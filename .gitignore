@@ -1,0 +1,17 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+*.swp
+*.swo
+*~
+
+# Temporary
+*.tmp
+*.bak
+
+# Node (if any scripts need it)
+node_modules/
+skills/*/node_modules/
+skills/**/node_modules/

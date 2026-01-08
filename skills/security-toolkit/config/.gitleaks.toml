@@ -1,0 +1,144 @@
+# Gitleaks Configuration for Local Pulse
+# Extends default rules with GCP and Supabase-specific patterns
+
+title = "Local Pulse Security - Gitleaks Config"
+
+[extend]
+useDefault = true
+
+# ============================================
+# CUSTOM RULES FOR THIS PROJECT
+# ============================================
+
+[[rules]]
+id = "supabase-service-role-key"
+description = "Supabase Service Role Key (bypasses RLS - CRITICAL)"
+regex = '''(?i)(supabase[_-]?(service[_-]?role|secret)[_-]?key)\s*[:=]\s*['"]?(eyJ[a-zA-Z0-9_-]{30,}\.[a-zA-Z0-9_-]{30,}\.[a-zA-Z0-9_-]{30,})['"]?'''
+secretGroup = 3
+keywords = ["supabase", "service_role", "secret_key"]
+entropy = 3.5
+
+[[rules]]
+id = "supabase-database-url"
+description = "Supabase Database Connection String"
+regex = '''(?i)(postgres|postgresql)://[^:]+:[^@]+@[^/]*supabase[^/]*/[^\s'"]+'''
+keywords = ["supabase", "postgres", "postgresql"]
+
+[[rules]]
+id = "gcp-service-account-json"
+description = "GCP Service Account JSON Key"
+regex = '''"type"\s*:\s*"service_account"'''
+keywords = ["service_account", "private_key"]
+
+[[rules]]
+id = "gcp-api-key"
+description = "GCP API Key"
+regex = '''(?i)\b(AIza[0-9A-Za-z\\-_]{35})(?:['|"|\n|\r|\s|\x60|;]|$)'''
+secretGroup = 1
+keywords = ["aiza"]
+
+[[rules]]
+id = "openrouter-api-key"
+description = "OpenRouter API Key"
+regex = '''(?i)(openrouter[_-]?api[_-]?key)\s*[:=]\s*['"]?([a-zA-Z0-9_-]{32,})['"]?'''
+secretGroup = 2
+keywords = ["openrouter"]
+
+[[rules]]
+id = "spotify-client-secret"
+description = "Spotify Client Secret"
+regex = '''(?i)(spotify[_-]?client[_-]?secret)\s*[:=]\s*['"]?([a-zA-Z0-9]{32})['"]?'''
+secretGroup = 2
+keywords = ["spotify", "client_secret"]
+
+[[rules]]
+id = "generic-high-entropy-secret"
+description = "High Entropy Secret in Environment Variable"
+regex = '''(?i)(secret|password|token|key|credential)[_-]?[a-z]*\s*[:=]\s*['"]?([a-zA-Z0-9/+=]{32,})['"]?'''
+secretGroup = 2
+entropy = 4.0
+keywords = ["secret", "password", "token", "key", "credential"]
+
+[[rules]]
+id = "frontend-service-key-import"
+description = "Service key accessed in frontend code"
+regex = '''process\.env\.(SUPABASE_SECRET_KEY|SUPABASE_SERVICE_ROLE_KEY|DATABASE_URL|OPENROUTER_API_KEY)'''
+path = '''apps/frontend/src/.*\.(ts|tsx|js|jsx)$'''
+keywords = ["process.env"]
+
+# ============================================
+# ALLOWLIST - False Positives
+# ============================================
+
+[allowlist]
+description = "Global allowlist for false positives"
+
+paths = [
+    # Config files that document patterns
+    '''\.gitleaks\.toml$''',
+    '''\.secrets\.baseline$''',
+    '''\.env\.example$''',
+    '''\.env\.local\.example$''',
+
+    # Lock files and dependencies
+    '''package-lock\.json$''',
+    '''yarn\.lock$''',
+    '''poetry\.lock$''',
+    '''go\.sum$''',
+
+    # Binary and generated files
+    '''(.*?)(jpg|gif|pdf|png|svg|ico|woff|woff2|ttf|eot)$''',
+
+    # Test fixtures
+    '''tests/fixtures/''',
+    '''__snapshots__/''',
+
+    # Build artifacts
+    '''dist/''',
+    '''build/''',
+    '''\.next/''',
+    '''node_modules/''',
+    '''\.venv/''',
+    '''__pycache__/''',
+]
+
+regexes = [
+    # Allow placeholder/example values
+    '''(example|placeholder|your-key-here|xxx|yyy|zzz)''',
+
+    # Allow SHA256 hashes (package integrity)
+    '''sha256:[a-f0-9]{64}''',
+    '''sha512:[a-f0-9]{128}''',
+
+    # Allow test credentials explicitly marked
+    '''# gitleaks:allow''',
+    '''// gitleaks:allow''',
+
+    # Allow public Supabase keys (anon/publishable)
+    '''SUPABASE_PUBLISHABLE_KEY''',
+    '''NEXT_PUBLIC_SUPABASE_ANON_KEY''',
+    '''VITE_SUPABASE_URL''',
+]
+
+stopwords = [
+    "example",
+    "placeholder",
+    "your-key-here",
+    "test",
+    "dummy",
+    "fake",
+    "mock",
+    "sample",
+    "xxx",
+    "yyy",
+    "zzz",
+    "redacted",
+    "REDACTED",
+]
+
+# ============================================
+# RULE-SPECIFIC ALLOWLISTS
+# ============================================
+
+[rules.allowlist]
+# Per-rule overrides can go here

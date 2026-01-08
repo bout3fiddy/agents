@@ -1,0 +1,255 @@
+#!/bin/bash
+set -euo pipefail
+
+DEFAULT_AGENTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+AGENTS_DIR="${AGENTS_DIR:-$DEFAULT_AGENTS_DIR}"
+CLAUDE_DIR="$HOME/.claude"
+CODEX_DIR="$HOME/.codex"
+
+shopt -s nullglob
+
+echo "Syncing from $AGENTS_DIR..."
+
+# Ensure base directories exist
+mkdir -p "$AGENTS_DIR/skills" "$AGENTS_DIR/instructions" "$AGENTS_DIR/commands" "$AGENTS_DIR/agents"
+mkdir -p "$CLAUDE_DIR/skills" "$CLAUDE_DIR/agents" "$CLAUDE_DIR/commands" "$CODEX_DIR/skills"
+
+mtime() {
+    local path="$1"
+    if stat -f "%m" "$path" >/dev/null 2>&1; then
+        stat -f "%m" "$path"
+    else
+        stat -c "%Y" "$path"
+    fi
+}
+
+latest_mtime() {
+    local dir="$1"
+    if [[ ! -d "$dir" ]]; then
+        echo 0
+        return
+    fi
+    if stat -f "%m" "$dir" >/dev/null 2>&1; then
+        local ts
+        ts="$(find "$dir" -type f -print0 2>/dev/null | \
+            xargs -0 stat -f "%m" 2>/dev/null | \
+            sort -n | tail -1 | awk '{print $1+0}')"
+        echo "${ts:-0}"
+    else
+        local ts
+        ts="$(find "$dir" -type f -print0 2>/dev/null | \
+            xargs -0 stat -c "%Y" 2>/dev/null | \
+            sort -n | tail -1 | awk '{print $1+0}')"
+        echo "${ts:-0}"
+    fi
+}
+
+copy_dir() {
+    local src="$1"
+    local dest="$2"
+
+    mkdir -p "$dest"
+    if command -v rsync &> /dev/null; then
+        rsync -a --copy-links "$src"/ "$dest"/
+    else
+        cp -R -L "$src"/. "$dest"/
+    fi
+}
+
+copy_file() {
+    local src="$1"
+    local dest="$2"
+
+    mkdir -p "$(dirname "$dest")"
+    if command -v rsync &> /dev/null; then
+        rsync -a --copy-links "$src" "$dest"
+    else
+        cp -L "$src" "$dest"
+    fi
+}
+
+sync_dir_latest_wins() {
+    local a="$1"
+    local b="$2"
+    local a_time
+    local b_time
+
+    a_time="$(latest_mtime "$a")"
+    b_time="$(latest_mtime "$b")"
+
+    if [[ "$a_time" -ge "$b_time" ]]; then
+        copy_dir "$a" "$b"
+    else
+        copy_dir "$b" "$a"
+    fi
+}
+
+sync_dir_latest_wins_three() {
+    local a="$1"
+    local b="$2"
+    local c="$3"
+    local a_time
+    local b_time
+    local c_time
+    local winner
+
+    a_time="$(latest_mtime "$a")"
+    b_time="$(latest_mtime "$b")"
+    c_time="$(latest_mtime "$c")"
+
+    if [[ "$a_time" -ge "$b_time" && "$a_time" -ge "$c_time" ]]; then
+        winner="$a"
+    elif [[ "$b_time" -ge "$a_time" && "$b_time" -ge "$c_time" ]]; then
+        winner="$b"
+    else
+        winner="$c"
+    fi
+
+    [[ -d "$winner" ]] || return
+    if [[ "$winner" != "$a" ]]; then
+        copy_dir "$winner" "$a"
+    fi
+    if [[ "$winner" != "$b" ]]; then
+        copy_dir "$winner" "$b"
+    fi
+    if [[ "$winner" != "$c" ]]; then
+        copy_dir "$winner" "$c"
+    fi
+}
+
+sync_file_latest_wins() {
+    local a="$1"
+    local b="$2"
+
+    if [[ ! -f "$a" && ! -f "$b" ]]; then
+        return
+    fi
+    if [[ ! -f "$a" ]]; then
+        copy_file "$b" "$a"
+        return
+    fi
+    if [[ ! -f "$b" ]]; then
+        copy_file "$a" "$b"
+        return
+    fi
+
+    if [[ "$(mtime "$a")" -ge "$(mtime "$b")" ]]; then
+        copy_file "$a" "$b"
+    else
+        copy_file "$b" "$a"
+    fi
+}
+
+sync_file_latest_wins_three() {
+    local a="$1"
+    local b="$2"
+    local c="$3"
+    local a_time=0
+    local b_time=0
+    local c_time=0
+    local winner
+
+    [[ -f "$a" ]] && a_time="$(mtime "$a")"
+    [[ -f "$b" ]] && b_time="$(mtime "$b")"
+    [[ -f "$c" ]] && c_time="$(mtime "$c")"
+
+    if [[ "$a_time" -ge "$b_time" && "$a_time" -ge "$c_time" ]]; then
+        winner="$a"
+    elif [[ "$b_time" -ge "$a_time" && "$b_time" -ge "$c_time" ]]; then
+        winner="$b"
+    else
+        winner="$c"
+    fi
+
+    [[ -f "$winner" ]] || return
+    if [[ "$winner" != "$a" ]]; then
+        copy_file "$winner" "$a"
+    fi
+    if [[ "$winner" != "$b" ]]; then
+        copy_file "$winner" "$b"
+    fi
+    if [[ "$winner" != "$c" ]]; then
+        copy_file "$winner" "$c"
+    fi
+}
+
+sync_skills() {
+    echo "Syncing skills..."
+
+    mkdir -p "$AGENTS_DIR/skills" "$CLAUDE_DIR/skills" "$CODEX_DIR/skills"
+
+    local skill_dir
+    for skill_dir in "$AGENTS_DIR/skills" "$CLAUDE_DIR/skills" "$CODEX_DIR/skills"; do
+        mkdir -p "$skill_dir"
+    done
+
+    local name
+    for name in $(ls -1 "$AGENTS_DIR/skills" "$CLAUDE_DIR/skills" "$CODEX_DIR/skills" 2>/dev/null | sort -u); do
+        [[ -z "$name" ]] && continue
+        local agents_skill="$AGENTS_DIR/skills/$name"
+        local claude_skill="$CLAUDE_DIR/skills/$name"
+        local codex_skill="$CODEX_DIR/skills/$name"
+        local agents_valid=0
+        local claude_valid=0
+        local codex_valid=0
+
+        [[ -f "$agents_skill/SKILL.md" ]] && agents_valid=1
+        [[ -f "$claude_skill/SKILL.md" ]] && claude_valid=1
+        [[ -f "$codex_skill/SKILL.md" ]] && codex_valid=1
+
+        if [[ "$agents_valid" -eq 0 && "$claude_valid" -eq 0 && "$codex_valid" -eq 0 ]]; then
+            continue
+        fi
+
+        echo "  $name"
+        sync_dir_latest_wins_three "$agents_skill" "$claude_skill" "$codex_skill"
+    done
+}
+
+sync_instructions() {
+    echo "Syncing instructions..."
+
+    mkdir -p "$AGENTS_DIR/instructions"
+    sync_file_latest_wins_three \
+        "$AGENTS_DIR/instructions/global.md" \
+        "$CLAUDE_DIR/CLAUDE.md" \
+        "$CODEX_DIR/AGENTS.md"
+    echo "  global.md <-> Claude + Codex (latest wins)"
+}
+
+sync_agents() {
+    echo "Syncing agents..."
+
+    mkdir -p "$AGENTS_DIR/agents" "$CLAUDE_DIR/agents"
+    local name
+    for name in $(ls -1 "$AGENTS_DIR/agents" "$CLAUDE_DIR/agents" 2>/dev/null | sort -u); do
+        [[ -z "$name" ]] && continue
+        local agents_file="$AGENTS_DIR/agents/$name"
+        local claude_file="$CLAUDE_DIR/agents/$name"
+        [[ "$name" == *.md ]] || continue
+        echo "  $name"
+        sync_file_latest_wins "$agents_file" "$claude_file"
+    done
+}
+
+sync_commands() {
+    echo "Syncing commands..."
+
+    mkdir -p "$AGENTS_DIR/commands" "$CLAUDE_DIR/commands"
+    local name
+    for name in $(ls -1 "$AGENTS_DIR/commands" "$CLAUDE_DIR/commands" 2>/dev/null | sort -u); do
+        [[ -z "$name" ]] && continue
+        local agents_file="$AGENTS_DIR/commands/$name"
+        local claude_file="$CLAUDE_DIR/commands/$name"
+        [[ "$name" == *.md ]] || continue
+        echo "  $name"
+        sync_file_latest_wins "$agents_file" "$claude_file"
+    done
+}
+
+sync_skills
+sync_instructions
+sync_agents
+sync_commands
+echo ""
+echo "Done!"

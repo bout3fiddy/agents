@@ -1,0 +1,25 @@
+{
+  "description": "Consolidated MCP server configurations",
+  "servers": {
+    "playwright": {
+      "type": "local",
+      "command": ["npx", "-y", "@playwright/mcp@latest"],
+      "enabled": true,
+      "description": "Browser automation via Playwright"
+    },
+    "greptile": {
+      "type": "remote",
+      "url": "https://api.greptile.com/mcp",
+      "headers": {
+        "Authorization": "Bearer {env:GREPTILE_API_KEY}"
+      },
+      "description": "Code search and PR review"
+    },
+    "sentry": {
+      "type": "remote",
+      "url": "https://mcp.sentry.dev/mcp",
+      "oauth": {},
+      "description": "Error tracking and monitoring"
+    }
+  }
+}

@@ -1,0 +1,171 @@
+# Pre-commit Security Configuration for Local Pulse
+# Multi-tool security stack: secrets + SAST + IaC + containers
+#
+# Install: pip install pre-commit && pre-commit install
+# Run all: pre-commit run --all-files
+# Update:  pre-commit autoupdate
+
+default_stages: [pre-commit]
+fail_fast: false
+
+repos:
+  # ============================================
+  # SECRET DETECTION
+  # ============================================
+
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.21.2
+    hooks:
+      - id: gitleaks
+        name: "gitleaks - detect secrets"
+        args: ['--config', '.gitleaks.toml']
+        stages: [pre-commit, pre-push]
+
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.5.0
+    hooks:
+      - id: detect-secrets
+        name: "detect-secrets - baseline check"
+        args: ['--baseline', '.secrets.baseline']
+        exclude: |
+          (?x)^(
+            package-lock\.json|
+            yarn\.lock|
+            poetry\.lock|
+            \.secrets\.baseline
+          )$
+
+  # ============================================
+  # PYTHON SECURITY (SAST)
+  # ============================================
+
+  - repo: https://github.com/PyCQA/bandit
+    rev: 1.7.10
+    hooks:
+      - id: bandit
+        name: "bandit - Python SAST"
+        args: ["-c", "pyproject.toml", "-r", "."]
+        additional_dependencies: ["bandit[toml]"]
+        files: \.py$
+        exclude: |
+          (?x)^(
+            tests/|
+            scripts/|
+            \.venv/|
+            migrations/
+          )
+
+  # ============================================
+  # MULTI-LANGUAGE SAST (Semgrep)
+  # ============================================
+
+  - repo: https://github.com/semgrep/semgrep
+    rev: v1.90.0
+    hooks:
+      - id: semgrep
+        name: "semgrep - BFF security rules"
+        args:
+          - '--config=.semgrep/'
+          - '--error'
+          - '--exclude=node_modules'
+          - '--exclude=.venv'
+          - '--exclude=dist'
+        files: \.(py|js|ts|tsx|jsx)$
+
+  # ============================================
+  # DOCKERFILE SECURITY
+  # ============================================
+
+  - repo: https://github.com/hadolint/hadolint
+    rev: v2.13.1-beta
+    hooks:
+      - id: hadolint-docker
+        name: "hadolint - Dockerfile security"
+        entry: hadolint/hadolint hadolint
+        args: ['--config', '.hadolint.yaml']
+
+  # ============================================
+  # INFRASTRUCTURE AS CODE
+  # ============================================
+
+  - repo: https://github.com/bridgecrewio/checkov
+    rev: 3.2.262
+    hooks:
+      - id: checkov
+        name: "checkov - IaC security"
+        args:
+          - --quiet
+          - --compact
+          - --config-file=.checkov.yaml
+        files: \.(tf|yaml|yml|json|Dockerfile)$
+        exclude: |
+          (?x)^(
+            node_modules/|
+            \.venv/|
+            package-lock\.json|
+            poetry\.lock
+          )
+
+  # ============================================
+  # GITHUB ACTIONS SECURITY
+  # ============================================
+
+  - repo: https://github.com/woodruffw/zizmor-pre-commit
+    rev: v1.0.1
+    hooks:
+      - id: zizmor
+        name: "zizmor - GitHub Actions security"
+        files: \.github/workflows/.*\.ya?ml$
+
+  # ============================================
+  # STANDARD SECURITY HOOKS
+  # ============================================
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: detect-private-key
+        name: "detect-private-key"
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: ['--maxkb=1000']
+      - id: check-yaml
+        args: ['--unsafe']
+      - id: check-json
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+      - id: no-commit-to-branch
+        args: ['--branch', 'main', '--branch', 'master']
+
+  # ============================================
+  # DEPENDENCY SECURITY (Local hooks)
+  # ============================================
+
+  - repo: local
+    hooks:
+      - id: pip-audit
+        name: "pip-audit - Python dependency scan"
+        entry: poetry run pip-audit
+        language: system
+        files: (pyproject\.toml|poetry\.lock)$
+        pass_filenames: false
+        stages: [pre-push]  # Only on push (slow)
+
+      - id: npm-audit
+        name: "npm-audit - Node dependency scan"
+        entry: npm audit --audit-level=high
+        language: system
+        files: package\.json$
+        pass_filenames: false
+        stages: [pre-push]  # Only on push (slow)
+
+# ============================================
+# CI CONFIGURATION
+# ============================================
+
+ci:
+  autofix_prs: false
+  autoupdate_schedule: weekly
+  skip:
+    - pip-audit  # Too slow for CI pre-commit
+    - npm-audit  # Too slow for CI pre-commit
