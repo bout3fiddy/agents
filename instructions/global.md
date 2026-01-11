@@ -9,6 +9,7 @@ These instructions apply to all projects unless overridden by project-specific C
 - Search by keyword: `rg -n "description:|name:" ~/.agents/skills/**/SKILL.md`
 - If no skills match, proceed without loading any skill.
 - If a task involves secrets, auth, credentials, tokens, or API keys, load and follow the `secrets-and-auth-guardrails` skill.
+- If a task mentions Linear, issues/tickets/tasks, projects, backlog, roadmap, or brainstorming/ideation capture, load and follow the `linear-mcp-ops` skill.
 
 ## Execution and Quality Gates
 
