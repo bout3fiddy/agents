@@ -264,7 +264,7 @@ WHERE tablename = 'your_table';
 SUPABASE_URL=https://<your-project-ref>.supabase.co
 SUPABASE_PUBLISHABLE_KEY=eyJ...   # Public anon key (safe for frontend)
 SUPABASE_SECRET_KEY=eyJ...        # Service role key (backend only!)
-SUPABASE_DATABASE_URL=postgresql://postgres.<ref>:<password>@aws-0-<region>.pooler.supabase.com:6543/postgres
+SUPABASE_DATABASE_URL=postgresql://postgres.<ref>:<redacted>@aws-0-<region>.pooler.supabase.com:6543/postgres
 ```
 
 ### Local Development

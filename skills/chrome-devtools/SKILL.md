@@ -131,7 +131,7 @@ node screenshot.js --url https://example.com --output page.png --no-compress
 # Keep browser open with --close false
 node navigate.js --url https://example.com/login --close false
 node fill.js --selector "#email" --value "user@example.com" --close false
-node fill.js --selector "#password" --value "secret" --close false
+node fill.js --selector "#password" --value "example-value" --close false
 node click.js --selector "button[type=submit]"
 ```
 

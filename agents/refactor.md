@@ -1,4 +1,5 @@
 ---
+name: refactor
 description: DRY-SOLID refactoring specialist. Fixes code violations with minimal changes.
 mode: subagent
 temperature: 0.1

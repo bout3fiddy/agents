@@ -58,7 +58,7 @@ node click.js --url https://example.com --selector "a.link" --wait-for-navigatio
 # Fill form (chain commands)
 node navigate.js --url https://example.com/login --close false
 node fill.js --selector "#email" --value "user@example.com" --close false
-node fill.js --selector "#password" --value "secret123" --close false
+node fill.js --selector "#password" --value "example-value" --close false
 node click.js --selector "button[type=submit]"
 
 # Execute JavaScript

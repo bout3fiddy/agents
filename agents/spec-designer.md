@@ -1,4 +1,5 @@
 ---
+name: spec-designer
 description: Spec designer that interviews deeply and writes docs/specs/* specs only.
 mode: primary
 model: openai/gpt-5.2-codex-xhigh

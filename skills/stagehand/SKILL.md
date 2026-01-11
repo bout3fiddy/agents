@@ -99,7 +99,7 @@ await page.act("Enter name 'John Doe' and email 'john@example.com'")
 ```python
 # GOOD: Atomic actions
 await page.act("Click the submit button")
-await page.act("Type 'password123' into the password field")
+await page.act("Type 'example-value' into the password field")
 
 # BAD: Multi-step actions (AVOID)
 await page.act("Order me a pizza")
@@ -319,12 +319,12 @@ if __name__ == "__main__":
 
 ```python
 # BAD: Multiple steps
-await page.act("Sign in, go to settings, and change password")
+await page.act("Sign in, go to settings, and change credentials")
 
 # GOOD: Atomic steps
 await page.act("Click the sign in button")
 await page.act("Type 'user@email.com' into email field")
-await page.act("Type 'password123' into password field")
+await page.act("Type 'example-value' into password field")
 await page.act("Click submit")
 ```
 
