@@ -17,6 +17,12 @@ These instructions apply to all projects unless overridden by project-specific C
 - For any code changes, run the project's pre-commit hooks if configured.
 - For any code changes, run all tests affected by the changed files and ensure they pass before finishing.
 - Never write credentials or auth artifacts inside the repo (including temp dirs like `.gcloud_tmp/`); use a safe path outside the repo such as `$HOME/.config/<tool>` or `/tmp/<tool>`.
+- Do not suggest the user run lint/tests or “next steps” for required checks; execute them yourself and report results.
+
+## Command Execution Discipline
+
+- Do not run shell commands during discussion-only requests (policy/prompt changes, explanations, ideation) unless needed to apply the requested change.
+- Do not scan the filesystem or run discovery commands unless explicitly asked or necessary to complete the task.
 
 ## Spec-Driven Delivery
 
