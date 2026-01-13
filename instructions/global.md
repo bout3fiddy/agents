@@ -10,6 +10,7 @@ These instructions apply to all projects unless overridden by project-specific C
 - If no skills match, proceed without loading any skill.
 - If a task involves secrets, auth, credentials, tokens, or API keys, load and follow the `secrets-and-auth-guardrails` skill.
 - If a task mentions Linear, issues/tickets/tasks, projects, backlog, roadmap, or brainstorming/ideation capture, load and follow the `linear-mcp-ops` skill.
+- If a task involves designing or building UI components, motion/animation, interaction polish, or CSS component patterns, load and follow the `frontend-components` skill.
 
 ## Execution and Quality Gates
 

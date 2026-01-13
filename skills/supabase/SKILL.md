@@ -14,6 +14,8 @@ Reference for Supabase CLI, local development, and database management.
 | Start local Supabase | `supabase start` |
 | Stop local Supabase | `supabase stop` |
 | Check status | `supabase status` |
+| Export local env | `supabase status -o env` |
+| Login (one-time) | `supabase login` |
 | Link to production | `supabase link --project-ref <your-project-ref>` |
 | Create migration | `supabase migration new <name>` |
 | Push to production | `supabase db push` |
@@ -67,6 +69,12 @@ supabase stop --no-backup  # ⚠️ DESTRUCTIVE
 ### One-Time Setup
 
 ```bash
+# Authenticate once (stores token in OS keychain or local file)
+supabase login
+
+# Alternative to interactive login
+export SUPABASE_ACCESS_TOKEN="<token>"
+
 # Link to production project
 supabase link --project-ref <your-project-ref>
 
@@ -90,6 +98,18 @@ supabase db diff
 ---
 
 ## 3. Migration Workflow
+
+### Recommended Daily Workflow (Local → Remote)
+
+1) Start local stack: `supabase start` (use `-x` to skip services if needed)  
+2) Make schema changes:
+   - **Manual SQL**: `supabase migration new <name>` then edit the file  
+   - **Studio/UI**: change in Studio, then `supabase db diff -f <name>`  
+3) Apply locally for a clean, reproducible state: `supabase db reset`  
+4) Sanity check:
+   - `supabase migration list --local`  
+   - `supabase db diff` (no output = clean)  
+5) Push when happy: `supabase db push --linked` (use `--dry-run` if desired)
 
 ### Option A: Incremental Migrations (Recommended for Teams)
 
@@ -190,6 +210,8 @@ file_size_limit = "10MB"
 allowed_mime_types = ["image/png", "image/jpeg", "image/webp", "image/gif"]
 ```
 
+**Note:** `supabase db diff` does not reliably capture storage bucket changes. Track bucket config explicitly in `supabase/config.toml`.
+
 ### Storage RLS Policies
 
 **CRITICAL SECURITY**: Storage policies control who can read/write files.
@@ -276,6 +298,8 @@ SUPABASE_SECRET_KEY=eyJ...        # From `supabase status`
 SUPABASE_DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:54322/postgres
 ```
 
+Tip: `supabase status -o env` prints local env vars in `.env` format. Never commit `.env*`.
+
 ---
 
 ## 8. Troubleshooting
@@ -321,6 +345,8 @@ supabase db diff
 
 # Pull production schema (overwrites local migrations)
 supabase db pull --schema public
+
+# Note: db pull excludes auth/storage unless you include those schemas with --schema
 ```
 
 ---
@@ -369,6 +395,15 @@ CREATE POLICY "View all" ON users FOR SELECT USING (true);
 2. `supabase/DATABASE.md` - The documentation
 
 Keep schema documentation in sync with the actual SQL.
+
+---
+
+## 12. Why This Workflow Works
+
+- **Deterministic**: local DB is always derivable from migrations (`db reset`).  
+- **Low drift**: `db diff` and migration list make discrepancies visible early.  
+- **Safe pushes**: `db push` after link gives a clear, repeatable deployment path.  
+- **Config clarity**: storage bucket settings live in `supabase/config.toml`, not hidden state.
 
 ---
 

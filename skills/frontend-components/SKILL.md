@@ -401,6 +401,147 @@ The offset values depend on the heart's pixel dimensions (approximately half the
 
 ---
 
+## 6. Motion Choice: Spring vs Easing vs None
+
+Start by deciding what role motion plays in the interaction.
+
+- **Use springs** when motion is tied to user input (drag, flick, press, gestures). Springs preserve velocity and handle interruption well.
+- **Use easing** when the system is announcing a change or guiding attention (modals, toasts, view switches).
+- **Use no animation** for high-frequency actions (typing, rapid toggles, keyboard navigation) where motion adds noise.
+- **Use linear** when motion represents time itself (progress bars, scrubbing, loaders).
+
+### Easing defaults
+
+- **Entrance/feedback**: ease-out (fast start, soft landing).
+- **Exit**: ease-in (acknowledge, then get out of the way).
+- **Mode switches**: ease-in-out (balanced, deliberate).
+
+### Timing defaults
+
+- **Press/hover**: 120–180ms
+- **Small state changes**: 180–260ms
+- **Large transitions**: up to ~300ms
+
+If motion feels slow, shorten duration before changing the curve.
+
+### Spring knobs
+
+- **Stiffness** controls responsiveness (how hard it pulls to target).
+- **Damping** controls settling vs oscillation.
+- **Mass** affects perceived weight (interacts with stiffness/damping).
+
+### Example (CSS + spring)
+
+```css
+/* Ease-out entrance */
+.panel {
+  transition: transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1),
+              opacity 220ms ease-out;
+}
+.panel[data-state="open"] {
+  transform: translateY(0);
+  opacity: 1;
+}
+.panel[data-state="closed"] {
+  transform: translateY(8px);
+  opacity: 0;
+}
+```
+
+```ts
+// Spring for gesture-driven motion (example API)
+const spring = { type: "spring", stiffness: 800, damping: 70, mass: 8 };
+```
+
+---
+
+## 7. Pseudo-Elements for Component Depth
+
+Use pseudo-elements to add layers and interaction polish without extra DOM.
+
+### Core rules
+
+- `::before` / `::after` create anonymous children and **require `content`** to render.
+- Use them for **decorative layers, icons, separators, and bigger hit targets** without markup.
+- Favor `position: absolute` + `inset: 0` for full-bleed overlays.
+
+### Hover backdrop pattern
+
+```css
+.btn {
+  position: relative;
+  z-index: 0;
+}
+.btn::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: currentColor;
+  opacity: 0;
+  transform: scale(0.95);
+  transition: opacity 160ms ease-out, transform 160ms ease-out;
+  z-index: -1;
+}
+.btn:hover::before,
+.btn:focus-visible::before {
+  opacity: 0.12;
+  transform: scale(1);
+}
+```
+
+### Native UI styling hooks
+
+Modern pseudo-elements expose browser-native features (dialogs, popovers, view transitions, scroll-driven nav, form pickers). Prefer them over JS wrappers when possible.
+
+### View Transitions (CSS-first)
+
+When using `document.startViewTransition()`, the browser creates a pseudo-element tree for both states. Style those pseudo-elements to define the animation and avoid custom DOM cloning.
+
+---
+
+## 8. 12 Principles of UI Animation (Condensed)
+
+Use these as a checklist when motion feels “off.”
+
+1) **Squash & Stretch**: Subtle deformation signals weight; avoid cartoonish extremes.  
+2) **Anticipation**: Add a small pre‑cue before big actions; save for moments that matter.  
+3) **Staging**: Sequence motion to guide attention; avoid animating everything at once.  
+4) **Pose to Pose**: Define key moments; let interpolation handle in‑betweens.  
+5) **Follow Through / Overlap**: Parts settle at different times; small stagger feels alive.  
+6) **Slow In / Slow Out**: Ease in/out to avoid jarring starts/stops.  
+7) **Arcs**: Curved paths feel organic; reserve for hero moments.  
+8) **Secondary Action**: Add supporting flourishes that reinforce the main action.  
+9) **Timing**: Keep interactions under ~300ms and consistent across the UI.  
+10) **Exaggeration**: Amplify for emphasis, sparingly.  
+11) **Solid Drawing**: Use depth cues (shadows, perspective) for believable motion.  
+12) **Appeal**: The sum of care and taste; aim for “feels right,” not “shows off.”
+
+---
+
+## 9. Sound as UI Feedback (Optional but Powerful)
+
+Use audio to reinforce actions and reduce perceived latency, but keep it subtle and optional.
+
+### When to use sound
+
+- Confirm major actions (payments, uploads)
+- Signal errors/warnings that must be noticed
+- Reinforce state changes or notifications that need attention
+
+### Rules
+
+- **Never autoplay.** Trigger on user action.
+- **Complement, never replace** visual feedback.
+- **Provide a toggle** and allow volume control independent of system volume.
+- Use `prefers-reduced-motion` as a proxy for reduced stimulation when needed.
+
+### Implementation notes
+
+- Simple cues: `new Audio("click.mp3").play()` for straightforward playback.
+- Lower latency / layering: Web Audio API (especially for rapid UI sounds).
+
+---
+
 ## Quick Reference
 
 | Component | Key Technique |
@@ -410,6 +551,9 @@ The offset values depend on the heart's pixel dimensions (approximately half the
 | Date badge | Flex column, size variants via parent selector |
 | Featured card | CSS Grid with `minmax(0, 1fr)` for shrinkable columns |
 | Like button | `::before` radial gradient backdrop on hover |
+| Motion choice | Springs for input, easing for system, linear for time |
+| Pseudo-elements | Decorative layers + hit target expansion |
+| UI sound | Subtle, optional, action-driven cues |
 
 ---
 
