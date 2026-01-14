@@ -1,6 +1,6 @@
 ---
 name: skill-installer
-description: Install skills into this repo using our workflow: clone/copy into skills/, validate with skills-ref (uv), and sync. Use when asked to install or import skills.
+description: "Install skills into this repo using our workflow: clone/copy into skills/, validate with skills-ref (uv), and sync. Use when asked to install or import skills."
 ---
 
 # Skill Installer (Repo Workflow)

@@ -1,0 +1,9 @@
+{
+  "repo_url": "git@github.com:org/agents.git",
+  "base_branch": "main",
+  "remote": "origin",
+  "pr_labels": ["policy", "automation"],
+  "pr_reviewers": ["you"],
+  "branch_prefix": "policy",
+  "sync_mode": "hard"
+}
