@@ -16,7 +16,7 @@ These instructions apply to all projects unless overridden by project-specific C
 - If a task involves installing/importing skills, load and follow the `skill-installer` skill.
 - When a skill references `references/` files, read only the specific files needed for the task; do not bulk-load entire reference directories.
 - After any skill change, run `skills-ref validate` using `uv` to ensure spec compliance.
-- If a user corrects agent behavior or requests a self-healing policy loop, load and follow the `agent-self-healing` skill.
+- If a user corrects agent behavior or requests self-correction, load and follow the `agent-observability` skill.
 
 ## Execution and Quality Gates
 

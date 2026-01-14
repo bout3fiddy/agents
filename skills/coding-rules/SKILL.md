@@ -124,4 +124,6 @@ Red flags:
 
 ## 15) Documentation hygiene
 
-- Do not create docs files unless explicitly requested.
+- Do not create unnecessary docs files.
+- Necessary docs include user-requested docs, compliance/safety docs, spec-driven required specs for multi-step/exploratory work, and self-reporting logs when triggered.
+- If spec-driven is active, the spec is required and does not violate this rule.
