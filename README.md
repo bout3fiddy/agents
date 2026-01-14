@@ -12,7 +12,8 @@ agents/
 ├── commands/                  # Claude-only (optional)
 ├── agents/                    # Claude-only (optional)
 └── bin/
-    └── sync.sh
+    ├── sync.sh
+    └── sync-hard.sh           # Destructive mirror to ~/.codex and ~/.claude
 ```
 
 ## Quick Start
@@ -27,6 +28,9 @@ export PATH="$PATH:$HOME/.agents/bin"
 
 # Sync everything (creates needed dirs)
 ./bin/sync.sh
+
+# Hard-sync (destructive mirror)
+./bin/sync-hard.sh
 ```
 
 ## How It Works
@@ -41,6 +45,7 @@ export PATH="$PATH:$HOME/.agents/bin"
 
 **Latest wins:**
 - `sync.sh` compares modification times and propagates the newest version to the other locations.
+- `sync-hard.sh` is destructive and mirrors this repo exactly to `~/.codex` and `~/.claude`.
 
 ### Instructions (bootstrap)
 
@@ -73,6 +78,15 @@ EOF
 
 # Sync to all tools
 ./bin/sync.sh
+```
+
+## Validate Skills
+
+Use `skills-ref` (via `uv`) to validate a skill folder:
+
+```bash
+uv sync
+uv run skills-ref validate skills/my-new-skill
 ```
 
 ## Tool Compatibility Matrix
