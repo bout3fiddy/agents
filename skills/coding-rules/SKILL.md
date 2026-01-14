@@ -35,29 +35,35 @@ description: Core coding rules for implementation, refactors, and bug fixes. Cov
 - Do not cat/grep `.env` files or secret stores.
 - Refer to secret names only; check presence without echoing values.
 
-## 6) SQL safety and query limits
+## 6) Toolchain selection (must follow)
+
+- If `uv.lock` or `pyproject.toml` exists, use `uv` for Python deps and tests (`uv sync`, `uv run pytest`).  
+- Never use `pip install` or ad‑hoc venvs unless explicitly asked.  
+- For JS/TS, prefer `bun` over npm/yarn/pnpm when possible.  
+
+## 7) SQL safety and query limits
 
 - Always use parameterized queries (no string concatenation or formatting).
 - Every SELECT must be bounded (LIMIT, pagination, or a single-row predicate).
 - Exceptions: `COUNT(*)`, aggregation with bounded cardinality, or `WHERE id = ?`.
 
-## 7) Avoid race conditions
+## 8) Avoid race conditions
 
 - Avoid check-then-act and read-modify-write without atomic guards.
 - Use transactions, `ON CONFLICT`, `SELECT FOR UPDATE`, and constraints.
 
-## 8) Error handling
+## 9) Error handling
 
 - Never swallow exceptions. If you catch, log and re-raise or explain why continuing is safe.
 - No empty or silent `except` blocks.
 
-## 9) Configuration and constants
+## 10) Configuration and constants
 
 - Do not hardcode magic numbers, URLs, or config values.
 - Centralize settings and use named constants.
 - Avoid scattered `os.getenv()` calls outside the settings module.
 
-## 10) Architecture and design
+## 11) Architecture and design
 
 - Prefer composition over inheritance; inheritance only for true IS-A or framework requirements.
 - Avoid circular imports; keep dependency direction one-way.

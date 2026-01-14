@@ -12,6 +12,8 @@ These instructions apply to all projects unless overridden by project-specific C
 - If a task mentions Linear, issues/tickets/tasks, projects, backlog, roadmap, or brainstorming/ideation capture, load and follow the `linear-mcp-ops` skill.
 - If a task involves designing or building UI components, motion/animation, interaction polish, or CSS component patterns, load and follow the `frontend-components` skill.
 - If a task involves investigating external repos or extracting best practices from a specific repo path, load and follow the `repo-research` skill.
+- If a task involves creating/updating skills, load and follow the `skill-creator` skill.
+- If a task involves installing/importing skills, load and follow the `skill-installer` skill.
 
 ## Execution and Quality Gates
 
@@ -25,6 +27,12 @@ These instructions apply to all projects unless overridden by project-specific C
 
 - Do not run shell commands during discussion-only requests (policy/prompt changes, explanations, ideation) unless needed to apply the requested change.
 - Do not scan the filesystem or run discovery commands unless explicitly asked or necessary to complete the task.
+
+## Toolchain Selection (Deterministic)
+
+- If `uv.lock` or `pyproject.toml` exists, use `uv` for Python deps and tests: `uv sync`, `uv run pytest`, etc.  
+- Never run `pip install` or create ad‑hoc venvs unless explicitly requested.  
+- For JS/TS, use `bun` instead of npm/yarn/pnpm when possible.  
 
 ## Spec-Driven Delivery
 
