@@ -14,6 +14,7 @@ These instructions apply to all projects unless overridden by project-specific C
 - If a task involves investigating external repos or extracting best practices from a specific repo path, load and follow the `repo-research` skill.
 - If a task involves creating/updating skills, load and follow the `skill-creator` skill.
 - If a task involves installing/importing skills, load and follow the `skill-installer` skill.
+- When a skill references `references/` files, read only the specific files needed for the task; do not bulk-load entire reference directories.
 
 ## Execution and Quality Gates
 
