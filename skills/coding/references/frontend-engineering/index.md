@@ -75,28 +75,7 @@ If the repo uses a different structure, follow the repo conventions.
 
 ## SolidJS patterns
 
-### Component composition
-
-- Prefer small, focused components and composition over inheritance.
-- Keep components pure: compute state with signals/memos and avoid side effects in render.
-- Use `createSignal` for local state and `createStore` for nested state.
-- Use `createMemo` for derived values instead of recomputing in JSX.
-
-### Control flow
-
-- Use `<Show>` and `<For>` instead of ternaries and `.map()`.
-- Use `<Switch>`/`<Match>` for multi-branch conditions.
-
-### Data fetching
-
-- Use `createResource` for async data with `Suspense` and error boundaries.
-- Keep data fetching outside of rendering logic.
-
-### Anti-patterns
-
-- Destructuring props (breaks reactivity).
-- Reading signals without calling them.
-- Mutating signals directly.
+See `references/solidjs/solidjs-full.md` and `references/solidjs/index.md` for Solid-specific patterns and performance rules.
 
 ## Subagent handoff (keep main context clean)
 

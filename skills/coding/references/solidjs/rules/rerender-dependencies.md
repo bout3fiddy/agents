@@ -1,13 +1,13 @@
 ---
-title: Narrow Effect Dependencies
+title: Narrow Reactive Dependencies
 impact: MEDIUM
-impactDescription: minimizes effect re-runs
-tags: rerender, useEffect, dependencies, optimization
+impactDescription: minimizes recomputation
+tags: reactivity, dependencies, optimization
 ---
 
-## Narrow Effect Dependencies
+## Narrow Reactive Dependencies
 
-**Impact: MEDIUM (minimizes effect re-runs)**
+**Impact: MEDIUM (minimizes recomputation)**
 
 Narrow reactive dependencies by deriving booleans or primitives before effects.
 

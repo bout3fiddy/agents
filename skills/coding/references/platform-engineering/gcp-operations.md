@@ -70,7 +70,7 @@ gcloud run deploy <SERVICE_NAME> \
 
 ```bash
 # Tail logs for a service
-gcloud logs tail --service=<SERVICE_NAME> \
+gcloud beta run services logs tail <SERVICE_NAME> \
   --project="$PROJECT_ID" \
   --region="$REGION"
 ```
@@ -91,28 +91,37 @@ gcloud logging read \
   --limit=20
 
 # Filter by time range (last hour)
+# GNU date (Linux)
+START_TIME="$(date -u -d '1 hour ago' '+%Y-%m-%dT%H:%M:%SZ')"
+# BSD date (macOS)
+# START_TIME="$(date -u -v-1H '+%Y-%m-%dT%H:%M:%SZ')"
 gcloud logging read \
-  "resource.type=cloud_run_revision AND resource.labels.service_name=<SERVICE_NAME> AND timestamp>=\"$(date -u -v-1H '+%Y-%m-%dT%H:%M:%SZ')\"" \
+  "resource.type=cloud_run_revision AND resource.labels.service_name=<SERVICE_NAME> AND timestamp>=\"$START_TIME\"" \
   --project="$PROJECT_ID" \
   --limit=100
 ```
 
 ## Secret Manager
 
+Follow `references/secrets-and-auth-guardrails.md`. Do not read or print secret values.
+
 ```bash
 # List secrets
 gcloud secrets list --project="$PROJECT_ID"
 
-# Read latest version
-gcloud secrets versions access latest --secret=<SECRET_NAME> --project="$PROJECT_ID"
+# Describe a secret (metadata only)
+gcloud secrets describe <SECRET_NAME> --project="$PROJECT_ID"
 
-# Create a secret from stdin
-echo -n 'secret-value' | gcloud secrets create <SECRET_NAME> \
+# List recent versions (metadata only)
+gcloud secrets versions list <SECRET_NAME> --project="$PROJECT_ID" --limit=5
+
+# Create a secret from stdin (run locally; never paste secrets into chat/logs)
+printf '%s' '<secret-value>' | gcloud secrets create <SECRET_NAME> \
   --data-file=- \
   --project="$PROJECT_ID"
 
 # Add new version
-echo -n 'new-secret-value' | gcloud secrets versions add <SECRET_NAME> \
+printf '%s' '<new-secret-value>' | gcloud secrets versions add <SECRET_NAME> \
   --data-file=- \
   --project="$PROJECT_ID"
 

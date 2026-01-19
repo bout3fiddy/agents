@@ -1,10 +1,10 @@
 # Bun - JavaScript/TypeScript Runtime & Toolkit (Reference)
 
-Bun is the ONLY approved JavaScript/TypeScript toolkit. Never use npm, yarn, pnpm, or node directly.
+Bun is the preferred JavaScript/TypeScript toolkit when the repo supports it. If a repo is locked to npm/yarn/pnpm, follow its established toolchain and lockfile.
 
 ## Core Principle
 
-**ALWAYS use Bun. NEVER use npm, yarn, pnpm, or node.**
+**Prefer Bun when compatible. Otherwise, use the repo's existing package manager and lockfile.**
 
 ## Command Reference
 
@@ -82,8 +82,8 @@ bun build ./src/cli.ts --compile --outfile myapp
 
 ## Lock Files
 
-- **Approved**: `bun.lockb` (binary) or `bun.lock` (text)
-- **Delete on sight**: `package-lock.json`, `yarn.lock`, `pnpm-lock.yaml`
+- **Preferred** when using Bun: `bun.lockb` (binary) or `bun.lock` (text)
+- Keep the repo's existing lockfile unless you're explicitly migrating toolchains.
 
 ## Configuration (bunfig.toml)
 
@@ -170,19 +170,16 @@ jobs:
 
 ## Migration from npm/yarn/pnpm
 
-1. Delete old lock files:
-   ```bash
-   rm -f package-lock.json yarn.lock pnpm-lock.yaml
-   ```
+Only migrate when the repo explicitly opts in and the team agrees on the toolchain change.
 
-2. Install with Bun:
+1. Install with Bun:
    ```bash
    bun install
    ```
 
-3. Update scripts (already compatible, just use `bun run`)
+2. Update scripts (already compatible, just use `bun run`)
 
-4. Replace commands:
+3. Replace commands:
    - `npm run` -> `bun run`
    - `npx` -> `bunx`
    - `node` -> `bun`
@@ -234,14 +231,14 @@ bun install --force
 ### TypeScript errors
 Bun includes TypeScript types. If IDE issues:
 ```bash
-bun add -d bun-types
+bun add -d @types/bun
 ```
 
 Then in tsconfig.json:
 ```json
 {
   "compilerOptions": {
-    "types": ["bun-types"]
+    "types": ["bun"]
   }
 }
 ```

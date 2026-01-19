@@ -25,8 +25,9 @@ SolidJS is a reactive JavaScript library for building user interfaces with:
 | Derived/computed values | `createMemo()` |
 | Side effects | `createEffect()` |
 | Async data fetching | `createResource()` |
+| SolidStart data APIs (router) | `query()` + `createAsync()` |
 | Conditional rendering | `<Show when={...}>` |
-| List rendering | `<For each={...}>` |
+| List rendering | `<For each={...}>` / `<Index each={...}>` |
 | Multiple conditions | `<Switch>` / `<Match>` |
 | Error boundaries | `<ErrorBoundary>` |
 | Loading states | `<Suspense>` |
@@ -266,10 +267,10 @@ function UserProfile() {
 }
 ```
 
-**Keyed Show** - Force re-render when reference changes:
+**Keyed Show** - Force re-creation when reference changes:
 
 ```typescript
-// Re-renders entire child when user reference changes
+// Recreates entire child when user reference changes
 <Show when={user()} keyed>
   <UserCard user={user()} />
 </Show>
@@ -529,6 +530,43 @@ function TaskList() {
     </ul>
   );
 }
+```
+
+---
+
+## SolidStart Data APIs (`query` + `createAsync`)
+
+In SolidStart, prefer router data APIs for server-aware fetching. `query()` defines a cached fetcher and `createAsync()` reads it in components. This integrates with SSR, Suspense, and route preloading. The older `cache()` helper is deprecated in favor of `query()`.
+
+```typescript
+import { For } from "solid-js";
+import { query, createAsync } from "@solidjs/router";
+
+const getPosts = query(async () => {
+  const res = await fetch("https://my-api.com/posts");
+  return res.json();
+}, "posts");
+
+export const preload = () => getPosts();
+
+export default function Page() {
+  const posts = createAsync(() => getPosts());
+  return <For each={posts()}>{(p) => <li>{p.title}</li>}</For>;
+}
+```
+
+## SSR Safety
+
+Avoid touching `window`, `document`, or `localStorage` at module scope. Use `onMount` or guards so server rendering doesn’t crash.
+
+```typescript
+import { createSignal, onMount } from "solid-js";
+
+const [path, setPath] = createSignal("");
+
+onMount(() => {
+  setPath(window.location.pathname);
+});
 ```
 
 ---
@@ -795,10 +833,12 @@ function GoodComponent() {
 }
 ```
 
-### 3. Using Array.map Instead of For
+### 3. Using `.map()` for Reactive Lists
+
+For reactive lists, prefer `<For>` (or `<Index>` when the index is stable) to avoid unnecessary DOM churn. `.map()` is fine for static/small lists that won’t change.
 
 ```typescript
-// BAD: array.map() recreates all elements on any change
+// BAD: map recreates all elements on any change
 function BadList() {
   const [items, setItems] = createSignal(["a", "b", "c"]);
 
@@ -809,7 +849,7 @@ function BadList() {
   );
 }
 
-// GOOD: For component has efficient reconciliation
+// GOOD: For reconciles efficiently for reactive lists
 function GoodList() {
   const [items, setItems] = createSignal(["a", "b", "c"]);
 
@@ -821,22 +861,56 @@ function GoodList() {
     </ul>
   );
 }
+
+// GOOD: Index is best when list order is stable and you care about index
+function GoodIndexList() {
+  const [items, setItems] = createSignal(["a", "b", "c"]);
+
+  return (
+    <ul>
+      <Index each={items()}>
+        {(item, i) => <li>{i()}: {item()}</li>}
+      </Index>
+    </ul>
+  );
+}
 ```
 
-### 4. Ternary Instead of Show
+### 4. Calling Components as Functions
+
+Calling a component like a plain function skips ownership/context/cleanup semantics. Prefer JSX (`<Component />`) so Solid can wire reactivity and lifecycles correctly.
 
 ```typescript
-// BAD: Ternary always evaluates both branches
-function BadConditional() {
-  const [show, setShow] = createSignal(false);
+// BAD: direct invocation
+function BadCall() {
+  const body = MyComponent();
+  return <section>{body}</section>;
+}
 
+// GOOD: JSX invocation
+function GoodCall() {
+  return (
+    <section>
+      <MyComponent />
+    </section>
+  );
+}
+```
+
+### 5. Over-prescribing `<Show>` (ternary is fine)
+
+Ternary (`cond() ? A : B`) and `&&` are valid in Solid. `<Show>` is similar to the ternary operator and is often preferred for readability and for its `fallback` and `keyed` options.
+
+```typescript
+// OK: simple conditional
+function ConditionalInline() {
+  const [show, setShow] = createSignal(false);
   return show() ? <HeavyComponent /> : <Fallback />;
 }
 
-// GOOD: Show only renders the active branch
-function GoodConditional() {
+// Often nicer: explicit fallback + keyed option when needed
+function ConditionalShow() {
   const [show, setShow] = createSignal(false);
-
   return (
     <Show when={show()} fallback={<Fallback />}>
       <HeavyComponent />
@@ -845,7 +919,7 @@ function GoodConditional() {
 }
 ```
 
-### 5. Mutating Signals Directly
+### 6. Mutating Signals Directly
 
 ```typescript
 // BAD: Direct mutation doesn't trigger updates
@@ -941,8 +1015,8 @@ describe("Counter", () => {
 1. **Signals**: Am I calling signals with `()` to read values?
 2. **Props**: Am I avoiding destructuring props?
 3. **Effects**: Am I reading signals synchronously in effects?
-4. **Lists**: Am I using `<For>` instead of `.map()`?
-5. **Conditionals**: Am I using `<Show>` instead of ternary?
+4. **Lists**: Am I using `<For>`/`<Index>` for reactive lists and `.map()` only for static/small lists?
+5. **Conditionals**: Am I using `<Show>`/`<Switch>` when it improves clarity (fallback, keyed, multi-branch), and avoiding non-reactive conditionals?
 6. **Memos**: Am I using `createMemo` for derived values?
 7. **DRY**: Is this logic duplicated? Should it be a shared hook/utility?
 8. **SRP**: Does this component have a single responsibility?

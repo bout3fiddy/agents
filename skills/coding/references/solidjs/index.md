@@ -18,10 +18,9 @@ Reference these guidelines when:
 | 2 | Bundle Size Optimization | CRITICAL |
 | 3 | Server-Side Performance | HIGH |
 | 4 | Client-Side Data Fetching | MEDIUM-HIGH |
-| 5 | Re-render Optimization | MEDIUM |
+| 5 | Reactive Invalidation Optimization | MEDIUM |
 | 6 | Rendering Performance | MEDIUM |
-| 7 | JavaScript Performance | LOW-MEDIUM |
-| 8 | Advanced Patterns | LOW |
+| 7 | Advanced Patterns | LOW |
 
 ## Quick Reference (Critical First)
 
@@ -58,7 +57,6 @@ rg -n "lru" references/solidjs/rules/
 - `bundle-*` — bundle size optimization
 - `server-*` — server-side performance
 - `client-*` — client-side data fetching
-- `rerender-*` — re-render optimization
+- `rerender-*` — reactive invalidation optimization
 - `rendering-*` — DOM rendering performance
-- `js-*` — JavaScript micro-optimizations
 - `advanced-*` — advanced patterns

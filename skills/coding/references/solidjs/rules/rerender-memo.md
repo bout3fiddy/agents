@@ -1,13 +1,13 @@
 ---
-title: Extract to Memoized Components
+title: Extract to Memoized Computations or Components
 impact: MEDIUM
-impactDescription: enables early returns
-tags: rerender, memo, useMemo, optimization
+impactDescription: reduces reactive work
+tags: reactivity, memo, optimization
 ---
 
-## Extract to Memoized Components
+## Extract to Memoized Computations or Components
 
-**Impact: MEDIUM (enables early returns)**
+**Impact: MEDIUM (reduces reactive work)**
 
 Isolate expensive work in memoized computations or child components.
 

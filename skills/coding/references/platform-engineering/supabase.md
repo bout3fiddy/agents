@@ -14,7 +14,6 @@ Reference for Supabase CLI, local development, and database management.
 | Start local Supabase | `supabase start` |
 | Stop local Supabase | `supabase stop` |
 | Check status | `supabase status` |
-| Export local env | `supabase status -o env` |
 | Login (one-time) | `supabase login` |
 | Link to production | `supabase link --project-ref <your-project-ref>` |
 | Create migration | `supabase migration new <name>` |
@@ -75,6 +74,7 @@ supabase login
 
 # Alternative to interactive login
 export SUPABASE_ACCESS_TOKEN="<token>"
+# Never paste tokens into chat or logs.
 
 # Link to production project
 supabase link --project-ref <your-project-ref>
@@ -86,7 +86,7 @@ supabase projects list
 ### After Linking You Can
 
 ```bash
-# Pull production schema to local
+# Pull remote schema changes into a migration (review carefully)
 supabase db pull
 
 # Push local migrations to production
@@ -134,22 +134,7 @@ supabase db reset  # ⚠️ Wipes local data
 supabase db push
 ```
 
-### Option B: Direct SQL (Simpler for Solo Dev)
-
-```bash
-# 1. Test SQL locally
-psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" << 'EOF'
-ALTER TABLE users ADD COLUMN preferences JSONB DEFAULT '{}';
-EOF
-
-# 2. Run same SQL in production via SQL Editor
-# https://supabase.com/dashboard/project/<your-project-ref>/sql/new
-
-# 3. Update the schema file manually
-# supabase/migrations/00000000000001_schema.sql
-```
-
-### Option C: Schema Diffing
+### Option B: Schema Diffing
 
 ```bash
 # Make changes directly to local DB, then generate migration
@@ -287,12 +272,14 @@ WHERE tablename = 'your_table';
 
 ## 7. Environment Variables
 
+Follow `references/secrets-and-auth-guardrails.md`. Store keys in your secret manager or local env files. Do not print or paste keys into chat or logs.
+
 ### Required for Production
 
 ```bash
 SUPABASE_URL=https://<your-project-ref>.supabase.co
-SUPABASE_PUBLISHABLE_KEY=eyJ...   # Public anon key (safe for frontend)
-SUPABASE_SECRET_KEY=eyJ...        # Service role key (backend only!)
+SUPABASE_PUBLISHABLE_KEY=<anon-key>   # Public anon key (safe for frontend)
+SUPABASE_SECRET_KEY=<service-role-key> # Service role key (backend only!)
 SUPABASE_DATABASE_URL=postgresql://postgres.<ref>:<redacted>@aws-0-<region>.pooler.supabase.com:6543/postgres
 ```
 
@@ -300,12 +287,10 @@ SUPABASE_DATABASE_URL=postgresql://postgres.<ref>:<redacted>@aws-0-<region>.pool
 
 ```bash
 SUPABASE_URL=http://127.0.0.1:54321
-SUPABASE_PUBLISHABLE_KEY=eyJ...   # From `supabase status`
-SUPABASE_SECRET_KEY=eyJ...        # From `supabase status`
+SUPABASE_PUBLISHABLE_KEY=<anon-key>
+SUPABASE_SECRET_KEY=<service-role-key>
 SUPABASE_DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:54322/postgres
 ```
-
-Tip: `supabase status -o env` prints local env vars in `.env` format. Never commit `.env*`.
 
 ---
 
@@ -350,8 +335,9 @@ supabase stop && supabase start
 # See differences between local and production
 supabase db diff
 
-# Pull production schema (overwrites local migrations)
+# Pull remote schema changes into a new migration (review carefully)
 supabase db pull --schema public
+# db pull creates a new migration file under supabase/migrations
 
 # Note: db pull excludes auth/storage unless you include those schemas with --schema
 ```
@@ -385,36 +371,7 @@ CREATE POLICY "View all" ON users FOR SELECT USING (true);
 
 ---
 
-## 10. Project File Locations
-
-| Purpose | File |
-|---------|------|
-| Complete schema | `supabase/migrations/00000000000001_schema.sql` |
-| Schema documentation | `supabase/DATABASE.md` |
-| Local config | `supabase/config.toml` |
-| Seed data | `supabase/seed.sql` |
-| Git ignores | `supabase/.gitignore` |
-
-### When Changing Schema
-
-**ALWAYS update both:**
-1. `supabase/migrations/00000000000001_schema.sql` - The SQL
-2. `supabase/DATABASE.md` - The documentation
-
-Keep schema documentation in sync with the actual SQL.
-
----
-
-## 12. Why This Workflow Works
-
-- **Deterministic**: local DB is always derivable from migrations (`db reset`).  
-- **Low drift**: `db diff` and migration list make discrepancies visible early.  
-- **Safe pushes**: `db push` after link gives a clear, repeatable deployment path.  
-- **Config clarity**: storage bucket settings live in `supabase/config.toml`, not hidden state.
-
----
-
-## 11. Useful SQL Queries
+## 10. Useful SQL Queries
 
 ### List All Tables
 

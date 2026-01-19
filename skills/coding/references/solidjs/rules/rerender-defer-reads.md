@@ -1,15 +1,15 @@
 ---
-title: Defer State Reads to Usage Point
+title: Defer Reactive Reads to Usage Point
 impact: MEDIUM
 impactDescription: avoids unnecessary subscriptions
-tags: rerender, searchParams, localStorage, optimization
+tags: reactivity, searchParams, localStorage, optimization
 ---
 
-## Defer State Reads to Usage Point
+## Defer Reactive Reads to Usage Point
 
 **Impact: MEDIUM (avoids unnecessary subscriptions)**
 
-Defer reactive reads until the moment of use; avoid unnecessary subscriptions.
+Defer reactive reads until the moment of use to avoid unnecessary subscriptions. Keep browser-only reads inside event handlers or `onMount` to avoid SSR issues.
 
 **Incorrect:**
 

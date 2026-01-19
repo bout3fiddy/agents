@@ -21,35 +21,23 @@ Performance optimization guide for SolidJS applications, ordered by impact. Rule
    - Preload based on user intent
 3. Server-Side Performance — **HIGH**
    - Cross-request LRU caching
-   - Minimize serialization boundaries
-   - Parallel data fetching via composition
-   - Per-request deduplication (request-scope cache)
+   - `query()` + `createAsync()` for request dedupe and shared caching
+   - Parallel data fetching with independent queries
 4. Client-Side Data Fetching — **MEDIUM-HIGH**
    - Deduplicate global event listeners
-   - Shared request cache/dedup
-5. Re-render Optimization — **MEDIUM**
+5. Reactive Invalidation Optimization — **MEDIUM**
    - Defer reactive reads to usage point
    - Extract memoized computations
-   - Narrow effect dependencies
+   - Narrow reactive dependencies
    - Subscribe to derived state
    - Use transitions for non-urgent updates
 6. Rendering Performance — **MEDIUM**
    - content-visibility for long lists
-   - Hoist static JSX/templates
    - Optimize SVG precision
    - Preserve DOM for show/hide
    - Explicit conditional rendering
-7. JavaScript Performance — **LOW-MEDIUM**
-   - Index maps for repeated lookups
-   - Cache property access in loops
-   - Cache storage API calls
-   - Combine iterations
-   - Early returns
-   - Hoist RegExp creation
-   - Set/Map for O(1) lookups
-8. Advanced Patterns — **LOW**
-   - Store event handlers in refs
-   - useLatest-style stable callback refs
+7. Advanced Patterns — **LOW**
+   - Avoid destructuring callback props when you need the latest function
 
 ---
 

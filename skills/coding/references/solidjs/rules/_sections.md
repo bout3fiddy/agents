@@ -18,29 +18,24 @@ The section ID (in parentheses) is the filename prefix used to group rules.
 ## 3. Server-Side Performance (server)
 
 **Impact:** HIGH  
-**Description:** Optimize server fetches, caching, and serialization to reduce response times.
+**Description:** Optimize server fetches and caching (SolidStart data APIs, request dedupe) to reduce response times.
 
 ## 4. Client-Side Data Fetching (client)
 
 **Impact:** MEDIUM-HIGH  
 **Description:** Deduplicate requests and subscriptions across components.
 
-## 5. Re-render Optimization (rerender)
+## 5. Reactive Invalidation Optimization (rerender)
 
 **Impact:** MEDIUM  
-**Description:** Reduce unnecessary reactive updates and recomputation.
+**Description:** Reduce unnecessary reactive invalidations and recomputation.
 
 ## 6. Rendering Performance (rendering)
 
 **Impact:** MEDIUM  
 **Description:** Reduce DOM and layout work during rendering.
 
-## 7. JavaScript Performance (js)
-
-**Impact:** LOW-MEDIUM  
-**Description:** Micro-optimizations for hot paths that can add up.
-
-## 8. Advanced Patterns (advanced)
+## 7. Advanced Patterns (advanced)
 
 **Impact:** LOW  
 **Description:** Advanced patterns for specific edge cases.

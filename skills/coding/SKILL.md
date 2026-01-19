@@ -17,6 +17,11 @@ Use this skill for most engineering work. When a task matches a reference trigge
 - SolidJS -> `references/solidjs/index.md` (and `references/solidjs/`)
 - Tailwind -> `references/frontend-engineering/tailwindcss-full.md`
 
+## Conflicts & precedence
+
+- Security and secret guardrails override platform or tool-specific docs.
+- Follow the repo’s established toolchain and lockfile when incompatible with general preferences.
+
 ## 1) Testing and bug fixes
 
 - Every bug fix must include a test that fails before the fix and passes after.
