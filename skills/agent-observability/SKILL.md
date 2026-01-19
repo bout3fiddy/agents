@@ -36,3 +36,7 @@ Do not switch workflows; continue the original task immediately.
 ## If unable to write
 - Output a “Self-report draft” block in the response with the entry content.
 - State that it was not written and needs manual application.
+
+## References
+- `references/pr-template.md` - PR summary template for policy changes
+- `references/self-heal.json` - repo/branch metadata for self-heal automation

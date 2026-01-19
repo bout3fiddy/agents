@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Destructive mirror from repo → ~/.codex and ~/.claude
-# This deletes any skills/agents/commands in targets that are not present in this repo.
+# This deletes any skills in targets that are not present in this repo.
 
 DEFAULT_AGENTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 AGENTS_DIR="${AGENTS_DIR:-$DEFAULT_AGENTS_DIR}"
@@ -12,7 +12,7 @@ CODEX_DIR="$HOME/.codex"
 echo "Hard-syncing from $AGENTS_DIR..."
 
 # Ensure source directories exist (treat missing as empty)
-mkdir -p "$AGENTS_DIR/skills" "$AGENTS_DIR/agents" "$AGENTS_DIR/commands" "$AGENTS_DIR/instructions"
+mkdir -p "$AGENTS_DIR/skills" "$AGENTS_DIR/instructions"
 
 mirror_dir() {
   local src="$1"
@@ -43,12 +43,6 @@ mirror_file() {
 echo "Syncing skills (destructive mirror)..."
 mirror_dir "$AGENTS_DIR/skills" "$CLAUDE_DIR/skills"
 mirror_dir "$AGENTS_DIR/skills" "$CODEX_DIR/skills"
-
-echo "Syncing agents (destructive mirror)..."
-mirror_dir "$AGENTS_DIR/agents" "$CLAUDE_DIR/agents"
-
-echo "Syncing commands (destructive mirror)..."
-mirror_dir "$AGENTS_DIR/commands" "$CLAUDE_DIR/commands"
 
 echo "Syncing instructions (overwrite)..."
 mirror_file "$AGENTS_DIR/instructions/global.md" "$CLAUDE_DIR/CLAUDE.md"

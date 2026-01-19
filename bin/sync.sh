@@ -11,8 +11,8 @@ shopt -s nullglob
 echo "Syncing from $AGENTS_DIR..."
 
 # Ensure base directories exist
-mkdir -p "$AGENTS_DIR/skills" "$AGENTS_DIR/instructions" "$AGENTS_DIR/commands" "$AGENTS_DIR/agents"
-mkdir -p "$CLAUDE_DIR/skills" "$CLAUDE_DIR/agents" "$CLAUDE_DIR/commands" "$CODEX_DIR/skills"
+mkdir -p "$AGENTS_DIR/skills" "$AGENTS_DIR/instructions"
+mkdir -p "$CLAUDE_DIR/skills" "$CODEX_DIR/skills"
 
 mtime() {
     local path="$1"
@@ -217,39 +217,7 @@ sync_instructions() {
     echo "  global.md <-> Claude + Codex (latest wins)"
 }
 
-sync_agents() {
-    echo "Syncing agents..."
-
-    mkdir -p "$AGENTS_DIR/agents" "$CLAUDE_DIR/agents"
-    local name
-    for name in $(ls -1 "$AGENTS_DIR/agents" "$CLAUDE_DIR/agents" 2>/dev/null | sort -u); do
-        [[ -z "$name" ]] && continue
-        local agents_file="$AGENTS_DIR/agents/$name"
-        local claude_file="$CLAUDE_DIR/agents/$name"
-        [[ "$name" == *.md ]] || continue
-        echo "  $name"
-        sync_file_latest_wins "$agents_file" "$claude_file"
-    done
-}
-
-sync_commands() {
-    echo "Syncing commands..."
-
-    mkdir -p "$AGENTS_DIR/commands" "$CLAUDE_DIR/commands"
-    local name
-    for name in $(ls -1 "$AGENTS_DIR/commands" "$CLAUDE_DIR/commands" 2>/dev/null | sort -u); do
-        [[ -z "$name" ]] && continue
-        local agents_file="$AGENTS_DIR/commands/$name"
-        local claude_file="$CLAUDE_DIR/commands/$name"
-        [[ "$name" == *.md ]] || continue
-        echo "  $name"
-        sync_file_latest_wins "$agents_file" "$claude_file"
-    done
-}
-
 sync_skills
 sync_instructions
-sync_agents
-sync_commands
 echo ""
 echo "Done!"
