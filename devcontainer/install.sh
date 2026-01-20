@@ -17,6 +17,8 @@ notes:
   - rebuild keeps named volumes (history, auth) intact
   - if devcontainer cli is missing, we suggest how to install it
   - set DEVC_TEMPLATE_DIR to override the template source
+  - set DEVC_TMUX_SESSION to override the tmux session name (default: agent)
+  - set DEVC_TMUX_SESSION_MODE=new to force a new session per run
 USAGE
 }
 
@@ -95,6 +97,28 @@ require_devcontainer_cli() {
   fi
 }
 
+tmux_session_name() {
+  if [[ -n "${DEVC_TMUX_SESSION:-}" ]]; then
+    echo "$DEVC_TMUX_SESSION"
+    return
+  fi
+
+  if [[ "${DEVC_TMUX_SESSION_MODE:-reuse}" == "new" ]]; then
+    echo "agent-$(date +%s)-$$"
+    return
+  fi
+
+  echo "agent"
+}
+
+tmux_attach() {
+  local repo_path="$1"
+  local session
+
+  session="$(tmux_session_name)"
+  devcontainer exec --workspace-folder "$repo_path" tmux new -As "$session"
+}
+
 self_install() {
   local bin_dir="$HOME/.local/bin"
   local share_dir="$HOME/.local/share/devc/template"
@@ -164,13 +188,13 @@ case "$cmd" in
     copy_template "$REPO_PATH" "$TEMPLATE_DIR"
     require_devcontainer_cli
     devcontainer up --workspace-folder "$REPO_PATH" --remove-existing-container
-    devcontainer exec --workspace-folder "$REPO_PATH" tmux new -As agent
+    tmux_attach "$REPO_PATH"
     ;;
   up)
     copy_template "$REPO_PATH" "$TEMPLATE_DIR"
     require_devcontainer_cli
     devcontainer up --workspace-folder "$REPO_PATH"
-    devcontainer exec --workspace-folder "$REPO_PATH" tmux new -As agent
+    tmux_attach "$REPO_PATH"
     ;;
   exec)
     copy_template "$REPO_PATH" "$TEMPLATE_DIR"
