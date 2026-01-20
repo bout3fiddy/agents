@@ -356,6 +356,29 @@ def ensure_fish_history() -> None:
     log(f"linked fish history to {target}")
 
 
+def ensure_uv_tools() -> None:
+    tools = ("ruff", "pytest", "mypy", "prek")
+    missing = [tool for tool in tools if shutil.which(tool) is None]
+    if not missing:
+        log("uv tools already installed")
+        return
+    if shutil.which("uv") is None:
+        log("uv not found; skipping uv tool install")
+        return
+    log(f"installing uv tools: {', '.join(missing)}")
+    result = subprocess.run(
+        ["uv", "tool", "install", *missing],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        detail = result.stderr.strip() or result.stdout.strip()
+        log(f"uv tool install failed: {detail}")
+        return
+    log("uv tools installed")
+
+
 def ensure_dir_ownership(path: Path) -> None:
     path.mkdir(parents=True, exist_ok=True)
     try:
@@ -406,6 +429,7 @@ def main() -> None:
     ensure_claude_config()
     ensure_fish_config()
     ensure_shell_aliases()
+    ensure_uv_tools()
     log("configured defaults for container use")
 
 

@@ -25,9 +25,9 @@ the built in terminal would login inside the container.
 ## what's inside
 
 - base image: ubuntu 25.10 + node from `node:22-bookworm-slim`
-- tools: git, gh, jq, ripgrep, fd, zoxide, tmux, fish, zsh, vim
+- tools: git, jq, ripgrep, fd, zoxide, tmux, fish, zsh, vim + CLIs (gh, docker cli, bun, lsof, psql, gcloud)
 - agents: claude-code + codex cli (latest), agent-browser
-- python: uv + a managed python (currently 3.14) preinstalled
+- python: uv + a managed python (currently 3.12); ruff/pytest/mypy/prek installed on first container start
 - networking: no firewall / restrictions (internet enabled)
 - permissions: passwordless sudo for the `node` user
 
@@ -47,6 +47,7 @@ the built in terminal would login inside the container.
 - `~/.claude` and `~/.codex` are bind-mounted from the host
 - gh config stored in a docker volume
 - host services are reachable at `http://host.docker.internal:<port>`
+- common local ports forwarded: 3000, 3100, 8000, 8001, 8002, 8082, 54321, 54322
 
 ## devcontainer json highlights
 

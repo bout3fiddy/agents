@@ -16,9 +16,14 @@
 ## Spec-driven work
 - For multi-step or exploratory work, maintain `docs/specs/<slug>.md`.
 
+## Repo-specific context
+- If a repo has `AGENTS.md` or `CLAUDE.md`, read it first.
+- If repo context is missing or needs to be condensed, create/update `docs/agent-context.md` with short bullet points and reference it from the root file. Only append new knowledge.
+
 ## Command discipline
 - Don't run shell commands for discussion-only requests unless needed to apply a change.
 - Run safe, routine commands by default. Only ask the user when a command is destructive, touches secrets, or needs explicit approval.
+- For routine diagnostics, run the command yourself; only ask the user when blocked by permissions or environment limits, and explain why.
 
 ## Skills index
 - agent-observability - detect explicit corrections to assistant behavior (e.g., "don't do X", "always do Y") and log a report in `docs/observed-coding-agent-issues.md` after completing the current request. Do not trigger on general frustration, meta-policy discussion, or hypotheticals. refs: PR template + self-heal metadata

@@ -43,7 +43,8 @@ ARG CODEX_VERSION=latest
 # Install common dev tools.
 # Note: we intentionally do NOT install iptables/ipset or ship a firewall script.
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
-  apt-get update && apt-get install -y --no-install-recommends \
+  apt-get update \
+  && apt-get install -y --no-install-recommends \
     ca-certificates \
     curl \
     less \
@@ -53,7 +54,6 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     fish \
     unzip \
     openssh-client \
-    gh \
     jq \
     vim \
     tmux \
@@ -62,6 +62,11 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     ripgrep \
     zoxide \
     fd-find \
+    gnupg \
+    build-essential \
+    gh \
+    lsof \
+    postgresql-client \
     libasound2t64 \
     libatk-bridge2.0-0 \
     libatk1.0-0 \
@@ -80,10 +85,34 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     libxfixes3 \
     libxkbcommon0 \
     libxrandr2 \
+  && docker_compose_pkg="docker-compose-v2" \
+  && if ! apt-cache show "${docker_compose_pkg}" >/dev/null 2>&1; then docker_compose_pkg="docker-compose-plugin"; fi \
+  && docker_buildx_pkg="" \
+  && if apt-cache show docker-buildx >/dev/null 2>&1; then docker_buildx_pkg="docker-buildx"; \
+     elif apt-cache show docker-buildx-plugin >/dev/null 2>&1; then docker_buildx_pkg="docker-buildx-plugin"; fi \
+  && apt-get install -y --no-install-recommends \
+    docker.io \
+    "${docker_compose_pkg}" \
+    ${docker_buildx_pkg:+${docker_buildx_pkg}} \
   && rm -rf /var/lib/apt/lists/*
 RUN if command -v fdfind >/dev/null 2>&1 && [ ! -e /usr/local/bin/fd ]; then \
     ln -s /usr/bin/fdfind /usr/local/bin/fd; \
   fi
+
+# Install Google Cloud CLI via the official apt repo (Linuxbrew cask is not supported).
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+  apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    curl \
+    gnupg \
+  && mkdir -p /etc/apt/keyrings \
+  && curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg \
+    | gpg --dearmor -o /etc/apt/keyrings/cloud.google.gpg \
+  && echo "deb [signed-by=/etc/apt/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" \
+    > /etc/apt/sources.list.d/google-cloud-sdk.list \
+  && apt-get update && apt-get install -y --no-install-recommends \
+    google-cloud-cli \
+  && rm -rf /var/lib/apt/lists/*
 
 # Bring in node + npm from the official node image (fast, no apt deps).
 COPY --from=node /usr/local/ /usr/local/
@@ -141,7 +170,8 @@ WORKDIR /workspace
 
 # Install global packages.
 ENV NPM_CONFIG_PREFIX=/usr/local/share/npm-global
-ENV PATH="${PATH}:/usr/local/share/npm-global/bin"
+ENV BUN_INSTALL=/home/node/.bun
+ENV PATH="/home/node/.bun/bin:/home/node/.local/bin:${PATH}:/usr/local/share/npm-global/bin"
 ENV NPM_CONFIG_FUND=false \
     NPM_CONFIG_AUDIT=false \
     NPM_CONFIG_UPDATE_NOTIFIER=false \
@@ -166,11 +196,25 @@ RUN agent-browser install
 # Install uv
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
 
-# Ensure uv is on PATH for the node user.
-ENV PATH="/home/node/.local/bin:${PATH}"
+# Install bun (JS runtime) for the node user.
+RUN curl -fsSL https://bun.sh/install | bash
 
 # Preinstall managed Python for uv.
-RUN uv python install 3.14
+RUN uv python install 3.12
+
+# Preinstall uv tools to avoid heavy postCreate installs inside large workspaces.
+RUN uv tool install --python 3.12 ruff \
+  && uv tool install --python 3.12 pytest \
+  && uv tool install --python 3.12 mypy \
+  && uv tool install --python 3.12 prek
+
+# Ensure python3.12 exists on PATH for scripts that require it.
+RUN mkdir -p /home/node/.local/bin \
+  && python_path="$(uv python find 3.12)" \
+  && [ -n "${python_path}" ] \
+  && ln -sf "${python_path}" /home/node/.local/bin/python3.12 \
+  && chmod +x /home/node/.local/bin/python3.12
+
 
 # Passwordless sudo for the non-root user (for unattended / automation workflows).
 USER root

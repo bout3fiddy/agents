@@ -11,7 +11,7 @@ description: Self-report agent issues by logging user corrections for later revi
 - Create the report file if it doesn’t exist.
 - After logging, immediately resume the main task.
 - Rate limit: at most one log entry per session unless the user explicitly asks to log more.
-- Batch multiple corrections into a single entry (append an "Additional corrections" bullet list) instead of creating multiple entries.
+- Batch multiple corrections into a single entry by updating the existing root cause and guardrail notes; do not add verbatim quotes.
 
 ## Detect → Record → Resume
 
@@ -27,15 +27,8 @@ If a log has already been written this session, batch new corrections under the 
 Entry format:
 - Date/Time:
 - Task/Context:
-- User correction (verbatim):
 - What went wrong (root cause):
 - Proposed guardrail:
-- Status: Pending user decision
-
-Optional batch format:
-- Additional corrections:
-  - "<verbatim correction 1>"
-  - "<verbatim correction 2>"
 
 ### 3) Resume main task
 Do not switch workflows; continue the original task immediately.
