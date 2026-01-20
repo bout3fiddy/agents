@@ -16,6 +16,17 @@ agents/
     └── sync-hard.sh           # Destructive mirror to ~/.codex and ~/.claude
 ```
 
+## Skills Directory
+
+Short descriptions of the skills stored in `skills/`:
+
+- `agent-browser`: Browser automation for navigation, form filling, screenshots, and extraction.
+- `agent-observability`: Logs explicit user corrections to improve assistant behavior.
+- `coding`: Core engineering rules for implementation, refactors, and bug fixes.
+- `planning`: Spec-driven planning, scope clarification, and Linear tracking workflows.
+- `seo`: SEO strategy and execution, including programmatic SEO and SEO audits.
+- `skill-creator`: Create, update, or install skills in this repo and keep the index in sync.
+
 ## Quick Start
 
 ```bash

@@ -11,8 +11,11 @@ Thumbs.db
 *.tmp
 *.bak
 
+# Python
+.ruff_cache/
+
 # Node (if any scripts need it)
 node_modules/
-skills/*/node_modules/
-skills/**/node_modules/
+
+# Repo-specific
 docs/

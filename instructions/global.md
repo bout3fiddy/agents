@@ -25,6 +25,7 @@
 - agent-browser - browser automation tool (not a sub-agent). Use only for navigation/forms/screenshots/extraction. refs: none
 - coding - core engineering rules with indexed references (frontend + platform included). refs: see `skills/coding/SKILL.md`
 - planning - clarify scope, spec-first delivery, and Linear tracking. refs: clarifying questions, spec workflow, Linear ops
+- seo - SEO strategy and execution, including programmatic SEO at scale and SEO audits/diagnostics. refs: skills/seo/references/programmatic-seo.md, skills/seo/references/seo-audit.md
 - skill-creator - create/install skills workflow. refs: checklist + templates
 
 ## Browser Automation

@@ -18,7 +18,7 @@ notes:
   - if devcontainer cli is missing, we suggest how to install it
   - set DEVC_TEMPLATE_DIR to override the template source
   - set DEVC_TMUX_SESSION to override the tmux session name (default: agent)
-  - set DEVC_TMUX_SESSION_MODE=new to force a new session per run
+  - set DEVC_TMUX_SESSION_MODE=reuse to reuse a single session per repo (default: new)
 USAGE
 }
 
@@ -103,12 +103,12 @@ tmux_session_name() {
     return
   fi
 
-  if [[ "${DEVC_TMUX_SESSION_MODE:-reuse}" == "new" ]]; then
-    echo "agent-$(date +%s)-$$"
+  if [[ "${DEVC_TMUX_SESSION_MODE:-new}" == "reuse" ]]; then
+    echo "agent"
     return
   fi
 
-  echo "agent"
+  echo "agent-$(date +%s)-$$"
 }
 
 tmux_attach() {
