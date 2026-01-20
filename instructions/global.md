@@ -18,13 +18,22 @@
 
 ## Command discipline
 - Don't run shell commands for discussion-only requests unless needed to apply a change.
+- Run safe, routine commands by default. Only ask the user when a command is destructive, touches secrets, or needs explicit approval.
 
-## Skills index (current)
-- agent-observability - highest priority: detect user frustration/corrections, log a report in `docs/observed-coding-agent-issues.md`, then resume. refs: PR template + self-heal metadata
-- agent-browser - browser automation for navigation, forms, screenshots, extraction. refs: none
+## Skills index
+- agent-observability - detect explicit corrections to assistant behavior (e.g., "don't do X", "always do Y") and log a report in `docs/observed-coding-agent-issues.md` after completing the current request. Do not trigger on general frustration, meta-policy discussion, or hypotheticals. refs: PR template + self-heal metadata
+- agent-browser - browser automation tool (not a sub-agent). Use only for navigation/forms/screenshots/extraction. refs: none
 - coding - core engineering rules with indexed references (frontend + platform included). refs: see `skills/coding/SKILL.md`
 - planning - clarify scope, spec-first delivery, and Linear tracking. refs: clarifying questions, spec workflow, Linear ops
 - skill-creator - create/install skills workflow. refs: checklist + templates
 
 ## Browser Automation
+- `agent-browser` is a command-line tool, not an agent.
 - Use `agent-browser` for web automation (see agent-browser skill).
+
+## Agent observability trigger guardrails
+- Require an explicit corrective directive about assistant behavior (imperative + desired future behavior).
+- Exclusions: policy discussions, general frustration without a directive, and hypotheticals.
+- If ambiguous, skip logging unless the user explicitly asks to log.
+- Defer logging until after completing the current user request; never interrupt mid-task.
+- Only log when there is a clear, actionable fix or guardrail to implement; otherwise skip.

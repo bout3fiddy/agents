@@ -15,6 +15,7 @@ Use this skill for most engineering work. When a task matches a reference trigge
 - JS/TS toolchain -> `references/bun.md`
 - Auth/secrets/credentials -> `references/secrets-and-auth-guardrails.md`
 - SolidJS -> `references/solidjs/index.md` (and `references/solidjs/`)
+- React/Next.js -> `references/react/index.md`
 - Tailwind -> `references/frontend-engineering/tailwindcss-full.md`
 
 ## Conflicts & precedence
