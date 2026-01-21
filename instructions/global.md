@@ -17,8 +17,9 @@
 - For multi-step or exploratory work, maintain `docs/specs/<slug>.md`.
 
 ## Repo-specific context
-- If a repo has `AGENTS.md` or `CLAUDE.md`, read it first.
-- If repo context is missing or needs to be condensed, create/update `docs/agent-context.md` with short bullet points and reference it from the root file. Only append new knowledge.
+- If a repo has `AGENTS.md` or `CLAUDE.md`, read it first. These files capture repo-specific conventions, toolchains, and guardrails that override generic assumptions.
+- Be proactive and specific: whenever you discover structural repo knowledge (e.g., where key code lives, how workflows are run, repo-specific commands, tooling/layout conventions), add a concise bullet to `AGENTS.md`.
+- If repo context is missing or needs to be condensed, create/update `AGENTS.md` with short bullet points and reference it from the root file. Only append new knowledge.
 
 ## Command discipline
 - Don't run shell commands for discussion-only requests unless needed to apply a change.

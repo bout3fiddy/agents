@@ -57,7 +57,11 @@
     "source=${localEnv:HOME}/.claude,target=/home/node/.claude,type=bind,consistency=cached",
     "source=${localEnv:HOME}/.codex,target=/home/node/.codex-host,type=bind,consistency=cached",
     "source=gh-config,target=/home/node/.config/gh,type=volume",
-    "source=${localEnv:HOME}/.gitconfig,target=/home/node/.gitconfig,type=bind,consistency=cached,readonly"
+    "source=${localEnv:HOME}/.gitconfig,target=/home/node/.gitconfig,type=bind,consistency=cached,readonly",
+    "source=${localWorkspaceFolderBasename}-node_modules,target=/workspace/node_modules,type=volume",
+    "source=${localWorkspaceFolderBasename}-frontend-node_modules,target=/workspace/apps/frontend/node_modules,type=volume",
+    "source=${localWorkspaceFolderBasename}-admin-node_modules,target=/workspace/apps/admin_platform/node_modules,type=volume",
+    "source=${localWorkspaceFolderBasename}-venv,target=/workspace/.venv-container,type=volume"
   ],
   "containerEnv": {
     "NODE_OPTIONS": "--max-old-space-size=4096",

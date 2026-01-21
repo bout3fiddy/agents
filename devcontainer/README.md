@@ -49,6 +49,50 @@ the built in terminal would login inside the container.
 - host services are reachable at `http://host.docker.internal:<port>`
 - common local ports forwarded: 3000, 3100, 8000, 8001, 8002, 8082, 54321, 54322
 
+## native deps and shared node_modules
+
+Because `/workspace` is a bind mount from your host, any existing `node_modules` are shared across macOS and Linux.
+Native deps are OS/arch-specific (darwin vs linux), so installs on the host can break inside the container and vice
+versa. This template isolates `node_modules` inside the container using Docker volumes by default.
+
+If your repo has additional `package.json` locations, add a volume mount for each new `node_modules` path:
+
+```json
+// .devcontainer/devcontainer.json
+"mounts": [
+  "... existing mounts ...",
+  "source=${localWorkspaceFolderBasename}-node_modules,target=/workspace/node_modules,type=volume",
+  "source=${localWorkspaceFolderBasename}-frontend-node_modules,target=/workspace/apps/frontend/node_modules,type=volume",
+  "source=${localWorkspaceFolderBasename}-admin-node_modules,target=/workspace/apps/admin_platform/node_modules,type=volume"
+]
+```
+
+Optional (recommended) for Python: keep the container venv isolated too (included by default).
+
+```json
+"mounts": [
+  "... existing mounts ...",
+  "source=${localWorkspaceFolderBasename}-venv,target=/workspace/.venv-container,type=volume"
+]
+```
+
+After first enablement (volumes are empty), rebuild the container and reinstall deps inside it (`bun install` per package).
+
+## accessing host services (important)
+
+- inside the container, `localhost`/`127.0.0.1` refers to the container, not your host
+- use `http://host.docker.internal:<port>` for host dev servers and APIs
+- if a dev server blocks that hostname (e.g., Vite), allow it:
+
+```ts
+// vite.config.ts
+export default defineConfig({
+  server: {
+    allowedHosts: ["host.docker.internal"],
+  },
+});
+```
+
 ## devcontainer json highlights
 
 - adds `host.docker.internal` via `--add-host=host-gateway`

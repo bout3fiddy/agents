@@ -379,6 +379,96 @@ def ensure_uv_tools() -> None:
     log("uv tools installed")
 
 
+def _node_modules_ready(path: Path) -> bool:
+    node_modules = path / "node_modules"
+    if not node_modules.is_dir():
+        return False
+    try:
+        return any(node_modules.iterdir())
+    except OSError:
+        return True
+
+
+def _read_package_manager(path: Path) -> str | None:
+    package_json = path / "package.json"
+    if not package_json.exists():
+        return None
+    try:
+        data = json.loads(package_json.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    package_manager = data.get("packageManager")
+    if isinstance(package_manager, str):
+        return package_manager
+    return None
+
+
+def _bun_lock_present(path: Path) -> bool:
+    return (path / "bun.lockb").exists() or (path / "bun.lock").exists()
+
+
+def _uses_bun(path: Path) -> bool:
+    if _bun_lock_present(path):
+        return True
+    package_manager = _read_package_manager(path)
+    return bool(package_manager and package_manager.startswith("bun@"))
+
+
+def _bun_install_args(path: Path) -> list[str]:
+    if _bun_lock_present(path):
+        return ["--frozen-lockfile"]
+    return []
+
+
+def _iter_bun_targets(workspace: Path) -> list[Path]:
+    targets: list[Path] = []
+    if (workspace / "package.json").exists():
+        targets.append(workspace)
+
+    for parent in ("apps", "packages"):
+        root = workspace / parent
+        if not root.is_dir():
+            continue
+        for child in root.iterdir():
+            if child.is_dir() and (child / "package.json").exists():
+                targets.append(child)
+    return targets
+
+
+def ensure_bun_deps(workspace: Path) -> None:
+    if os.environ.get("DEVCONTAINER_SKIP_BUN_INSTALL", "").lower() in ("1", "true", "yes"):
+        log("skipping bun install (DEVCONTAINER_SKIP_BUN_INSTALL set)")
+        return
+    if shutil.which("bun") is None:
+        log("bun not found; skipping bun installs")
+        return
+
+    for path in _iter_bun_targets(workspace):
+        label = str(path.relative_to(workspace)) if path != workspace else "workspace root"
+        if not _uses_bun(path):
+            log(f"skipping bun install in {label} (no bun lock or packageManager)")
+            continue
+        if not _bun_lock_present(path):
+            log(f"skipping bun install in {label} (missing bun lockfile)")
+            continue
+        ensure_dir_ownership(path / "node_modules")
+        if _node_modules_ready(path):
+            log(f"skipping bun install in {label} (node_modules exists)")
+            continue
+        cmd = ["bun", "install", *_bun_install_args(path)]
+        log(f"installing bun deps in {label}")
+        result = subprocess.run(
+            cmd,
+            cwd=path,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0:
+            detail = result.stderr.strip() or result.stdout.strip()
+            log(f"bun install failed in {label}: {detail}")
+
+
 def ensure_dir_ownership(path: Path) -> None:
     path.mkdir(parents=True, exist_ok=True)
     try:
@@ -430,6 +520,7 @@ def main() -> None:
     ensure_fish_config()
     ensure_shell_aliases()
     ensure_uv_tools()
+    ensure_bun_deps(workspace)
     log("configured defaults for container use")
 
 

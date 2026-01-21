@@ -2,6 +2,8 @@
 
 Skills-first setup for Claude Code + Codex. Keep everything in `~/.agents` and sync copies to each tool.
 
+Repo-specific notes live in `AGENTS.md`.
+
 ## Structure
 
 ```
