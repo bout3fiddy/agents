@@ -366,17 +366,22 @@ def ensure_uv_tools() -> None:
         log("uv not found; skipping uv tool install")
         return
     log(f"installing uv tools: {', '.join(missing)}")
-    result = subprocess.run(
-        ["uv", "tool", "install", *missing],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-    if result.returncode != 0:
-        detail = result.stderr.strip() or result.stdout.strip()
-        log(f"uv tool install failed: {detail}")
-        return
-    log("uv tools installed")
+    failed: list[str] = []
+    for tool in missing:
+        result = subprocess.run(
+            ["uv", "tool", "install", tool],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0:
+            detail = result.stderr.strip() or result.stdout.strip()
+            log(f"uv tool install failed for {tool}: {detail}")
+            failed.append(tool)
+    if failed:
+        log(f"uv tool install incomplete (failed: {', '.join(failed)})")
+    else:
+        log("uv tools installed")
 
 
 def _node_modules_ready(path: Path) -> bool:
