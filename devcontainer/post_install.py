@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import ast
 import json
 import os
 import re
@@ -357,7 +358,8 @@ def ensure_fish_history() -> None:
 
 
 def ensure_uv_tools() -> None:
-    tools = ("ruff", "pytest", "mypy", "prek")
+    tools = ("ruff", "pytest", "mypy", "prek", "takopi")
+    upgrade_tools = {"takopi"}
     missing = [tool for tool in tools if shutil.which(tool) is None]
     if not missing:
         log("uv tools already installed")
@@ -368,8 +370,12 @@ def ensure_uv_tools() -> None:
     log(f"installing uv tools: {', '.join(missing)}")
     failed: list[str] = []
     for tool in missing:
+        cmd = ["uv", "tool", "install"]
+        if tool in upgrade_tools:
+            cmd.append("-U")
+        cmd.append(tool)
         result = subprocess.run(
-            ["uv", "tool", "install", tool],
+            cmd,
             check=False,
             capture_output=True,
             text=True,
@@ -424,20 +430,161 @@ def _bun_install_args(path: Path) -> list[str]:
         return ["--frozen-lockfile"]
     return []
 
+def _read_workspaces_from_package_json(workspace: Path) -> list[str]:
+    package_json = workspace / "package.json"
+    if not package_json.exists():
+        return []
+    try:
+        data = json.loads(package_json.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return []
+    workspaces = data.get("workspaces")
+    if isinstance(workspaces, list):
+        return [item for item in workspaces if isinstance(item, str)]
+    if isinstance(workspaces, dict):
+        packages = workspaces.get("packages")
+        if isinstance(packages, list):
+            return [item for item in packages if isinstance(item, str)]
+    return []
+
+
+def _read_workspaces_from_pnpm(path: Path) -> list[str]:
+    if not path.exists():
+        return []
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return []
+
+    patterns: list[str] = []
+    in_packages = False
+    base_indent = 0
+
+    for line in lines:
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        if not in_packages:
+            if stripped.startswith("packages:"):
+                in_packages = True
+                base_indent = len(line) - len(line.lstrip())
+                inline = stripped[len("packages:"):].strip()
+                if inline:
+                    if inline.startswith("[") and inline.endswith("]"):
+                        try:
+                            value = ast.literal_eval(inline)
+                        except Exception:
+                            value = None
+                        if isinstance(value, list):
+                            for item in value:
+                                if isinstance(item, str):
+                                    patterns.append(item)
+                    else:
+                        if (inline.startswith("'") and inline.endswith("'")) or (
+                            inline.startswith('"') and inline.endswith('"')
+                        ):
+                            inline = inline[1:-1]
+                        patterns.append(inline)
+                continue
+        else:
+            indent = len(line) - len(line.lstrip())
+            if indent <= base_indent:
+                in_packages = False
+                continue
+            if stripped.startswith("-"):
+                item = stripped[1:].strip()
+                if (item.startswith("'") and item.endswith("'")) or (
+                    item.startswith('"') and item.endswith('"')
+                ):
+                    item = item[1:-1]
+                if item:
+                    patterns.append(item)
+
+    return patterns
+
+
+def _normalize_workspace_pattern(pattern: str) -> str:
+    normalized = pattern.strip()
+    if normalized.startswith("./"):
+        normalized = normalized[2:]
+    return normalized
+
+
+def _collect_workspace_targets(workspace: Path, patterns: list[str]) -> list[Path]:
+    includes: list[str] = []
+    excludes: list[str] = []
+
+    for raw in patterns:
+        normalized = _normalize_workspace_pattern(raw)
+        if not normalized:
+            continue
+        if normalized.startswith("!"):
+            excluded = normalized[1:].strip()
+            if excluded:
+                excludes.append(excluded)
+        else:
+            includes.append(normalized)
+
+    if not includes:
+        return []
+
+    candidates: set[Path] = set()
+    for pattern in includes:
+        for match in workspace.glob(pattern):
+            if match.is_file() and match.name == "package.json":
+                match = match.parent
+            if match.is_dir():
+                candidates.add(match)
+
+    if excludes:
+        excluded_paths: set[Path] = set()
+        for pattern in excludes:
+            for match in workspace.glob(pattern):
+                if match.is_file() and match.name == "package.json":
+                    match = match.parent
+                if match.is_dir():
+                    excluded_paths.add(match)
+        candidates -= excluded_paths
+
+    results: list[Path] = []
+    for path in candidates:
+        if "node_modules" in path.parts:
+            continue
+        if not (path / "package.json").exists():
+            continue
+        try:
+            relative = path.relative_to(workspace)
+        except ValueError:
+            continue
+        if relative.as_posix() == ".":
+            continue
+        results.append(path)
+
+    return sorted(results, key=lambda item: item.as_posix())
+
 
 def _iter_bun_targets(workspace: Path) -> list[Path]:
     targets: list[Path] = []
     if (workspace / "package.json").exists():
         targets.append(workspace)
 
-    for parent in ("apps", "packages"):
-        root = workspace / parent
-        if not root.is_dir():
+    patterns: list[str] = []
+    patterns.extend(_read_workspaces_from_package_json(workspace))
+    patterns.extend(_read_workspaces_from_pnpm(workspace / "pnpm-workspace.yaml"))
+    patterns.extend(_read_workspaces_from_pnpm(workspace / "pnpm-workspace.yml"))
+
+    if patterns:
+        targets.extend(_collect_workspace_targets(workspace, patterns))
+
+    seen: set[Path] = set()
+    deduped: list[Path] = []
+    for path in targets:
+        resolved = path.resolve()
+        if resolved in seen:
             continue
-        for child in root.iterdir():
-            if child.is_dir() and (child / "package.json").exists():
-                targets.append(child)
-    return targets
+        seen.add(resolved)
+        deduped.append(path)
+    return deduped
 
 
 def ensure_bun_deps(workspace: Path) -> None:

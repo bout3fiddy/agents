@@ -6,7 +6,7 @@
 - If no skill matches, continue without one.
 
 ## Quality gates
-- If `.pre-commit-config.yaml` exists, run: `uv run prek run --all-files` (runs repo-defined hooks like ruff/ruff-format; it may modify files, so re-run and re-stage until clean).
+- If `.pre-commit-config.yaml` exists and you made changes to files the hooks could touch (code/config/etc. in this repo), run: `uv run prek run --all-files` (runs repo-defined hooks like ruff/ruff-format; it may modify files, so re-run and re-stage until clean). If no relevant changes were made, skip running `prek`.
 - Run tests affected by your changes.
 
 ## Toolchain

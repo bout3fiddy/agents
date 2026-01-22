@@ -200,20 +200,21 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
 RUN curl -fsSL https://bun.sh/install | bash
 
 # Preinstall managed Python for uv.
-RUN uv python install 3.12
+RUN uv python install 3.14
 
 # Preinstall uv tools to avoid heavy postCreate installs inside large workspaces.
-RUN uv tool install --python 3.12 ruff \
-  && uv tool install --python 3.12 pytest \
-  && uv tool install --python 3.12 mypy \
-  && uv tool install --python 3.12 prek
+RUN uv tool install --python 3.14 ruff \
+  && uv tool install --python 3.14 pytest \
+  && uv tool install --python 3.14 mypy \
+  && uv tool install --python 3.14 prek \
+  && uv tool install --python 3.14 -U takopi
 
-# Ensure python3.12 exists on PATH for scripts that require it.
+# Ensure python3.14 exists on PATH for scripts that require it.
 RUN mkdir -p /home/node/.local/bin \
-  && python_path="$(uv python find 3.12)" \
+  && python_path="$(uv python find 3.14)" \
   && [ -n "${python_path}" ] \
-  && ln -sf "${python_path}" /home/node/.local/bin/python3.12 \
-  && chmod +x /home/node/.local/bin/python3.12
+  && ln -sf "${python_path}" /home/node/.local/bin/python3.14 \
+  && chmod +x /home/node/.local/bin/python3.14
 
 
 # Passwordless sudo for the non-root user (for unattended / automation workflows).
