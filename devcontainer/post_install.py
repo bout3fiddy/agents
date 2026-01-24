@@ -661,6 +661,9 @@ def main() -> None:
     ensure_dir_ownership(Path.home() / ".claude")
     ensure_dir_ownership(Path.home() / ".codex")
     ensure_dir_ownership(Path.home() / ".config" / "gh")
+    uv_env = os.environ.get("UV_PROJECT_ENVIRONMENT")
+    if uv_env:
+        ensure_dir_ownership(Path(uv_env))
     ensure_fish_history()
     ensure_global_gitignore(workspace)
     ensure_codex_config()

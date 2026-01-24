@@ -60,14 +60,14 @@
     "source=gh-config,target=/home/node/.config/gh,type=volume",
     "source=${localEnv:HOME}/.gitconfig,target=/home/node/.gitconfig,type=bind,consistency=cached,readonly",
     "source=${localWorkspaceFolderBasename}-node_modules,target=/workspace/node_modules,type=volume",
-    "source=${localWorkspaceFolderBasename}-venv,target=/workspace/.venv-container,type=volume"
+    "source=${localWorkspaceFolderBasename}-venv,target=/home/node/.venv,type=volume"
   ],
   "containerEnv": {
     "NODE_OPTIONS": "--max-old-space-size=4096",
     "CLAUDE_CONFIG_DIR": "/home/node/.claude",
     "CODEX_HOME": "/home/node/.codex",
     "CODEX_HOST_HOME": "/home/node/.codex-host",
-    "UV_PROJECT_ENVIRONMENT": "/workspace/.venv-container"
+    "UV_PROJECT_ENVIRONMENT": "/home/node/.venv"
   },
   "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind,consistency=delegated",
   "workspaceFolder": "/workspace"

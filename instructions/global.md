@@ -19,7 +19,6 @@
 ## Repo-specific context
 - If a repo has `AGENTS.md` or `CLAUDE.md`, read it first. These files capture repo-specific conventions, toolchains, and guardrails that override generic assumptions.
 - Be proactive and specific: when you discover structural repo knowledge (e.g., key locations, workflows, repo commands, tooling/layout conventions), add a concise bullet to `AGENTS.md` immediately. Do this even if the user does not ask.
-- Final-response check: confirm whether you added repo context. If not, explicitly say “No new repo context discovered.”
 - If repo context is missing or needs to be condensed, create/update `AGENTS.md` with short bullet points and reference it from the root file. Only append new knowledge.
 
 ## Command discipline

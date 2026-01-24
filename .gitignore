@@ -20,3 +20,4 @@ node_modules/
 # Repo-specific
 docs/
 .devcontainer/
+venv*/

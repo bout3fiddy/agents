@@ -60,12 +60,12 @@ When you run `devc install`, we auto-detect workspace packages from your root `p
 This keeps monorepo installs isolated without hardcoding app names. To opt out: `DEVC_SKIP_WORKSPACE_MOUNTS=1 devc install <repo>`
 (or the legacy `DEVC_SKIP_APP_MOUNTS=1`).
 
-Optional (recommended) for Python: keep the container venv isolated too (included by default).
+Optional (recommended) for Python: keep the container venv isolated too (included by default) and outside the repo.
 
 ```json
 "mounts": [
   "... existing mounts ...",
-  "source=${localWorkspaceFolderBasename}-venv,target=/workspace/.venv-container,type=volume"
+  "source=${localWorkspaceFolderBasename}-venv,target=/home/node/.venv,type=volume"
 ]
 ```
 
