@@ -1,0 +1,53 @@
+---
+description: Index of reference files for references/rules.
+---
+# React Rules References
+
+## References
+- `references/react/rules/advanced-event-handler-refs.md` - stable subscriptions
+- `references/react/rules/advanced-use-latest.md` - prevents effect re-runs
+- `references/react/rules/async-api-routes.md` - 2-10× improvement
+- `references/react/rules/async-defer-await.md` - avoids blocking unused code paths
+- `references/react/rules/async-dependencies.md` - 2-10× improvement
+- `references/react/rules/async-parallel.md` - 2-10× improvement
+- `references/react/rules/async-suspense-boundaries.md` - faster initial paint
+- `references/react/rules/bundle-barrel-imports.md` - 200-800ms import cost, slow builds
+- `references/react/rules/bundle-conditional.md` - loads large data only when needed
+- `references/react/rules/bundle-defer-third-party.md` - loads after hydration
+- `references/react/rules/bundle-dynamic-imports.md` - directly affects TTI and LCP
+- `references/react/rules/bundle-preload.md` - reduces perceived latency
+- `references/react/rules/client-event-listeners.md` - single listener for N components
+- `references/react/rules/client-localstorage-schema.md` - prevents schema conflicts, reduces storage size
+- `references/react/rules/client-passive-event-listeners.md` - eliminates scroll delay caused by event listeners
+- `references/react/rules/client-swr-dedup.md` - automatic deduplication
+- `references/react/rules/js-batch-dom-css.md` - reduces reflows/repaints
+- `references/react/rules/js-cache-function-results.md` - avoid redundant computation
+- `references/react/rules/js-cache-property-access.md` - reduces lookups
+- `references/react/rules/js-cache-storage.md` - reduces expensive I/O
+- `references/react/rules/js-combine-iterations.md` - reduces iterations
+- `references/react/rules/js-early-exit.md` - avoids unnecessary computation
+- `references/react/rules/js-hoist-regexp.md` - avoids recreation
+- `references/react/rules/js-index-maps.md` - 1M ops to 2K ops
+- `references/react/rules/js-length-check-first.md` - avoids expensive operations when lengths differ
+- `references/react/rules/js-min-max-loop.md` - O(n) instead of O(n log n)
+- `references/react/rules/js-set-map-lookups.md` - O(n) to O(1)
+- `references/react/rules/js-tosorted-immutable.md` - prevents mutation bugs in React state
+- `references/react/rules/rendering-activity.md` - preserves state/DOM
+- `references/react/rules/rendering-animate-svg-wrapper.md` - enables hardware acceleration
+- `references/react/rules/rendering-conditional-render.md` - prevents rendering 0 or NaN
+- `references/react/rules/rendering-content-visibility.md` - faster initial render
+- `references/react/rules/rendering-hoist-jsx.md` - avoids re-creation
+- `references/react/rules/rendering-hydration-no-flicker.md` - avoids visual flicker and hydration errors
+- `references/react/rules/rendering-svg-precision.md` - reduces file size
+- `references/react/rules/rerender-defer-reads.md` - avoids unnecessary subscriptions
+- `references/react/rules/rerender-dependencies.md` - minimizes effect re-runs
+- `references/react/rules/rerender-derived-state.md` - reduces re-render frequency
+- `references/react/rules/rerender-functional-setstate.md` - prevents stale closures and unnecessary callback recreations
+- `references/react/rules/rerender-lazy-state-init.md` - wasted computation on every render
+- `references/react/rules/rerender-memo.md` - enables early returns
+- `references/react/rules/rerender-transitions.md` - maintains UI responsiveness
+- `references/react/rules/server-after-nonblocking.md` - faster response times
+- `references/react/rules/server-cache-lru.md` - caches across requests
+- `references/react/rules/server-cache-react.md` - deduplicates within request
+- `references/react/rules/server-parallel-fetching.md` - eliminates server-side waterfalls
+- `references/react/rules/server-serialization.md` - reduces data transfer size

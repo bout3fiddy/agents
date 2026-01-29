@@ -1,3 +1,6 @@
+---
+description: Index of reference files for references/frontend-engineering.
+---
 # Frontend Engineering (Reference)
 
 Use this for UI craft, design-system rules, component patterns, and SolidJS guidance.
@@ -94,6 +97,6 @@ Example:
 `/agents design-reviewer` and provide the URL + component path.
 
 ## References
-- `references/frontend-engineering/design-guidelines.md` - visual design guidance
 - `references/frontend-engineering/components-and-motion.md` - component patterns and motion recipes
+- `references/frontend-engineering/design-guidelines.md` - visual design guidance
 - `references/frontend-engineering/tailwindcss-full.md` - Tailwind CSS v4 reference

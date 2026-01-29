@@ -1,3 +1,6 @@
+---
+description: Index of reference files for references/solidjs.
+---
 # SolidJS Best Practices (Reference)
 
 Performance-focused guidelines for SolidJS apps, ordered by impact. Apply these patterns when writing or reviewing Solid components, data fetching, and UI performance.
@@ -37,20 +40,8 @@ Reference these guidelines when:
 - Preload on user intent
 
 ## References
-
-Full documentation with code examples:
-
-- `references/solidjs/solid-performance-guidelines.md` — complete guide with rule index
-- `references/solidjs/solidjs-full.md` — full SolidJS development reference
-- `references/solidjs/rules/` — individual rules organized by category
-
-To find a specific rule:
-```
-rg -n "suspense" references/solidjs/rules/
-rg -n "barrel" references/solidjs/rules/
-rg -n "lru" references/solidjs/rules/
-```
-
+- `references/solidjs/solid-performance-guidelines.md` - complete guide with rule index
+- `references/solidjs/solidjs-full.md` - full SolidJS development reference
 ## Rule Categories in `references/solidjs/rules/`
 
 - `async-*` — waterfall elimination

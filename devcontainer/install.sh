@@ -66,6 +66,51 @@ find_python() {
   echo ""
 }
 
+path_has_dir() {
+  local dir="$1"
+  case ":${PATH:-}:" in
+    *":$dir:"*)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+path_hint() {
+  local bin_dir="$1"
+  local shell_name
+  local rc_file=""
+  local line="export PATH=\"$bin_dir:\$PATH\""
+
+  shell_name="$(basename "${SHELL:-}")"
+  case "$shell_name" in
+    zsh)
+      rc_file="$HOME/.zshrc"
+      ;;
+    bash)
+      if [[ -f "$HOME/.bashrc" ]]; then
+        rc_file="$HOME/.bashrc"
+      else
+        rc_file="$HOME/.bash_profile"
+      fi
+      ;;
+    fish)
+      rc_file="$HOME/.config/fish/config.fish"
+      line="set -gx PATH $bin_dir \$PATH"
+      ;;
+  esac
+
+  echo "note: $bin_dir is not on your PATH." >&2
+  if [[ -n "$rc_file" ]]; then
+    echo "      add this line to $rc_file:" >&2
+  else
+    echo "      add this line to your shell config:" >&2
+  fi
+  echo "      $line" >&2
+}
+
 sync_workspace_mounts() {
   local repo_path="$1"
   local devcontainer_json="$2"
@@ -379,7 +424,9 @@ self_install() {
 
   echo "✓ installed devc to $bin_dir/devc" >&2
   echo "✓ installed template to $share_dir" >&2
-  echo "note: ensure $bin_dir is on your PATH" >&2
+  if ! path_has_dir "$bin_dir"; then
+    path_hint "$bin_dir"
+  fi
 }
 
 if [[ $# -lt 1 ]]; then

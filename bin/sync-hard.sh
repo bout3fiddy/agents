@@ -40,6 +40,17 @@ mirror_file() {
   fi
 }
 
+build_skills_index() {
+  local builder="$AGENTS_DIR/bin/build-agents-index.sh"
+  if [[ -f "$builder" ]]; then
+    bash "$builder"
+  else
+    echo "Skills index builder not found; skipping."
+  fi
+}
+
+build_skills_index
+
 echo "Syncing skills (destructive mirror)..."
 mirror_dir "$AGENTS_DIR/skills" "$CLAUDE_DIR/skills"
 mirror_dir "$AGENTS_DIR/skills" "$CODEX_DIR/skills"

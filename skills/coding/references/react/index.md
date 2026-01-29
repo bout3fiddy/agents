@@ -1,3 +1,6 @@
+---
+description: Index of reference files for references/react.
+---
 # React/Next.js Best Practices (Reference)
 
 Use this reference for React or Next.js performance, data fetching, rendering, and UI quality reviews.
@@ -8,10 +11,8 @@ Use this reference for React or Next.js performance, data fetching, rendering, a
 - Auditing UI quality or accessibility issues
 
 ## References
-- `references/react/react-best-practices.md` — full Vercel React/Next.js guide
-- `references/react/rules/` — individual rule files (by category)
-- `references/react/web-interface-guidelines.md` — UI review checklist source and workflow
-
+- `references/react/react-best-practices.md` - full Vercel React/Next.js guide
+- `references/react/web-interface-guidelines.md` - UI review checklist source and workflow
 ## Rule Categories (by prefix)
 - `async-` — eliminating waterfalls
 - `bundle-` — bundle size optimization

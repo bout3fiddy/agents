@@ -9,3 +9,4 @@
 - `devc install` injects `node_modules` mounts by reading workspace globs from root `package.json` and/or `pnpm-workspace.yaml`; repos without workspaces won't get extra directories created.
 - Devcontainer bun installs now scan workspace globs (package.json workspaces / pnpm-workspace) instead of assuming `apps/` or `packages/`.
 - Devcontainer sets `UV_PROJECT_ENVIRONMENT` to `/home/node/.venv` and mounts the venv volume there to keep it out of the repo.
+- `bin/build-agents-index.sh` auto-generates the skills index block in `instructions/global.md`; it runs during `bin/sync.sh` and `bin/sync-hard.sh`.

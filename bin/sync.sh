@@ -215,6 +215,19 @@ sync_instructions() {
         "$CLAUDE_DIR/CLAUDE.md" \
         "$CODEX_DIR/AGENTS.md"
     echo "  global.md <-> Claude + Codex (latest wins)"
+
+    build_skills_index
+    copy_file "$AGENTS_DIR/instructions/global.md" "$CLAUDE_DIR/CLAUDE.md"
+    copy_file "$AGENTS_DIR/instructions/global.md" "$CODEX_DIR/AGENTS.md"
+}
+
+build_skills_index() {
+    local builder="$AGENTS_DIR/bin/build-agents-index.sh"
+    if [[ -f "$builder" ]]; then
+        bash "$builder"
+    else
+        echo "Skills index builder not found; skipping."
+    fi
 }
 
 sync_skills
