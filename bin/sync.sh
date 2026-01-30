@@ -5,14 +5,19 @@ DEFAULT_AGENTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 AGENTS_DIR="${AGENTS_DIR:-$DEFAULT_AGENTS_DIR}"
 CLAUDE_DIR="$HOME/.claude"
 CODEX_DIR="$HOME/.codex"
+PI_DIR="${PI_DIR:-$HOME/.pi}"
 
 shopt -s nullglob
+
+if ! "$AGENTS_DIR/bin/pi-eval-gate.py"; then
+    exit 1
+fi
 
 echo "Syncing from $AGENTS_DIR..."
 
 # Ensure base directories exist
 mkdir -p "$AGENTS_DIR/skills" "$AGENTS_DIR/instructions"
-mkdir -p "$CLAUDE_DIR/skills" "$CODEX_DIR/skills"
+mkdir -p "$CLAUDE_DIR/skills" "$CODEX_DIR/skills" "$PI_DIR/skills"
 
 mtime() {
     local path="$1"
@@ -117,6 +122,46 @@ sync_dir_latest_wins_three() {
     fi
 }
 
+sync_dir_latest_wins_four() {
+    local a="$1"
+    local b="$2"
+    local c="$3"
+    local d="$4"
+    local a_time
+    local b_time
+    local c_time
+    local d_time
+    local winner
+
+    a_time="$(latest_mtime "$a")"
+    b_time="$(latest_mtime "$b")"
+    c_time="$(latest_mtime "$c")"
+    d_time="$(latest_mtime "$d")"
+
+    winner="$a"
+    if [[ "$b_time" -ge "$a_time" && "$b_time" -ge "$c_time" && "$b_time" -ge "$d_time" ]]; then
+        winner="$b"
+    elif [[ "$c_time" -ge "$a_time" && "$c_time" -ge "$b_time" && "$c_time" -ge "$d_time" ]]; then
+        winner="$c"
+    elif [[ "$d_time" -ge "$a_time" && "$d_time" -ge "$b_time" && "$d_time" -ge "$c_time" ]]; then
+        winner="$d"
+    fi
+
+    [[ -d "$winner" ]] || return
+    if [[ "$winner" != "$a" ]]; then
+        copy_dir "$winner" "$a"
+    fi
+    if [[ "$winner" != "$b" ]]; then
+        copy_dir "$winner" "$b"
+    fi
+    if [[ "$winner" != "$c" ]]; then
+        copy_dir "$winner" "$c"
+    fi
+    if [[ "$winner" != "$d" ]]; then
+        copy_dir "$winner" "$d"
+    fi
+}
+
 sync_file_latest_wins() {
     local a="$1"
     local b="$2"
@@ -173,36 +218,79 @@ sync_file_latest_wins_three() {
     fi
 }
 
+sync_file_latest_wins_four() {
+    local a="$1"
+    local b="$2"
+    local c="$3"
+    local d="$4"
+    local a_time=0
+    local b_time=0
+    local c_time=0
+    local d_time=0
+    local winner
+
+    [[ -f "$a" ]] && a_time="$(mtime "$a")"
+    [[ -f "$b" ]] && b_time="$(mtime "$b")"
+    [[ -f "$c" ]] && c_time="$(mtime "$c")"
+    [[ -f "$d" ]] && d_time="$(mtime "$d")"
+
+    winner="$a"
+    if [[ "$b_time" -ge "$a_time" && "$b_time" -ge "$c_time" && "$b_time" -ge "$d_time" ]]; then
+        winner="$b"
+    elif [[ "$c_time" -ge "$a_time" && "$c_time" -ge "$b_time" && "$c_time" -ge "$d_time" ]]; then
+        winner="$c"
+    elif [[ "$d_time" -ge "$a_time" && "$d_time" -ge "$b_time" && "$d_time" -ge "$c_time" ]]; then
+        winner="$d"
+    fi
+
+    [[ -f "$winner" ]] || return
+    if [[ "$winner" != "$a" ]]; then
+        copy_file "$winner" "$a"
+    fi
+    if [[ "$winner" != "$b" ]]; then
+        copy_file "$winner" "$b"
+    fi
+    if [[ "$winner" != "$c" ]]; then
+        copy_file "$winner" "$c"
+    fi
+    if [[ "$winner" != "$d" ]]; then
+        copy_file "$winner" "$d"
+    fi
+}
+
 sync_skills() {
     echo "Syncing skills..."
 
-    mkdir -p "$AGENTS_DIR/skills" "$CLAUDE_DIR/skills" "$CODEX_DIR/skills"
+    mkdir -p "$AGENTS_DIR/skills" "$CLAUDE_DIR/skills" "$CODEX_DIR/skills" "$PI_DIR/skills"
 
     local skill_dir
-    for skill_dir in "$AGENTS_DIR/skills" "$CLAUDE_DIR/skills" "$CODEX_DIR/skills"; do
+    for skill_dir in "$AGENTS_DIR/skills" "$CLAUDE_DIR/skills" "$CODEX_DIR/skills" "$PI_DIR/skills"; do
         mkdir -p "$skill_dir"
     done
 
     local name
-    for name in $(ls -1 "$AGENTS_DIR/skills" "$CLAUDE_DIR/skills" "$CODEX_DIR/skills" 2>/dev/null | sort -u); do
+    for name in $(ls -1 "$AGENTS_DIR/skills" "$CLAUDE_DIR/skills" "$CODEX_DIR/skills" "$PI_DIR/skills" 2>/dev/null | sort -u); do
         [[ -z "$name" ]] && continue
         local agents_skill="$AGENTS_DIR/skills/$name"
         local claude_skill="$CLAUDE_DIR/skills/$name"
         local codex_skill="$CODEX_DIR/skills/$name"
+        local pi_skill="$PI_DIR/skills/$name"
         local agents_valid=0
         local claude_valid=0
         local codex_valid=0
+        local pi_valid=0
 
         [[ -f "$agents_skill/SKILL.md" ]] && agents_valid=1
         [[ -f "$claude_skill/SKILL.md" ]] && claude_valid=1
         [[ -f "$codex_skill/SKILL.md" ]] && codex_valid=1
+        [[ -f "$pi_skill/SKILL.md" ]] && pi_valid=1
 
-        if [[ "$agents_valid" -eq 0 && "$claude_valid" -eq 0 && "$codex_valid" -eq 0 ]]; then
+        if [[ "$agents_valid" -eq 0 && "$claude_valid" -eq 0 && "$codex_valid" -eq 0 && "$pi_valid" -eq 0 ]]; then
             continue
         fi
 
         echo "  $name"
-        sync_dir_latest_wins_three "$agents_skill" "$claude_skill" "$codex_skill"
+        sync_dir_latest_wins_four "$agents_skill" "$claude_skill" "$codex_skill" "$pi_skill"
     done
 }
 
@@ -210,15 +298,17 @@ sync_instructions() {
     echo "Syncing instructions..."
 
     mkdir -p "$AGENTS_DIR/instructions"
-    sync_file_latest_wins_three \
+    sync_file_latest_wins_four \
         "$AGENTS_DIR/instructions/global.md" \
         "$CLAUDE_DIR/CLAUDE.md" \
-        "$CODEX_DIR/AGENTS.md"
-    echo "  global.md <-> Claude + Codex (latest wins)"
+        "$CODEX_DIR/AGENTS.md" \
+        "$PI_DIR/AGENTS.md"
+    echo "  global.md <-> Claude + Codex + Pi (latest wins)"
 
     build_skills_index
     copy_file "$AGENTS_DIR/instructions/global.md" "$CLAUDE_DIR/CLAUDE.md"
     copy_file "$AGENTS_DIR/instructions/global.md" "$CODEX_DIR/AGENTS.md"
+    copy_file "$AGENTS_DIR/instructions/global.md" "$PI_DIR/AGENTS.md"
 }
 
 build_skills_index() {

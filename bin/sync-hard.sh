@@ -8,11 +8,17 @@ DEFAULT_AGENTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 AGENTS_DIR="${AGENTS_DIR:-$DEFAULT_AGENTS_DIR}"
 CLAUDE_DIR="$HOME/.claude"
 CODEX_DIR="$HOME/.codex"
+PI_DIR="${PI_DIR:-$HOME/.pi}"
+
+if ! "$AGENTS_DIR/bin/pi-eval-gate.py"; then
+  exit 1
+fi
 
 echo "Hard-syncing from $AGENTS_DIR..."
 
 # Ensure source directories exist (treat missing as empty)
 mkdir -p "$AGENTS_DIR/skills" "$AGENTS_DIR/instructions"
+mkdir -p "$PI_DIR/skills"
 
 mirror_dir() {
   local src="$1"
@@ -54,10 +60,12 @@ build_skills_index
 echo "Syncing skills (destructive mirror)..."
 mirror_dir "$AGENTS_DIR/skills" "$CLAUDE_DIR/skills"
 mirror_dir "$AGENTS_DIR/skills" "$CODEX_DIR/skills"
+mirror_dir "$AGENTS_DIR/skills" "$PI_DIR/skills"
 
 echo "Syncing instructions (overwrite)..."
 mirror_file "$AGENTS_DIR/instructions/global.md" "$CLAUDE_DIR/CLAUDE.md"
 mirror_file "$AGENTS_DIR/instructions/global.md" "$CODEX_DIR/AGENTS.md"
+mirror_file "$AGENTS_DIR/instructions/global.md" "$PI_DIR/AGENTS.md"
 
 echo ""
 echo "Done!"

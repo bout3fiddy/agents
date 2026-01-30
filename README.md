@@ -55,6 +55,7 @@ export PATH="$PATH:$HOME/.agents/bin"
 **Sync behavior:**
 - **Claude**: `~/.claude/skills/<name>/SKILL.md` (copied)
 - **Codex**: `~/.codex/skills/<name>/SKILL.md` (copied)
+- **Pi**: `~/.pi/skills/<name>/SKILL.md` (copied)
 
 **Latest wins:**
 - `sync.sh` compares modification times and propagates the newest version to the other locations.
@@ -65,6 +66,7 @@ export PATH="$PATH:$HOME/.agents/bin"
 `instructions/global.md` is copied to:
 - `~/.claude/CLAUDE.md`
 - `~/.codex/AGENTS.md`
+- `~/.pi/AGENTS.md`
 
 `sync.sh` uses a latest-wins policy across these files.
 
@@ -104,10 +106,10 @@ uv run skills-ref validate skills/my-new-skill
 
 ## Tool Compatibility Matrix
 
-| Content | Claude | Codex |
-|---------|--------|-------|
-| Skills | ✅ | ✅ |
-| Instructions | ✅ CLAUDE.md | ✅ AGENTS.md |
+| Content | Claude | Codex | Pi |
+|---------|--------|-------|----|
+| Skills | ✅ | ✅ | ✅ |
+| Instructions | ✅ CLAUDE.md | ✅ AGENTS.md | ✅ AGENTS.md |
 
 ## File Locations After Sync
 
@@ -117,6 +119,10 @@ uv run skills-ref validate skills/my-new-skill
 └── skills/<name>/SKILL.md (latest-wins with ~/.agents/skills/<name>/SKILL.md)
 
 ~/.codex/
+├── AGENTS.md (latest-wins with ~/.agents/instructions/global.md)
+└── skills/<name>/SKILL.md (latest-wins with ~/.agents/skills/<name>/SKILL.md)
+
+~/.pi/
 ├── AGENTS.md (latest-wins with ~/.agents/instructions/global.md)
 └── skills/<name>/SKILL.md (latest-wins with ~/.agents/skills/<name>/SKILL.md)
 ```

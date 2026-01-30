@@ -10,3 +10,5 @@
 - Devcontainer bun installs now scan workspace globs (package.json workspaces / pnpm-workspace) instead of assuming `apps/` or `packages/`.
 - Devcontainer sets `UV_PROJECT_ENVIRONMENT` to `/home/node/.venv` and mounts the venv volume there to keep it out of the repo.
 - `bin/build-agents-index.sh` auto-generates the skills index block in `instructions/global.md`; it runs during `bin/sync.sh` and `bin/sync-hard.sh`.
+- `bin/sync.sh` and `bin/sync-hard.sh` also sync skills/instructions to `~/.pi` (Pi agent).
+- Eval specs live in `skills-evals/specs/pi-eval/` with a mirror in `docs/specs/pi-eval/` (keep both in sync).

@@ -41,8 +41,8 @@ Implement now (recommended):
 ## Terminology
 - Skill invocation: a read tool call of a SKILL.md file.
 - Reference invocation: a read tool call of a references/* file within a skill.
-- Attempted invocation: a SKILL.md read that is blocked in dry-run mode.
-- Dry-run: tool-call interception blocks SKILL.md reads; only attempts are logged.
+- Attempted invocation: a SKILL.md read during dry-run (stubbed content, no real load).
+- Dry-run: SKILL.md reads return a stub response; attempts are logged for scoring.
 - Global instructions: required instruction files for a given model.
 
 ## Location and Packaging
@@ -64,11 +64,16 @@ Implement now (recommended):
   - Default audit of the current agent dir and model from settings.
 - pi eval audit --model <name> [--agent-dir <path>]
   - Audit with explicit model selection.
-- pi eval run --cases <path> [--model <name>] [--dry-run] [--matrix <name>]
-  [--agent-dir <path>] [--filter <id|suite>] [--limit <n>]
-  - Run eval cases; one isolated Pi run per case.
-- pi eval smoke [--model <name>] [--dry-run]
+- pi eval run --cases <path> [--model <name>] [--dry-run] [--thinking <level>]
+  [--matrix <name>] [--agent-dir <path>] [--filter <id|suite>] [--limit <n>]
+  [--reuse] [--profile] [--verbose] [--trace]
+  - Run eval cases; one isolated Pi run per case (reuse is optional).
+- pi eval smoke [--model <name>] [--dry-run] [--thinking <level>] [--verbose] [--trace]
   - Run a small built-in dataset.
+- Thinking level defaults to `medium` unless overridden.
+- `--verbose` emits timestamped, per-case inputs/outputs.
+- `--trace` adds streaming deltas + tool execution events (implies verbose).
+- Env overrides: `PI_EVAL_VERBOSE=1`, `PI_EVAL_TRACE=1`.
 
 ## Configuration
 ### Eval Config File
@@ -102,6 +107,11 @@ Schema (proposal):
   "expectedRefs": ["skills/skill-a/references/foo.md"],
   "assertions": ["must_contain:XYZ", "must_not_contain:ABC"],
   "skillSet": ["skill-a", "skill-b"],
+  "tools": ["read"],
+  "sandbox": true,
+  "fileAssertions": [
+    { "path": "path/to/file", "mustContain": ["foo"], "mustNotContain": ["bar"] }
+  ],
   "dryRun": false,
   "tokenBudget": 1200,
   "notes": "optional"
@@ -119,7 +129,7 @@ Schema (proposal):
 - [ ] Build the pi-eval extension skeleton.
 - [ ] Implement `pi eval audit` with model + skills inventory output.
 - [ ] Implement `pi eval run` with per-case isolation.
-- [ ] Support dry-run blocking of SKILL.md reads.
+- [ ] Support dry-run stubbed SKILL.md reads.
 - [ ] Parse the case registry from skills-evals/specs/pi-eval/evals.md.
 - [ ] Generate model-specific reports + index.json.
 - [ ] Add strict sync gating (enabled after Pi install).
@@ -161,7 +171,7 @@ Schema (proposal):
 
 ## Dry-Run Mode
 - Intercept tool_call events for read operations targeting SKILL.md.
-- Block the read and record an attempted invocation.
+- Return a stubbed response instead of loading SKILL.md content; record an attempted invocation.
 - Use attempted invocations for scoring in dry-run mode.
 
 ## Inter-Skill Interference Testing
@@ -214,25 +224,28 @@ Schema (proposal):
 - Use tables for skill inventory and per-case results.
 - Use status badges and short icons where helpful (ASCII only):
   OK, WARN, FAIL, SKIP, DRY.
-- Keep line width under 100 columns and avoid noisy wrapping.
+- Size tables to the terminal width when known (override with `PI_EVAL_TABLE_WIDTH`).
+- Skill inventory table uses a 10:60:30 split by default.
+- When width cannot be detected, default to ~100 columns and avoid noisy wrapping.
+- Verbose/trace logs include ISO timestamps; multiline blocks are prefixed per line.
 - Provide a compact summary at the end with counts and elapsed time.
 - Use a non-React render stack: chalk or picocolors for color, boxen for panels,
   cli-table3 (or table from @tbl) for tables, and log-symbols for icons.
 
 ## Determinism and Safety
-- One case per fresh process to avoid state bleed.
+- Default: one case per fresh process to avoid state bleed. Optional `--reuse` runs multiple cases per skill set with `new_session` resets.
 - Model pinned per run from CLI or settings.
-- Dry-run blocks SKILL.md reads to prevent side effects.
+- Dry-run stubs SKILL.md reads to prevent side effects.
 - No writes outside temp/log directories.
 
 ## Acceptance Criteria
 - pi eval prints skill inventory and global instruction status for the chosen model.
 - pi eval run --cases X runs cases and reports invocation correctness.
-- pi eval run --dry-run blocks SKILL.md reads and still reports attempted invocations.
+- pi eval run --dry-run stubs SKILL.md reads and still reports attempted invocations.
 - Matrix mode shows deltas between baseline and interference runs.
 - Extension is installable and removable without repo runtime changes.
 
-## Open Questions
-- Exact mapping of model name to global instruction file set.
-- Default locations for skills and instructions in the target environment.
-- Preferred format for optional output assertions.
+## Open Questions (Resolved)
+- Model → global instructions: use the same files for all models: `AGENTS.md` and `instructions/global.md` (config uses a `default` mapping).
+- Default locations: `<agentDir>/skills` and `<agentDir>/instructions` only, unless overridden via config/flags.
+- Output assertions: support `must_contain:<text>` and `must_not_contain:<text>` string checks against concatenated assistant output.

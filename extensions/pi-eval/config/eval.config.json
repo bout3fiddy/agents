@@ -1,0 +1,13 @@
+{
+  "requiredModels": ["codex"],
+  "models": {
+    "default": {
+      "globalInstructions": ["AGENTS.md", "instructions/global.md"]
+    }
+  },
+  "defaults": {
+    "agentDir": ".",
+    "skillsPaths": ["skills"],
+    "dryRun": false
+  }
+}
