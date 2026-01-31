@@ -2,18 +2,18 @@ import type { ExtensionAPI, ExtensionCommandContext } from "@mariozechner/pi-cod
 import type { Model } from "@mariozechner/pi-ai";
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { cp, mkdir, readFile, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { chmod, copyFile, cp, mkdir, readFile, rm } from "node:fs/promises";
+import { homedir, tmpdir } from "node:os";
 import path from "node:path";
 import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
 import { tokenizeArgs, parseFlags } from "./args.js";
-import { parseLimitFlag, parseStringFlag, resolveCasesPath } from "./validation.js";
+import { parseJobsFlag, parseLimitFlag, parseStringFlag, resolveCasesPath } from "./validation.js";
 import { runAudit } from "./audit.js";
 import { loadCases, filterCases } from "./cases.js";
 import { loadEvalConfig } from "./config.js";
 import { color, logLines, logPanelWithTimestamp, logWithTimestamp, renderPanel, renderTable, symbols } from "./logger.js";
-import { buildReport, renderReportNotice, updateIndex, writeReport } from "./report.js";
+import { buildReport, readReportRows, renderReportNotice, updateIndex, writeReport } from "./report.js";
 import { discoverSkills } from "./skills.js";
 import type {
 	CaseEvaluation,
@@ -274,8 +274,7 @@ const resolveTools = (evalCase: EvalCase): string[] => {
 const isReadOnlyTools = (tools: string[]): boolean =>
 	tools.length === 1 && tools[0] === "read";
 
-const resolveSandbox = (evalCase: EvalCase, dryRun: boolean): boolean =>
-	evalCase.sandbox ?? (!dryRun || Boolean(evalCase.fileAssertions?.length));
+const resolveSandbox = (evalCase: EvalCase): boolean => evalCase.sandbox ?? true;
 
 const SANDBOX_EXCLUDES = [
 	".git",
@@ -285,6 +284,9 @@ const SANDBOX_EXCLUDES = [
 	"build",
 	"coverage",
 	".cache",
+	"AGENTS.md",
+	"skills-evals/reports",
+	"skills-evals/specs/pi-eval/logs",
 	"docs/specs/pi-eval/reports",
 	"docs/specs/pi-eval/logs",
 ];
@@ -313,12 +315,93 @@ const cleanupSandbox = async (sandboxDir: string | null): Promise<void> => {
 	await rm(sandboxDir, { recursive: true, force: true });
 };
 
+const createSandboxHome = async (caseId: string): Promise<string> => {
+	const homeDir = path.join(tmpdir(), "pi-eval-home", caseId, randomUUID());
+	await mkdir(homeDir, { recursive: true });
+	return homeDir;
+};
+
+const cleanupSandboxHome = async (homeDir: string | null): Promise<void> => {
+	if (!homeDir) return;
+	await rm(homeDir, { recursive: true, force: true });
+};
+
+const runEvalSync = async (params: {
+	agentDir: string;
+	homeDir: string;
+	authSourcePath?: string | null;
+	logger?: CaseLogger | null;
+}): Promise<void> => {
+	const { agentDir, homeDir, authSourcePath, logger } = params;
+	const syncScript = path.join(agentDir, "bin", "sync.sh");
+	if (!(await fileExists(syncScript))) {
+		throw new Error(`Sync script not found: ${syncScript}`);
+	}
+
+	const env = {
+		...process.env,
+		HOME: homeDir,
+		EVAL_SYNC_HOME: homeDir,
+		AGENTS_DIR: agentDir,
+		SKIP_PI_EVAL_GATE: "1",
+	};
+
+	const stdoutChunks: string[] = [];
+	const stderrChunks: string[] = [];
+	const proc = spawn("bash", [syncScript, "--hard", "--eval"], {
+		cwd: agentDir,
+		env,
+		stdio: ["ignore", "pipe", "pipe"],
+	});
+	proc.stdout?.on("data", (chunk) => stdoutChunks.push(String(chunk)));
+	proc.stderr?.on("data", (chunk) => stderrChunks.push(String(chunk)));
+
+	const exitCode = await withTimeout(
+		new Promise<number>((resolve, reject) => {
+			proc.on("close", (code) => resolve(code ?? 0));
+			proc.on("error", (error) => reject(error));
+		}),
+		30_000,
+		`sync --eval ${path.basename(agentDir)}`,
+	);
+
+	if (logger && logger.traceEnabled) {
+		if (stdoutChunks.length > 0) {
+			logger.traceBlock("sync stdout", stdoutChunks.join("").trimEnd());
+		}
+		if (stderrChunks.length > 0) {
+			logger.traceBlock("sync stderr", stderrChunks.join("").trimEnd());
+		}
+	}
+
+	if (exitCode !== 0) {
+		const stderr = stderrChunks.join("").trim();
+		throw new Error(`sync --eval failed (exit ${exitCode})${stderr ? `: ${stderr}` : ""}`);
+	}
+
+	if (authSourcePath) {
+		const targetAuthPath = path.join(homeDir, ".pi", "agent", "auth.json");
+		await mkdir(path.dirname(targetAuthPath), { recursive: true });
+		await copyFile(authSourcePath, targetAuthPath);
+		try {
+			await chmod(targetAuthPath, 0o600);
+		} catch {
+			// ignore chmod failures
+		}
+		if (logger && logger.traceEnabled) {
+			logger.trace(
+				`auth synced: ${normalizePath(authSourcePath)} -> ${normalizePath(targetAuthPath)}`,
+			);
+		}
+	}
+};
+
 const mapSkillPathsToSandbox = (paths: string[], agentDir: string, sandboxDir: string): string[] =>
 	paths.map((skillPath) => path.join(sandboxDir, path.relative(agentDir, skillPath)));
 
-const requiresIsolatedRun = (evalCase: EvalCase, dryRun: boolean): boolean => {
+const requiresIsolatedRun = (evalCase: EvalCase): boolean => {
 	const tools = resolveTools(evalCase);
-	const sandbox = resolveSandbox(evalCase, dryRun);
+	const sandbox = resolveSandbox(evalCase);
 	return sandbox || !isReadOnlyTools(tools);
 };
 
@@ -366,6 +449,27 @@ const waitForFile = async (filePath: string, timeoutMs = 10_000, intervalMs = 25
 		await sleep(intervalMs);
 	}
 	return false;
+};
+
+const runWithConcurrency = async <T, R>(
+	items: T[],
+	limit: number,
+	handler: (item: T, index: number) => Promise<R>,
+): Promise<R[]> => {
+	if (items.length === 0) return [];
+	const results: R[] = new Array(items.length);
+	let nextIndex = 0;
+	const workerCount = Math.max(1, Math.min(limit, items.length));
+	const runWorker = async () => {
+		while (true) {
+			const current = nextIndex;
+			nextIndex += 1;
+			if (current >= items.length) break;
+			results[current] = await handler(items[current], current);
+		}
+	};
+	await Promise.all(Array.from({ length: workerCount }, () => runWorker()));
+	return results;
 };
 
 const toRelativePath = (filePath: string, baseDir: string): string => {
@@ -539,9 +643,23 @@ const runCaseProcess = async (params: {
 	dryRun: boolean;
 	thinkingLevel: string;
 	tools: string[];
+	globalInstructionsPath?: string | null;
+	homeDir?: string | null;
 	logger?: CaseLogger | null;
 }): Promise<CaseRunResult> => {
-	const { evalCase, skillPaths, model, agentDir, cwd, dryRun, thinkingLevel, tools, logger } = params;
+	const {
+		evalCase,
+		skillPaths,
+		model,
+		agentDir,
+		cwd,
+		dryRun,
+		thinkingLevel,
+		tools,
+		globalInstructionsPath,
+		homeDir,
+		logger,
+	} = params;
 	const prompts = [evalCase.prompt, ...(evalCase.turns ?? [])];
 	const caseStart = Date.now();
 	const promptTimings: number[] = [];
@@ -562,6 +680,8 @@ const runCaseProcess = async (params: {
 		PI_EVAL_DRY_RUN: dryRun ? "1" : "0",
 		PI_EVAL_TURNS: String(prompts.length),
 		PI_EVAL_AGENT_DIR: agentDir,
+		...(globalInstructionsPath ? { PI_EVAL_GLOBAL_INSTRUCTIONS_PATH: globalInstructionsPath } : {}),
+		...(homeDir ? { HOME: homeDir } : {}),
 	};
 
 	const toolArg = tools.length > 0 ? tools.join(",") : "read";
@@ -858,6 +978,8 @@ class ReusePool {
 		private agentDir: string,
 		private model: ModelSpec,
 		private thinkingLevel: string,
+		private globalInstructionsPath?: string | null,
+		private homeDir?: string | null,
 	) {}
 
 	async getClient(skillNames: string[], skillPaths: string[]): Promise<RpcClient> {
@@ -870,6 +992,10 @@ class ReusePool {
 			PI_EVAL_MODE: "1",
 			PI_EVAL_DRY_RUN: "0",
 			PI_EVAL_AGENT_DIR: this.agentDir,
+			...(this.globalInstructionsPath
+				? { PI_EVAL_GLOBAL_INSTRUCTIONS_PATH: this.globalInstructionsPath }
+				: {}),
+			...(this.homeDir ? { HOME: this.homeDir } : {}),
 		};
 
 		const args = [
@@ -1132,7 +1258,7 @@ const runCaseReuse = async (
 	const caseLabel = `${evalCase.id}${mode === "single" ? "" : ` ${mode}`}`;
 	const logger = createCaseLogger(caseLabel, verbose, trace);
 	const tools = resolveTools(evalCase);
-	const sandbox = resolveSandbox(evalCase, dryRun);
+	const sandbox = resolveSandbox(evalCase);
 	logCaseMetadata(logger, {
 		evalCase,
 		mode,
@@ -1235,6 +1361,7 @@ const runCase = async (
 	skillSetOverride?: string[],
 	verbose = false,
 	trace = false,
+	authSourcePath?: string | null,
 ): Promise<CaseEvaluation> => {
 	const baseSkillSet = skillSetOverride ?? evalCase.skillSet ?? Array.from(skillMap.keys());
 	const { paths, missing } = resolveSkillPaths(baseSkillSet, skillMap);
@@ -1249,7 +1376,7 @@ const runCase = async (
 	}
 
 	const tools = resolveTools(evalCase);
-	const sandbox = resolveSandbox(evalCase, dryRun);
+	const sandbox = resolveSandbox(evalCase);
 	const caseLabel = `${evalCase.id}${mode === "single" ? "" : ` ${mode}`}`;
 	const logger = createCaseLogger(caseLabel, verbose, trace);
 	logCaseMetadata(logger, {
@@ -1264,6 +1391,7 @@ const runCase = async (
 	});
 
 	let sandboxDir: string | null = null;
+	let sandboxHomeDir: string | null = null;
 	try {
 		let caseAgentDir = agentDir;
 		let caseCwd = agentDir;
@@ -1275,6 +1403,15 @@ const runCase = async (
 			caseSkillPaths = mapSkillPathsToSandbox(paths, agentDir, sandboxDir);
 		}
 
+		sandboxHomeDir = await createSandboxHome(evalCase.id);
+		await runEvalSync({
+			agentDir: caseAgentDir,
+			homeDir: sandboxHomeDir,
+			authSourcePath,
+			logger,
+		});
+		const caseGlobalInstructionsPath = path.join(sandboxHomeDir, ".pi", "agent", "AGENTS.md");
+
 		const result = await runCaseProcess({
 			evalCase,
 			skillPaths: caseSkillPaths,
@@ -1284,6 +1421,8 @@ const runCase = async (
 			dryRun,
 			thinkingLevel,
 			tools,
+			globalInstructionsPath: caseGlobalInstructionsPath,
+			homeDir: sandboxHomeDir,
 			logger,
 		});
 		result.workspaceDir = sandboxDir;
@@ -1302,6 +1441,7 @@ const runCase = async (
 		);
 	} finally {
 		await cleanupSandbox(sandboxDir);
+		await cleanupSandboxHome(sandboxHomeDir);
 	}
 };
 
@@ -1314,8 +1454,19 @@ const runMatrixCase = async (params: {
 	thinkingLevel: string;
 	verbose: boolean;
 	trace: boolean;
+	authSourcePath?: string | null;
 }): Promise<MatrixEvaluation> => {
-	const { evalCase, skillMap, model, agentDir, dryRun, thinkingLevel, verbose, trace } = params;
+	const {
+		evalCase,
+		skillMap,
+		model,
+		agentDir,
+		dryRun,
+		thinkingLevel,
+		verbose,
+		trace,
+		authSourcePath,
+	} = params;
 	const baselineSkills = evalCase.expectedSkills ?? [];
 	const interferenceSkills = evalCase.skillSet ?? baselineSkills;
 
@@ -1330,6 +1481,7 @@ const runMatrixCase = async (params: {
 		baselineSkills,
 		verbose,
 		trace,
+		authSourcePath,
 	);
 	const interference = await runCase(
 		evalCase,
@@ -1342,6 +1494,7 @@ const runMatrixCase = async (params: {
 		interferenceSkills,
 		verbose,
 		trace,
+		authSourcePath,
 	);
 
 	const targetSkills = evalCase.expectedSkills ?? [];
@@ -1362,13 +1515,16 @@ const runMatrixCase = async (params: {
 	return { evalCase, baseline, interference, deltaSummary };
 };
 
-const reportPathFor = (agentDir: string, model: ModelSpec, date: string, sha: string): string => {
+const reportRootFor = (agentDir: string): string =>
+	path.join(agentDir, "skills-evals", "reports");
+
+const reportPathFor = (agentDir: string, model: ModelSpec): string => {
 	const safeModel = `${model.provider}-${model.id}`.replace(/[^a-zA-Z0-9-_]+/g, "-");
-	return path.join(agentDir, "docs", "specs", "pi-eval", "reports", date, `${safeModel}_${sha}.md`);
+	return path.join(reportRootFor(agentDir), `${safeModel}.md`);
 };
 
 const indexPathFor = (agentDir: string): string =>
-	path.join(agentDir, "docs", "specs", "pi-eval", "reports", "index.json");
+	path.join(reportRootFor(agentDir), "index.json");
 
 const getCommitSha = async (): Promise<string> => {
 	try {
@@ -1386,8 +1542,8 @@ const showUsage = () => {
 			"Usage:",
 			"  pi eval audit --model <model> [--agent-dir <path>]",
 			"  pi eval run --cases <path> [--model <model>] [--dry-run] [--thinking <level>]",
-			"       [--matrix <name>] [--filter <id|suite>] [--limit <n>] [--reuse] [--profile]",
-			"       [--verbose] [--trace]",
+			"       [--matrix <name>] [--filter <id|suite>] [--limit <n>] [--jobs <n>] [--reuse]",
+			"       [--profile] [--verbose] [--trace]",
 			"  pi eval smoke [--model <model>] [--dry-run] [--thinking <level>] [--verbose] [--trace]",
 		].join("\n"),
 	);
@@ -1427,15 +1583,30 @@ export const registerEvalCommand = (pi: ExtensionAPI) => {
 				if (subcommand === "run" || subcommand === "smoke") {
 					await ensureModelAuth(model, ctx);
 					const casesPath = await resolveCasesPath(agentDir, flags["--cases"], DEFAULT_CASES_PATH);
+					const defaultCasesPath = await resolveCasesPath(agentDir, undefined, DEFAULT_CASES_PATH);
+					const globalInstructionsPath = resolvePath("instructions/global.md", agentDir);
+					const globalInstructionsAvailable = await fileExists(globalInstructionsPath);
+					const authSourcePath =
+						process.env.PI_EVAL_AUTH_SOURCE ??
+						path.join(homedir(), ".pi", "agent", "auth.json");
+					const authSourceAvailable = await fileExists(authSourcePath);
+					const evalAuthSource = authSourceAvailable ? authSourcePath : null;
 					const filter = parseStringFlag("--filter", flags["--filter"]);
 					const limitOverride = parseLimitFlag(flags["--limit"]);
+					const jobsOverride = parseJobsFlag(flags["--jobs"]);
 					const limit =
-					limitOverride ??
-					(subcommand === "smoke" ? DEFAULT_SMOKE_LIMIT : undefined);
+						limitOverride ??
+						(subcommand === "smoke" ? DEFAULT_SMOKE_LIMIT : undefined);
 					const matrix = flags["--matrix"] as string | boolean | undefined;
+					let concurrency = jobsOverride ?? 1;
+					const casesPathResolved = normalizePath(path.resolve(casesPath));
+					const defaultCasesResolved = normalizePath(path.resolve(defaultCasesPath));
+					const isDefaultCasesPath = casesPathResolved === defaultCasesResolved;
+					const isFullRun = subcommand === "run" && !filter && !limitOverride && isDefaultCasesPath;
 
 					const casesLoadStart = Date.now();
-					const cases = filterCases(await loadCases(casesPath), filter, limit);
+					const allCases = await loadCases(casesPath);
+					const cases = filterCases(allCases, filter, limit);
 					const casesLoadMs = Date.now() - casesLoadStart;
 					if (cases.length === 0) {
 						console.log(`${symbols.warn} ${color.warning("No cases matched.")}`);
@@ -1445,13 +1616,16 @@ export const registerEvalCommand = (pi: ExtensionAPI) => {
 					const reuseEnabled =
 						reuseProcess &&
 						!cases.some((evalCase) => {
-							const dryRun = dryRunOverride
-								? true
-								: evalCase.dryRun ?? config.defaults?.dryRun ?? false;
-							return requiresIsolatedRun(evalCase, dryRun);
+							return requiresIsolatedRun(evalCase);
 						});
 					if (reuseProcess && !reuseEnabled) {
 						logVerbose(verbose, "Reuse: disabled (cases require isolated runs)");
+					}
+					if (reuseEnabled && concurrency > 1) {
+						console.log(
+							`${symbols.warn} ${color.warning("Parallel jobs disabled while reuse is on.")}`,
+						);
+						concurrency = 1;
 					}
 
 					const skillsLoadStart = Date.now();
@@ -1472,6 +1646,7 @@ export const registerEvalCommand = (pi: ExtensionAPI) => {
 					if (limit) {
 						logVerbose(verbose, `Limit: ${limit}`);
 					}
+					logVerbose(verbose, `Jobs: ${concurrency}`);
 					logVerbose(verbose, `Matrix: ${matrix ? String(matrix) : "off"}`);
 					logVerbose(verbose, `Reuse: ${reuseEnabled ? "on" : "off"}`);
 					logVerbose(verbose, `Thinking: ${thinkingLevel}`);
@@ -1480,6 +1655,27 @@ export const registerEvalCommand = (pi: ExtensionAPI) => {
 						verbose,
 						`Dry-run: ${dryRunOverride ? "forced on" : config.defaults?.dryRun ? "default on" : "off"}`,
 					);
+					logVerbose(verbose, `Report scope: ${isFullRun ? "full" : "partial"}`);
+					if (globalInstructionsAvailable) {
+						logVerbose(
+							verbose,
+							`Global instructions: ${normalizePath(path.relative(agentDir, globalInstructionsPath))}`,
+						);
+					} else {
+						console.log(
+							`${symbols.warn} ${color.warning("Global instructions missing; evals will not mirror synced agent instructions.")}`,
+						);
+					}
+					if (authSourceAvailable) {
+						logVerbose(
+							verbose,
+							`Auth source: ${normalizePath(authSourcePath)}`,
+						);
+					} else {
+						console.log(
+							`${symbols.warn} ${color.warning("Auth file missing; evals will fail without API keys.")}`,
+						);
+					}
 					if (skillsPaths.length > 0) {
 						logVerboseBlock(
 							verbose,
@@ -1495,52 +1691,139 @@ export const registerEvalCommand = (pi: ExtensionAPI) => {
 						);
 					}
 
-				if (profile) {
-					console.log(
-						renderPanel(
-							"Pi Eval Profiling",
-							[
-								`${color.accent("Cases load")}: ${formatDuration(casesLoadMs)}`,
-								`${color.accent("Skills load")}: ${formatDuration(skillsLoadMs)}`,
-								`${color.accent("Reuse")}: ${reuseEnabled ? "on" : "off"}`,
-							].join("\n"),
-						),
-					);
-					console.log("");
-				}
+					if (profile) {
+						console.log(
+							renderPanel(
+								"Pi Eval Profiling",
+								[
+									`${color.accent("Cases load")}: ${formatDuration(casesLoadMs)}`,
+									`${color.accent("Skills load")}: ${formatDuration(skillsLoadMs)}`,
+									`${color.accent("Reuse")}: ${reuseEnabled ? "on" : "off"}`,
+								].join("\n"),
+							),
+						);
+						console.log("");
+					}
 
 					const runStart = Date.now();
 					const evaluations: CaseEvaluation[] = [];
 					const matrixResults: MatrixEvaluation[] = [];
 					const profileTotals: number[] = [];
 
-				console.log(
-					renderPanel(
-						"Pi Eval Run",
-						`${color.accent("Cases")}: ${cases.length}${reuseEnabled ? " (reuse)" : ""}`,
-					),
-				);
-				console.log("");
+					console.log(
+						renderPanel(
+							"Pi Eval Run",
+							`${color.accent("Cases")}: ${cases.length}${reuseEnabled ? " (reuse)" : ""}`,
+						),
+					);
+					console.log("");
 
-				if (reuseEnabled) {
-					const pool = new ReusePool(agentDir, model, thinkingLevel);
-					try {
-						for (const evalCase of cases) {
+					if (reuseEnabled) {
+						let reuseHomeDir: string | null = null;
+						reuseHomeDir = await createSandboxHome("reuse");
+						await runEvalSync({
+							agentDir,
+							homeDir: reuseHomeDir,
+							authSourcePath: evalAuthSource,
+						});
+						const reuseInstructionsPath = path.join(
+							reuseHomeDir,
+							".pi",
+							"agent",
+							"AGENTS.md",
+						);
+						const pool = new ReusePool(
+							agentDir,
+							model,
+							thinkingLevel,
+							reuseInstructionsPath,
+							reuseHomeDir,
+						);
+						try {
+							for (const evalCase of cases) {
+								const dryRun = dryRunOverride ? true : evalCase.dryRun ?? config.defaults?.dryRun ?? false;
+								if (matrix) {
+									const matrixResult = await runMatrixCaseReuse({
+										evalCase,
+										skillMap,
+										model,
+										agentDir,
+										dryRun,
+										pool,
+										verbose,
+										trace,
+										thinkingLevel,
+									});
+									matrixResults.push(matrixResult);
+									evaluations.push(matrixResult.baseline, matrixResult.interference);
+									console.log(
+										`${matrixResult.baseline.status === "pass" ? symbols.ok : symbols.fail} ${evalCase.id} baseline`,
+									);
+									console.log(
+										`${matrixResult.interference.status === "pass" ? symbols.ok : symbols.fail} ${evalCase.id} interference`,
+									);
+									if (profile) {
+										logCaseProfile(`${evalCase.id} baseline`, matrixResult.baseline.result.timings);
+										logCaseProfile(`${evalCase.id} interference`, matrixResult.interference.result.timings);
+										if (matrixResult.baseline.result.timings?.totalMs) {
+											profileTotals.push(matrixResult.baseline.result.timings.totalMs);
+										}
+										if (matrixResult.interference.result.timings?.totalMs) {
+											profileTotals.push(matrixResult.interference.result.timings.totalMs);
+										}
+									}
+								} else {
+									const evaluation = await runCaseReuse(
+										evalCase,
+										skillMap,
+										model,
+										agentDir,
+										dryRun,
+										"single",
+										pool,
+										undefined,
+										verbose,
+										trace,
+										thinkingLevel,
+									);
+									evaluations.push(evaluation);
+									console.log(
+										`${evaluation.status === "pass" ? symbols.ok : symbols.fail} ${evalCase.id}`,
+									);
+									if (profile) {
+										logCaseProfile(evalCase.id, evaluation.result.timings);
+										if (evaluation.result.timings?.totalMs) {
+											profileTotals.push(evaluation.result.timings.totalMs);
+										}
+									}
+								}
+							}
+						} finally {
+							await pool.closeAll();
+							await cleanupSandboxHome(reuseHomeDir);
+						}
+					} else {
+						type RunOutcome = {
+							evaluations: CaseEvaluation[];
+							matrixResults: MatrixEvaluation[];
+							profileTotals: number[];
+						};
+
+						const outcomes = await runWithConcurrency(cases, concurrency, async (evalCase) => {
 							const dryRun = dryRunOverride ? true : evalCase.dryRun ?? config.defaults?.dryRun ?? false;
+							const caseProfileTotals: number[] = [];
 							if (matrix) {
-								const matrixResult = await runMatrixCaseReuse({
+								const matrixResult = await runMatrixCase({
 									evalCase,
 									skillMap,
 									model,
 									agentDir,
 									dryRun,
-									pool,
+									thinkingLevel,
 									verbose,
 									trace,
-									thinkingLevel,
+									authSourcePath: evalAuthSource,
 								});
-								matrixResults.push(matrixResult);
-								evaluations.push(matrixResult.baseline, matrixResult.interference);
 								console.log(
 									`${matrixResult.baseline.status === "pass" ? symbols.ok : symbols.fail} ${evalCase.id} baseline`,
 								);
@@ -1551,74 +1834,19 @@ export const registerEvalCommand = (pi: ExtensionAPI) => {
 									logCaseProfile(`${evalCase.id} baseline`, matrixResult.baseline.result.timings);
 									logCaseProfile(`${evalCase.id} interference`, matrixResult.interference.result.timings);
 									if (matrixResult.baseline.result.timings?.totalMs) {
-										profileTotals.push(matrixResult.baseline.result.timings.totalMs);
+										caseProfileTotals.push(matrixResult.baseline.result.timings.totalMs);
 									}
 									if (matrixResult.interference.result.timings?.totalMs) {
-										profileTotals.push(matrixResult.interference.result.timings.totalMs);
+										caseProfileTotals.push(matrixResult.interference.result.timings.totalMs);
 									}
 								}
-							} else {
-								const evaluation = await runCaseReuse(
-									evalCase,
-									skillMap,
-									model,
-									agentDir,
-									dryRun,
-									"single",
-									pool,
-									undefined,
-									verbose,
-									trace,
-									thinkingLevel,
-								);
-								evaluations.push(evaluation);
-								console.log(
-									`${evaluation.status === "pass" ? symbols.ok : symbols.fail} ${evalCase.id}`,
-								);
-								if (profile) {
-									logCaseProfile(evalCase.id, evaluation.result.timings);
-									if (evaluation.result.timings?.totalMs) {
-										profileTotals.push(evaluation.result.timings.totalMs);
-									}
-								}
+								return {
+									evaluations: [matrixResult.baseline, matrixResult.interference],
+									matrixResults: [matrixResult],
+									profileTotals: caseProfileTotals,
+								};
 							}
-						}
-					} finally {
-						await pool.closeAll();
-					}
-				} else {
-					for (const evalCase of cases) {
-						const dryRun = dryRunOverride ? true : evalCase.dryRun ?? config.defaults?.dryRun ?? false;
-						if (matrix) {
-							const matrixResult = await runMatrixCase({
-								evalCase,
-								skillMap,
-								model,
-								agentDir,
-								dryRun,
-								thinkingLevel,
-								verbose,
-								trace,
-							});
-							matrixResults.push(matrixResult);
-							evaluations.push(matrixResult.baseline, matrixResult.interference);
-							console.log(
-								`${matrixResult.baseline.status === "pass" ? symbols.ok : symbols.fail} ${evalCase.id} baseline`,
-							);
-							console.log(
-								`${matrixResult.interference.status === "pass" ? symbols.ok : symbols.fail} ${evalCase.id} interference`,
-							);
-							if (profile) {
-								logCaseProfile(`${evalCase.id} baseline`, matrixResult.baseline.result.timings);
-								logCaseProfile(`${evalCase.id} interference`, matrixResult.interference.result.timings);
-								if (matrixResult.baseline.result.timings?.totalMs) {
-									profileTotals.push(matrixResult.baseline.result.timings.totalMs);
-								}
-								if (matrixResult.interference.result.timings?.totalMs) {
-									profileTotals.push(matrixResult.interference.result.timings.totalMs);
-								}
-							}
-						} else {
+
 							const evaluation = await runCase(
 								evalCase,
 								skillMap,
@@ -1630,20 +1858,31 @@ export const registerEvalCommand = (pi: ExtensionAPI) => {
 								undefined,
 								verbose,
 								trace,
+								evalAuthSource,
 							);
-							evaluations.push(evaluation);
 							console.log(
 								`${evaluation.status === "pass" ? symbols.ok : symbols.fail} ${evalCase.id}`,
 							);
 							if (profile) {
 								logCaseProfile(evalCase.id, evaluation.result.timings);
 								if (evaluation.result.timings?.totalMs) {
-									profileTotals.push(evaluation.result.timings.totalMs);
+									caseProfileTotals.push(evaluation.result.timings.totalMs);
 								}
 							}
+
+							return {
+								evaluations: [evaluation],
+								matrixResults: [],
+								profileTotals: caseProfileTotals,
+							};
+						});
+
+						for (const outcome of outcomes) {
+							evaluations.push(...outcome.evaluations);
+							matrixResults.push(...outcome.matrixResults);
+							profileTotals.push(...outcome.profileTotals);
 						}
 					}
-				}
 
 				console.log("");
 				console.log(buildCaseTable(evaluations));
@@ -1666,21 +1905,30 @@ export const registerEvalCommand = (pi: ExtensionAPI) => {
 				renderRunSummary(evaluations, durationMs);
 
 				const commitSha = await getCommitSha();
-				const date = new Date().toISOString().split("T")[0] ?? "unknown-date";
-				const reportPath = reportPathFor(agentDir, model, date, commitSha);
+				const reportPath = reportPathFor(agentDir, model);
 				const indexPath = indexPathFor(agentDir);
+				const runTimestamp = new Date().toISOString();
+				const previousRows = await readReportRows(reportPath);
 				const reportContent = buildReport({
 					model,
 					commitSha,
-					runTimestamp: new Date().toISOString(),
+					runTimestamp,
 					evaluations,
 					matrix: matrixResults,
 					durationMs,
+					allCases,
+					previousRows,
+					runScope: isFullRun ? "full" : "partial",
+					filter,
+					limit,
+					casesPathLabel,
 				});
 
 				await writeReport(reportPath, reportContent);
-				await updateIndex(indexPath, model.key, { sha: commitSha, timestamp: new Date().toISOString() });
-				renderReportNotice(reportPath, indexPath);
+				if (isFullRun) {
+					await updateIndex(indexPath, model.key, { sha: commitSha, timestamp: runTimestamp });
+				}
+				renderReportNotice(reportPath, indexPath, { indexUpdated: isFullRun });
 				return;
 			}
 

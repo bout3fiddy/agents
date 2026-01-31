@@ -76,7 +76,7 @@ def verify_commit(sha: str, root: Path) -> str | None:
 def main() -> int:
     root = Path(__file__).resolve().parents[1]
     config_path = root / "extensions" / "pi-eval" / "config" / "eval.config.json"
-    index_path = root / "docs" / "specs" / "pi-eval" / "reports" / "index.json"
+    index_path = root / "skills-evals" / "reports" / "index.json"
 
     if shutil.which("pi") is None:
         warn("pi-eval gate: pi is not installed; skipping eval gating.")

@@ -31,10 +31,11 @@
 ## Skills list (manual)
 - agent-observability - detect explicit corrections to assistant behavior (e.g., "don't do X", "always do Y") and log a report in `docs/observed-coding-agent-issues.md` after completing the current request. Do not trigger on general frustration, meta-policy discussion, or hypotheticals. refs: PR template + self-heal metadata
 - agent-browser - browser automation tool (not a sub-agent). Use only for navigation/forms/screenshots/extraction. refs: none
-- coding - core engineering rules with indexed references (frontend + platform included). refs: see `skills/coding/SKILL.md`
+- coding - core engineering rules for implementation, SQL, docs/config edits, and technical guidance, with indexed references (frontend + platform included). refs: see `skills/coding/SKILL.md`
+- database-migrations - safe planning and execution of schema/data migrations. refs: skills/database-migrations/references/migration-checklist.md
 - planning - clarify scope, spec-first delivery, and Linear tracking. refs: clarifying questions, spec workflow, Linear ops
 - seo - SEO strategy and execution, including programmatic SEO at scale and SEO audits/diagnostics. refs: skills/seo/references/programmatic-seo.md, skills/seo/references/seo-audit.md
-- skill-creator - create/install skills workflow. refs: checklist + templates
+- skill-creator - create/update/install skills (including planning/specs and edits to skills/*) workflow. refs: checklist + templates
 
 ## Skills index (auto-generated)
 - Pipe-delimited index built from `skills/*/SKILL.md` + `skills/*/references/*.md` during sync.
@@ -42,10 +43,12 @@
 <!-- AGENTS_SKILLS_INDEX_START -->
 AUTO-GENERATED SKILLS INDEX. SOURCE: skills/*/SKILL.md + skills/*/references/*.md
 skill|agent-browser|Automates browser interactions for web testing, form filling, screenshots, and data extraction. Use when the user needs to navigate websites, interact with web pages, fill forms, take screenshots, test web application...|skills/agent-browser/SKILL.md
-skill|agent-observability|Self-report agent issues by logging user corrections for later review. Use when a user says "don’t do that", "stop doing X", "always do Y", or requests self-correction.|skills/agent-observability/SKILL.md
-skill|coding|Core engineering rules for implementation, refactors, and bug fixes, with indexed references for specialized workflows.|skills/coding/SKILL.md
-skill|planning|Use for planning workflows: clarifying underspecified work, spec-driven delivery, and Linear-backed tracking.|skills/planning/SKILL.md
-skill|skill-creator|Create, update, or install skills using our repo workflow (uv + skills-ref validation, lean SKILL.md, references/ for detail, and sync via bin/sync.sh or bin/sync-hard.sh).|skills/skill-creator/SKILL.md
+skill|agent-observability|Self-report agent issues by logging user corrections for later review, then resume with the correct skill. Use when a user says "don’t do that", "stop doing X", "always do Y", or requests self-correction.|skills/agent-observability/SKILL.md
+skill|coding|Core engineering rules for implementation, refactors, bug fixes, SQL, docs/config edits, commands, and technical guidance, with indexed references for specialized workflows.|skills/coding/SKILL.md
+skill|planning|Planning workflows for clarifying underspecified work, spec-driven delivery, and Linear-backed tracking.|skills/planning/SKILL.md
+skill|skill-creator|Create, update, or install skills (including planning/specs and edits to skills/*) using our repo workflow (uv + skills-ref validation, lean SKILL.md, references/ for detail, and sync via bin/sync.sh [--hard]....|skills/skill-creator/SKILL.md
+trigger|agent-observability|Policy change / PR summary requested|skills/agent-observability/references/pr-template.md
+trigger|agent-observability|Self-heal metadata requested|skills/agent-observability/references/self-heal.json
 trigger|coding|Auth/secrets/credentials|skills/coding/references/secrets-and-auth-guardrails.md
 trigger|coding|Infra/platform/ops/GCP/Cloud Run/secrets/storage/Supabase|skills/coding/references/platform-engineering/index.md
 trigger|coding|JS/TS toolchain|skills/coding/references/bun.md
@@ -54,6 +57,12 @@ trigger|coding|React/Next.js|skills/coding/references/react/index.md
 trigger|coding|SolidJS|skills/coding/references/solidjs/index.md
 trigger|coding|Tailwind|skills/coding/references/frontend-engineering/tailwindcss-full.md
 trigger|coding|UI/design/layout/components/motion|skills/coding/references/frontend-engineering/index.md
+trigger|planning|Linear tickets/ops/brainstorm capture|skills/planning/references/linear-mcp-ops.md
+trigger|planning|Spec-first/iterative plan|skills/planning/references/spec-driven-iterative-builder.md
+trigger|planning|Underspecified implementation request|skills/planning/references/ask-questions-if-underspecified.md
+trigger|skill-creator|Adding or modifying a Rules section|skills/skill-creator/references/templates/rules-template.md
+trigger|skill-creator|Creating a skill or skeleton|skills/skill-creator/references/templates/skill-skeleton.md
+trigger|skill-creator|Running or verifying the checklist|skills/skill-creator/references/checklist.md
 ref|agent-observability|skills/agent-observability/references/index.md|References Index|Index of reference files for references/references.
 ref|agent-observability|skills/agent-observability/references/pr-template.md|Policy Change|Policy Change
 ref|coding|skills/coding/references/bun.md|Bun - JavaScript/TypeScript Runtime & Toolkit (Reference)|Bun is the preferred JavaScript/TypeScript toolkit when the repo supports it. If a repo is locked to npm/yarn/pnpm, follow its established toolchain and lockfile.

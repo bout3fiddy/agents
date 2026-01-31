@@ -68,6 +68,7 @@ const EVAL_SYSTEM_PROMPT = [
 
 let evalModeRegistered = false;
 let dryRunEnabled = false;
+let globalInstructionsContent: string | null = null;
 
 const setDryRunEnabled = (value: boolean) => {
 	dryRunEnabled = value;
@@ -81,6 +82,26 @@ const parseDryRunValue = (input: string | undefined): boolean | null => {
 	return null;
 };
 
+const loadGlobalInstructions = async (): Promise<string> => {
+	if (globalInstructionsContent !== null) {
+		return globalInstructionsContent;
+	}
+	const instructionsPath = process.env.PI_EVAL_GLOBAL_INSTRUCTIONS_PATH;
+	if (!instructionsPath) {
+		globalInstructionsContent = "";
+		return globalInstructionsContent;
+	}
+	try {
+		globalInstructionsContent = await fsReadFile(instructionsPath, "utf-8");
+	} catch {
+		globalInstructionsContent = "";
+	}
+	return globalInstructionsContent;
+};
+
+const isAgentsPath = (absolutePath: string): boolean =>
+	path.basename(absolutePath) === "AGENTS.md";
+
 const createEvalReadTool = (cwd: string) => {
 	const base = createReadTool(cwd, {
 		operations: {
@@ -88,11 +109,33 @@ const createEvalReadTool = (cwd: string) => {
 				if (dryRunEnabled && isSkillPath(absolutePath)) {
 					return;
 				}
+				if (isAgentsPath(absolutePath)) {
+					try {
+						await fsAccess(absolutePath, constants.R_OK);
+						return;
+					} catch {
+						const instructions = await loadGlobalInstructions();
+						if (instructions) {
+							return;
+						}
+					}
+				}
 				await fsAccess(absolutePath, constants.R_OK);
 			},
 			readFile: async (absolutePath: string) => {
 				if (dryRunEnabled && isSkillPath(absolutePath)) {
 					return Buffer.from(DRY_RUN_SKILL_STUB);
+				}
+				if (isAgentsPath(absolutePath)) {
+					try {
+						await fsAccess(absolutePath, constants.R_OK);
+						return fsReadFile(absolutePath);
+					} catch {
+						const instructions = await loadGlobalInstructions();
+						if (instructions) {
+							return Buffer.from(instructions);
+						}
+					}
 				}
 				return fsReadFile(absolutePath);
 			},

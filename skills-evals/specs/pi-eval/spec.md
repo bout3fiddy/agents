@@ -89,7 +89,7 @@ Schema (proposal):
   },
   "defaults": {
     "agentDir": ".",
-    "skillsPaths": [".pi/skills", "~/.pi/agent/skills"],
+    "skillsPaths": ["~/.pi/agent/skills"],
     "dryRun": false
   }
 }
@@ -196,11 +196,14 @@ Schema (proposal):
 
 ## Reports and Model Coverage
 - Reports are model-specific and must be committed to the repo.
-- Report path: docs/specs/pi-eval/reports/YYYY-MM-DD/<model>_<shortsha>.md
+- Report path: skills-evals/reports/<model>.md (overwritten per run; case rows preserved/updated).
+- Case table includes a Run (date) column showing last execution per row.
 - Include: model name, commit SHA, run date/time, cases executed, pass/fail
   totals, token stats, and any failed cases.
-- Maintain a machine index: docs/specs/pi-eval/reports/index.json mapping
+- Maintain a machine index: skills-evals/reports/index.json mapping
   model -> last evaluated commit SHA + timestamp.
+- Partial runs (filter/limit/smoke or custom cases file) update case rows but do not
+  update the index; gating requires a full run.
 - A model is considered "up to date" if its latest report commit SHA is at or
   after the most recent change to skills/ or instructions/global.md.
 - Models without access or subscription should not be listed in requiredModels
@@ -212,7 +215,7 @@ Schema (proposal):
 - Sync gate checks only these paths for changes:
   - skills/**
   - instructions/global.md
-- There is no bypass flag; sync is strictly gated on eval completion.
+- There is no bypass flag for normal sync; the eval harness uses `bin/sync.sh --eval` when syncing into a temp HOME.
 - Until Pi is installed and the eval runner is available, sync should warn and
   skip gating. Once enabled, gating is strict with no bypass.
 
@@ -233,7 +236,11 @@ Schema (proposal):
   cli-table3 (or table from @tbl) for tables, and log-symbols for icons.
 
 ## Determinism and Safety
-- Default: one case per fresh process to avoid state bleed. Optional `--reuse` runs multiple cases per skill set with `new_session` resets.
+- Default: one case per fresh process to avoid state bleed. Optional `--reuse` runs multiple cases per skill set with `new_session` resets. Optional `--jobs <n>` runs cases in parallel with separate processes (disabled when `--reuse` is on).
+- Default: sandboxed workspace copy (can be disabled per-case with `sandbox: false`).
+- Each sandbox creates a temporary HOME with `.pi/agent` synced via `bin/sync.sh --hard --eval` (gating disabled).
+- If `~/.pi/agent/auth.json` exists, it is copied into the temp HOME for provider auth.
+- `AGENTS.md` reads fall back to the synced global instructions at `~/.pi/agent/AGENTS.md`.
 - Model pinned per run from CLI or settings.
 - Dry-run stubs SKILL.md reads to prevent side effects.
 - No writes outside temp/log directories.

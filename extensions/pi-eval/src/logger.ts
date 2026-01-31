@@ -213,13 +213,20 @@ type LogStream = "stdout" | "stderr";
 
 const formatTimestamp = (): string => new Date().toISOString();
 
-const writeLine = (line: string, stream: LogStream = "stdout") => {
-	const output = `${chalk.dim(`[${formatTimestamp()}]`)} ${line}`;
+const formatLine = (line: string): string => `${chalk.dim(`[${formatTimestamp()}]`)} ${line}`;
+
+const writeLines = (lines: string[], stream: LogStream = "stdout") => {
+	if (lines.length === 0) return;
+	const output = `${lines.join("\n")}\n`;
 	if (stream === "stderr") {
-		console.error(output);
+		process.stderr.write(output);
 	} else {
-		console.log(output);
+		process.stdout.write(output);
 	}
+};
+
+const writeLine = (line: string, stream: LogStream = "stdout") => {
+	writeLines([formatLine(line)], stream);
 };
 
 export const logWithTimestamp = (message: string, options: { stream?: LogStream } = {}) => {
@@ -232,9 +239,9 @@ export const logLines = (
 ) => {
 	const prefix = options.prefix ?? "";
 	const stream = options.stream ?? "stdout";
-	for (const line of String(message ?? "").split("\n")) {
-		writeLine(`${prefix}${line}`, stream);
-	}
+	const lines = String(message ?? "").split("\n");
+	const formatted = lines.map((line) => formatLine(`${prefix}${line}`));
+	writeLines(formatted, stream);
 };
 
 export const logPanelWithTimestamp = (

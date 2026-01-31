@@ -15,7 +15,7 @@ agents/
 ├── agents/                    # Claude-only (optional)
 └── bin/
     ├── sync.sh
-    └── sync-hard.sh           # Destructive mirror to ~/.codex and ~/.claude
+    └── sync.sh                # Sync skills/instructions (use --hard for destructive mirror)
 ```
 
 ## Skills Directory
@@ -43,7 +43,7 @@ export PATH="$PATH:$HOME/.agents/bin"
 ./bin/sync.sh
 
 # Hard-sync (destructive mirror)
-./bin/sync-hard.sh
+./bin/sync.sh --hard
 ```
 
 ## How It Works
@@ -59,7 +59,7 @@ export PATH="$PATH:$HOME/.agents/bin"
 
 **Latest wins:**
 - `sync.sh` compares modification times and propagates the newest version to the other locations.
-- `sync-hard.sh` is destructive and mirrors this repo exactly to `~/.codex` and `~/.claude`.
+- `sync.sh --hard` is destructive and mirrors this repo exactly to `~/.codex` and `~/.claude`.
 
 ### Instructions (bootstrap)
 

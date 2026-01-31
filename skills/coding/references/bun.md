@@ -6,6 +6,11 @@ Bun is the preferred JavaScript/TypeScript toolkit when the repo supports it. If
 
 **Prefer Bun when compatible. Otherwise, use the repo's existing package manager and lockfile.**
 
+## If repo context is missing
+- Ask for repo details (current package manager, lockfile, constraints).
+- Provide a migration checklist only; do not run commands.
+- If file reads fail, stop and ask for repo/paths; do not keep scanning.
+
 ## Command Reference
 
 ### Package Management

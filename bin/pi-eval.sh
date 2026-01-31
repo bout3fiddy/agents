@@ -20,20 +20,20 @@ fi
 if [[ -z "${PI_EVAL_TABLE_WIDTH:-}" ]]; then
   if [[ -n "${COLUMNS:-}" ]]; then
     export PI_EVAL_TABLE_WIDTH="$COLUMNS"
-  elif command -v stty >/dev/null 2>&1; then
+  elif [[ -t 0 ]] && command -v stty >/dev/null 2>&1; then
     TABLE_WIDTH="$(stty size </dev/tty 2>/dev/null | awk '{print $2}')"
     if [[ -n "$TABLE_WIDTH" ]]; then
       export PI_EVAL_TABLE_WIDTH="$TABLE_WIDTH"
     fi
-  elif command -v tput >/dev/null 2>&1; then
-    TABLE_WIDTH="$(tput cols </dev/tty 2>/dev/null || true)"
+  elif [[ -t 0 ]] && command -v tput >/dev/null 2>&1; then
+    TABLE_WIDTH="$(tput cols 2>/dev/null || true)"
     if [[ -n "$TABLE_WIDTH" ]]; then
       export PI_EVAL_TABLE_WIDTH="$TABLE_WIDTH"
     fi
   fi
 fi
 
-LOG_DIR="${PI_EVAL_LOG_DIR:-$ROOT_DIR/docs/specs/pi-eval/logs}"
+LOG_DIR="${PI_EVAL_LOG_DIR:-$ROOT_DIR/skills-evals/specs/pi-eval/logs}"
 LOG_PATH="${PI_EVAL_LOG:-}"
 if [[ "$LOG_PATH" == "off" || "$LOG_PATH" == "0" ]]; then
   LOG_PATH=""

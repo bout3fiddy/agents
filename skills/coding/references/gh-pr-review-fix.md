@@ -2,6 +2,12 @@
 
 Follow this workflow to find the latest PR, gather reviewer feedback + CI failures, organize them, and fix them one by one.
 
+## If no repo/PR context is provided
+- Ask for the PR link or repo/branch details.
+- Provide a checklist of steps without running commands.
+- If file reads or commands fail due to missing context, stop and ask for repo/PR details (do not keep scanning).
+- Do not run gh commands without a specific repo/PR.
+
 ## 1) Identify the target PR
 
 - Prefer the latest **updated** open PR unless the user specifies another PR.

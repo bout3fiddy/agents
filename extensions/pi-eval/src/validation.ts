@@ -23,6 +23,18 @@ export const parseLimitFlag = (value: string | boolean | undefined): number | un
 	return parsed;
 };
 
+export const parseJobsFlag = (value: string | boolean | undefined): number | undefined => {
+	if (value === undefined) return undefined;
+	if (typeof value !== "string") {
+		throw new Error("Flag --jobs expects a positive integer value.");
+	}
+	const parsed = Number(value);
+	if (!Number.isInteger(parsed) || parsed <= 0) {
+		throw new Error("Flag --jobs expects a positive integer value.");
+	}
+	return parsed;
+};
+
 export const resolveCasesPath = async (
 	agentDir: string,
 	value: string | boolean | undefined,

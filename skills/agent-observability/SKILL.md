@@ -1,6 +1,6 @@
 ---
 name: agent-observability
-description: Self-report agent issues by logging user corrections for later review. Use when a user says "don’t do that", "stop doing X", "always do Y", or requests self-correction.
+description: Self-report agent issues by logging user corrections for later review, then resume with the correct skill. Use when a user says "don’t do that", "stop doing X", "always do Y", or requests self-correction.
 ---
 
 # Agent Observability (Self-Reporting Log)
@@ -10,6 +10,9 @@ description: Self-report agent issues by logging user corrections for later revi
 - Log locally in the current repo at `docs/observed-coding-agent-issues.md`.
 - Create the report file if it doesn’t exist.
 - After logging, immediately resume the main task.
+- If the correction is followed by implementation work, open the relevant skill (coding/skill-creator/planning) before asking questions or reading files.
+- When opening references, use full repo paths like `skills/agent-observability/references/...` (not `references/...`).
+- If a reference trigger matches, open the referenced file before drafting output.
 - Rate limit: at most one log entry per session unless the user explicitly asks to log more.
 - Batch multiple corrections into a single entry by updating the existing root cause and guardrail notes; do not add verbatim quotes.
 
@@ -31,12 +34,16 @@ Entry format:
 - Proposed guardrail:
 
 ### 3) Resume main task
-Do not switch workflows; continue the original task immediately.
+Re-evaluate which skill applies next (coding/skill-creator/planning) and continue the original task immediately.
 
 ## If unable to write
 - Output a “Self-report draft” block in the response with the entry content.
 - State that it was not written and needs manual application.
 
+## Reference triggers (open before responding)
+- Policy change / PR summary requested -> `skills/agent-observability/references/pr-template.md`
+- Self-heal metadata requested -> `skills/agent-observability/references/self-heal.json`
+
 ## References
-- `references/pr-template.md` - PR summary template for policy changes
-- `references/self-heal.json` - repo/branch metadata for self-heal automation
+- `skills/agent-observability/references/pr-template.md` - PR summary template for policy changes
+- `skills/agent-observability/references/self-heal.json` - repo/branch metadata for self-heal automation

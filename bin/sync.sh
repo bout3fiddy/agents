@@ -3,14 +3,56 @@ set -euo pipefail
 
 DEFAULT_AGENTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 AGENTS_DIR="${AGENTS_DIR:-$DEFAULT_AGENTS_DIR}"
+SYNC_MODE="soft"
+EVAL_MODE="0"
+
+usage() {
+    cat <<'EOF'
+Usage: bin/sync.sh [--hard] [--eval]
+  --hard  Destructive mirror from repo to targets
+  --eval  Skip eval gate and use EVAL_SYNC_HOME as HOME (for temp agent homes)
+EOF
+}
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --hard)
+            SYNC_MODE="hard"
+            shift
+            ;;
+        --eval)
+            EVAL_MODE="1"
+            shift
+            ;;
+        -h|--help)
+            usage
+            exit 0
+            ;;
+        *)
+            echo "Unknown option: $1" >&2
+            usage >&2
+            exit 1
+            ;;
+    esac
+done
+
+if [[ "$EVAL_MODE" == "1" ]]; then
+    export SKIP_PI_EVAL_GATE=1
+    if [[ -n "${EVAL_SYNC_HOME:-}" ]]; then
+        export HOME="$EVAL_SYNC_HOME"
+    fi
+fi
+
 CLAUDE_DIR="$HOME/.claude"
 CODEX_DIR="$HOME/.codex"
-PI_DIR="${PI_DIR:-$HOME/.pi}"
+PI_DIR="${PI_DIR:-$HOME/.pi/agent}"
 
 shopt -s nullglob
 
-if ! "$AGENTS_DIR/bin/pi-eval-gate.py"; then
-    exit 1
+if [[ "${SKIP_PI_EVAL_GATE:-}" != "1" ]]; then
+    if ! "$AGENTS_DIR/bin/pi-eval-gate.py"; then
+        exit 1
+    fi
 fi
 
 echo "Syncing from $AGENTS_DIR..."
@@ -65,6 +107,32 @@ copy_file() {
     local src="$1"
     local dest="$2"
 
+    mkdir -p "$(dirname "$dest")"
+    if command -v rsync &> /dev/null; then
+        rsync -a --copy-links "$src" "$dest"
+    else
+        cp -L "$src" "$dest"
+    fi
+}
+
+mirror_dir() {
+    local src="$1"
+    local dest="$2"
+
+    mkdir -p "$dest"
+    if command -v rsync &> /dev/null; then
+        rsync -a --delete --copy-links "$src"/ "$dest"/
+    else
+        shopt -s dotglob
+        rm -rf "$dest"/*
+        cp -R -L "$src"/. "$dest"/
+        shopt -u dotglob
+    fi
+}
+
+mirror_file() {
+    local src="$1"
+    local dest="$2"
     mkdir -p "$(dirname "$dest")"
     if command -v rsync &> /dev/null; then
         rsync -a --copy-links "$src" "$dest"
@@ -263,6 +331,14 @@ sync_skills() {
 
     mkdir -p "$AGENTS_DIR/skills" "$CLAUDE_DIR/skills" "$CODEX_DIR/skills" "$PI_DIR/skills"
 
+    if [[ "$SYNC_MODE" == "hard" ]]; then
+        echo "  (hard mirror)"
+        mirror_dir "$AGENTS_DIR/skills" "$CLAUDE_DIR/skills"
+        mirror_dir "$AGENTS_DIR/skills" "$CODEX_DIR/skills"
+        mirror_dir "$AGENTS_DIR/skills" "$PI_DIR/skills"
+        return
+    fi
+
     local skill_dir
     for skill_dir in "$AGENTS_DIR/skills" "$CLAUDE_DIR/skills" "$CODEX_DIR/skills" "$PI_DIR/skills"; do
         mkdir -p "$skill_dir"
@@ -298,6 +374,16 @@ sync_instructions() {
     echo "Syncing instructions..."
 
     mkdir -p "$AGENTS_DIR/instructions"
+
+    if [[ "$SYNC_MODE" == "hard" ]]; then
+        build_skills_index
+        mirror_file "$AGENTS_DIR/instructions/global.md" "$CLAUDE_DIR/CLAUDE.md"
+        mirror_file "$AGENTS_DIR/instructions/global.md" "$CODEX_DIR/AGENTS.md"
+        mirror_file "$AGENTS_DIR/instructions/global.md" "$PI_DIR/AGENTS.md"
+        echo "  global.md -> Claude + Codex + Pi (hard mirror)"
+        return
+    fi
+
     sync_file_latest_wins_four \
         "$AGENTS_DIR/instructions/global.md" \
         "$CLAUDE_DIR/CLAUDE.md" \
