@@ -196,7 +196,7 @@ Schema (proposal):
 
 ## Reports and Model Coverage
 - Reports are model-specific and must be committed to the repo.
-- Report path: skills-evals/reports/<model>.md (overwritten per run; case rows preserved/updated).
+- Report path: skills-evals/reports/<model>.md (overwritten per run; case rows preserved/updated for current cases; rows for removed case IDs are pruned on the next run).
 - Case table includes a Run (date) column showing last execution per row.
 - Include: model name, commit SHA, run date/time, cases executed, pass/fail
   totals, token stats, and any failed cases.

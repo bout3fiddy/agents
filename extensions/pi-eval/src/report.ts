@@ -112,9 +112,6 @@ const mergeReportRows = (params: {
 	for (const evalCase of allCases) {
 		caseIds.add(evalCase.id);
 	}
-	for (const caseId of previousModes.keys()) {
-		caseIds.add(caseId);
-	}
 	for (const caseId of updatedModes.keys()) {
 		caseIds.add(caseId);
 	}

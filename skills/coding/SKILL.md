@@ -5,34 +5,36 @@ description: Core engineering rules for implementation, refactors, bug fixes, SQ
 
 # Coding (Core + Indexed References)
 
-Use this skill for most engineering work, including implementation, refactors, bug fixes, SQL, docs/config edits, commands, and technical guidance. When a task matches a reference trigger, open that reference immediately.
+Use this skill for most engineering work, including implementation, refactors, bug fixes, SQL, docs/config edits, commands, and technical guidance. When a task clearly matches a reference trigger, open that reference before drafting the substantive response (ask brief clarifying questions first if needed).
 
 ## Scope & routing
 - Use this skill for code changes and technical guidance across languages/tools.
-- Always open this SKILL before responding with code, SQL, commands, or edits to docs/configs—even for small changes.
-- If the primary task is creating/updating/installing a skill (anything under `skills/` or SKILL.md content), use `skill-creator` instead. If the user asks for a plan/spec for a skill, handle it in `skill-creator` unless they explicitly request a planning-only response.
+- Prefer to open this SKILL before providing concrete code, SQL, commands, or edits. If the user hasn't provided enough context, you may ask 1-2 clarifying questions first, then open the SKILL before drafting the solution.
+- **Hard rule:** if the request mentions `skills/`, `SKILL.md`, or creating/updating a skill, do **not** open coding. Use `skill-creator` instead (including plans/specs unless explicitly plan-only). If coding is already open, stop and hand off.
+- Never edit home-level agent instruction files (e.g., `~/.pi/agent/AGENTS.md`, `~/.claude/...`, `~/.codex/...`). Repo-local `AGENTS.md` or `CLAUDE.md` updates are OK only for durable repo-specific context.
 - When opening references, use full repo paths like `skills/coding/references/...` (not `references/...`). If a reference read fails, retry once with the full path.
-- If a trigger matches, open the referenced file before responding (do not rely on memory).
-- If the user provides a word/length limit, comply and keep the response minimal.
+- When a trigger clearly matches, open the referenced file before drafting the substantive response. If you only need clarification, ask first.
+- If the user provides a word/length limit, minimize extra reads and keep the response short.
 
-## Quick topic scan (open refs before responding)
-- UI/layout/design/components/motion
-- Infra/platform/ops/deploy/Cloud/GCP/Supabase/storage
-- Auth/secrets/credentials/safety guidance
-- PR review/CI/GitHub
-- JS/TS toolchain or Bun
-- React/Next.js, SolidJS, Tailwind
+## Quick topic scan (open refs when clearly relevant)
+- UI/layout/styling or motion work
+- Infra/platform/ops/deploy/secrets/storage work
+- Auth/credentials/safety guidance
+- PR review or CI failures
+- JS/TS runtime or toolchain changes
+- Framework-specific guidance (ask which stack if unclear)
 
-## Reference triggers (open the reference)
+## Reference triggers (open when clearly relevant)
+If the request explicitly names a framework/tool or clearly falls into a category below, open the matching reference before drafting the substantive response. If the stack/tooling is unclear, ask 1-2 clarifying questions first.
 
-- UI/design/layout/components/motion -> `skills/coding/references/frontend-engineering/index.md`
-- Infra/platform/ops/GCP/Cloud Run/secrets/storage/Supabase -> `skills/coding/references/platform-engineering/index.md`
-- PR review/CI failures/gh -> `skills/coding/references/gh-pr-review-fix.md`
-- JS/TS toolchain -> `skills/coding/references/bun.md`
+- UI/layout/motion or component design -> `skills/coding/references/frontend-engineering/index.md`
+- Infra/platform/ops/deploy/secrets/storage -> `skills/coding/references/platform-engineering/index.md`
+- PR review/CI/GitHub -> `skills/coding/references/gh-pr-review-fix.md`
+- JS/TS runtime or toolchain -> `skills/coding/references/bun.md`
 - Auth/secrets/credentials -> `skills/coding/references/secrets-and-auth-guardrails.md`
-- SolidJS -> `skills/coding/references/solidjs/index.md` (and `skills/coding/references/solidjs/`)
 - React/Next.js -> `skills/coding/references/react/index.md`
-- Tailwind -> `skills/coding/references/frontend-engineering/tailwindcss-full.md`
+- SolidJS -> `skills/coding/references/solidjs/index.md` (and `skills/coding/references/solidjs/`)
+- Utility-class styling (Tailwind) -> `skills/coding/references/frontend-engineering/tailwindcss-full.md`
 
 ## Conflicts & precedence
 

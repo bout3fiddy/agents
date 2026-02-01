@@ -6,6 +6,10 @@
 - If no skill matches, continue without one.
 - Always consult the Skills index (auto-generated) to identify relevant skills and triggers.
 - If a trigger matches, open the referenced file immediately; if a skill matches without a trigger, open its `SKILL.md` and follow any references it points to.
+- For any file edits outside `skills/`, open `skills/coding/SKILL.md` before editing.
+- For edits under `skills/` or `SKILL.md`, **read `skills/skill-creator/SKILL.md` before responding** and do not open `coding`.
+- When editing another skill’s `SKILL.md`, ask the user to paste the relevant section instead of reading the file directly.
+- When the user asks for a plan/spec, open `skills/planning/SKILL.md` before drafting.
 
 ## Quality gates
 - If `.pre-commit-config.yaml` exists and you made changes to files the hooks could touch (code/config/etc. in this repo), run: `uv run prek run --all-files` (runs repo-defined hooks like ruff/ruff-format; it may modify files, so re-run and re-stage until clean). If no relevant changes were made, skip running `prek`.
@@ -46,19 +50,18 @@ skill|agent-browser|Automates browser interactions for web testing, form filling
 skill|agent-observability|Self-report agent issues by logging user corrections for later review, then resume with the correct skill. Use when a user says "don’t do that", "stop doing X", "always do Y", or requests self-correction.|skills/agent-observability/SKILL.md
 skill|coding|Core engineering rules for implementation, refactors, bug fixes, SQL, docs/config edits, commands, and technical guidance, with indexed references for specialized workflows.|skills/coding/SKILL.md
 skill|planning|Planning workflows for clarifying underspecified work, spec-driven delivery, and Linear-backed tracking.|skills/planning/SKILL.md
-skill|skill-creator|Create, update, or install skills (including planning/specs and edits to skills/*) using our repo workflow (uv + skills-ref validation, lean SKILL.md, references/ for detail, and sync via bin/sync.sh [--hard]....|skills/skill-creator/SKILL.md
+skill|skill-creator|Create, update, or install skills (including planning/specs and edits to skills/*) using our repo workflow (uv + skills-ref validation, lean SKILL.md, references/ for detail, and sync via bin/sync.sh [--hard]).|skills/skill-creator/SKILL.md
 trigger|agent-observability|Policy change / PR summary requested|skills/agent-observability/references/pr-template.md
-trigger|agent-observability|Self-heal metadata requested|skills/agent-observability/references/self-heal.json
 trigger|coding|Auth/secrets/credentials|skills/coding/references/secrets-and-auth-guardrails.md
-trigger|coding|Infra/platform/ops/GCP/Cloud Run/secrets/storage/Supabase|skills/coding/references/platform-engineering/index.md
-trigger|coding|JS/TS toolchain|skills/coding/references/bun.md
-trigger|coding|PR review/CI failures/gh|skills/coding/references/gh-pr-review-fix.md
+trigger|coding|Infra/platform/ops/deploy/secrets/storage|skills/coding/references/platform-engineering/index.md
+trigger|coding|JS/TS runtime or toolchain|skills/coding/references/bun.md
+trigger|coding|PR review/CI/GitHub|skills/coding/references/gh-pr-review-fix.md
 trigger|coding|React/Next.js|skills/coding/references/react/index.md
 trigger|coding|SolidJS|skills/coding/references/solidjs/index.md
-trigger|coding|Tailwind|skills/coding/references/frontend-engineering/tailwindcss-full.md
-trigger|coding|UI/design/layout/components/motion|skills/coding/references/frontend-engineering/index.md
-trigger|planning|Linear tickets/ops/brainstorm capture|skills/planning/references/linear-mcp-ops.md
+trigger|coding|UI/layout/motion or component design|skills/coding/references/frontend-engineering/index.md
+trigger|coding|Utility-class styling (Tailwind)|skills/coding/references/frontend-engineering/tailwindcss-full.md
 trigger|planning|Spec-first/iterative plan|skills/planning/references/spec-driven-iterative-builder.md
+trigger|planning|Ticketing or Linear ops/brainstorm capture|skills/planning/references/linear-mcp-ops.md
 trigger|planning|Underspecified implementation request|skills/planning/references/ask-questions-if-underspecified.md
 trigger|skill-creator|Adding or modifying a Rules section|skills/skill-creator/references/templates/rules-template.md
 trigger|skill-creator|Creating a skill or skeleton|skills/skill-creator/references/templates/skill-skeleton.md

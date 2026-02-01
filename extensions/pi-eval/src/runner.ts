@@ -119,6 +119,9 @@ const buildCaseResult = (
 	tokenBudget: evalCase.tokenBudget ?? null,
 });
 
+const normalizeRefPath = (ref: string): string =>
+	normalizePath(ref).trim().replace(/^\.\/+/, "");
+
 const evaluateCase = async (
 	evalCase: EvalCase,
 	result: CaseRunResult,
@@ -128,6 +131,7 @@ const evaluateCase = async (
 	const useAttempts = result.dryRun;
 	const invokedSkills = useAttempts ? result.skillAttempts : result.skillInvocations;
 	const invokedRefs = useAttempts ? result.refAttempts : result.refInvocations;
+	const normalizedInvokedRefs = invokedRefs.map(normalizeRefPath);
 
 	for (const skill of evalCase.expectedSkills ?? []) {
 		if (!invokedSkills.includes(skill)) {
@@ -140,7 +144,11 @@ const evaluateCase = async (
 		}
 	}
 	for (const ref of evalCase.expectedRefs ?? []) {
-		if (!invokedRefs.includes(ref)) {
+		const normalizedExpected = normalizeRefPath(ref);
+		const hasMatch = normalizedInvokedRefs.some(
+			(item) => item === normalizedExpected || item.endsWith(`/${normalizedExpected}`),
+		);
+		if (!hasMatch) {
 			reasons.push(`missing reference: ${ref}`);
 		}
 	}
@@ -1605,8 +1613,12 @@ export const registerEvalCommand = (pi: ExtensionAPI) => {
 					const isFullRun = subcommand === "run" && !filter && !limitOverride && isDefaultCasesPath;
 
 					const casesLoadStart = Date.now();
-					const allCases = await loadCases(casesPath);
-					const cases = filterCases(allCases, filter, limit);
+					const defaultCases = await loadCases(defaultCasesPath);
+					const selectedCases = isDefaultCasesPath
+						? defaultCases
+						: await loadCases(casesPath);
+					const allCases = defaultCases;
+					const cases = filterCases(selectedCases, filter, limit);
 					const casesLoadMs = Date.now() - casesLoadStart;
 					if (cases.length === 0) {
 						console.log(`${symbols.warn} ${color.warning("No cases matched.")}`);
