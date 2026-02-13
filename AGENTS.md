@@ -12,3 +12,4 @@
 - `bin/build-agents-index.sh` auto-generates the skills index block in `instructions/global.md`; it runs during `bin/sync.sh` (soft) and `bin/sync.sh --hard`.
 - `bin/sync.sh` syncs skills/instructions to `~/.pi/agent` (Pi agent global context/skills); use `--hard` for destructive mirror.
 - Eval specs live in `skills-evals/specs/pi-eval/` with a mirror in `docs/specs/pi-eval/` (keep both in sync).
+- `DEVC_DISABLE_MCP_SERVERS` in `devcontainer/devcontainer.json` can disable MCP startup in containers (comma/space/semi-colon separated list); use it to skip auth-heavy servers (e.g. `sentry` and/or `linear`) on non-interactive session starts.

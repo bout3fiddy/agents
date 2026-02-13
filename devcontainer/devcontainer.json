@@ -68,7 +68,8 @@
     "CLAUDE_CONFIG_DIR": "/home/node/.claude",
     "CODEX_HOME": "/home/node/.codex",
     "CODEX_HOST_HOME": "/home/node/.codex-host",
-    "UV_PROJECT_ENVIRONMENT": "/home/node/.venv"
+    "UV_PROJECT_ENVIRONMENT": "/home/node/.venv",
+    "DEVC_DISABLE_MCP_SERVERS": "sentry"
   },
   "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind,consistency=delegated",
   "workspaceFolder": "/workspace"

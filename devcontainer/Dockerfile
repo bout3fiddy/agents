@@ -29,6 +29,7 @@ RUN --mount=type=cache,target=/root/.npm \
     "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}" \
     "@openai/codex@${CODEX_VERSION}" \
     "agent-browser" \
+    "mcp-remote" \
   && corepack enable --install-directory /usr/local/share/npm-global/bin \
   && corepack prepare pnpm@latest --activate
 

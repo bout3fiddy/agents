@@ -39,6 +39,7 @@ the built in terminal would login inside the container.
 - claude/codex/takopi state is bind-mounted from your host `~/.claude`, `~/.codex`, and `~/.takopi`
 - `codex` / `claude` aliases are installed (`codexxx`, `clod`)
 - `postCreateCommand` runs `uv` to apply defaults and ensure ownerships
+- MCP startup can be suppressed per session with `DEVC_DISABLE_MCP_SERVERS` in container env (comma/space/semi-colon separated, values like `sentry` and `linear`) to avoid browser-auth-dependent startup in headless containers.
 
 ## mounts and ports
 

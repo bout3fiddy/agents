@@ -70,7 +70,10 @@ CODEX_MCP_URL_RE = re.compile(
     r'^(?P<prefix>\s*url\s*=\s*")(?P<scheme>https?|wss?)://'
     r'(?P<host>localhost|127\\.0\\.0\\.1|\\[::1\\]|::1)(?P<rest>[^"]*)(?P<suffix>".*)$'
 )
+CODEX_MCP_SECTION_RE = re.compile(r"^\[(?P<section>[^\]]+)\]\s*$")
 CODEX_WEB_SEARCH_REQUEST_RE = re.compile(r"^(?P<indent>\s*)web_search_request\s*=\s*(?P<value>.+?)\s*$")
+CODEX_MCP_STARTUP_TIMEOUT_SEC = 60
+DEVC_DISABLE_MCP_SERVERS_ENV = "DEVC_DISABLE_MCP_SERVERS"
 
 
 def log(message: str) -> None:
@@ -219,6 +222,151 @@ def rewrite_web_search_feature(text: str) -> tuple[str, bool]:
     return "\n".join(out_lines).rstrip() + "\n", True
 
 
+def _parse_toml_array(value: str) -> list[str] | None:
+    try:
+        parsed = json.loads(value)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(parsed, list):
+        return None
+    return [str(item) for item in parsed]
+
+
+def _find_section_range(lines: list[str], section_name: str) -> tuple[int | None, int]:
+    section_header = f"[{section_name}]"
+    start = None
+    for i, line in enumerate(lines):
+        if line.strip() == section_header:
+            start = i
+            break
+    if start is None:
+        return None, -1
+    end = len(lines)
+    for j in range(start + 1, len(lines)):
+        if CODEX_MCP_SECTION_RE.match(lines[j]) and lines[j].strip() != section_header:
+            end = j
+            break
+    return start, end
+
+
+def _get_disabled_mcp_servers() -> set[str]:
+    raw = os.environ.get(DEVC_DISABLE_MCP_SERVERS_ENV, "")
+    if not raw:
+        return set()
+
+    disabled: set[str] = set()
+    for item in raw.replace(";", ",").replace(" ", ",").split(","):
+        name = item.strip().lower()
+        if not name:
+            continue
+        if name.startswith("mcp_servers."):
+            name = name.removeprefix("mcp_servers.")
+        disabled.add(name)
+    return disabled
+
+
+def _is_disabled_mcp_section(section_name: str, disabled: set[str]) -> bool:
+    if not disabled:
+        return False
+
+    normalized = section_name.strip().lower()
+    if normalized in disabled:
+        return True
+    if normalized.startswith("mcp_servers."):
+        return normalized.removeprefix("mcp_servers.") in disabled
+    return False
+
+
+def _filter_disabled_mcp_sections(lines: list[str], disabled: set[str]) -> tuple[list[str], bool]:
+    if not disabled:
+        return lines, False
+
+    out: list[str] = []
+    removed = False
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        match = CODEX_MCP_SECTION_RE.match(line)
+        if match and _is_disabled_mcp_section(match.group("section"), disabled):
+            removed = True
+            i += 1
+            while i < len(lines) and not CODEX_MCP_SECTION_RE.match(lines[i]):
+                i += 1
+            continue
+        out.append(line)
+        i += 1
+
+    return out, removed
+
+
+def _ensure_section_key_int(lines: list[str], start: int, end: int, key: str, value: int) -> bool:
+    for i in range(start + 1, end):
+        if re.match(rf"^\s*{re.escape(key)}\s*=", lines[i]):
+            new_line = f"{key} = {value}"
+            if lines[i].strip() == new_line:
+                return False
+            lines[i] = new_line
+            return True
+
+    lines.insert(end, f"{key} = {value}")
+    return True
+
+
+def _ensure_sentry_section_settings(lines: list[str], start: int, end: int) -> bool:
+    updated = False
+    for i in range(start + 1, end):
+        if re.match(r"^\s*command\s*=", lines[i]) and "mcp-remote" not in lines[i]:
+            lines[i] = 'command = "mcp-remote"'
+            updated = True
+
+        match = re.match(r"^\s*args\s*=\s*(\[.*\])\s*$", lines[i])
+        if not match:
+            continue
+        values = _parse_toml_array(match.group(1))
+        if not values:
+            continue
+
+        if values and "http" in values[-1]:
+            target_url = values[-1]
+        elif len(values) > 1:
+            target_url = values[-1]
+        else:
+            target_url = "https://mcp.sentry.dev/mcp"
+
+        lines[i] = f'args = ["{target_url}"]'
+        updated = True
+
+    return (
+        _ensure_section_key_int(lines, start, end, "startup_timeout_sec", CODEX_MCP_STARTUP_TIMEOUT_SEC)
+        or updated
+    )
+
+
+def rewrite_mcp_server_settings(text: str) -> tuple[str, bool]:
+    lines = text.splitlines()
+    changed = False
+    disabled_mcp_servers = _get_disabled_mcp_servers()
+    if disabled_mcp_servers:
+        lines, removed = _filter_disabled_mcp_sections(lines, disabled_mcp_servers)
+        changed = changed or removed
+
+    for section_name in ("mcp_servers.linear", "mcp_servers.sentry"):
+        start, end = _find_section_range(lines, section_name)
+        if start is None:
+            continue
+        if section_name == "mcp_servers.sentry":
+            changed = _ensure_sentry_section_settings(lines, start, end) or changed
+            continue
+        changed = (
+            _ensure_section_key_int(lines, start, end, "startup_timeout_sec", CODEX_MCP_STARTUP_TIMEOUT_SEC)
+            or changed
+        )
+
+    if not changed:
+        return text, False
+    return "\n".join(lines).rstrip() + "\n", True
+
+
 def build_container_codex_config(source_text: str) -> tuple[str, bool]:
     text = source_text
     if text.lstrip().startswith(CODEX_CONFIG_HEADER):
@@ -230,6 +378,8 @@ def build_container_codex_config(source_text: str) -> tuple[str, bool]:
     text, changed = rewrite_mcp_urls(text)
     updated = updated or changed
     text, changed = rewrite_web_search_feature(text)
+    updated = updated or changed
+    text, changed = rewrite_mcp_server_settings(text)
     updated = updated or changed
 
     if text.strip():
@@ -426,6 +576,30 @@ def ensure_uv_tools() -> None:
         log(f"uv tool install incomplete (failed: {', '.join(failed)})")
     else:
         log("uv tools installed")
+
+
+def ensure_mcp_remote() -> None:
+    if shutil.which("mcp-remote") is not None:
+        return
+
+    npm_bin = shutil.which("npm")
+    if npm_bin is None:
+        log("npm not found; skipping mcp-remote install")
+        return
+
+    log("installing mcp-remote for sentry MCP startup")
+    result = subprocess.run(
+        [npm_bin, "install", "-g", "mcp-remote"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        detail = result.stderr.strip() or result.stdout.strip()
+        log(f"mcp-remote install failed; sentry MCP will rely on existing config: {detail}")
+        return
+
+    log("mcp-remote installed")
 
 
 def ensure_latest_codex() -> None:
@@ -724,6 +898,9 @@ def main() -> None:
         ensure_dir_ownership(Path(uv_env))
     ensure_fish_history()
     ensure_global_gitignore(workspace)
+    disabled_mcp_servers = _get_disabled_mcp_servers()
+    if "sentry" not in disabled_mcp_servers:
+        ensure_mcp_remote()
     ensure_codex_config()
     ensure_latest_codex()
     ensure_codex_state_links(
