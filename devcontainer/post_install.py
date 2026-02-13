@@ -70,6 +70,7 @@ CODEX_MCP_URL_RE = re.compile(
     r'^(?P<prefix>\s*url\s*=\s*")(?P<scheme>https?|wss?)://'
     r'(?P<host>localhost|127\\.0\\.0\\.1|\\[::1\\]|::1)(?P<rest>[^"]*)(?P<suffix>".*)$'
 )
+CODEX_WEB_SEARCH_REQUEST_RE = re.compile(r"^(?P<indent>\s*)web_search_request\s*=\s*(?P<value>.+?)\s*$")
 
 
 def log(message: str) -> None:
@@ -183,6 +184,41 @@ def rewrite_mcp_urls(text: str) -> tuple[str, bool]:
     return "\n".join(out_lines).rstrip() + "\n", True
 
 
+def rewrite_web_search_feature(text: str) -> tuple[str, bool]:
+    in_features = False
+    updated = False
+    out_lines: list[str] = []
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("["):
+            in_features = stripped == "[features]"
+            out_lines.append(line)
+            continue
+
+        if in_features:
+            match = CODEX_WEB_SEARCH_REQUEST_RE.match(line)
+            if match:
+                value = match.group("value").strip().strip('"').strip().lower()
+                if value in {"true", "1", "yes", "on"}:
+                    replacement = "live"
+                elif value in {"false", "0", "no", "off"}:
+                    replacement = "disabled"
+                elif value in {"live", "cached", "disabled"}:
+                    replacement = value
+                else:
+                    replacement = "live"
+
+                out_lines.append(f'{match.group("indent")}web_search = "{replacement}"')
+                updated = True
+                continue
+
+        out_lines.append(line)
+
+    if not updated:
+        return text, False
+    return "\n".join(out_lines).rstrip() + "\n", True
+
+
 def build_container_codex_config(source_text: str) -> tuple[str, bool]:
     text = source_text
     if text.lstrip().startswith(CODEX_CONFIG_HEADER):
@@ -192,6 +228,8 @@ def build_container_codex_config(source_text: str) -> tuple[str, bool]:
     text, changed = upsert_root_key(text, "cli_auth_credentials_store", "file")
     updated = updated or changed
     text, changed = rewrite_mcp_urls(text)
+    updated = updated or changed
+    text, changed = rewrite_web_search_feature(text)
     updated = updated or changed
 
     if text.strip():
@@ -388,6 +426,26 @@ def ensure_uv_tools() -> None:
         log(f"uv tool install incomplete (failed: {', '.join(failed)})")
     else:
         log("uv tools installed")
+
+
+def ensure_latest_codex() -> None:
+    npm_bin = shutil.which("npm")
+    if npm_bin is None:
+        log("npm not found; skipping codex update")
+        return
+
+    result = subprocess.run(
+        [npm_bin, "install", "-g", "@openai/codex@latest"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        detail = result.stderr.strip() or result.stdout.strip()
+        log(f"codex update check failed: {detail}")
+        return
+
+    log("codex is up to date")
 
 
 def _node_modules_ready(path: Path) -> bool:
@@ -667,6 +725,7 @@ def main() -> None:
     ensure_fish_history()
     ensure_global_gitignore(workspace)
     ensure_codex_config()
+    ensure_latest_codex()
     ensure_codex_state_links(
         Path(os.environ.get("CODEX_HOME", str(Path.home() / ".codex"))),
         Path(os.environ.get("CODEX_HOST_HOME", str(Path.home() / ".codex-host"))),

@@ -42,6 +42,7 @@
   },
   "remoteUser": "node",
   "postCreateCommand": "python3.14 /workspace/.devcontainer/post_install.py",
+  "postStartCommand": "python3.14 /workspace/.devcontainer/post_install.py",
   "forwardPorts": [
     3000,
     3100,
