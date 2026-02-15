@@ -32,6 +32,36 @@
 - Run safe, routine commands by default. Only ask the user when a command is destructive, touches secrets, or needs explicit approval.
 - For routine diagnostics, run the command yourself; only ask the user when blocked by permissions or environment limits, and explain why.
 
+## PR review bot loop
+- When asked to iteratively fix PR review feedback, run this loop for the specified PR.
+- Step 1: Fetch latest review + issue comments.
+- Step 2: Fix actionable items, run relevant tests, then commit and push.
+- Step 3: Sleep for 12 minutes (`sleep 720`) to allow review bots to post new findings.
+- Step 4: Fetch comments again and compare against the previous snapshot.
+- Step 5: If there are no new actionable comments, create a staging release and stop.
+- Step 6: If there are new actionable comments, repeat from Step 2.
+
+## Refactor bot loop (focused)
+- Primary objective: reduce LOC non-destructively by removing duplication, consolidating repeated logic, and simplifying structure without changing behavior.
+- When asked for repo-wide refactoring, audit against these coding-skill rules only:
+- `3) Input validation at boundaries`
+- `4) No code injection`
+- `9) Error handling`
+- `10) Configuration and constants`
+- `11) Architecture and design`
+- `12) Frontend safety`
+- `15) Type hints (Python)`
+- `16) Documentation hygiene`
+- If subagents are available, spin them up in parallel to scan for duplication by domain (services, APIs, UI/components, tests, config/utilities) and return concrete merge/extract candidates.
+- If subagents are not available, run the same duplicate-code scan sequentially.
+- Create and maintain a spec at `docs/specs/refactor-<slug>.md` using the spec-driven builder workflow before broad refactors.
+- Step 1: Establish a baseline health score out of 10 with evidence by rule.
+- Step 2: Build a ranked deduplication backlog (exact duplicates first, then near-duplicates, then structural simplifications).
+- Step 3: Refactor highest-impact items with minimal safe changes (extract shared primitives, delete redundant paths, unify constants/interfaces).
+- Step 4: Run affected tests/linters/quality gates.
+- Step 5: Reassess the score and update the spec with completed work, risks, LOC delta, and next actions.
+- Step 6: Repeat Steps 2-5 until the score is above `9.0`, no critical violations remain in the focused rules, and no high-confidence duplication candidates remain.
+
 ## Skills list (manual)
 - agent-observability - detect explicit corrections to assistant behavior (e.g., "don't do X", "always do Y") and log a report in `docs/observed-coding-agent-issues.md` after completing the current request. Do not trigger on general frustration, meta-policy discussion, or hypotheticals. refs: PR template + self-heal metadata
 - agent-browser - browser automation tool (not a sub-agent). Use only for navigation/forms/screenshots/extraction. refs: none
