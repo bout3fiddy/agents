@@ -38,10 +38,12 @@
 - Step 2: For each new review/issue comment, classify whether it is a true positive.
 - Step 3: Only for true positives, fix actionable items, run relevant tests, then commit and push.
 - Step 4: Always respond to each GitHub comment in both cases: if true positive, reply with what was fixed; if false positive, reply with why no code change is needed.
-- Step 5: Sleep for 12 minutes (`sleep 720`) to allow review bots to post new findings.
-- Step 6: Fetch comments again and compare against the previous snapshot.
-- Step 7: If there are no new actionable comments, create a staging release and stop.
-- Step 8: If there are new actionable comments, repeat from Step 2.
+- Step 5: Check GitHub CI for the PR head commit and ensure all required checks/actions are passing.
+- Step 6: If any required CI check/action is failing, fix the issue, run relevant tests, commit/push, and respond on the PR with what changed.
+- Step 7: Sleep for 12 minutes (`sleep 720`) to allow review bots to post new findings.
+- Step 8: Fetch comments again and compare against the previous snapshot.
+- Step 9: If there are no new actionable comments and all required CI checks/actions are passing, create a staging release and stop.
+- Step 10: If there are new actionable comments or required CI checks/actions are not passing, repeat from Step 2.
 
 ## Refactor bot loop (focused)
 - Primary objective: reduce LOC non-destructively by removing duplication, consolidating repeated logic, and simplifying structure without changing behavior.
