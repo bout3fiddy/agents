@@ -35,11 +35,13 @@
 ## PR review bot loop
 - When asked to iteratively fix PR review feedback, run this loop for the specified PR.
 - Step 1: Fetch latest review + issue comments.
-- Step 2: Fix actionable items, run relevant tests, then commit and push.
-- Step 3: Sleep for 12 minutes (`sleep 720`) to allow review bots to post new findings.
-- Step 4: Fetch comments again and compare against the previous snapshot.
-- Step 5: If there are no new actionable comments, create a staging release and stop.
-- Step 6: If there are new actionable comments, repeat from Step 2.
+- Step 2: For each new review/issue comment, classify whether it is a true positive.
+- Step 3: Only for true positives, fix actionable items, run relevant tests, then commit and push.
+- Step 4: Always respond to each GitHub comment in both cases: if true positive, reply with what was fixed; if false positive, reply with why no code change is needed.
+- Step 5: Sleep for 12 minutes (`sleep 720`) to allow review bots to post new findings.
+- Step 6: Fetch comments again and compare against the previous snapshot.
+- Step 7: If there are no new actionable comments, create a staging release and stop.
+- Step 8: If there are new actionable comments, repeat from Step 2.
 
 ## Refactor bot loop (focused)
 - Primary objective: reduce LOC non-destructively by removing duplication, consolidating repeated logic, and simplifying structure without changing behavior.
