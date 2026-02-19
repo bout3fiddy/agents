@@ -44,8 +44,8 @@ if [[ "$EVAL_MODE" == "1" ]]; then
 fi
 
 CLAUDE_DIR="$HOME/.claude"
-CODEX_DIR="$HOME/.codex"
-PI_DIR="${PI_DIR:-$HOME/.pi/agent}"
+AGENTS_HOME_DIR="${AGENTS_HOME_DIR:-$HOME/.agents}"
+PI_DIR="${PI_DIR:-$AGENTS_HOME_DIR}"
 
 shopt -s nullglob
 
@@ -59,7 +59,7 @@ echo "Syncing from $AGENTS_DIR..."
 
 # Ensure base directories exist
 mkdir -p "$AGENTS_DIR/skills" "$AGENTS_DIR/instructions"
-mkdir -p "$CLAUDE_DIR/skills" "$CODEX_DIR/skills" "$PI_DIR/skills"
+mkdir -p "$CLAUDE_DIR/skills" "$AGENTS_HOME_DIR/skills" "$PI_DIR/skills"
 
 mtime() {
     local path="$1"
@@ -94,6 +94,7 @@ latest_mtime() {
 copy_dir() {
     local src="$1"
     local dest="$2"
+    [[ "$src" == "$dest" ]] && return
 
     mkdir -p "$dest"
     if command -v rsync &> /dev/null; then
@@ -106,6 +107,7 @@ copy_dir() {
 copy_file() {
     local src="$1"
     local dest="$2"
+    [[ "$src" == "$dest" ]] && return
 
     mkdir -p "$(dirname "$dest")"
     if command -v rsync &> /dev/null; then
@@ -118,6 +120,7 @@ copy_file() {
 mirror_dir() {
     local src="$1"
     local dest="$2"
+    [[ "$src" == "$dest" ]] && return
 
     mkdir -p "$dest"
     if command -v rsync &> /dev/null; then
@@ -133,6 +136,7 @@ mirror_dir() {
 mirror_file() {
     local src="$1"
     local dest="$2"
+    [[ "$src" == "$dest" ]] && return
     mkdir -p "$(dirname "$dest")"
     if command -v rsync &> /dev/null; then
         rsync -a --copy-links "$src" "$dest"
@@ -329,44 +333,44 @@ sync_file_latest_wins_four() {
 sync_skills() {
     echo "Syncing skills..."
 
-    mkdir -p "$AGENTS_DIR/skills" "$CLAUDE_DIR/skills" "$CODEX_DIR/skills" "$PI_DIR/skills"
+    mkdir -p "$AGENTS_DIR/skills" "$CLAUDE_DIR/skills" "$AGENTS_HOME_DIR/skills" "$PI_DIR/skills"
 
     if [[ "$SYNC_MODE" == "hard" ]]; then
         echo "  (hard mirror)"
         mirror_dir "$AGENTS_DIR/skills" "$CLAUDE_DIR/skills"
-        mirror_dir "$AGENTS_DIR/skills" "$CODEX_DIR/skills"
+        mirror_dir "$AGENTS_DIR/skills" "$AGENTS_HOME_DIR/skills"
         mirror_dir "$AGENTS_DIR/skills" "$PI_DIR/skills"
         return
     fi
 
     local skill_dir
-    for skill_dir in "$AGENTS_DIR/skills" "$CLAUDE_DIR/skills" "$CODEX_DIR/skills" "$PI_DIR/skills"; do
+    for skill_dir in "$AGENTS_DIR/skills" "$CLAUDE_DIR/skills" "$AGENTS_HOME_DIR/skills" "$PI_DIR/skills"; do
         mkdir -p "$skill_dir"
     done
 
     local name
-    for name in $(ls -1 "$AGENTS_DIR/skills" "$CLAUDE_DIR/skills" "$CODEX_DIR/skills" "$PI_DIR/skills" 2>/dev/null | sort -u); do
+    for name in $(ls -1 "$AGENTS_DIR/skills" "$CLAUDE_DIR/skills" "$AGENTS_HOME_DIR/skills" "$PI_DIR/skills" 2>/dev/null | sort -u); do
         [[ -z "$name" ]] && continue
         local agents_skill="$AGENTS_DIR/skills/$name"
         local claude_skill="$CLAUDE_DIR/skills/$name"
-        local codex_skill="$CODEX_DIR/skills/$name"
+        local agents_home_skill="$AGENTS_HOME_DIR/skills/$name"
         local pi_skill="$PI_DIR/skills/$name"
         local agents_valid=0
         local claude_valid=0
-        local codex_valid=0
+        local agents_home_valid=0
         local pi_valid=0
 
         [[ -f "$agents_skill/SKILL.md" ]] && agents_valid=1
         [[ -f "$claude_skill/SKILL.md" ]] && claude_valid=1
-        [[ -f "$codex_skill/SKILL.md" ]] && codex_valid=1
+        [[ -f "$agents_home_skill/SKILL.md" ]] && agents_home_valid=1
         [[ -f "$pi_skill/SKILL.md" ]] && pi_valid=1
 
-        if [[ "$agents_valid" -eq 0 && "$claude_valid" -eq 0 && "$codex_valid" -eq 0 && "$pi_valid" -eq 0 ]]; then
+        if [[ "$agents_valid" -eq 0 && "$claude_valid" -eq 0 && "$agents_home_valid" -eq 0 && "$pi_valid" -eq 0 ]]; then
             continue
         fi
 
         echo "  $name"
-        sync_dir_latest_wins_four "$agents_skill" "$claude_skill" "$codex_skill" "$pi_skill"
+        sync_dir_latest_wins_four "$agents_skill" "$claude_skill" "$agents_home_skill" "$pi_skill"
     done
 }
 
@@ -378,22 +382,22 @@ sync_instructions() {
     if [[ "$SYNC_MODE" == "hard" ]]; then
         build_skills_index
         mirror_file "$AGENTS_DIR/instructions/global.md" "$CLAUDE_DIR/CLAUDE.md"
-        mirror_file "$AGENTS_DIR/instructions/global.md" "$CODEX_DIR/AGENTS.md"
+        mirror_file "$AGENTS_DIR/instructions/global.md" "$AGENTS_HOME_DIR/AGENTS.md"
         mirror_file "$AGENTS_DIR/instructions/global.md" "$PI_DIR/AGENTS.md"
-        echo "  global.md -> Claude + Codex + Pi (hard mirror)"
+        echo "  global.md -> Claude + Agents (hard mirror)"
         return
     fi
 
     sync_file_latest_wins_four \
         "$AGENTS_DIR/instructions/global.md" \
         "$CLAUDE_DIR/CLAUDE.md" \
-        "$CODEX_DIR/AGENTS.md" \
+        "$AGENTS_HOME_DIR/AGENTS.md" \
         "$PI_DIR/AGENTS.md"
-    echo "  global.md <-> Claude + Codex + Pi (latest wins)"
+    echo "  global.md <-> Claude + Agents (latest wins)"
 
     build_skills_index
     copy_file "$AGENTS_DIR/instructions/global.md" "$CLAUDE_DIR/CLAUDE.md"
-    copy_file "$AGENTS_DIR/instructions/global.md" "$CODEX_DIR/AGENTS.md"
+    copy_file "$AGENTS_DIR/instructions/global.md" "$AGENTS_HOME_DIR/AGENTS.md"
     copy_file "$AGENTS_DIR/instructions/global.md" "$PI_DIR/AGENTS.md"
 }
 

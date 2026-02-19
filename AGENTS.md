@@ -11,7 +11,7 @@
 - Devcontainer sets `UV_PROJECT_ENVIRONMENT` to `/home/node/.venv` and mounts the venv volume there to keep it out of the repo.
 - `bin/build-agents-index.sh` auto-generates the skills index block in `instructions/global.md`; it runs during `bin/sync.sh` (soft) and `bin/sync.sh --hard`.
 - Skill validation in this repo uses the `agentskills` executable from `skills-ref` (`uvx --from skills-ref agentskills validate skills/<name>`).
-- `bin/sync.sh` syncs skills/instructions to `~/.pi/agent` (Pi agent global context/skills); use `--hard` for destructive mirror.
+- `bin/sync.sh` syncs skills/instructions across `~/.agents` and `~/.claude` by default; set `PI_DIR` explicitly for legacy Pi targets.
 - Eval specs live in `skills-evals/specs/pi-eval/` with a mirror in `docs/specs/pi-eval/` (keep both in sync).
 - `DEVC_DISABLE_MCP_SERVERS` in `devcontainer/devcontainer.json` can disable MCP startup in containers (comma/space/semi-colon separated list); use it to skip auth-heavy servers (e.g. `sentry` and/or `linear`) on non-interactive session starts.
 - Third-party skill installers may land content in `~/.agents/skills/<name>`; to vendor into this repo, copy into `skills/<name>/`, ensure progressive disclosure (`SKILL.md` + `references/`), then run `./bin/build-agents-index.sh`.

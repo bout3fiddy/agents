@@ -53,19 +53,20 @@ export PATH="$PATH:$HOME/.agents/bin"
 
 **Sync behavior:**
 - **Claude**: `~/.claude/skills/<name>/SKILL.md` (copied)
-- **Codex**: `~/.codex/skills/<name>/SKILL.md` (copied)
-- **Pi**: `~/.pi/skills/<name>/SKILL.md` (copied)
+- **Agents home (Codex standard)**: `~/.agents/skills/<name>/SKILL.md` (copied)
+- **Pi (default)**: `~/.agents/skills/<name>/SKILL.md` (same location)
 
 **Latest wins:**
 - `sync.sh` compares modification times and propagates the newest version to the other locations.
-- `sync.sh --hard` is destructive and mirrors this repo exactly to `~/.codex` and `~/.claude`.
+- `sync.sh --hard` is destructive and mirrors this repo exactly to `~/.agents` and `~/.claude`.
+- To target a legacy Pi directory, set `PI_DIR` explicitly (for example `PI_DIR="$HOME/.pi/agent"`).
 
 ### Instructions (bootstrap)
 
 `instructions/global.md` is copied to:
 - `~/.claude/CLAUDE.md`
-- `~/.codex/AGENTS.md`
-- `~/.pi/AGENTS.md`
+- `~/.agents/AGENTS.md`
+- `~/.agents/AGENTS.md` (Pi default)
 
 `sync.sh` uses a latest-wins policy across these files.
 
@@ -117,11 +118,10 @@ uv run skills-ref validate skills/my-new-skill
 ├── CLAUDE.md (latest-wins with ~/.agents/instructions/global.md)
 └── skills/<name>/SKILL.md (latest-wins with ~/.agents/skills/<name>/SKILL.md)
 
-~/.codex/
+~/.agents/
 ├── AGENTS.md (latest-wins with ~/.agents/instructions/global.md)
 └── skills/<name>/SKILL.md (latest-wins with ~/.agents/skills/<name>/SKILL.md)
 
-~/.pi/
-├── AGENTS.md (latest-wins with ~/.agents/instructions/global.md)
-└── skills/<name>/SKILL.md (latest-wins with ~/.agents/skills/<name>/SKILL.md)
+Legacy Pi target (optional override):
+  PI_DIR="$HOME/.pi/agent" ./bin/sync.sh
 ```
