@@ -28,7 +28,6 @@ RUN --mount=type=cache,target=/root/.npm \
   npm install -g \
     "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}" \
     "@openai/codex@${CODEX_VERSION}" \
-    "agent-browser" \
     "mcp-remote" \
   && corepack enable --install-directory /usr/local/share/npm-global/bin \
   && corepack prepare pnpm@latest --activate
@@ -190,9 +189,6 @@ ENV XDG_CONFIG_HOME=/home/node/.config
 ENV SHELL=/usr/bin/fish
 ENV EDITOR=vim
 ENV VISUAL=vim
-
-# Install agent-browser managed Chromium.
-RUN agent-browser install
 
 # Install uv
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv

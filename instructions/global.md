@@ -68,7 +68,6 @@
 
 ## Skills list (manual)
 - agent-observability - detect explicit corrections to assistant behavior (e.g., "don't do X", "always do Y") and log a report in `docs/observed-coding-agent-issues.md` after completing the current request. Do not trigger on general frustration, meta-policy discussion, or hypotheticals. refs: PR template + self-heal metadata
-- agent-browser - browser automation tool (not a sub-agent). Use only for navigation/forms/screenshots/extraction. refs: none
 - coding - core engineering rules for implementation, SQL, docs/config edits, and technical guidance, with indexed references (frontend + platform included). refs: see `skills/coding/SKILL.md`
 - database-migrations - safe planning and execution of schema/data migrations. refs: skills/database-migrations/references/migration-checklist.md
 - planning - clarify scope, spec-first delivery, and Linear tracking. refs: clarifying questions, spec workflow, Linear ops
@@ -80,9 +79,9 @@
 
 <!-- AGENTS_SKILLS_INDEX_START -->
 AUTO-GENERATED SKILLS INDEX. SOURCE: skills/*/SKILL.md + skills/*/references/*.md
-skill|agent-browser|Automates browser interactions for web testing, form filling, screenshots, and data extraction. Use when the user needs to navigate websites, interact with web pages, fill forms, take screenshots, test web application...|skills/agent-browser/SKILL.md
 skill|agent-observability|Self-report agent issues by logging user corrections for later review, then resume with the correct skill. Use when a user says "don’t do that", "stop doing X", "always do Y", or requests self-correction.|skills/agent-observability/SKILL.md
 skill|coding|Core engineering rules for implementation, refactors, bug fixes, SQL, docs/config edits, commands, and technical guidance, with indexed references for specialized workflows.|skills/coding/SKILL.md
+skill|design|Frontend design curation skill for UI critique, motion storyboarding, and DialKit tuning. Use when the user asks for interface feedback, animation sequencing, or interactive design-control setup.|skills/design/SKILL.md
 skill|planning|Planning workflows for clarifying underspecified work, spec-driven delivery, and Linear-backed tracking.|skills/planning/SKILL.md
 skill|skill-creator|Create, update, or install skills (including planning/specs and edits to skills/*) using our repo workflow (uv + skills-ref validation, lean SKILL.md, references/ for detail, and sync via bin/sync.sh [--hard]).|skills/skill-creator/SKILL.md
 trigger|agent-observability|Policy change / PR summary requested|skills/agent-observability/references/pr-template.md
@@ -94,6 +93,9 @@ trigger|coding|React/Next.js|skills/coding/references/react/index.md
 trigger|coding|SolidJS|skills/coding/references/solidjs/index.md
 trigger|coding|UI/layout/motion or component design|skills/coding/references/frontend-engineering/index.md
 trigger|coding|Utility-class styling (Tailwind)|skills/coding/references/frontend-engineering/tailwindcss-full.md
+trigger|design|Animation/storyboard/motion/transition/entrance/timing/stagger/spring|skills/design/references/storyboard-animation.md
+trigger|design|DialKit/sliders/controls/tuning panel/live params|skills/design/references/dialkit.md
+trigger|design|UI critique/review/feedback/audit/polish/refine/redesign|skills/design/references/design-critique.md
 trigger|planning|Spec-first/iterative plan|skills/planning/references/spec-driven-iterative-builder.md
 trigger|planning|Ticketing or Linear ops/brainstorm capture|skills/planning/references/linear-mcp-ops.md
 trigger|planning|Underspecified implementation request|skills/planning/references/ask-questions-if-underspecified.md
@@ -192,6 +194,10 @@ ref|coding|skills/coding/references/solidjs/rules/server-cache-lru.md|Cross-Requ
 ref|coding|skills/coding/references/solidjs/rules/server-query-dedup.md|Use query() + createAsync() for request dedupe and shared caching|deduplicates and shares server fetches
 ref|coding|skills/coding/references/solidjs/solid-performance-guidelines.md|SolidJS Performance Guidelines|complete guide with rule index
 ref|coding|skills/coding/references/solidjs/solidjs-full.md|SolidJS Full Reference|full SolidJS development reference
+ref|design|skills/design/references/design-critique.md|Design Critique|Systematic critique workflow for screenshots, components, and pages with prioritized opportunities.
+ref|design|skills/design/references/dialkit.md|DialKit|DialKit setup checks, smart defaults, and config-generation patterns for live tuning panels.
+ref|design|skills/design/references/index.md|References Index|Index of reference files for design skill modules.
+ref|design|skills/design/references/storyboard-animation.md|Storyboard Animation|Human-readable, stage-driven animation structure with centralized timing/config constants.
 ref|planning|skills/planning/references/ask-questions-if-underspecified.md|Ask Questions If Underspecified|Use when user requests implementation work (implement, add, create, build, refactor, fix) AND the request lacks clear acceptance criteria, scope, or constraints. Do NOT use during exploration, explanation, or continua...
 ref|planning|skills/planning/references/index.md|References Index|Index of reference files for references/references.
 ref|planning|skills/planning/references/linear-mcp-ops.md|Linear MCP Ops|Manage Linear via MCP (create/update/search issues, tickets, tasks, projects, labels, comments, cycles). Auto-capture brainstorm/ideation into Linear, auto-check Linear context when conversation implies status/backlog...
@@ -202,10 +208,6 @@ ref|skill-creator|skills/skill-creator/references/templates/index.md|Templates R
 ref|skill-creator|skills/skill-creator/references/templates/rules-template.md|Rule Title Here|Optional description of impact
 ref|skill-creator|skills/skill-creator/references/templates/skill-skeleton.md|<Skill Title>|<what it does + when to use it>
 <!-- AGENTS_SKILLS_INDEX_END -->
-
-## Browser Automation
-- `agent-browser` is a command-line tool, not an agent.
-- Use `agent-browser` for web automation (see agent-browser skill).
 
 ## Agent observability trigger guardrails
 - Require an explicit corrective directive about assistant behavior (imperative + desired future behavior).

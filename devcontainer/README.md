@@ -17,7 +17,6 @@ install `./devcontainer/install.sh self-install`
 run `devc <repo>` or `devc .` inside project folder.
 
 you're now in tmux with claude and codex ready to go, with permissions preconfigured.
-agent-browser is installed globally and ships with a managed chromium download.
 
 to use with vscode, run `devc install <repo>` and choose "reopen in container" in the editor.
 the built in terminal would login inside the container.
@@ -26,7 +25,7 @@ the built in terminal would login inside the container.
 
 - base image: ubuntu 25.10 + node from `node:22-bookworm-slim`
 - tools: git, jq, ripgrep, fd, zoxide, tmux, fish, zsh, vim + CLIs (gh, docker cli, bun, lsof, psql, gcloud)
-- agents: claude-code + codex cli (latest), agent-browser
+- agents: claude-code + codex cli (latest)
 - python: uv + a managed python (currently 3.14); ruff/pytest/mypy/prek/takopi installed on first container start
 - networking: no firewall / restrictions (internet enabled)
 - permissions: passwordless sudo for the `node` user

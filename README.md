@@ -22,7 +22,6 @@ agents/
 
 Short descriptions of the skills stored in `skills/`:
 
-- `agent-browser`: Browser automation for navigation, form filling, screenshots, and extraction.
 - `agent-observability`: Logs explicit user corrections to improve assistant behavior.
 - `coding`: Core engineering rules for implementation, refactors, and bug fixes.
 - `planning`: Spec-driven planning, scope clarification, and Linear tracking workflows.
