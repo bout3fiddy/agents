@@ -67,7 +67,6 @@
 - Step 6: Repeat Steps 2-5 until the score is above `9.0`, no critical violations remain in the focused rules, and no high-confidence duplication candidates remain.
 
 ## Skills list (manual)
-- agent-observability - detect explicit corrections to assistant behavior (e.g., "don't do X", "always do Y") and log a report in `docs/observed-coding-agent-issues.md` after completing the current request. Do not trigger on general frustration, meta-policy discussion, or hypotheticals. refs: PR template + self-heal metadata
 - coding - core engineering rules for implementation, SQL, docs/config edits, and technical guidance, with indexed references (frontend + platform included). refs: see `skills/coding/SKILL.md`
 - database-migrations - safe planning and execution of schema/data migrations. refs: skills/database-migrations/references/migration-checklist.md
 - planning - clarify scope, spec-first delivery, and Linear tracking. refs: clarifying questions, spec workflow, Linear ops
@@ -79,12 +78,10 @@
 
 <!-- AGENTS_SKILLS_INDEX_START -->
 AUTO-GENERATED SKILLS INDEX. SOURCE: skills/*/SKILL.md + skills/*/references/*.md
-skill|agent-observability|Self-report agent issues by logging user corrections for later review, then resume with the correct skill. Use when a user says "don’t do that", "stop doing X", "always do Y", or requests self-correction.|skills/agent-observability/SKILL.md
 skill|coding|Core engineering rules for implementation, refactors, bug fixes, SQL, docs/config edits, commands, and technical guidance, with indexed references for specialized workflows.|skills/coding/SKILL.md
 skill|design|Frontend design curation skill for UI critique, motion storyboarding, and DialKit tuning. Use when the user asks for interface feedback, animation sequencing, or interactive design-control setup.|skills/design/SKILL.md
 skill|planning|Planning workflows for clarifying underspecified work, spec-driven delivery, and Linear-backed tracking.|skills/planning/SKILL.md
 skill|skill-creator|Create, update, or install skills (including planning/specs and edits to skills/*) using our repo workflow (uv + skills-ref validation, lean SKILL.md, references/ for detail, and sync via bin/sync.sh [--hard]).|skills/skill-creator/SKILL.md
-trigger|agent-observability|Policy change / PR summary requested|skills/agent-observability/references/pr-template.md
 trigger|coding|Auth/secrets/credentials|skills/coding/references/secrets-and-auth-guardrails.md
 trigger|coding|Infra/platform/ops/deploy/secrets/storage|skills/coding/references/platform-engineering/index.md
 trigger|coding|JS/TS runtime or toolchain|skills/coding/references/bun.md
@@ -102,8 +99,6 @@ trigger|planning|Underspecified implementation request|skills/planning/reference
 trigger|skill-creator|Adding or modifying a Rules section|skills/skill-creator/references/templates/rules-template.md
 trigger|skill-creator|Creating a skill or skeleton|skills/skill-creator/references/templates/skill-skeleton.md
 trigger|skill-creator|Running or verifying the checklist|skills/skill-creator/references/checklist.md
-ref|agent-observability|skills/agent-observability/references/index.md|References Index|Index of reference files for references/references.
-ref|agent-observability|skills/agent-observability/references/pr-template.md|Policy Change|Policy Change
 ref|coding|skills/coding/references/bun.md|Bun - JavaScript/TypeScript Runtime & Toolkit (Reference)|Bun is the preferred JavaScript/TypeScript toolkit when the repo supports it. If a repo is locked to npm/yarn/pnpm, follow its established toolchain and lockfile.
 ref|coding|skills/coding/references/frontend-engineering/components-and-motion.md|Frontend Components: Full Reference|component patterns and motion recipes
 ref|coding|skills/coding/references/frontend-engineering/design-guidelines.md|Frontend Design Guidelines (Reference)|visual design guidance
@@ -208,10 +203,3 @@ ref|skill-creator|skills/skill-creator/references/templates/index.md|Templates R
 ref|skill-creator|skills/skill-creator/references/templates/rules-template.md|Rule Title Here|Optional description of impact
 ref|skill-creator|skills/skill-creator/references/templates/skill-skeleton.md|<Skill Title>|<what it does + when to use it>
 <!-- AGENTS_SKILLS_INDEX_END -->
-
-## Agent observability trigger guardrails
-- Require an explicit corrective directive about assistant behavior (imperative + desired future behavior).
-- Exclusions: policy discussions, general frustration without a directive, and hypotheticals.
-- If ambiguous, skip logging unless the user explicitly asks to log.
-- Defer logging until after completing the current user request; never interrupt mid-task.
-- Only log when there is a clear, actionable fix or guardrail to implement; otherwise skip.
