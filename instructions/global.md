@@ -6,6 +6,7 @@
 - If no skill matches, continue without one.
 - Always consult the Skills index (auto-generated) to identify relevant skills and triggers.
 - If a trigger matches, open the referenced file immediately; if a skill matches without a trigger, open its `SKILL.md` and follow any references it points to.
+- When creating/refactoring `AGENTS.md` or `CLAUDE.md` architecture (including progressive disclosure or legacy monolith cleanup), open `skills/housekeeping/SKILL.md` before editing.
 - For any file edits outside `skills/`, open `skills/coding/SKILL.md` before editing.
 - For edits under `skills/` or `SKILL.md`, **read `skills/skill-creator/SKILL.md` before responding** and do not open `coding`.
 - When editing another skill’s `SKILL.md`, ask the user to paste the relevant section instead of reading the file directly.
@@ -24,8 +25,14 @@
 
 ## Repo-specific context
 - If a repo has `AGENTS.md` or `CLAUDE.md`, read it first. These files capture repo-specific conventions, toolchains, and guardrails that override generic assumptions.
-- Be proactive and specific: when you discover structural repo knowledge (e.g., key locations, workflows, repo commands, tooling/layout conventions), add a concise bullet to `AGENTS.md` immediately. Do this even if the user does not ask.
-- If repo context is missing or needs to be condensed, create/update `AGENTS.md` with short bullet points and reference it from the root file. Only append new knowledge.
+- Be proactive and specific: when you discover durable structural repo knowledge (e.g., key locations, workflows, repo commands, tooling/layout conventions), add a concise bullet to the nearest-scope `AGENTS.md` even if the user did not ask.
+- Keep `AGENTS.md` curated, not append-only: deduplicate, remove stale/conflicting notes, and collapse near-duplicate guidance when you touch related areas.
+- Use progressive disclosure architecture for agent docs: root `AGENTS.md` should stay concise (critical guardrails, task routing, canonical commands) and link to deeper docs for detailed/volatile content.
+- Prefer scoped context over global sprawl: add nested `AGENTS.md` files in major subtrees (for example `apps/frontend`, `infra`, `apps/agent`) when domain guidance is dense.
+- If an existing `AGENTS.md` is a legacy monolith (for example very long, mixed-domain flat lists, or contradictory bullets), migrate it to the progressive-disclosure model while preserving behavior guidance.
+- Legacy migration action: move deep or volatile details into `.agents/repo-context/*`, add/refresh nested `AGENTS.md` for domain-specific instructions, and rewrite root `AGENTS.md` as a concise router.
+- For volatile operational facts, include freshness metadata when feasible (`owner`, `last_verified`, and/or date) so stale notes can be pruned safely.
+- If repo context is missing, create/update `AGENTS.md` with short bullet points and links to deeper references.
 
 ## Command discipline
 - Don't run shell commands for discussion-only requests unless needed to apply a change.
@@ -69,6 +76,7 @@
 ## Skills list (manual)
 - coding - core engineering rules for implementation, SQL, docs/config edits, and technical guidance, with indexed references (frontend + platform included). refs: see `skills/coding/SKILL.md`
 - database-migrations - safe planning and execution of schema/data migrations. refs: skills/database-migrations/references/migration-checklist.md
+- housekeeping - repository housekeeping for AGENTS/CLAUDE architecture, progressive disclosure, and legacy monolith migration. refs: skills/housekeeping/references/agents-architecture.md, skills/housekeeping/references/migration-playbook.md
 - planning - clarify scope, spec-first delivery, and Linear tracking. refs: clarifying questions, spec workflow, Linear ops
 - seo - SEO strategy and execution, including programmatic SEO at scale and SEO audits/diagnostics. refs: skills/seo/references/programmatic-seo.md, skills/seo/references/seo-audit.md
 - skill-creator - create/update/install skills (including planning/specs and edits to skills/*) workflow. refs: checklist + templates
@@ -80,6 +88,7 @@
 AUTO-GENERATED SKILLS INDEX. SOURCE: skills/*/SKILL.md + skills/*/references/*.md
 skill|coding|Core engineering rules for implementation, refactors, bug fixes, SQL, docs/config edits, commands, and technical guidance, with indexed references for specialized workflows.|skills/coding/SKILL.md
 skill|design|Frontend design curation skill for UI critique, motion storyboarding, and DialKit tuning. Use when the user asks for interface feedback, animation sequencing, or interactive design-control setup.|skills/design/SKILL.md
+skill|housekeeping|Repository housekeeping workflows for AGENTS/CLAUDE architecture, progressive disclosure, and migration of legacy monolithic instruction files.|skills/housekeeping/SKILL.md
 skill|planning|Planning workflows for clarifying underspecified work, spec-driven delivery, and Linear-backed tracking.|skills/planning/SKILL.md
 skill|skill-creator|Create, update, or install skills (including planning/specs and edits to skills/*) using our repo workflow (uv + skills-ref validation, lean SKILL.md, references/ for detail, and sync via bin/sync.sh [--hard]).|skills/skill-creator/SKILL.md
 trigger|coding|Auth/secrets/credentials|skills/coding/references/secrets-and-auth-guardrails.md
@@ -93,6 +102,8 @@ trigger|coding|Utility-class styling (Tailwind)|skills/coding/references/fronten
 trigger|design|Animation/storyboard/motion/transition/entrance/timing/stagger/spring|skills/design/references/storyboard-animation.md
 trigger|design|DialKit/sliders/controls/tuning panel/live params|skills/design/references/dialkit.md
 trigger|design|UI critique/review/feedback/audit/polish/refine/redesign|skills/design/references/design-critique.md
+trigger|housekeeping|AGENTS/CLAUDE architecture, progressive disclosure, or context-memory organization|skills/housekeeping/references/agents-architecture.md
+trigger|housekeeping|Legacy monolithic AGENTS cleanup, contradiction pruning, or migration planning|skills/housekeeping/references/migration-playbook.md
 trigger|planning|Spec-first/iterative plan|skills/planning/references/spec-driven-iterative-builder.md
 trigger|planning|Ticketing or Linear ops/brainstorm capture|skills/planning/references/linear-mcp-ops.md
 trigger|planning|Underspecified implementation request|skills/planning/references/ask-questions-if-underspecified.md
@@ -193,6 +204,9 @@ ref|design|skills/design/references/design-critique.md|Design Critique|Systemati
 ref|design|skills/design/references/dialkit.md|DialKit|DialKit setup checks, smart defaults, and config-generation patterns for live tuning panels.
 ref|design|skills/design/references/index.md|References Index|Index of reference files for design skill modules.
 ref|design|skills/design/references/storyboard-animation.md|Storyboard Animation|Human-readable, stage-driven animation structure with centralized timing/config constants.
+ref|housekeeping|skills/housekeeping/references/agents-architecture.md|AGENTS Architecture|Recommended progressive-disclosure architecture for AGENTS/CLAUDE systems.
+ref|housekeeping|skills/housekeeping/references/index.md|References Index|Index of reference files for AGENTS/CLAUDE housekeeping architecture and migration.
+ref|housekeeping|skills/housekeeping/references/migration-playbook.md|Legacy Monolith Migration Playbook|Step-by-step process to migrate legacy monolithic AGENTS files safely.
 ref|planning|skills/planning/references/ask-questions-if-underspecified.md|Ask Questions If Underspecified|Use when user requests implementation work (implement, add, create, build, refactor, fix) AND the request lacks clear acceptance criteria, scope, or constraints. Do NOT use during exploration, explanation, or continua...
 ref|planning|skills/planning/references/index.md|References Index|Index of reference files for references/references.
 ref|planning|skills/planning/references/linear-mcp-ops.md|Linear MCP Ops|Manage Linear via MCP (create/update/search issues, tickets, tasks, projects, labels, comments, cycles). Auto-capture brainstorm/ideation into Linear, auto-check Linear context when conversation implies status/backlog...
