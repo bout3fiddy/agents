@@ -40,8 +40,20 @@
 - For routine diagnostics, run the command yourself; only ask the user when blocked by permissions or environment limits, and explain why.
 
 ## Linear task completion
-- When a task tied to a Linear issue is completed, always add a comment to that issue before finishing your response.
-- Completion comments must summarize what was done, what validation ran (tests/checks), and any follow-up actions or caveats.
+- Treat Linear work as a lifecycle state machine, not a one-off update. Default semantic flow is `Unrefined -> Backlog -> In Progress -> In Review -> Completed`, then map those semantics to the team's actual Linear statuses before writing.
+- If work starts from `Backlog`/refined queue, move the issue to `In Progress` before implementation begins. If follow-up work happens after review, move it back to `In Progress` before making changes.
+- Move to `In Review` only when implementation is done and validation evidence is ready. Move to `Completed` only when the work is in production (or the user explicitly confirms production completion criteria).
+- Before closing your turn, add a PM-style comment to the issue that includes: work summary and acceptance criteria covered, validation/tests run (or why skipped), remaining follow-ups/caveats, and next owner + target state.
+- If you cannot transition the issue (permissions, missing sign-off, missing deployment), leave a blocker comment with the current state, required next state, and exact owner who must act.
+
+## PM lifecycle guardrails
+- Treat every planning or Linear-facing request as a PM handoff: read current status, decide the next lifecycle state, apply transition, verify the update, and comment.
+- Always narrate lifecycle intent in Linear comments (why this state now, what proves exit criteria, and what must happen next).
+- Use `skills/planning/references/linear-mcp-ops.md` for the operational checklist (state mapping, transition triggers, and comment templates).
+
+## Planning & Linear triggers
+- Planning work, specs, or anything that touches Linear tickets must use the planning skill and `skills/planning/references/linear-mcp-ops.md`.
+- When this trigger fires, explicitly record whether each issue is being created, refined, transitioned, or commented, and include issue IDs in the response.
 
 ## PR review bot loop
 - When asked to iteratively fix PR review feedback, run this loop for the specified PR.

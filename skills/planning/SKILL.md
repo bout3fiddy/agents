@@ -14,6 +14,7 @@ Use this skill when work is underspecified, needs a spec-first plan, or should b
 - When opening references, use full repo paths like `skills/planning/references/...` (not `references/...`). If a reference read fails, retry once with the full path.
 - If a trigger clearly matches, open the referenced file before drafting the plan/spec. If you need 1-2 clarifying questions first, ask them before opening the ref.
 - If a word/length limit is given, keep it short and minimize extra reads.
+- Treat all Linear status flow requests as planning work: load `skills/planning/references/linear-mcp-ops.md`, map lifecycle semantics to team statuses, and capture rationale/comments for each transition.
 
 ## Reference triggers (open when clearly relevant)
 If the request clearly matches one of the categories below, open the reference before drafting the plan. If the tracker/tooling is unclear, ask a brief clarifying question first.
