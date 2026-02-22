@@ -14,19 +14,8 @@ agents/
 ├── commands/                  # Claude-only (optional)
 ├── agents/                    # Claude-only (optional)
 └── bin/
-    ├── sync.sh
     └── sync.sh                # Sync skills/instructions (use --hard for destructive mirror)
 ```
-
-## Skills Directory
-
-Short descriptions of the skills stored in `skills/`:
-
-- `agent-observability`: Logs explicit user corrections to improve assistant behavior.
-- `coding`: Core engineering rules for implementation, refactors, and bug fixes.
-- `planning`: Spec-driven planning, scope clarification, and Linear tracking workflows.
-- `seo`: SEO strategy and execution, including programmatic SEO and SEO audits.
-- `skill-creator`: Create, update, or install skills in this repo and keep the index in sync.
 
 ## Quick Start
 
@@ -100,8 +89,7 @@ EOF
 Use `skills-ref` (via `uv`) to validate a skill folder:
 
 ```bash
-uv sync
-uv run skills-ref validate skills/my-new-skill
+uvx --from skills-ref agentskills validate skills/my-new-skill
 ```
 
 ## Tool Compatibility Matrix
