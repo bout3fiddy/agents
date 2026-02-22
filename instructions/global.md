@@ -39,6 +39,10 @@
 - Run safe, routine commands by default. Only ask the user when a command is destructive, touches secrets, or needs explicit approval.
 - For routine diagnostics, run the command yourself; only ask the user when blocked by permissions or environment limits, and explain why.
 
+## Linear task completion
+- When a task tied to a Linear issue is completed, always add a comment to that issue before finishing your response.
+- Completion comments must summarize what was done, what validation ran (tests/checks), and any follow-up actions or caveats.
+
 ## PR review bot loop
 - When asked to iteratively fix PR review feedback, run this loop for the specified PR.
 - Step 1: Fetch latest review + issue comments.
