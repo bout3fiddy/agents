@@ -68,9 +68,10 @@
 - Step 9: If there are no new actionable comments and all required CI checks/actions are passing, create a staging release and stop.
 - Step 10: If there are new actionable comments or required CI checks/actions are not passing, repeat from Step 2.
 
-## Refactor bot loop (focused)
-- Primary objective: reduce LOC non-destructively by removing duplication, consolidating repeated logic, and simplifying structure without changing behavior.
-- When asked for repo-wide refactoring, audit against these coding-skill rules only:
+## Refactoring and code-smell review requests
+- When users ask to check specific code for smells, refactoring opportunities, or quality concerns, perform a diagnostic review first (do not auto-refactor).
+- Open and apply `skills/code-smells/SKILL.md` (and its references) for smell classification and recommendations.
+- Cross-check findings against coding-skill rules:
 - `3) Input validation at boundaries`
 - `4) No code injection`
 - `9) Error handling`
@@ -79,18 +80,12 @@
 - `12) Frontend safety`
 - `15) Type hints (Python)`
 - `16) Documentation hygiene`
-- If subagents are available, spin them up in parallel to scan for duplication by domain (services, APIs, UI/components, tests, config/utilities) and return concrete merge/extract candidates.
-- If subagents are not available, run the same duplicate-code scan sequentially.
-- Create and maintain a spec at `docs/specs/refactor-<slug>.md` using the spec-driven builder workflow before broad refactors.
-- Step 1: Establish a baseline health score out of 10 with evidence by rule.
-- Step 2: Build a ranked deduplication backlog (exact duplicates first, then near-duplicates, then structural simplifications).
-- Step 3: Refactor highest-impact items with minimal safe changes (extract shared primitives, delete redundant paths, unify constants/interfaces).
-- Step 4: Run affected tests/linters/quality gates.
-- Step 5: Reassess the score and update the spec with completed work, risks, LOC delta, and next actions.
-- Step 6: Repeat Steps 2-5 until the score is above `9.0`, no critical violations remain in the focused rules, and no high-confidence duplication candidates remain.
+- Report findings with canonical smell labels, severity, concrete evidence, and suggested refactoring options.
+- Only implement refactors when the user explicitly asks for code changes.
 
 ## Skills list (manual)
 - coding - core engineering rules for implementation, SQL, docs/config edits, and technical guidance, with indexed references (frontend + platform included). refs: see `skills/coding/SKILL.md`
+- code-smells - smell-based quality review using the Refactoring.Guru catalog; diagnoses code smells and recommends targeted refactoring options. refs: see `skills/code-smells/SKILL.md`
 - database-migrations - safe planning and execution of schema/data migrations. refs: skills/database-migrations/references/migration-checklist.md
 - housekeeping - repository housekeeping for AGENTS/CLAUDE architecture, progressive disclosure, and legacy monolith migration. refs: skills/housekeeping/references/agents-architecture.md, skills/housekeeping/references/migration-playbook.md
 - planning - clarify scope, spec-first delivery, and Linear tracking. refs: clarifying questions, spec workflow, Linear ops
@@ -102,11 +97,13 @@
 
 <!-- AGENTS_SKILLS_INDEX_START -->
 AUTO-GENERATED SKILLS INDEX. SOURCE: skills/*/SKILL.md + skills/*/references/*.md
+skill|code-smells|Detect and classify code smells using Refactoring.Guru's smell catalog, then recommend targeted refactoring options without automatically rewriting code.|skills/code-smells/SKILL.md
 skill|coding|Core engineering rules for implementation, refactors, bug fixes, SQL, docs/config edits, commands, and technical guidance, with indexed references for specialized workflows.|skills/coding/SKILL.md
 skill|design|Frontend design curation skill for UI critique, motion storyboarding, and DialKit tuning. Use when the user asks for interface feedback, animation sequencing, or interactive design-control setup.|skills/design/SKILL.md
 skill|housekeeping|Repository housekeeping workflows for AGENTS/CLAUDE architecture, progressive disclosure, and migration of legacy monolithic instruction files.|skills/housekeeping/SKILL.md
 skill|planning|Planning workflows for clarifying underspecified work, spec-driven delivery, and Linear-backed tracking.|skills/planning/SKILL.md
 skill|skill-creator|Create, update, or install skills (including planning/specs and edits to skills/*) using our repo workflow (uv + skills-ref validation, lean SKILL.md, references/ for detail, and sync via bin/sync.sh [--hard]).|skills/skill-creator/SKILL.md
+trigger|code-smells|Code smell/refactoring opportunity/maintainability/quality review|skills/code-smells/references/refactoring-guru-smells.md
 trigger|coding|Auth/secrets/credentials|skills/coding/references/secrets-and-auth-guardrails.md
 trigger|coding|Infra/platform/ops/deploy/secrets/storage|skills/coding/references/platform-engineering/index.md
 trigger|coding|JS/TS runtime or toolchain|skills/coding/references/bun.md
@@ -126,6 +123,8 @@ trigger|planning|Underspecified implementation request|skills/planning/reference
 trigger|skill-creator|Adding or modifying a Rules section|skills/skill-creator/references/templates/rules-template.md
 trigger|skill-creator|Creating a skill or skeleton|skills/skill-creator/references/templates/skill-skeleton.md
 trigger|skill-creator|Running or verifying the checklist|skills/skill-creator/references/checklist.md
+ref|code-smells|skills/code-smells/references/index.md|References Index|Index of reference files for the code-smells skill.
+ref|code-smells|skills/code-smells/references/refactoring-guru-smells.md|Refactoring.Guru Smells Catalog|Full list of Refactoring.Guru code smells with detection cues and common refactoring options.
 ref|coding|skills/coding/references/bun.md|Bun - JavaScript/TypeScript Runtime & Toolkit (Reference)|Bun is the preferred JavaScript/TypeScript toolkit when the repo supports it. If a repo is locked to npm/yarn/pnpm, follow its established toolchain and lockfile.
 ref|coding|skills/coding/references/frontend-engineering/components-and-motion.md|Frontend Components: Full Reference|component patterns and motion recipes
 ref|coding|skills/coding/references/frontend-engineering/design-guidelines.md|Frontend Design Guidelines (Reference)|visual design guidance
