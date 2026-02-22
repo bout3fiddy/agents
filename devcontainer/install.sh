@@ -30,6 +30,10 @@ die() {
   exit 1
 }
 
+ensure_host_state_dirs() {
+  mkdir -p "$HOME/.claude" "$HOME/.codex" "$HOME/.takopi"
+}
+
 ensure_repo() {
   local repo_path="$1"
   [[ -d "$repo_path" ]] || die "repo path does not exist or is not a directory: $repo_path"
@@ -341,6 +345,7 @@ copy_template() {
   local src_dir="$2"
   local dest_dir="$repo_path/.devcontainer"
 
+  ensure_host_state_dirs
   mkdir -p "$dest_dir"
 
   for f in "${TEMPLATE_FILES[@]}"; do

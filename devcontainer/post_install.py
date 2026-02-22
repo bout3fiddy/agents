@@ -546,8 +546,7 @@ def ensure_fish_history() -> None:
 
 
 def ensure_uv_tools() -> None:
-    tools = ("ruff", "pytest", "mypy", "prek", "takopi")
-    upgrade_tools = {"takopi"}
+    tools = ("ruff", "pytest", "mypy", "prek")
     missing = [tool for tool in tools if shutil.which(tool) is None]
     if not missing:
         log("uv tools already installed")
@@ -558,10 +557,7 @@ def ensure_uv_tools() -> None:
     log(f"installing uv tools: {', '.join(missing)}")
     failed: list[str] = []
     for tool in missing:
-        cmd = ["uv", "tool", "install"]
-        if tool in upgrade_tools:
-            cmd.append("-U")
-        cmd.append(tool)
+        cmd = ["uv", "tool", "install", tool]
         result = subprocess.run(
             cmd,
             check=False,
@@ -620,6 +616,25 @@ def ensure_latest_codex() -> None:
         return
 
     log("codex is up to date")
+
+
+def ensure_latest_takopi() -> None:
+    if shutil.which("uv") is None:
+        log("uv not found; skipping takopi update")
+        return
+
+    result = subprocess.run(
+        ["uv", "tool", "install", "-U", "takopi"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        detail = result.stderr.strip() or result.stdout.strip()
+        log(f"takopi update check failed: {detail}")
+        return
+
+    log("takopi is up to date")
 
 
 def _node_modules_ready(path: Path) -> bool:
@@ -892,6 +907,7 @@ def main() -> None:
     ensure_dir_ownership(Path("/commandhistory"))
     ensure_dir_ownership(Path.home() / ".claude")
     ensure_dir_ownership(Path.home() / ".codex")
+    ensure_dir_ownership(Path.home() / ".takopi")
     ensure_dir_ownership(Path.home() / ".config" / "gh")
     uv_env = os.environ.get("UV_PROJECT_ENVIRONMENT")
     if uv_env:
@@ -911,6 +927,7 @@ def main() -> None:
     ensure_fish_config()
     ensure_shell_aliases()
     ensure_uv_tools()
+    ensure_latest_takopi()
     ensure_bun_deps(workspace)
     log("configured defaults for container use")
 
