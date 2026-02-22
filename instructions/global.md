@@ -71,15 +71,6 @@
 ## Refactoring and code-smell review requests
 - When users ask to check specific code for smells, refactoring opportunities, or quality concerns, perform a diagnostic review first (do not auto-refactor).
 - Open and apply `skills/code-smells/SKILL.md` (and its references) for smell classification and recommendations.
-- Cross-check findings against coding-skill rules:
-- `3) Input validation at boundaries`
-- `4) No code injection`
-- `9) Error handling`
-- `10) Configuration and constants`
-- `11) Architecture and design`
-- `12) Frontend safety`
-- `15) Type hints (Python)`
-- `16) Documentation hygiene`
 - Report findings with canonical smell labels, severity, concrete evidence, and suggested refactoring options.
 - Only implement refactors when the user explicitly asks for code changes.
 

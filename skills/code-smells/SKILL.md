@@ -11,7 +11,15 @@ Use this skill when users ask to assess code for smells, refactoring opportuniti
 - Diagnose first: identify and classify smells before proposing edits.
 - Use canonical Refactoring.Guru smell names exactly.
 - Anchor findings to concrete evidence (file/function/line or behavior).
-- Pair smell findings with relevant coding-skill rules when applicable.
+- Pair smell findings with this quality checklist when applicable:
+- Input validation at boundaries
+- No code injection
+- Error handling
+- Configuration and constants
+- Architecture and design
+- Frontend safety
+- Type hints (Python)
+- Documentation hygiene
 - Do not refactor automatically; only propose changes unless implementation is explicitly requested.
 - Prioritize findings by impact and risk.
 
@@ -19,7 +27,7 @@ Use this skill when users ask to assess code for smells, refactoring opportuniti
 1) Confirm the review scope (files, functions, modules, PR, or snippet).
 2) Detect smells using the reference catalog.
 3) Report findings with: smell name, evidence, impact, suggested refactoring(s), and risk/effort.
-4) Include relevant coding-skill checks (`3`, `4`, `9`, `10`, `11`, `12`, `15`, `16`) for quality and safety context.
+4) Include relevant quality-check names from the operating-rules checklist for context.
 5) If no smells are found, state that explicitly and note any residual risks or test gaps.
 6) Apply code changes only when the user explicitly asks to implement refactors.
 
