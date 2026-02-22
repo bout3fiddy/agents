@@ -1,6 +1,6 @@
 ---
 name: code-smells
-description: Detect and classify code smells using Refactoring.Guru's smell catalog, then recommend targeted refactoring options without automatically rewriting code.
+description: Detect and classify code smells using a canonical smell catalog, then recommend targeted refactoring options without automatically rewriting code.
 ---
 
 # Code Smells (Detection + Guidance)
@@ -9,7 +9,7 @@ Use this skill when users ask to assess code for smells, refactoring opportuniti
 
 ## Operating rules
 - Diagnose first: identify and classify smells before proposing edits.
-- Use canonical Refactoring.Guru smell names exactly.
+- Use canonical smell names from this skill's catalog exactly.
 - Anchor findings to concrete evidence (file/function/line or behavior).
 - Pair smell findings with this quality checklist when applicable:
 - Input validation at boundaries
@@ -32,8 +32,8 @@ Use this skill when users ask to assess code for smells, refactoring opportuniti
 6) Apply code changes only when the user explicitly asks to implement refactors.
 
 ## Reference triggers (open when clearly relevant)
-- Code smell/refactoring opportunity/maintainability/quality review -> `skills/code-smells/references/refactoring-guru-smells.md`
+- Code smell/refactoring opportunity/maintainability/quality review -> `skills/code-smells/references/smells/index.md`
 
 ## References
 - `skills/code-smells/references/index.md` - References index for this skill
-- `skills/code-smells/references/refactoring-guru-smells.md` - Complete smell catalog and review checklist aligned to Refactoring.Guru
+- `skills/code-smells/references/smells/index.md` - Smell catalog with one reference file per smell

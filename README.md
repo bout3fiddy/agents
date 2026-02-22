@@ -1,115 +1,113 @@
-# Unified Agent Configuration
+# Agents Workflow Template
 
-Skills-first setup for Claude Code + Codex. Keep everything in `~/.agents` and sync copies to each tool.
+Canonical source for shared agent skills and global instructions used by Claude/Codex-style setups.
 
-Repo-specific notes live in `AGENTS.md`.
+Repo-specific operating notes live in `AGENTS.md`.
 
-## Structure
+## What this repo manages
 
-```
+- Skills under `skills/<name>/` (`SKILL.md` plus optional `references/`)
+- Global instruction source at `instructions/global.md`
+- Sync tooling in `bin/` (`sync.sh`, `build-agents-index.sh`, eval gate)
+
+## Repository layout
+
+```text
 agents/
-├── skills/                    # Reusable skills (<name>/SKILL.md)
-├── instructions/              # Minimal bootstrap instructions
-│   └── global.md              # -> CLAUDE.md, AGENTS.md
-├── commands/                  # Claude-only (optional)
-├── agents/                    # Claude-only (optional)
-└── bin/
-    └── sync.sh                # Sync skills/instructions (use --hard for destructive mirror)
+├── skills/                    # Skill packages: <name>/SKILL.md (+ references/)
+├── instructions/
+│   └── global.md              # Source copied to CLAUDE.md / AGENTS.md targets
+├── bin/
+│   ├── sync.sh                # Sync skills + instructions
+│   ├── build-agents-index.sh  # Regenerate auto skills index block
+│   └── pi-eval-gate.py        # Sync gate for evals
+├── devcontainer/              # Devcontainer template and installer
+└── AGENTS.md                  # Repo-specific durable notes
 ```
 
-## Quick Start
+## Quick start
 
 ```bash
-# Recommended: keep this repo at ~/.agents
-# If you keep it elsewhere, export AGENTS_DIR to point at it:
-# export AGENTS_DIR="/path/to/agents"
+# Recommended location
+cd ~
+git clone https://github.com/bout3fiddy/agents.git .agents
+cd ~/.agents
 
-# Add to PATH (optional, add to ~/.zshrc or ~/.bashrc)
-export PATH="$PATH:$HOME/.agents/bin"
-
-# Sync everything (creates needed dirs)
+# Sync skills + instructions (latest-wins)
 ./bin/sync.sh
 
-# Hard-sync (destructive mirror)
+# Destructive mirror from this repo to targets
 ./bin/sync.sh --hard
 ```
 
-## How It Works
+If this repo is not at `~/.agents`, set:
 
-### Skills
+```bash
+export AGENTS_DIR="/absolute/path/to/agents"
+```
 
-**Source of truth:** `skills/<name>/SKILL.md`
+## Sync behavior
 
-**Sync behavior:**
-- **Claude**: `~/.claude/skills/<name>/SKILL.md` (copied)
-- **Agents home (Codex standard)**: `~/.agents/skills/<name>/SKILL.md` (copied)
-- **Pi (default)**: `~/.agents/skills/<name>/SKILL.md` (same location)
+`bin/sync.sh` targets:
 
-**Latest wins:**
-- `sync.sh` compares modification times and propagates the newest version to the other locations.
-- `sync.sh --hard` is destructive and mirrors this repo exactly to `~/.agents` and `~/.claude`.
-- To target a legacy Pi directory, set `PI_DIR` explicitly (for example `PI_DIR="$HOME/.pi/agent"`).
-
-### Instructions (bootstrap)
-
-`instructions/global.md` is copied to:
+- `~/.claude/skills/`
+- `~/.agents/skills/`
+- `PI_DIR/skills/` (defaults to `~/.agents/skills/`)
 - `~/.claude/CLAUDE.md`
 - `~/.agents/AGENTS.md`
-- `~/.agents/AGENTS.md` (Pi default)
+- `PI_DIR/AGENTS.md`
 
-`sync.sh` uses a latest-wins policy across these files.
+### Modes
 
-### Commands (Claude-only, optional)
+- `./bin/sync.sh`
+  - Skills: latest-wins across repo + targets
+  - Instructions: latest-wins across `instructions/global.md` and target instruction files
+- `./bin/sync.sh --hard`
+  - Skills: mirror this repo's `skills/` to targets
+  - Instructions: mirror this repo's `instructions/global.md` to target instruction files
 
-`commands/*.md` are copied to:
-- `~/.claude/commands/`
+### Index regeneration
 
-Commands also use latest-wins syncing between `~/.agents/commands` and `~/.claude/commands`.
+`bin/build-agents-index.sh` runs during sync and updates the auto-generated skills index block inside `instructions/global.md`.
 
-## Creating New Content
+## Creating or updating a skill
+
+1. Create/update `skills/<name>/SKILL.md`.
+2. Keep `SKILL.md` concise; place longer material in `skills/<name>/references/`.
+3. Validate:
 
 ```bash
-# Create a new skill
-mkdir -p skills/my-new-skill
-cat > skills/my-new-skill/SKILL.md <<'EOF'
----
-name: my-new-skill
-description: Brief description of what this skill does and when to use it.
----
+uvx --from skills-ref agentskills validate skills/<name>
+```
 
-# My New Skill
-EOF
+4. Sync:
 
-# Sync to all tools
+```bash
 ./bin/sync.sh
+# or, if you intentionally want destructive mirror:
+./bin/sync.sh --hard
 ```
 
-## Validate Skills
-
-Use `skills-ref` (via `uv`) to validate a skill folder:
+## Useful commands
 
 ```bash
-uvx --from skills-ref agentskills validate skills/my-new-skill
+# Rebuild only the skills index block
+./bin/build-agents-index.sh
+
+# Sync with eval override (for temp/eval homes)
+./bin/sync.sh --eval
+
+# Legacy Pi target example
+PI_DIR="$HOME/.pi/agent" ./bin/sync.sh
 ```
 
-## Tool Compatibility Matrix
+## Devcontainer rollout note
 
-| Content | Claude | Codex | Pi |
-|---------|--------|-------|----|
-| Skills | ✅ | ✅ | ✅ |
-| Instructions | ✅ CLAUDE.md | ✅ AGENTS.md | ✅ AGENTS.md |
+`./bin/sync.sh --hard` only syncs skills/instructions. It does not roll out devcontainer template changes.
 
-## File Locations After Sync
+For devcontainer template rollout:
 
-```
-~/.claude/
-├── CLAUDE.md (latest-wins with ~/.agents/instructions/global.md)
-└── skills/<name>/SKILL.md (latest-wins with ~/.agents/skills/<name>/SKILL.md)
-
-~/.agents/
-├── AGENTS.md (latest-wins with ~/.agents/instructions/global.md)
-└── skills/<name>/SKILL.md (latest-wins with ~/.agents/skills/<name>/SKILL.md)
-
-Legacy Pi target (optional override):
-  PI_DIR="$HOME/.pi/agent" ./bin/sync.sh
-```
+1. Update files under `devcontainer/` in this repo
+2. Run `./devcontainer/install.sh self-install`
+3. In target repo: `devc install .`
+4. Rebuild container: `devc rebuild .`
