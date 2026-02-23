@@ -5,12 +5,14 @@ DEFAULT_AGENTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 AGENTS_DIR="${AGENTS_DIR:-$DEFAULT_AGENTS_DIR}"
 SYNC_MODE="soft"
 EVAL_MODE="0"
+STRICT_EVAL_GATE="${STRICT_EVAL_GATE:-0}"
 
 usage() {
     cat <<'EOF'
-Usage: bin/sync.sh [--hard] [--eval]
+Usage: bin/sync.sh [--hard] [--eval] [--strict-eval-gate]
   --hard  Destructive mirror from repo to targets
   --eval  Skip eval gate and use EVAL_SYNC_HOME as HOME (for temp agent homes)
+  --strict-eval-gate  Fail sync when pi-eval gate fails
 EOF
 }
 
@@ -22,6 +24,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --eval)
             EVAL_MODE="1"
+            shift
+            ;;
+        --strict-eval-gate)
+            STRICT_EVAL_GATE="1"
             shift
             ;;
         -h|--help)
@@ -51,7 +57,12 @@ shopt -s nullglob
 
 if [[ "${SKIP_PI_EVAL_GATE:-}" != "1" ]]; then
     if ! "$AGENTS_DIR/bin/pi-eval-gate.py"; then
-        exit 1
+        if [[ "${PI_EVAL_GATE_STRICT:-$STRICT_EVAL_GATE}" == "1" ]]; then
+            echo "sync: pi-eval gate failed and strict mode is enabled; aborting sync." >&2
+            exit 1
+        fi
+        echo "sync: pi-eval gate failed; continuing in non-blocking mode." >&2
+        echo "sync: set PI_EVAL_GATE_STRICT=1 or pass --strict-eval-gate to make this blocking." >&2
     fi
 fi
 

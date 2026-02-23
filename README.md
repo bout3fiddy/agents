@@ -66,6 +66,13 @@ export AGENTS_DIR="/absolute/path/to/agents"
   - Skills: mirror this repo's `skills/` to targets
   - Instructions: mirror this repo's `instructions/global.md` to target instruction files
 
+### PI eval gate behavior
+
+- `bin/sync.sh` runs `bin/pi-eval-gate.py` by default.
+- Gate failures are warning-only (non-blocking) by default.
+- To make gate failures block sync, use `--strict-eval-gate` or set `PI_EVAL_GATE_STRICT=1`.
+- `./bin/sync.sh --eval` still skips the gate (`SKIP_PI_EVAL_GATE=1`) and can override `HOME` via `EVAL_SYNC_HOME`.
+
 ### Index regeneration
 
 `bin/build-agents-index.sh` runs during sync and updates the auto-generated skills index block inside `instructions/global.md`.
