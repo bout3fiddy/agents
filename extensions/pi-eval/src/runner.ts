@@ -45,31 +45,63 @@ const modelSpecFromModel = (model: Model<any>): ModelSpec => ({
 	label: `${model.provider}/${model.id}`,
 });
 
+const modelSpecFromKey = (modelKey: string): ModelSpec | null => {
+	const [provider, ...idParts] = modelKey.split("/");
+	const id = idParts.join("/");
+	if (!provider || !id) return null;
+	return {
+		provider,
+		id,
+		key: `${provider}/${id}`,
+		label: `${provider}/${id}`,
+	};
+};
+
 const resolveModelSpec = async (
 	modelArg: string | undefined,
+	config: EvalConfig,
 	ctx: ExtensionCommandContext,
 ): Promise<ModelSpec> => {
+	let availableModels: Model<any>[] | null = null;
+	const getAvailableModels = async (): Promise<Model<any>[]> => {
+		if (availableModels) return availableModels;
+		availableModels = await ctx.modelRegistry.getAvailable();
+		return availableModels;
+	};
+
 	if (modelArg) {
 		if (modelArg.includes("/")) {
-			const [provider, id] = modelArg.split("/");
-			return {
-				provider,
-				id,
-				key: `${provider}/${id}`,
-				label: `${provider}/${id}`,
-			};
+			const parsed = modelSpecFromKey(modelArg);
+			if (parsed) return parsed;
+			throw new Error(`Invalid model format: ${modelArg}. Expected provider/model.`);
 		}
-		const available = await ctx.modelRegistry.getAvailable();
+		const available = await getAvailableModels();
 		const match = available.find((item) => item.id === modelArg);
 		if (match) return modelSpecFromModel(match);
-		throw new Error(`Model not found: ${modelArg}`);
+		throw new Error(
+			`Model not found: ${modelArg}. Available: ${available
+				.map((item) => `${item.provider}/${item.id}`)
+				.join(", ")}`,
+		);
+	}
+
+	const configuredModel = config.requiredModels?.[0];
+	if (typeof configuredModel === "string" && configuredModel.trim().length > 0) {
+		if (configuredModel.includes("/")) {
+			const parsed = modelSpecFromKey(configuredModel);
+			if (parsed) return parsed;
+		} else {
+			const available = await getAvailableModels();
+			const match = available.find((item) => item.id === configuredModel);
+			if (match) return modelSpecFromModel(match);
+		}
 	}
 
 	if (ctx.model) {
 		return modelSpecFromModel(ctx.model);
 	}
 
-	const available = await ctx.modelRegistry.getAvailable();
+	const available = await getAvailableModels();
 	if (available.length === 0) {
 		throw new Error("No models available. Configure a provider or login.");
 	}
@@ -1584,7 +1616,7 @@ export const registerEvalCommand = (pi: ExtensionAPI) => {
 					ctx.cwd,
 				);
 				const modelArg = parseStringFlag("--model", flags["--model"]);
-				const model = await resolveModelSpec(modelArg, ctx);
+				const model = await resolveModelSpec(modelArg, config, ctx);
 				const skillsPaths = resolveSkillsPaths(config, agentDir);
 				const dryRunOverride = Boolean(flags["--dry-run"]);
 				const thinkingLevel = parseStringFlag("--thinking", flags["--thinking"]) ?? "medium";

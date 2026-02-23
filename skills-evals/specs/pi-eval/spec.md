@@ -61,7 +61,7 @@ Implement now (recommended):
 
 ## CLI Surface
 - pi eval
-  - Default audit of the current agent dir and model from settings.
+  - Default audit of the current agent dir and the first `requiredModels` entry from eval config (falls back to selected model if not configured).
 - pi eval audit --model <name> [--agent-dir <path>]
   - Audit with explicit model selection.
 - pi eval run --cases <path> [--model <name>] [--dry-run] [--thinking <level>]
@@ -206,16 +206,24 @@ Schema (proposal):
 - Partial runs (filter/limit/smoke or custom cases file) update case rows but do not
   update the index; gating requires a full run.
 - A model is considered "up to date" if its latest report commit SHA is at or
-  after the most recent change to skills/ or instructions/global.md.
+  after the most recent tracked change to skills/instructions/eval inputs.
 - Models without access or subscription should not be listed in requiredModels
   and are not gated until added later.
 
 ## Sync Gating
 - Sync is blocked unless all required models have up-to-date eval reports.
 - Required models are defined in eval.config.json (e.g., models.required list).
-- Sync gate checks only these paths for changes:
+- Sync gate checks these paths for changes:
   - skills/**
   - instructions/global.md
+  - extensions/pi-eval/config/eval.config.json
+  - skills-evals/specs/pi-eval/evals.md
+  - skills-evals/cases/pi-eval.jsonl
+  - docs/specs/pi-eval/evals.md
+- Sync gate reads the first available report index from:
+  - skills-evals/reports/index.json
+  - skills-evals/specs/pi-eval/reports/index.json
+  - docs/specs/pi-eval/reports/index.json
 - There is no bypass flag for normal sync; the eval harness uses `bin/sync.sh --eval` when syncing into a temp HOME.
 - Until Pi is installed and the eval runner is available, sync should warn and
   skip gating. Once enabled, gating is strict with no bypass.

@@ -30,6 +30,18 @@ def read_json(path: Path) -> dict:
     raise ValueError(f"Expected JSON object in {path}")
 
 
+def resolve_index_paths(root: Path) -> tuple[Path, list[Path]]:
+    candidates = [
+        root / "skills-evals" / "reports" / "index.json",
+        root / "skills-evals" / "specs" / "pi-eval" / "reports" / "index.json",
+        root / "docs" / "specs" / "pi-eval" / "reports" / "index.json",
+    ]
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate, candidates
+    return candidates[0], candidates
+
+
 def resolve_model_key(required: str, keys: list[str], errors: list[str]) -> str | None:
     if required in keys:
         return required
@@ -76,7 +88,7 @@ def verify_commit(sha: str, root: Path) -> str | None:
 def main() -> int:
     root = Path(__file__).resolve().parents[1]
     config_path = root / "extensions" / "pi-eval" / "config" / "eval.config.json"
-    index_path = root / "skills-evals" / "reports" / "index.json"
+    index_path, index_candidates = resolve_index_paths(root)
 
     if shutil.which("pi") is None:
         warn("pi-eval gate: pi is not installed; skipping eval gating.")
@@ -105,7 +117,9 @@ def main() -> int:
         return 0
 
     if not index_path.exists():
-        warn(f"pi-eval gate: report index missing at {index_path}")
+        warn("pi-eval gate: report index missing. Checked:")
+        for candidate in index_candidates:
+            warn(f"  - {candidate}")
         return 1
 
     try:
@@ -120,12 +134,25 @@ def main() -> int:
         return 1
 
     latest_change = run_git(
-        ["log", "-1", "--format=%H", "--", "skills", "instructions/global.md"],
+        [
+            "log",
+            "-1",
+            "--format=%H",
+            "--",
+            "skills",
+            "instructions/global.md",
+            "extensions/pi-eval/config/eval.config.json",
+            "skills-evals/specs/pi-eval/evals.md",
+            "skills-evals/cases/pi-eval.jsonl",
+            "docs/specs/pi-eval/evals.md",
+        ],
         root,
     ).stdout.strip()
 
     if not latest_change:
-        warn("pi-eval gate: no commits found for skills/instructions; skipping eval gating.")
+        warn(
+            "pi-eval gate: no commits found for tracked skills/instructions/eval inputs; skipping eval gating."
+        )
         return 0
 
     errors: list[str] = []
@@ -153,7 +180,7 @@ def main() -> int:
         up_to_date = run_git(["merge-base", "--is-ancestor", latest_change, resolved_sha], root)
         if up_to_date.returncode != 0:
             errors.append(
-                "Report for '{key}' ({sha}) predates latest skills/instructions change ({latest}).".format(
+                "Report for '{key}' ({sha}) predates latest tracked change ({latest}).".format(
                     key=key,
                     sha=report_sha,
                     latest=latest_change[:7],
