@@ -21,6 +21,8 @@ Use this skill for most engineering work, including implementation, refactors, b
 - Infra/platform/ops/deploy/secrets/storage work
 - Auth/credentials/safety guidance
 - PR review or CI failures
+- Work-package-driven refactoring (audit, execution, continuation)
+- Code-smell diagnostics or refactoring opportunity reviews
 - JS/TS runtime or toolchain changes
 - Framework-specific guidance (ask which stack if unclear)
 
@@ -32,6 +34,8 @@ If the request explicitly names a framework/tool or clearly falls into a categor
 - PR review/CI/GitHub -> `skills/coding/references/gh-pr-review-fix.md`
 - JS/TS runtime or toolchain -> `skills/coding/references/bun.md`
 - Auth/secrets/credentials -> `skills/coding/references/secrets-and-auth-guardrails.md`
+- Work-package-driven refactoring/audit/continuation -> `skills/coding/references/refactoring/index.md`
+- Code smell/refactoring opportunity/maintainability/quality review -> `skills/coding/references/code-smells/smells/index.md`
 - React/Next.js -> `skills/coding/references/react/index.md`
 - SolidJS -> `skills/coding/references/solidjs/index.md` (and `skills/coding/references/solidjs/`)
 - Utility-class styling (Tailwind) -> `skills/coding/references/frontend-engineering/tailwindcss-full.md`
@@ -180,5 +184,7 @@ Red flags:
 - `skills/coding/references/gh-pr-review-fix.md` - PR review triage + CI fix workflow
 - `skills/coding/references/bun.md` - Bun runtime/tooling reference
 - `skills/coding/references/secrets-and-auth-guardrails.md` - auth/secret handling and incident response
+- `skills/coding/references/refactoring/index.md` - work-package-driven refactoring standards and execution directive
+- `skills/coding/references/code-smells/smells/index.md` - canonical smell catalog and mitigation directions
 - `skills/coding/references/solidjs/index.md` and `skills/coding/references/solidjs/` - SolidJS performance and patterns
 - `skills/coding/references/frontend-engineering/tailwindcss-full.md` - Tailwind CSS v4 reference

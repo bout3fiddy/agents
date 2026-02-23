@@ -11,6 +11,7 @@
 - For edits under `skills/` or `SKILL.md`, **read `skills/skill-creator/SKILL.md` before responding** and do not open `coding`.
 - When editing another skill’s `SKILL.md`, ask the user to paste the relevant section instead of reading the file directly.
 - When the user asks for a plan/spec, open `skills/planning/SKILL.md` before drafting.
+- When refactoring is driven by a review work package (`docs/review/workpackage_<name>_<date>.md`) or a continuation prompt, open `skills/coding/SKILL.md` and then `skills/coding/references/refactoring/index.md`.
 
 ## Quality gates
 - If `.pre-commit-config.yaml` exists and you made changes to files the hooks could touch (code/config/etc. in this repo), run: `uv run prek run --all-files` (runs repo-defined hooks like ruff/ruff-format; it may modify files, so re-run and re-stage until clean). If no relevant changes were made, skip running `prek`.
@@ -55,6 +56,19 @@
 - Planning work, specs, or anything that touches Linear tickets must use the planning skill and `skills/planning/references/linear-mcp-ops.md`.
 - When this trigger fires, explicitly record whether each issue is being created, refined, transitioned, or commented, and include issue IDs in the response.
 
+## Refactoring work package standard
+- Refactoring work packages must be created in `docs/review/workpackage_<name>_<date>.md`.
+- Each work package must embed the standard execution directive block at the top, using `skills/coding/references/refactoring/workpackage-execution-directive.md`.
+- Work package metadata and each `WP-*` section must include `Skill references to invoke` as concrete files to open first (not only skill names); include coding and code-smell references by default.
+- Each `WP-*` recommendation must include rationale traceability: applicable coding rule IDs, targeted smell mitigation (or explicit none), and reference file paths.
+- Every `WP-*` title must carry a status line: `[Status: Todo]`, `[Status: In Progress YYYY-MM-DD]`, or `[Status: Done YYYY-MM-DD]`.
+- For each completed `WP-*`, append `Implementation status (YYYY-MM-DD)`, `Why this works`, `Proof / validation`, and `How to test`.
+- Treat repeated execution prompts as continuation signals; continue from the first non-done item unless staging release is already complete.
+- Standard directive command:
+```text
+start implementing fixes per work package: docs/review/workpackage_<name>_<date>.md
+```
+
 ## PR review bot loop
 - When asked to iteratively fix PR review feedback, run this loop for the specified PR.
 - Step 1: Fetch latest review + issue comments.
@@ -69,14 +83,14 @@
 - Step 10: If there are new actionable comments or required CI checks/actions are not passing, repeat from Step 2.
 
 ## Refactoring and code-smell review requests
+- For work-package-driven refactoring execution, open and apply `skills/coding/SKILL.md` + `skills/coding/references/refactoring/index.md`.
 - When users ask to check specific code for smells, refactoring opportunities, or quality concerns, perform a diagnostic review first (do not auto-refactor).
-- Open and apply `skills/code-smells/SKILL.md` (and its references) for smell classification and recommendations.
+- Open and apply `skills/coding/SKILL.md` + `skills/coding/references/code-smells/smells/index.md` for smell classification and recommendations.
 - Report findings with canonical smell labels, severity, concrete evidence, and suggested refactoring options.
 - Only implement refactors when the user explicitly asks for code changes.
 
 ## Skills list (manual)
-- coding - core engineering rules for implementation, SQL, docs/config edits, and technical guidance, with indexed references (frontend + platform included). refs: see `skills/coding/SKILL.md`
-- code-smells - smell-based quality review using a canonical catalog; diagnoses code smells and recommends targeted refactoring options. refs: see `skills/code-smells/SKILL.md`
+- coding - core engineering rules for implementation, SQL, docs/config edits, technical guidance, and integrated refactoring/code-smell workflows via coding references. refs: `skills/coding/SKILL.md`, `skills/coding/references/refactoring/index.md`, `skills/coding/references/code-smells/smells/index.md`
 - database-migrations - safe planning and execution of schema/data migrations. refs: skills/database-migrations/references/migration-checklist.md
 - housekeeping - repository housekeeping for AGENTS/CLAUDE architecture, progressive disclosure, and legacy monolith migration. refs: skills/housekeeping/references/agents-architecture.md, skills/housekeeping/references/migration-playbook.md
 - planning - clarify scope, spec-first delivery, and Linear tracking. refs: clarifying questions, spec workflow, Linear ops
@@ -88,14 +102,13 @@
 
 <!-- AGENTS_SKILLS_INDEX_START -->
 AUTO-GENERATED SKILLS INDEX. SOURCE: skills/*/SKILL.md + skills/*/references/*.md
-skill|code-smells|Detect and classify code smells using a canonical smell catalog, then recommend targeted refactoring options without automatically rewriting code.|skills/code-smells/SKILL.md
 skill|coding|Core engineering rules for implementation, refactors, bug fixes, SQL, docs/config edits, commands, and technical guidance, with indexed references for specialized workflows.|skills/coding/SKILL.md
 skill|design|Frontend design curation skill for UI critique, motion storyboarding, and DialKit tuning. Use when the user asks for interface feedback, animation sequencing, or interactive design-control setup.|skills/design/SKILL.md
 skill|housekeeping|Repository housekeeping workflows for AGENTS/CLAUDE architecture, progressive disclosure, and migration of legacy monolithic instruction files.|skills/housekeeping/SKILL.md
 skill|planning|Planning workflows for clarifying underspecified work, spec-driven delivery, and Linear-backed tracking.|skills/planning/SKILL.md
 skill|skill-creator|Create, update, or install skills (including planning/specs and edits to skills/*) using our repo workflow (uv + skills-ref validation, lean SKILL.md, references/ for detail, and sync via bin/sync.sh [--hard]).|skills/skill-creator/SKILL.md
-trigger|code-smells|Code smell/refactoring opportunity/maintainability/quality review|skills/code-smells/references/smells/index.md
 trigger|coding|Auth/secrets/credentials|skills/coding/references/secrets-and-auth-guardrails.md
+trigger|coding|Code smell/refactoring opportunity/maintainability/quality review|skills/coding/references/code-smells/smells/index.md
 trigger|coding|Infra/platform/ops/deploy/secrets/storage|skills/coding/references/platform-engineering/index.md
 trigger|coding|JS/TS runtime or toolchain|skills/coding/references/bun.md
 trigger|coding|PR review/CI/GitHub|skills/coding/references/gh-pr-review-fix.md
@@ -103,6 +116,7 @@ trigger|coding|React/Next.js|skills/coding/references/react/index.md
 trigger|coding|SolidJS|skills/coding/references/solidjs/index.md
 trigger|coding|UI/layout/motion or component design|skills/coding/references/frontend-engineering/index.md
 trigger|coding|Utility-class styling (Tailwind)|skills/coding/references/frontend-engineering/tailwindcss-full.md
+trigger|coding|Work-package-driven refactoring/audit/continuation|skills/coding/references/refactoring/index.md
 trigger|design|Animation/storyboard/motion/transition/entrance/timing/stagger/spring|skills/design/references/storyboard-animation.md
 trigger|design|DialKit/sliders/controls/tuning panel/live params|skills/design/references/dialkit.md
 trigger|design|UI critique/review/feedback/audit/polish/refine/redesign|skills/design/references/design-critique.md
@@ -114,32 +128,32 @@ trigger|planning|Underspecified implementation request|skills/planning/reference
 trigger|skill-creator|Adding or modifying a Rules section|skills/skill-creator/references/templates/rules-template.md
 trigger|skill-creator|Creating a skill or skeleton|skills/skill-creator/references/templates/skill-skeleton.md
 trigger|skill-creator|Running or verifying the checklist|skills/skill-creator/references/checklist.md
-ref|code-smells|skills/code-smells/references/index.md|References Index|Index of reference files for the code-smells skill.
-ref|code-smells|skills/code-smells/references/smells/alternative-classes-with-different-interfaces.md|Alternative Classes with Different Interfaces|Signals and refactoring directions for Alternative Classes with Different Interfaces.
-ref|code-smells|skills/code-smells/references/smells/comments.md|Comments|Signals and refactoring directions for Comments.
-ref|code-smells|skills/code-smells/references/smells/data-class.md|Data Class|Signals and refactoring directions for Data Class.
-ref|code-smells|skills/code-smells/references/smells/data-clumps.md|Data Clumps|Signals and refactoring directions for Data Clumps.
-ref|code-smells|skills/code-smells/references/smells/dead-code.md|Dead Code|Signals and refactoring directions for Dead Code.
-ref|code-smells|skills/code-smells/references/smells/divergent-change.md|Divergent Change|Signals and refactoring directions for Divergent Change.
-ref|code-smells|skills/code-smells/references/smells/duplicate-code.md|Duplicate Code|Signals and refactoring directions for Duplicate Code.
-ref|code-smells|skills/code-smells/references/smells/feature-envy.md|Feature Envy|Signals and refactoring directions for Feature Envy.
-ref|code-smells|skills/code-smells/references/smells/inappropriate-intimacy.md|Inappropriate Intimacy|Signals and refactoring directions for Inappropriate Intimacy.
-ref|code-smells|skills/code-smells/references/smells/incomplete-library-class.md|Incomplete Library Class|Signals and refactoring directions for Incomplete Library Class.
-ref|code-smells|skills/code-smells/references/smells/index.md|Smells Index|Master smell catalog split into one reference file per smell.
-ref|code-smells|skills/code-smells/references/smells/large-class.md|Large Class|Signals and refactoring directions for Large Class.
-ref|code-smells|skills/code-smells/references/smells/lazy-class.md|Lazy Class|Signals and refactoring directions for Lazy Class.
-ref|code-smells|skills/code-smells/references/smells/long-method.md|Long Method|Signals and refactoring directions for Long Method.
-ref|code-smells|skills/code-smells/references/smells/long-parameter-list.md|Long Parameter List|Signals and refactoring directions for Long Parameter List.
-ref|code-smells|skills/code-smells/references/smells/message-chains.md|Message Chains|Signals and refactoring directions for Message Chains.
-ref|code-smells|skills/code-smells/references/smells/middle-man.md|Middle Man|Signals and refactoring directions for Middle Man.
-ref|code-smells|skills/code-smells/references/smells/parallel-inheritance-hierarchies.md|Parallel Inheritance Hierarchies|Signals and refactoring directions for Parallel Inheritance Hierarchies.
-ref|code-smells|skills/code-smells/references/smells/primitive-obsession.md|Primitive Obsession|Signals and refactoring directions for Primitive Obsession.
-ref|code-smells|skills/code-smells/references/smells/refused-bequest.md|Refused Bequest|Signals and refactoring directions for Refused Bequest.
-ref|code-smells|skills/code-smells/references/smells/shotgun-surgery.md|Shotgun Surgery|Signals and refactoring directions for Shotgun Surgery.
-ref|code-smells|skills/code-smells/references/smells/speculative-generality.md|Speculative Generality|Signals and refactoring directions for Speculative Generality.
-ref|code-smells|skills/code-smells/references/smells/switch-statements.md|Switch Statements|Signals and refactoring directions for Switch Statements.
-ref|code-smells|skills/code-smells/references/smells/temporary-field.md|Temporary Field|Signals and refactoring directions for Temporary Field.
 ref|coding|skills/coding/references/bun.md|Bun - JavaScript/TypeScript Runtime & Toolkit (Reference)|Bun is the preferred JavaScript/TypeScript toolkit when the repo supports it. If a repo is locked to npm/yarn/pnpm, follow its established toolchain and lockfile.
+ref|coding|skills/coding/references/code-smells/index.md|References Index|Code-smell diagnostic index under coding (canonical smell catalog and mitigation references).
+ref|coding|skills/coding/references/code-smells/smells/alternative-classes-with-different-interfaces.md|Alternative Classes with Different Interfaces|Signals and refactoring directions for Alternative Classes with Different Interfaces.
+ref|coding|skills/coding/references/code-smells/smells/comments.md|Comments|Signals and refactoring directions for Comments.
+ref|coding|skills/coding/references/code-smells/smells/data-class.md|Data Class|Signals and refactoring directions for Data Class.
+ref|coding|skills/coding/references/code-smells/smells/data-clumps.md|Data Clumps|Signals and refactoring directions for Data Clumps.
+ref|coding|skills/coding/references/code-smells/smells/dead-code.md|Dead Code|Signals and refactoring directions for Dead Code.
+ref|coding|skills/coding/references/code-smells/smells/divergent-change.md|Divergent Change|Signals and refactoring directions for Divergent Change.
+ref|coding|skills/coding/references/code-smells/smells/duplicate-code.md|Duplicate Code|Signals and refactoring directions for Duplicate Code.
+ref|coding|skills/coding/references/code-smells/smells/feature-envy.md|Feature Envy|Signals and refactoring directions for Feature Envy.
+ref|coding|skills/coding/references/code-smells/smells/inappropriate-intimacy.md|Inappropriate Intimacy|Signals and refactoring directions for Inappropriate Intimacy.
+ref|coding|skills/coding/references/code-smells/smells/incomplete-library-class.md|Incomplete Library Class|Signals and refactoring directions for Incomplete Library Class.
+ref|coding|skills/coding/references/code-smells/smells/index.md|Smells Index|Master smell catalog split into one reference file per smell.
+ref|coding|skills/coding/references/code-smells/smells/large-class.md|Large Class|Signals and refactoring directions for Large Class.
+ref|coding|skills/coding/references/code-smells/smells/lazy-class.md|Lazy Class|Signals and refactoring directions for Lazy Class.
+ref|coding|skills/coding/references/code-smells/smells/long-method.md|Long Method|Signals and refactoring directions for Long Method.
+ref|coding|skills/coding/references/code-smells/smells/long-parameter-list.md|Long Parameter List|Signals and refactoring directions for Long Parameter List.
+ref|coding|skills/coding/references/code-smells/smells/message-chains.md|Message Chains|Signals and refactoring directions for Message Chains.
+ref|coding|skills/coding/references/code-smells/smells/middle-man.md|Middle Man|Signals and refactoring directions for Middle Man.
+ref|coding|skills/coding/references/code-smells/smells/parallel-inheritance-hierarchies.md|Parallel Inheritance Hierarchies|Signals and refactoring directions for Parallel Inheritance Hierarchies.
+ref|coding|skills/coding/references/code-smells/smells/primitive-obsession.md|Primitive Obsession|Signals and refactoring directions for Primitive Obsession.
+ref|coding|skills/coding/references/code-smells/smells/refused-bequest.md|Refused Bequest|Signals and refactoring directions for Refused Bequest.
+ref|coding|skills/coding/references/code-smells/smells/shotgun-surgery.md|Shotgun Surgery|Signals and refactoring directions for Shotgun Surgery.
+ref|coding|skills/coding/references/code-smells/smells/speculative-generality.md|Speculative Generality|Signals and refactoring directions for Speculative Generality.
+ref|coding|skills/coding/references/code-smells/smells/switch-statements.md|Switch Statements|Signals and refactoring directions for Switch Statements.
+ref|coding|skills/coding/references/code-smells/smells/temporary-field.md|Temporary Field|Signals and refactoring directions for Temporary Field.
 ref|coding|skills/coding/references/frontend-engineering/components-and-motion.md|Frontend Components: Full Reference|component patterns and motion recipes
 ref|coding|skills/coding/references/frontend-engineering/design-guidelines.md|Frontend Design Guidelines (Reference)|visual design guidance
 ref|coding|skills/coding/references/frontend-engineering/index.md|Frontend Engineering (Reference)|Index of reference files for references/frontend-engineering.
@@ -200,6 +214,9 @@ ref|coding|skills/coding/references/react/rules/server-cache-react.md|Per-Reques
 ref|coding|skills/coding/references/react/rules/server-parallel-fetching.md|Parallel Data Fetching with Component Composition|eliminates server-side waterfalls
 ref|coding|skills/coding/references/react/rules/server-serialization.md|Minimize Serialization at RSC Boundaries|reduces data transfer size
 ref|coding|skills/coding/references/react/web-interface-guidelines.md|Web Interface Guidelines (UI Review Reference)|UI review checklist source and workflow
+ref|coding|skills/coding/references/refactoring/index.md|References Index|Refactoring work-package standards, directive command template, and accountability protocol.
+ref|coding|skills/coding/references/refactoring/workpackage-execution-directive.md|Refactoring Work Package Execution Directive|Standardized directive block to embed at the top of refactoring work package files.
+ref|coding|skills/coding/references/refactoring/workpackage-template.md|Refactoring Work Package Template|Standard structure for refactoring work packages, including status tracking and accountability sections.
 ref|coding|skills/coding/references/secrets-and-auth-guardrails.md|Secrets and Auth Guardrails (Reference)|1) Confirm scope: setup, remediation, or incident response. 2) Warn about side effects: call out any command that may persist credentials locally. 3) If a tool config path is involved (e.g., `CLOUDSDK_CONFIG`), ensure...
 ref|coding|skills/coding/references/solidjs/index.md|SolidJS Best Practices (Reference)|Index of reference files for references/solidjs.
 ref|coding|skills/coding/references/solidjs/rules/_sections.md|Sections|This file defines all sections, their ordering, impact levels, and descriptions. The section ID (in parentheses) is the filename prefix used to group rules.
