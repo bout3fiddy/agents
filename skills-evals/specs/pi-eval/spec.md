@@ -9,8 +9,8 @@ and evals, and removed without modifying runtime code in the repo.
 1) Install Pi locally.
 2) Configure Codex OAuth in your environment (no interactive login during evals).
 3) Add the pi-eval extension to Pi (symlink or copy into Pi extensions dir).
-4) Run `pi eval audit --model codex` to confirm settings and skill inventory.
-5) Run `pi eval run --cases <path> --model codex` to generate the report.
+4) Run `pi eval audit --model openai-codex/gpt-5.3-codex` to confirm settings and skill inventory.
+5) Run `pi eval run --cases <path> --model openai-codex/gpt-5.3-codex` to generate the report.
 6) Commit the report and index updates.
 7) Once Pi is installed, enable strict sync gating (no bypass).
 
@@ -81,7 +81,7 @@ Suggested path: extensions/pi-eval/config/eval.config.json
 
 Schema (proposal):
 {
-  "requiredModels": ["codex"],
+  "requiredModels": ["openai-codex/gpt-5.3-codex"],
   "models": {
     "model-name": {
       "globalInstructions": ["AGENTS.md", "instructions/global.md"]
@@ -137,11 +137,11 @@ Schema (proposal):
 
 ## Feedback Loops (Sandboxed Iteration)
 - Use a temporary agent dir to avoid polluting real settings:
-  `pi eval audit --model codex --agent-dir /tmp/pi-eval-agent`
+  `pi eval audit --model openai-codex/gpt-5.3-codex --agent-dir /tmp/pi-eval-agent`
 - Run a small subset by suite or ID while developing:
-  `pi eval run --cases skills-evals/specs/pi-eval/evals.md --model codex --filter refs-coding --limit 3`
+  `pi eval run --cases skills-evals/specs/pi-eval/evals.md --model openai-codex/gpt-5.3-codex --filter refs-coding --limit 3`
 - Use dry-run for side-effecting skills:
-  `pi eval run --cases skills-evals/specs/pi-eval/evals.md --model codex --dry-run --filter agent-observability`
+  `pi eval run --cases skills-evals/specs/pi-eval/evals.md --model openai-codex/gpt-5.3-codex --dry-run --filter agent-observability`
 - Iterate: change code -> rerun subset -> confirm pass -> expand to full suite.
 
 ## Authentication
@@ -196,11 +196,12 @@ Schema (proposal):
 
 ## Reports and Model Coverage
 - Reports are model-specific and must be committed to the repo.
-- Report path: skills-evals/reports/<model>.md (overwritten per run; case rows preserved/updated for current cases; rows for removed case IDs are pruned on the next run).
+- Report path (primary): skills-evals/reports/<model>.md (overwritten per run; case rows preserved/updated for current cases; rows for removed case IDs are pruned on the next run).
+- Mirror paths (kept in sync by runner writes): skills-evals/specs/pi-eval/reports/<model>.md and docs/specs/pi-eval/reports/<model>.md.
 - Case table includes a Run (date) column showing last execution per row.
 - Include: model name, commit SHA, run date/time, cases executed, pass/fail
   totals, token stats, and any failed cases.
-- Maintain a machine index: skills-evals/reports/index.json mapping
+- Maintain a machine index (primary + mirrored copies): skills-evals/reports/index.json mapping
   model -> last evaluated commit SHA + timestamp.
 - Partial runs (filter/limit/smoke or custom cases file) update case rows but do not
   update the index; gating requires a full run.

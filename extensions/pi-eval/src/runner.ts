@@ -1526,13 +1526,23 @@ const runMatrixCase = async (params: {
 const reportRootFor = (agentDir: string): string =>
 	path.join(agentDir, "skills-evals", "reports");
 
-const reportPathFor = (agentDir: string, model: ModelSpec): string => {
+const reportMirrorRootsFor = (agentDir: string): string[] => [
+	path.join(agentDir, "skills-evals", "specs", "pi-eval", "reports"),
+	path.join(agentDir, "docs", "specs", "pi-eval", "reports"),
+];
+
+const reportPathFor = (reportRoot: string, model: ModelSpec): string => {
 	const safeModel = `${model.provider}-${model.id}`.replace(/[^a-zA-Z0-9-_]+/g, "-");
-	return path.join(reportRootFor(agentDir), `${safeModel}.md`);
+	return path.join(reportRoot, `${safeModel}.md`);
 };
 
-const indexPathFor = (agentDir: string): string =>
-	path.join(reportRootFor(agentDir), "index.json");
+const indexPathFor = (reportRoot: string): string =>
+	path.join(reportRoot, "index.json");
+
+const allReportRootsFor = (agentDir: string): string[] => [
+	reportRootFor(agentDir),
+	...reportMirrorRootsFor(agentDir),
+];
 
 const getCommitSha = async (): Promise<string> => {
 	try {
@@ -1917,8 +1927,11 @@ export const registerEvalCommand = (pi: ExtensionAPI) => {
 				renderRunSummary(evaluations, durationMs);
 
 				const commitSha = await getCommitSha();
-				const reportPath = reportPathFor(agentDir, model);
-				const indexPath = indexPathFor(agentDir);
+				const reportRoots = allReportRootsFor(agentDir);
+				const reportPath = reportPathFor(reportRoots[0], model);
+				const indexPath = indexPathFor(reportRoots[0]);
+				const mirrorReportPaths = reportRoots.slice(1).map((root) => reportPathFor(root, model));
+				const mirrorIndexPaths = reportRoots.slice(1).map((root) => indexPathFor(root));
 				const runTimestamp = new Date().toISOString();
 				const previousRows = await readReportRows(reportPath);
 				const reportContent = buildReport({
@@ -1937,10 +1950,29 @@ export const registerEvalCommand = (pi: ExtensionAPI) => {
 				});
 
 				await writeReport(reportPath, reportContent);
+				for (const mirrorPath of mirrorReportPaths) {
+					await writeReport(mirrorPath, reportContent);
+				}
 				if (isFullRun) {
 					await updateIndex(indexPath, model.key, { sha: commitSha, timestamp: runTimestamp });
+					for (const mirrorIndexPath of mirrorIndexPaths) {
+						await updateIndex(mirrorIndexPath, model.key, {
+							sha: commitSha,
+							timestamp: runTimestamp,
+						});
+					}
 				}
 				renderReportNotice(reportPath, indexPath, { indexUpdated: isFullRun });
+				for (const mirrorPath of mirrorReportPaths) {
+					console.log(color.success(`Report written: ${mirrorPath}`));
+				}
+				for (const mirrorIndexPath of mirrorIndexPaths) {
+					if (isFullRun) {
+						console.log(color.muted(`Index updated: ${mirrorIndexPath}`));
+					} else {
+						console.log(color.warning(`Index not updated (partial run): ${mirrorIndexPath}`));
+					}
+				}
 				return;
 			}
 

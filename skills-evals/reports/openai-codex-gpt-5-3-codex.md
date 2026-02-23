@@ -2,10 +2,11 @@ NOTICE: This is auto-generated on each run of the evals framework. Do not edit t
 
 # Pi Eval Report
 
-- Model: openai-codex/gpt-5.2-codex
+- Model: openai-codex/gpt-5.3-codex
 - Commit: fbbc73d
 - Cases path: skills-evals/specs/pi-eval/evals.md
 - Run: 2026-01-31T11:14:27.145Z
+- Status: carried-forward baseline from GPT-5.2 report; rerun required for GPT-5.3 + latest case set.
 - Run scope: full
 - Cases executed: 49 (49 rows)
 - Case rows: 49 (pass 48, fail 1, skip 0)
