@@ -44,6 +44,7 @@ Include at minimum:
   - `skills/coding/SKILL.md`
   - `skills/coding/references/refactoring/workpackage-execution-directive.md`
   - `skills/coding/references/code-smells/smells/index.md`
+  - `skills/coding/references/code-smells/smells/codex-code-smell.md`
 
 ## Work package item template
 
@@ -59,6 +60,7 @@ Each `WP-XX` section must include:
 - Why this approach
 - Recommendation rationale:
   - coding rule IDs from `skills/coding/SKILL.md` that justify the recommendation
+  - hard-cutover status (`Default hard cutover` or `Exception approved`) citing `skills/coding/references/code-smells/smells/codex-code-smell.md`
   - smell mitigation targets from `skills/coding/references/code-smells/smells/*.md` (or explicit `No canonical smell`)
   - reference file paths used for the recommendation
 - Desired outcome

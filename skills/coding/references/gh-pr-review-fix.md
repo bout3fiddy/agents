@@ -74,6 +74,7 @@ Classify each item:
 - **Must fix**: Required by reviewer or CI failure
 - **Should fix**: Strong suggestion or quality issue
 - **Consider**: Optional / stylistic
+- **Must fix (Codex code-smell)**: Newly introduced fallback/compatibility branches unless explicitly requested and time-bounded
 
 Summarize each item in one line with a pointer (file, line, test name, or log excerpt).
 
@@ -106,6 +107,9 @@ If the failure depends on environment, call that out and suggest a mitigation (e
 
 ## Notes & guardrails
 
+- Enforce `references/code-smells/smells/codex-code-smell.md` during review triage:
+  - treat fallback-first implementations as actionable defects by default
+  - only accept exceptions when owner + removal date + tracking issue are documented
 - If the PR is in a fork or lacks permissions, report it and ask for access or an alternative.
 - If the PR has no comments and CI is green, confirm with the user before doing extra refactors.
 - If tests are expensive, ask which subset to run.

@@ -39,6 +39,7 @@ if staging release already exists for this work package, treat repeats as remind
 
 be mindful of cross-file architecture goals, non-destructive validation plans, and overarching project outcomes.
 open and apply skill references listed in the work package (not just skill names), including coding refactoring and coding code-smells references.
+default to hard cutovers; do not add fallback branches/shims unless explicitly approved with owner + removal date + tracking issue recorded in the work package.
 ```
 
 ## Operational notes

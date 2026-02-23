@@ -131,6 +131,7 @@ trigger|skill-creator|Running or verifying the checklist|skills/skill-creator/re
 ref|coding|skills/coding/references/bun.md|Bun - JavaScript/TypeScript Runtime & Toolkit (Reference)|Bun is the preferred JavaScript/TypeScript toolkit when the repo supports it. If a repo is locked to npm/yarn/pnpm, follow its established toolchain and lockfile.
 ref|coding|skills/coding/references/code-smells/index.md|References Index|Code-smell diagnostic index under coding (canonical smell catalog and mitigation references).
 ref|coding|skills/coding/references/code-smells/smells/alternative-classes-with-different-interfaces.md|Alternative Classes with Different Interfaces|Signals and refactoring directions for Alternative Classes with Different Interfaces.
+ref|coding|skills/coding/references/code-smells/smells/codex-code-smell.md|Codex Code Smell: Fallback-First Implementations|Codex coding rule: no fallback-first implementations; default to hard cutovers.
 ref|coding|skills/coding/references/code-smells/smells/comments.md|Comments|Signals and refactoring directions for Comments.
 ref|coding|skills/coding/references/code-smells/smells/data-class.md|Data Class|Signals and refactoring directions for Data Class.
 ref|coding|skills/coding/references/code-smells/smells/data-clumps.md|Data Clumps|Signals and refactoring directions for Data Clumps.

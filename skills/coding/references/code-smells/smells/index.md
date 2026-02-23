@@ -22,6 +22,7 @@ description: Complete code-smell catalog with one reference file per smell.
 - `references/code-smells/smells/divergent-change.md` - Signals and refactoring directions for Divergent Change.
 - `references/code-smells/smells/shotgun-surgery.md` - Signals and refactoring directions for Shotgun Surgery.
 - `references/code-smells/smells/parallel-inheritance-hierarchies.md` - Signals and refactoring directions for Parallel Inheritance Hierarchies.
+- `references/code-smells/smells/codex-code-smell.md` - Codex coding rule: no fallback-first implementations; default to hard cutovers.
 
 ### Dispensables
 - `references/code-smells/smells/comments.md` - Signals and refactoring directions for Comments.
