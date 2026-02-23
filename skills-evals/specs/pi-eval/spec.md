@@ -141,7 +141,7 @@ Schema (proposal):
 - Run a small subset by suite or ID while developing:
   `pi eval run --cases skills-evals/specs/pi-eval/evals.md --model openai-codex/gpt-5.3-codex --filter refs-coding --limit 3`
 - Use dry-run for side-effecting skills:
-  `pi eval run --cases skills-evals/specs/pi-eval/evals.md --model openai-codex/gpt-5.3-codex --dry-run --filter agent-observability`
+  `pi eval run --cases skills-evals/specs/pi-eval/evals.md --model openai-codex/gpt-5.3-codex --dry-run --filter cross-planning-coding`
 - Iterate: change code -> rerun subset -> confirm pass -> expand to full suite.
 
 ## Authentication
