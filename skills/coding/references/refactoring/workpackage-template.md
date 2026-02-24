@@ -6,13 +6,18 @@ description: Standard structure for refactoring work packages, including status 
 
 Use this template for all refactoring work packages. The canonical location is:
 
-`docs/review/workpackage_<name>_<date>.md`
+`docs/review/workpackages_<name>_<date>/`
 
-Use a date suffix in `DDMMYYYY` format to match current conventions.
+Use a date suffix in `DDMMYYYY` format to match current conventions. Store one or more markdown files in that folder (for example: `overview.md`, `wp-01.md`, `wp-02.md`).
+
+## Required folder layout
+
+- `overview.md` (required): canonical progress summary and execution entry point.
+- `wp-*.md` (optional but recommended): detailed per-item execution/audit notes.
 
 ## Required top-of-file directive
 
-Place this at the top of every work package (directly after the title):
+Place this at the top of the primary work package entry file (directly after the title). If execution prompts target the folder root, this entry file is the first file the execution agent should open.
 
 `## Execution Directive (Standard)`
 
@@ -31,6 +36,18 @@ Use this minimum structure:
 5. Overarching goals
 6. Non-goals
 7. Work package items (`WP-01`, `WP-02`, ...)
+
+## Overview summary requirements (`overview.md`)
+
+`overview.md` must include a compact rollup table (or equivalent list) for all `WP-*` items with:
+
+- `WP ID`
+- `Status` (`Todo` / `In Progress YYYY-MM-DD` / `Done YYYY-MM-DD`)
+- `Last updated`
+- `Proof / validation pointer` (file + section or command summary location)
+- `Next action`
+
+Execution agents should use this rollup first to determine what to do next before opening additional `wp-*.md` files.
 
 ## Metadata requirements
 
@@ -88,6 +105,8 @@ For each completed `WP-XX`, append all of:
   - Exact commands run and key outcomes (pass counts, CI result, runtime smoke result).
 - `How to test`:
   - Reproducible manual and/or automated verification steps.
+
+After updating the detailed `WP-XX` content, update `overview.md` in the same change so summary state stays authoritative.
 
 If implementation changes or narrows the original recommendation, update `Recommendation rationale` so traceability remains accurate.
 

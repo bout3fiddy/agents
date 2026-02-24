@@ -4,12 +4,18 @@ description: Standardized execution directive block for implementing refactoring
 
 # Refactoring Work Package Execution Directive
 
-Embed this block near the top of every refactoring work package file under:
+Embed this block near the top of the primary entry file in each refactoring work package folder under:
 
 `## Execution Directive (Standard)`
 
 ```text
-start implementing fixes per work package: <WORK_PACKAGE_PATH>
+start implementing fixes per work package: <WORK_PACKAGE_PATH_OR_DIR>
+
+if a directory path is provided (for example `docs/review/workpackages_<name>_<date>/`):
+- scan all markdown files in that directory
+- read `overview.md` first (required canonical status summary)
+- start from the primary entry doc (`overview.md` when present, otherwise first alphabetical markdown file)
+- continue from the first non-done `WP-*` status across the directory
 
 ensure changes are non-destructive.
 the app is locally hosted at <APP_URL>, started via <APP_START_COMMAND>.
@@ -23,6 +29,7 @@ when each work package item is implemented:
   - Proof / validation
   - How to test
 - mark the WP title status line as [Status: Done YYYY-MM-DD]
+- update `overview.md` rollup row for that `WP-*` with status, last-updated date, proof pointer, and next action
 
 commit and push periodically as coherent checkpoints.
 update relevant AGENTS.md files, and add scoped AGENTS.md files when durable guidance is missing.
@@ -44,6 +51,6 @@ default to hard cutovers; do not add fallback branches/shims unless explicitly a
 
 ## Operational notes
 
-- Use the work package document as the source of truth for progress; do not split status tracking across multiple files.
+- Use `overview.md` as the source of truth for progress summary; detailed evidence can live in per-`WP` files.
 - Do not remove audit context from completed sections; append implementation evidence below it.
 - If blocked, keep the WP status as `In Progress` and add blocker notes in `Implementation status`.

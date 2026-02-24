@@ -11,7 +11,7 @@
 - For edits under `skills/` or `SKILL.md`, **read `skills/skill-creator/SKILL.md` before responding** and do not open `coding`.
 - When editing another skill’s `SKILL.md`, ask the user to paste the relevant section instead of reading the file directly.
 - When the user asks for a plan/spec, open `skills/planning/SKILL.md` before drafting.
-- When refactoring is driven by a review work package (`docs/review/workpackage_<name>_<date>.md`) or a continuation prompt, open `skills/coding/SKILL.md` and then `skills/coding/references/refactoring/index.md`.
+- When refactoring is driven by a review work package folder (`docs/review/workpackages_<name>_<date>/`) or a continuation prompt, open `skills/coding/SKILL.md` and then `skills/coding/references/refactoring/index.md`.
 
 ## Quality gates
 - If `.pre-commit-config.yaml` exists and you made changes to files the hooks could touch (code/config/etc. in this repo), run: `uv run prek run --all-files` (runs repo-defined hooks like ruff/ruff-format; it may modify files, so re-run and re-stage until clean). If no relevant changes were made, skip running `prek`.
@@ -57,7 +57,10 @@
 - When this trigger fires, explicitly record whether each issue is being created, refined, transitioned, or commented, and include issue IDs in the response.
 
 ## Refactoring work package standard
-- Refactoring work packages must be created in `docs/review/workpackage_<name>_<date>.md`.
+- Refactoring work packages must be created in `docs/review/workpackages_<name>_<date>/`.
+- Each work package folder can contain multiple markdown docs (`*.md`); execution prompts may point to the folder root.
+- `overview.md` is required in each work package folder and is the canonical progress summary file.
+- `overview.md` must contain a rollup for every `WP-*` item (status, last-updated date, proof/validation pointer, and next action) so agents can assess state without opening every file.
 - Each work package must embed the standard execution directive block at the top, using `skills/coding/references/refactoring/workpackage-execution-directive.md`.
 - Work package metadata and each `WP-*` section must include `Skill references to invoke` as concrete files to open first (not only skill names); include coding and code-smell references by default.
 - Each `WP-*` recommendation must include rationale traceability: applicable coding rule IDs, targeted smell mitigation (or explicit none), and reference file paths.
@@ -66,7 +69,7 @@
 - Treat repeated execution prompts as continuation signals; continue from the first non-done item unless staging release is already complete.
 - Standard directive command:
 ```text
-start implementing fixes per work package: docs/review/workpackage_<name>_<date>.md
+start implementing fixes per work package: docs/review/workpackages_<name>_<date>/
 ```
 
 ## PR review bot loop
