@@ -14,7 +14,7 @@
 - When refactoring is driven by a review work package folder (`docs/review/workpackages_<name>_<date>/`) or a continuation prompt, open `skills/coding/SKILL.md` and then `skills/coding/references/refactoring/index.md`.
 
 ## Quality gates
-- If `.pre-commit-config.yaml` exists and you made changes to files the hooks could touch (code/config/etc. in this repo), run: `uv run prek run --all-files` (runs repo-defined hooks like ruff/ruff-format; it may modify files, so re-run and re-stage until clean). If no relevant changes were made, skip running `prek`.
+- If `.pre-commit-config.yaml` exists and you made code changes (source, tests, or executable build/lint/tooling config), run: `uv run prek run --all-files` (runs repo-defined hooks like ruff/ruff-format; it may modify files, so re-run and re-stage until clean). Skip `prek` for docs/planning-only changes (for example `docs/specs/**`, prose docs, and AGENTS/CLAUDE instruction edits) unless explicitly requested.
 - Run tests affected by your changes.
 
 ## Toolchain
