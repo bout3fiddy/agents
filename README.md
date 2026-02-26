@@ -22,8 +22,11 @@ agents/
 │   ├── sync.sh                # Hard sync to ~/.agents
 ├── skills/skill-creator/scripts/
 │   └── build_agents_index.py  # Regenerate auto skills index block (manual)
-├── skills-evals/bin/
-│   └── pi-eval.sh             # Eval runner wrapper
+├── skills-evals/
+│   ├── run.sh                 # Eval runner wrapper (no flags)
+│   └── fixtures/
+│       ├── eval-cases.jsonl   # Source-of-truth eval cases
+│       └── models.jsonl       # Models + thinking config
 ├── devcontainer/              # Devcontainer template and installer
 └── AGENTS.md                  # Repo-specific durable notes
 ```

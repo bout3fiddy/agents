@@ -40,6 +40,13 @@
 - Run safe, routine commands by default. Only ask the user when a command is destructive, touches secrets, or needs explicit approval.
 - For routine diagnostics, run the command yourself; only ask the user when blocked by permissions or environment limits, and explain why.
 
+## Implementation code-smell guardrails
+- For any code-writing task (not only explicit smell reviews), run a quick design check for these high-risk smells before finalizing changes: Speculative Generality (premature generalization), legacy compatibility aliases/shims, and fallback-first behavior.
+- Default to a single canonical implementation path and hard cutovers; do not add compatibility aliases, dual paths, or runtime fallback chains unless the user explicitly asks for that migration risk profile.
+- If a compatibility/fallback exception is explicitly approved, record owner, removal date, tracking issue/link, and validation plan in the same change.
+- If a required dependency or CLI is missing, fail fast with a clear setup/install error instead of silently cascading through alternate tools or runtimes.
+- Open and apply `skills/coding/references/code-smells/smells/speculative-generality.md` and `skills/coding/references/code-smells/smells/codex-code-smell.md` whenever this guardrail is in scope.
+
 ## Linear task completion
 - Treat Linear work as a lifecycle state machine, not a one-off update. Default semantic flow is `Unrefined -> Backlog -> In Progress -> In Review -> Completed`, then map those semantics to the team's actual Linear statuses before writing.
 - If work starts from `Backlog`/refined queue, move the issue to `In Progress` before implementation begins. If follow-up work happens after review, move it back to `In Progress` before making changes.

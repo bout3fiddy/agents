@@ -16,7 +16,7 @@
 - `bin/sync.sh` does not run sync-time gates; it only syncs files.
 - Eval cases source of truth is `skills-evals/fixtures/eval-cases.jsonl`; reports mirror to `docs/specs/pi-eval/reports/`.
 - Guardrail: when evals fail on skill/ref/global-instruction behavior, improve `skills/`, `skills/*/references/`, and `instructions/global.md` first; do not weaken eval expectations just to pass.
-- Canonical eval wrapper is `skills-evals/bin/pi-eval.sh`.
+- Canonical eval wrapper is `skills-evals/run.sh`.
 - `DEVC_DISABLE_MCP_SERVERS` in `devcontainer/devcontainer.json` can disable MCP startup in containers (comma/space/semi-colon separated list); use it to skip auth-heavy servers (e.g. `sentry` and/or `linear`) on non-interactive session starts.
 - Third-party skill installers may land content in `~/.agents/skills/<name>`; to vendor into this repo, copy into `skills/<name>/`, ensure progressive disclosure (`SKILL.md` + `references/`), then run `python3 skills/skill-creator/scripts/build_agents_index.py`.
 - Global policy now requires AGENTS docs to be curated and progressive-disclosure based (concise root router + scoped/nested AGENTS + deep docs), and to migrate legacy monolithic AGENTS files instead of appending indefinitely.
