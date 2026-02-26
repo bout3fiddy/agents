@@ -1,7 +1,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { color } from "./logger.js";
-import type { CaseEvaluation, EvalCase, MatrixEvaluation, ModelSpec } from "./types.js";
+import type { CaseEvaluation, EvalCase, ModelSpec } from "./types.js";
 import { ensureDir, fileExists, formatDuration, median, percentile } from "./utils.js";
 
 type ReportRow = {
@@ -178,20 +178,11 @@ const renderFailures = (rows: ReportRow[]): string => {
 		.join("\n");
 };
 
-const renderMatrixNotes = (matrix: MatrixEvaluation[]): string => {
-	if (matrix.length === 0) return "";
-	const lines = matrix.map(
-		(item) => `- **${item.evalCase.id}**: ${item.deltaSummary}`,
-	);
-	return ["## Matrix Deltas", ...lines, ""].join("\n");
-};
-
 export const buildReport = (params: {
 	model: ModelSpec;
 	commitSha: string;
 	runTimestamp: string;
 	evaluations: CaseEvaluation[];
-	matrix: MatrixEvaluation[];
 	durationMs: number;
 	allCases: EvalCase[];
 	previousRows: Map<string, ReportRow>;
@@ -205,7 +196,6 @@ export const buildReport = (params: {
 		commitSha,
 		runTimestamp,
 		evaluations,
-		matrix,
 		durationMs,
 		allCases,
 		previousRows,
@@ -254,29 +244,31 @@ export const buildReport = (params: {
 		"## Case Results",
 		renderCaseTable(rows),
 		"",
-		renderMatrixNotes(matrix),
 		"## Failures",
 		renderFailures(rows),
 		"",
 	].join("\n");
 };
 
-export const writeReport = async (filePath: string, content: string): Promise<void> => {
+const writeTextFile = async (filePath: string, content: string): Promise<void> => {
 	await ensureDir(path.dirname(filePath));
 	await writeFile(filePath, content);
+};
+
+export const writeReport = async (filePath: string, content: string): Promise<void> => {
+	await writeTextFile(filePath, content);
 };
 
 export const updateIndex = async (indexPath: string, modelKey: string, payload: { sha: string; timestamp: string }) => {
 	const indexData: Record<string, { sha: string; timestamp: string }> = {};
 	try {
-		const raw = await (await import("node:fs/promises")).readFile(indexPath, "utf-8");
+		const raw = await readFile(indexPath, "utf-8");
 		Object.assign(indexData, JSON.parse(raw));
 	} catch {
 		// ignore missing index
 	}
 	indexData[modelKey] = payload;
-	await ensureDir(path.dirname(indexPath));
-	await writeFile(indexPath, JSON.stringify(indexData, null, 2));
+	await writeTextFile(indexPath, JSON.stringify(indexData, null, 2));
 };
 
 export const renderReportNotice = (

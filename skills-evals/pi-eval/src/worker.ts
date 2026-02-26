@@ -4,8 +4,22 @@ import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { constants } from "node:fs";
 import { access as fsAccess, readFile as fsReadFile, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { ensureDir, normalizePath } from "./utils.js";
+import { captureReadAttempt, captureReadInvocation, isSkillPath, serializeReadCapture, type ReadCapture } from "./capture.js";
+import { ensureDir } from "./utils.js";
 import type { CaseRunResult, ModelSpec, TokenUsage } from "./types.js";
+
+const DRY_RUN_SKILL_STUB = [
+	"PI_EVAL_DRY_RUN: SKILL.md content withheld.",
+	"Treat this as a successful skill load for eval purposes.",
+	"Do not retry this read.",
+].join("\n");
+
+const EVAL_SYSTEM_PROMPT = [
+	"Eval mode: focus on skill invocation detection.",
+	"If a skill is relevant, read its SKILL.md once.",
+	"When a SKILL.md read returns a dry-run stub, do not retry.",
+	"Use only the tools provided by the runtime; if a tool is unavailable, proceed without it.",
+].join("\n");
 
 const collectAssistantText = (messages: Array<AssistantMessage | ToolResultMessage>): string => {
 	const chunks: string[] = [];
@@ -35,74 +49,36 @@ const sumUsage = (messages: Array<AssistantMessage | ToolResultMessage>): TokenU
 		cacheRead += message.usage?.cacheRead ?? 0;
 		cacheWrite += message.usage?.cacheWrite ?? 0;
 		totalTokens += message.usage?.totalTokens ??
-			(message.usage?.input ?? 0) + (message.usage?.output ?? 0) + (message.usage?.cacheRead ?? 0) + (message.usage?.cacheWrite ?? 0);
+			(message.usage?.input ?? 0) +
+			(message.usage?.output ?? 0) +
+			(message.usage?.cacheRead ?? 0) +
+			(message.usage?.cacheWrite ?? 0);
 	}
 
 	return { input, output, cacheRead, cacheWrite, totalTokens };
 };
 
-const toRelativePath = (filePath: string, baseDir: string): string => {
-	const relative = path.relative(baseDir, filePath);
-	return normalizePath(relative.startsWith("..") ? filePath : relative);
-};
+const isAgentsPath = (absolutePath: string): boolean => path.basename(absolutePath) === "AGENTS.md";
 
-const isSkillPath = (filePath: string): boolean => normalizePath(filePath).endsWith("/SKILL.md");
-
-const isReferencePath = (filePath: string): boolean => {
-	const normalized = normalizePath(filePath);
-	return normalized.includes("/references/") && normalized.endsWith(".md");
-};
-
-const DRY_RUN_SKILL_STUB = [
-	"PI_EVAL_DRY_RUN: SKILL.md content withheld.",
-	"Treat this as a successful skill load for eval purposes.",
-	"Do not retry this read.",
-].join("\n");
-
-const EVAL_SYSTEM_PROMPT = [
-	"Eval mode: focus on skill invocation detection.",
-	"If a skill is relevant, read its SKILL.md once.",
-	"When a SKILL.md read returns a dry-run stub, do not retry.",
-	"Use only the tools provided by the runtime; if a tool is unavailable, proceed without it.",
-].join("\n");
-
-let evalModeRegistered = false;
-let dryRunEnabled = false;
-let globalInstructionsContent: string | null = null;
-
-const setDryRunEnabled = (value: boolean) => {
-	dryRunEnabled = value;
-};
-
-const parseDryRunValue = (input: string | undefined): boolean | null => {
-	if (!input) return null;
-	const normalized = input.trim().toLowerCase();
-	if (["on", "true", "1", "yes"].includes(normalized)) return true;
-	if (["off", "false", "0", "no"].includes(normalized)) return false;
-	return null;
-};
-
-const loadGlobalInstructions = async (): Promise<string> => {
-	if (globalInstructionsContent !== null) {
+const createEvalReadTool = (cwd: string, dryRunEnabled: boolean) => {
+	let globalInstructionsContent: string | null = null;
+	const loadGlobalInstructions = async (): Promise<string> => {
+		if (globalInstructionsContent !== null) {
+			return globalInstructionsContent;
+		}
+		const instructionsPath = process.env.PI_EVAL_GLOBAL_INSTRUCTIONS_PATH;
+		if (!instructionsPath) {
+			globalInstructionsContent = "";
+			return globalInstructionsContent;
+		}
+		try {
+			globalInstructionsContent = await fsReadFile(instructionsPath, "utf-8");
+		} catch {
+			globalInstructionsContent = "";
+		}
 		return globalInstructionsContent;
-	}
-	const instructionsPath = process.env.PI_EVAL_GLOBAL_INSTRUCTIONS_PATH;
-	if (!instructionsPath) {
-		globalInstructionsContent = "";
-		return globalInstructionsContent;
-	}
-	try {
-		globalInstructionsContent = await fsReadFile(instructionsPath, "utf-8");
-	} catch {
-		globalInstructionsContent = "";
-	}
-	return globalInstructionsContent;
-};
+	};
 
-const isAgentsPath = (absolutePath: string): boolean =>
-	path.basename(absolutePath) === "AGENTS.md";
-
-const createEvalReadTool = (cwd: string) => {
 	const base = createReadTool(cwd, {
 		operations: {
 			access: async (absolutePath: string) => {
@@ -164,68 +140,38 @@ const createEvalWriteTool = (cwd: string) => {
 	};
 };
 
-const registerEvalMode = (pi: ExtensionAPI, initialDryRun: boolean) => {
-	if (evalModeRegistered) return;
-	evalModeRegistered = true;
-	setDryRunEnabled(initialDryRun);
-	const cwd = process.cwd();
-	pi.registerTool(createEvalReadTool(cwd));
-	pi.registerTool(createEvalEditTool(cwd));
-	pi.registerTool(createEvalWriteTool(cwd));
-
-	pi.registerCommand("eval-dry-run", {
-		description: "Toggle eval dry-run stub for SKILL.md reads",
-		handler: async (args, ctx) => {
-			const parsed = parseDryRunValue(args);
-			if (parsed === null) {
-				const status = dryRunEnabled ? "on" : "off";
-				if (ctx.hasUI) {
-					ctx.ui.notify(`Eval dry-run is ${status}`, "info");
-				}
-				return;
-			}
-			setDryRunEnabled(parsed);
-			if (ctx.hasUI) {
-				ctx.ui.notify(`Eval dry-run ${parsed ? "enabled" : "disabled"}`, "info");
-			}
-		},
-	});
-
-	pi.on("before_agent_start", async (event) => {
-		return { systemPrompt: `${event.systemPrompt}\n\n${EVAL_SYSTEM_PROMPT}` };
-	});
-};
-
 export const registerEvalWorker = (pi: ExtensionAPI): boolean => {
 	const isWorker = process.env.PI_EVAL_WORKER === "1";
-	const isEvalMode = process.env.PI_EVAL_MODE === "1";
-
-	if (!isWorker && !isEvalMode) {
+	if (!isWorker) {
 		return false;
 	}
 
 	const dryRun = process.env.PI_EVAL_DRY_RUN === "1";
-	registerEvalMode(pi, dryRun);
-
-	if (!isWorker) {
-		return true;
-	}
-
 	const outputPath = process.env.PI_EVAL_OUTPUT;
 	if (!outputPath) {
 		throw new Error("PI_EVAL_OUTPUT is required in worker mode");
 	}
 
+	const cwd = process.cwd();
+	pi.registerTool(createEvalReadTool(cwd, dryRun));
+	pi.registerTool(createEvalEditTool(cwd));
+	pi.registerTool(createEvalWriteTool(cwd));
+
+	pi.on("before_agent_start", async (event) => {
+		return { systemPrompt: `${event.systemPrompt}\n\n${EVAL_SYSTEM_PROMPT}` };
+	});
+
 	const caseId = process.env.PI_EVAL_CASE_ID ?? "unknown";
 	const expectedTurns = Number.parseInt(process.env.PI_EVAL_TURNS ?? "1", 10);
-	const agentDir = process.env.PI_EVAL_AGENT_DIR ?? process.cwd();
+	const agentDir = process.env.PI_EVAL_AGENT_DIR ?? cwd;
 	const startedAt = Date.now();
 
-	const skillAttempts = new Set<string>();
-	const skillInvocations = new Set<string>();
-	const refAttempts = new Set<string>();
-	const refInvocations = new Set<string>();
-	const errors: string[] = [];
+	const readCapture: ReadCapture = {
+		skillAttempts: new Set<string>(),
+		skillInvocations: new Set<string>(),
+		refAttempts: new Set<string>(),
+		refInvocations: new Set<string>(),
+	};
 	const outputChunks: string[] = [];
 	const tokenTotals: TokenUsage = {
 		input: 0,
@@ -243,17 +189,7 @@ export const registerEvalWorker = (pi: ExtensionAPI): boolean => {
 		const rawPath = event.input?.path;
 		if (typeof rawPath !== "string") return undefined;
 		const resolved = path.resolve(ctx.cwd, rawPath);
-		const relPath = toRelativePath(resolved, agentDir);
-
-		if (isSkillPath(resolved)) {
-			const skillName = path.basename(path.dirname(resolved));
-			skillAttempts.add(skillName);
-		}
-
-		if (isReferencePath(resolved)) {
-			refAttempts.add(relPath);
-		}
-
+		captureReadAttempt(resolved, agentDir, readCapture);
 		return undefined;
 	});
 
@@ -262,17 +198,7 @@ export const registerEvalWorker = (pi: ExtensionAPI): boolean => {
 		const rawPath = event.input?.path;
 		if (typeof rawPath !== "string") return undefined;
 		const resolved = path.resolve(ctx.cwd, rawPath);
-		const relPath = toRelativePath(resolved, agentDir);
-
-		if (isSkillPath(resolved)) {
-			const skillName = path.basename(path.dirname(resolved));
-			skillInvocations.add(skillName);
-		}
-
-		if (isReferencePath(resolved)) {
-			refInvocations.add(relPath);
-		}
-
+		captureReadInvocation(resolved, agentDir, readCapture);
 		return undefined;
 	});
 
@@ -292,28 +218,29 @@ export const registerEvalWorker = (pi: ExtensionAPI): boolean => {
 		if (finalized || completedTurns < expectedTurns) return;
 		finalized = true;
 
-		const model: ModelSpec | null = ctx.model
-			? {
-					provider: ctx.model.provider,
-					id: ctx.model.id,
-					key: `${ctx.model.provider}/${ctx.model.id}`,
-					label: `${ctx.model.provider}/${ctx.model.id}`,
-			  }
-			: null;
+			const model: ModelSpec | null = ctx.model
+				? {
+						provider: ctx.model.provider,
+						id: ctx.model.id,
+						key: `${ctx.model.provider}/${ctx.model.id}`,
+						label: `${ctx.model.provider}/${ctx.model.id}`,
+				  }
+				: null;
+			const capturedReads = serializeReadCapture(readCapture);
 
-		const result: CaseRunResult = {
-			caseId,
-			dryRun,
-			model,
-			skillInvocations: Array.from(skillInvocations).sort(),
-			skillAttempts: Array.from(skillAttempts).sort(),
-			refInvocations: Array.from(refInvocations).sort(),
-			refAttempts: Array.from(refAttempts).sort(),
-			outputText: outputChunks.join("\n").trim(),
-			tokens: tokenTotals,
-			durationMs: Date.now() - startedAt,
-			errors,
-		};
+			const result: CaseRunResult = {
+				caseId,
+				dryRun,
+				model,
+				skillInvocations: capturedReads.skillInvocations,
+				skillAttempts: capturedReads.skillAttempts,
+				refInvocations: capturedReads.refInvocations,
+				refAttempts: capturedReads.refAttempts,
+				outputText: outputChunks.join("\n").trim(),
+				tokens: tokenTotals,
+				durationMs: Date.now() - startedAt,
+				errors: [],
+			};
 
 		await ensureDir(path.dirname(outputPath));
 		await writeFile(outputPath, JSON.stringify(result, null, 2));

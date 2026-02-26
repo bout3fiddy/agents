@@ -1,0 +1,155 @@
+#!/bin/bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+EXT_PATH="$ROOT_DIR/skills-evals/pi-eval/index.ts"
+MODELS_FILE_DEFAULT="$ROOT_DIR/skills-evals/fixtures/models.jsonl"
+
+if ! command -v pi >/dev/null 2>&1; then
+	echo "pi is not installed or not on PATH." >&2
+	exit 1
+fi
+
+if [[ "$#" -ne 0 ]]; then
+	echo "run.sh takes no arguments. Configure models in skills-evals/fixtures/models.jsonl." >&2
+	exit 1
+fi
+
+cd "$ROOT_DIR"
+
+if [[ -z "${NO_COLOR:-}" ]]; then
+	export FORCE_COLOR="${FORCE_COLOR:-1}"
+fi
+
+if [[ -z "${PI_EVAL_TABLE_WIDTH:-}" ]]; then
+	if [[ -n "${COLUMNS:-}" ]]; then
+		export PI_EVAL_TABLE_WIDTH="$COLUMNS"
+	elif [[ -t 0 ]] && command -v stty >/dev/null 2>&1; then
+		TABLE_WIDTH="$(stty size </dev/tty 2>/dev/null | awk '{print $2}')"
+		if [[ -n "$TABLE_WIDTH" ]]; then
+			export PI_EVAL_TABLE_WIDTH="$TABLE_WIDTH"
+		fi
+	elif [[ -t 0 ]] && command -v tput >/dev/null 2>&1; then
+		TABLE_WIDTH="$(tput cols 2>/dev/null || true)"
+		if [[ -n "$TABLE_WIDTH" ]]; then
+			export PI_EVAL_TABLE_WIDTH="$TABLE_WIDTH"
+		fi
+	fi
+fi
+
+MODEL_SPECS=()
+MODELS_FILE="${PI_EVAL_MODELS_FILE:-$MODELS_FILE_DEFAULT}"
+THINKING_DEFAULT="${PI_EVAL_THINKING:-low}"
+
+LOG_DIR="${PI_EVAL_LOG_DIR:-$ROOT_DIR/skills-evals/logs}"
+LOG_PATH="${PI_EVAL_LOG:-}"
+LOG_OFF=0
+if [[ "$LOG_PATH" == "off" || "$LOG_PATH" == "0" ]]; then
+	LOG_OFF=1
+fi
+RUN_STAMP="$(date +"%Y-%m-%d_%H-%M-%S")"
+
+safe_model_name() {
+	printf "%s" "$1" | sed -E 's/[^a-zA-Z0-9._-]+/-/g'
+}
+
+load_models() {
+	if [[ ! -f "$MODELS_FILE" ]]; then
+		echo "Models file not found: $MODELS_FILE" >&2
+		exit 1
+	fi
+
+	MODEL_SPECS=()
+	local line_no=0
+	local line model thinking
+	while IFS= read -r line || [[ -n "$line" ]]; do
+		line_no=$((line_no + 1))
+		if [[ -z "${line//[[:space:]]/}" ]]; then
+			continue
+		fi
+		model="$(printf "%s\n" "$line" | sed -nE 's/.*"model"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/p')"
+		if [[ -z "$model" ]]; then
+			echo "Invalid model entry in $MODELS_FILE:$line_no (expected {\"model\":\"provider/model\"})." >&2
+			exit 1
+		fi
+		thinking="$(printf "%s\n" "$line" | sed -nE 's/.*"thinking"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/p')"
+		if [[ -z "$thinking" ]]; then
+			thinking="$THINKING_DEFAULT"
+		fi
+		MODEL_SPECS+=("${model}|${thinking}")
+	done <"$MODELS_FILE"
+
+	if [[ "${#MODEL_SPECS[@]}" -eq 0 ]]; then
+		echo "No models found in $MODELS_FILE" >&2
+		exit 1
+	fi
+}
+
+run_for_model() {
+	local model="$1"
+	local thinking="$2"
+	local prompt="/eval run --thinking $thinking --model $model"
+
+	if ((LOG_OFF == 0)); then
+		local run_log
+		if [[ -n "$LOG_PATH" && "${#MODELS[@]}" -eq 1 ]]; then
+			run_log="$LOG_PATH"
+		else
+			run_log="$LOG_DIR/$RUN_STAMP/$(safe_model_name "$model").log"
+		fi
+		mkdir -p "$(dirname "$run_log")"
+		echo "[$model] Logging to $run_log"
+		pi --no-session --no-extensions -e "$EXT_PATH" -p "$prompt" 2>&1 | tee "$run_log"
+		return
+	fi
+
+	pi --no-session --no-extensions -e "$EXT_PATH" -p "$prompt"
+}
+
+wait_for_pids() {
+	local pid
+	local failed_local=0
+	for pid in "$@"; do
+		if ! wait "$pid"; then
+			failed_local=1
+		fi
+	done
+	return "$failed_local"
+}
+
+load_models
+MAX_PARALLEL="${PI_EVAL_MAX_PARALLEL:-${#MODEL_SPECS[@]}}"
+if ! [[ "$MAX_PARALLEL" =~ ^[0-9]+$ ]] || ((MAX_PARALLEL < 1)); then
+	echo "PI_EVAL_MAX_PARALLEL must be a positive integer." >&2
+	exit 1
+fi
+
+echo "Running ${#MODEL_SPECS[@]} model(s); max parallel=$MAX_PARALLEL"
+echo "Models source: $MODELS_FILE"
+
+failed=0
+PIDS=()
+for spec in "${MODEL_SPECS[@]}"; do
+	model="${spec%%|*}"
+	thinking="${spec#*|}"
+	echo "[$model] Starting (thinking=$thinking)"
+	run_for_model "$model" "$thinking" &
+	PIDS+=("$!")
+	if ((${#PIDS[@]} >= MAX_PARALLEL)); then
+		if ! wait_for_pids "${PIDS[@]}"; then
+			failed=1
+		fi
+		PIDS=()
+	fi
+done
+
+if ((${#PIDS[@]} > 0)); then
+	if ! wait_for_pids "${PIDS[@]}"; then
+		failed=1
+	fi
+fi
+
+if ((failed != 0)); then
+	echo "One or more eval runs failed." >&2
+	exit 1
+fi

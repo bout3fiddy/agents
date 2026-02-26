@@ -11,28 +11,23 @@ export const parseStringFlag = (
 	return value;
 };
 
-export const parseLimitFlag = (value: string | boolean | undefined): number | undefined => {
+const parsePositiveIntFlag = (
+	name: string,
+	value: string | boolean | undefined,
+): number | undefined => {
 	if (value === undefined) return undefined;
 	if (typeof value !== "string") {
-		throw new Error("Flag --limit expects a positive integer value.");
+		throw new Error(`Flag ${name} expects a positive integer value.`);
 	}
 	const parsed = Number(value);
 	if (!Number.isInteger(parsed) || parsed <= 0) {
-		throw new Error("Flag --limit expects a positive integer value.");
+		throw new Error(`Flag ${name} expects a positive integer value.`);
 	}
 	return parsed;
 };
 
-export const parseJobsFlag = (value: string | boolean | undefined): number | undefined => {
-	if (value === undefined) return undefined;
-	if (typeof value !== "string") {
-		throw new Error("Flag --jobs expects a positive integer value.");
-	}
-	const parsed = Number(value);
-	if (!Number.isInteger(parsed) || parsed <= 0) {
-		throw new Error("Flag --jobs expects a positive integer value.");
-	}
-	return parsed;
+export const parseLimitFlag = (value: string | boolean | undefined): number | undefined => {
+	return parsePositiveIntFlag("--limit", value);
 };
 
 export const resolveCasesPath = async (

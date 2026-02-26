@@ -54,14 +54,6 @@ export type TokenUsage = {
 	totalTokens: number;
 };
 
-export type CaseTimings = {
-	spawnToFirstEventMs?: number | null;
-	promptToAgentEndMs?: number[];
-	agentEndToOutputMs?: number | null;
-	shutdownMs?: number | null;
-	totalMs?: number | null;
-};
-
 export type CaseRunResult = {
 	caseId: string;
 	dryRun: boolean;
@@ -75,13 +67,12 @@ export type CaseRunResult = {
 	durationMs: number;
 	errors: string[];
 	workspaceDir?: string | null;
-	timings?: CaseTimings;
 };
 
 export type CaseEvaluation = {
 	caseId: string;
 	suite: string;
-	mode: "single" | "baseline" | "interference";
+	mode: "single";
 	status: "pass" | "fail";
 	reasons: string[];
 	result: CaseRunResult;
@@ -90,11 +81,4 @@ export type CaseEvaluation = {
 	expectedRefs: string[];
 	assertions: string[];
 	tokenBudget?: number | null;
-};
-
-export type MatrixEvaluation = {
-	evalCase: EvalCase;
-	baseline: CaseEvaluation;
-	interference: CaseEvaluation;
-	deltaSummary: string;
 };

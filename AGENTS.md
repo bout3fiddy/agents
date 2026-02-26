@@ -2,18 +2,21 @@
 
 - This repo is the global workflow/template source; prefer changes here over per-repo tweaks.
 - Rollout flow: update `devcontainer/`, run `./devcontainer/install.sh self-install`, then in the target repo remove `.devcontainer`, run `devc install .`, and finally `devc rebuild .`.
-- `./bin/sync.sh --hard` only syncs skills/instructions; it does not update devcontainer templates. Use `./devcontainer/install.sh self-install` + `devc install .` to propagate template changes.
+- `./bin/sync.sh` only syncs skills/instructions; it does not update devcontainer templates. Use `./devcontainer/install.sh self-install` + `devc install .` to propagate template changes.
 - Devcontainer post-install ensures `ruff`, `pytest`, `mypy`, `prek`, and `takopi` are installed via `uv tool install` using Python 3.14 (takopi uses `-U`).
 - Devcontainer bind-mounts host config dirs (currently `~/.claude`, `~/.codex`, `~/.takopi`) into `/home/node`.
 - Only run `uv run prek run --all-files` when changes include code (source/tests) or executable build/lint/tooling config. Skip `prek` for docs/planning-only edits (for example `docs/specs/**`, prose docs, or AGENTS/CLAUDE instruction updates) unless explicitly requested.
 - `devc install` injects `node_modules` mounts by reading workspace globs from root `package.json` and/or `pnpm-workspace.yaml`; repos without workspaces won't get extra directories created.
 - Devcontainer bun installs now scan workspace globs (package.json workspaces / pnpm-workspace) instead of assuming `apps/` or `packages/`.
 - Devcontainer sets `UV_PROJECT_ENVIRONMENT` to `/home/node/.venv` and mounts the venv volume there to keep it out of the repo.
-- `bin/build-agents-index.sh` auto-generates the skills index block in `instructions/global.md`; it runs during `bin/sync.sh` (soft) and `bin/sync.sh --hard`.
+- `python3 skills/skill-creator/scripts/build_agents_index.py` auto-generates the skills index block in `instructions/global.md`; run it manually when you want to refresh the index.
 - Skill validation in this repo uses the `agentskills` executable from `skills-ref` (`uvx --from skills-ref agentskills validate skills/<name>`).
-- `bin/sync.sh` syncs skills/instructions across `~/.agents` and `~/.claude` by default; set `PI_DIR` explicitly for legacy Pi targets.
-- `bin/sync.sh` runs `bin/pi-eval-gate.py` by default but treats failures as warnings unless strict mode is enabled (`--strict-eval-gate` or `PI_EVAL_GATE_STRICT=1`).
-- Eval specs live in `skills-evals/specs/pi-eval/` with a mirror in `docs/specs/pi-eval/` (keep both in sync).
+- In-house TypeScript port of `agentskills validate` lives at `skills-evals/validate/` (`bun run skills-evals/validate/index.ts validate skills/<name>`).
+- `bin/sync.sh` always hard-syncs this repo into `~/.agents` only.
+- `bin/sync.sh` does not run sync-time gates; it only syncs files.
+- Eval cases source of truth is `skills-evals/fixtures/eval-cases.jsonl`; reports mirror to `docs/specs/pi-eval/reports/`.
+- Guardrail: when evals fail on skill/ref/global-instruction behavior, improve `skills/`, `skills/*/references/`, and `instructions/global.md` first; do not weaken eval expectations just to pass.
+- Canonical eval wrapper is `skills-evals/bin/pi-eval.sh`.
 - `DEVC_DISABLE_MCP_SERVERS` in `devcontainer/devcontainer.json` can disable MCP startup in containers (comma/space/semi-colon separated list); use it to skip auth-heavy servers (e.g. `sentry` and/or `linear`) on non-interactive session starts.
-- Third-party skill installers may land content in `~/.agents/skills/<name>`; to vendor into this repo, copy into `skills/<name>/`, ensure progressive disclosure (`SKILL.md` + `references/`), then run `./bin/build-agents-index.sh`.
+- Third-party skill installers may land content in `~/.agents/skills/<name>`; to vendor into this repo, copy into `skills/<name>/`, ensure progressive disclosure (`SKILL.md` + `references/`), then run `python3 skills/skill-creator/scripts/build_agents_index.py`.
 - Global policy now requires AGENTS docs to be curated and progressive-disclosure based (concise root router + scoped/nested AGENTS + deep docs), and to migrate legacy monolithic AGENTS files instead of appending indefinitely.

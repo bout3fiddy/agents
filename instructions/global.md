@@ -109,7 +109,7 @@ skill|coding|Core engineering rules for implementation, refactors, bug fixes, SQ
 skill|design|Frontend design curation skill for UI critique, motion storyboarding, and DialKit tuning. Use when the user asks for interface feedback, animation sequencing, or interactive design-control setup.|skills/design/SKILL.md
 skill|housekeeping|Repository housekeeping workflows for AGENTS/CLAUDE architecture, progressive disclosure, and migration of legacy monolithic instruction files.|skills/housekeeping/SKILL.md
 skill|planning|Planning workflows for clarifying underspecified work, spec-driven delivery, and Linear-backed tracking.|skills/planning/SKILL.md
-skill|skill-creator|Create, update, or install skills (including planning/specs and edits to skills/*) using our repo workflow (uv + skills-ref validation, lean SKILL.md, references/ for detail, and sync via bin/sync.sh [--hard]).|skills/skill-creator/SKILL.md
+skill|skill-creator|Create, update, or install skills (including planning/specs and edits to skills/*) using our repo workflow (uv + skills-ref validation, lean SKILL.md, references/ for detail, and sync via bin/sync.sh).|skills/skill-creator/SKILL.md
 trigger|coding|Auth/secrets/credentials|skills/coding/references/secrets-and-auth-guardrails.md
 trigger|coding|Code smell/refactoring opportunity/maintainability/quality review|skills/coding/references/code-smells/smells/index.md
 trigger|coding|Infra/platform/ops/deploy/secrets/storage|skills/coding/references/platform-engineering/index.md

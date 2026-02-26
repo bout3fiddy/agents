@@ -3,69 +3,75 @@ NOTICE: This is auto-generated on each run of the evals framework. Do not edit t
 # Pi Eval Report
 
 - Model: openai-codex/gpt-5.3-codex
-- Commit: cdc1459
-- Cases path: skills-evals/specs/pi-eval/evals.md
-- Run: 2026-02-23T15:34:36.070Z
-- Run scope: full
-- Cases executed: 49 (49 rows)
-- Case rows: 49 (pass 49, fail 0, skip 0)
-- Cases in spec: 49
-- Duration: 20m 2s
-- Token stats (this run): max 96033, median 11990, p95 31602
+- Commit: 3cf8f48
+- Cases path: skills-evals/fixtures/eval-cases.jsonl
+- Run: 2026-02-26T12:47:56.051Z
+- Run scope: partial (filter=CD-006)
+- Cases executed: 1 (1 rows)
+- Case rows: 56 (pass 55, fail 1, skip 0)
+- Cases in spec: 56
+- Duration: 4.6s
+- Token stats (this run): max 1117, median 1117, p95 1117
 
 ## Case Results
 | Case | Mode | Status | Tokens | Notes | Run |
 | --- | --- | --- | --- | --- | --- |
-| CD-001 | single | PASS | 3001 |  | 2026-02-23 |
-| CD-002 | single | PASS | 5185 |  | 2026-02-23 |
-| CD-003 | single | PASS | 1350 |  | 2026-02-23 |
-| CD-004 | single | PASS | 11990 |  | 2026-02-23 |
-| CD-006 | single | PASS | 2516 |  | 2026-02-23 |
-| CD-007 | single | PASS | 14681 |  | 2026-02-23 |
-| CD-008 | single | PASS | 16370 |  | 2026-02-23 |
-| CD-009 | single | PASS | 12056 |  | 2026-02-23 |
-| CD-010 | single | PASS | 11998 |  | 2026-02-23 |
-| CD-011 | single | PASS | 15639 |  | 2026-02-23 |
-| CD-012 | single | PASS | 11860 |  | 2026-02-23 |
-| PL-001 | single | PASS | 2869 |  | 2026-02-23 |
-| PL-002 | single | PASS | 3680 |  | 2026-02-23 |
-| PL-003 | single | PASS | 5059 |  | 2026-02-23 |
-| PL-004 | single | PASS | 8271 |  | 2026-02-23 |
-| PL-005 | single | PASS | 16353 |  | 2026-02-23 |
-| PL-006 | single | PASS | 11975 |  | 2026-02-23 |
-| R-CD-AUTH-001 | single | PASS | 9270 |  | 2026-02-23 |
-| R-CD-BUN-001 | single | PASS | 12272 |  | 2026-02-23 |
-| R-CD-INF-001 | single | PASS | 15204 |  | 2026-02-23 |
-| R-CD-PR-001 | single | PASS | 15661 |  | 2026-02-23 |
-| R-CD-REACT-001 | single | PASS | 96033 |  | 2026-02-23 |
-| R-CD-REFAC-001 | single | PASS | 18945 |  | 2026-02-23 |
-| R-CD-REFAC-002 | single | PASS | 12045 |  | 2026-02-23 |
-| R-CD-REFAC-003 | single | PASS | 10284 |  | 2026-02-23 |
-| R-CD-REFAC-004 | single | PASS | 15529 |  | 2026-02-23 |
-| R-CD-REFAC-005 | single | PASS | 29334 |  | 2026-02-23 |
-| R-CD-SMELL-001 | single | PASS | 14360 |  | 2026-02-23 |
-| R-CD-SMELL-002 | single | PASS | 15875 |  | 2026-02-23 |
-| R-CD-SMELL-003 | single | PASS | 15275 |  | 2026-02-23 |
-| R-CD-SMELL-004 | single | PASS | 27274 |  | 2026-02-23 |
-| R-CD-SOLID-001 | single | PASS | 30244 |  | 2026-02-23 |
-| R-CD-TAIL-001 | single | PASS | 16439 |  | 2026-02-23 |
-| R-CD-UI-001 | single | PASS | 10277 |  | 2026-02-23 |
-| R-PL-ASK-001 | single | PASS | 5984 |  | 2026-02-23 |
-| R-PL-LINEAR-001 | single | PASS | 6537 |  | 2026-02-23 |
-| R-PL-SPEC-001 | single | PASS | 11385 |  | 2026-02-23 |
-| R-SC-CHECK-001 | single | PASS | 16962 |  | 2026-02-23 |
-| R-SC-RULES-001 | single | PASS | 29002 |  | 2026-02-23 |
-| R-SC-SKEL-001 | single | PASS | 76951 |  | 2026-02-23 |
-| SC-001 | single | PASS | 7514 |  | 2026-02-23 |
-| SC-002 | single | PASS | 6978 |  | 2026-02-23 |
-| SC-003 | single | PASS | 2843 |  | 2026-02-23 |
-| SC-004 | single | PASS | 4859 |  | 2026-02-23 |
-| SC-005 | single | PASS | 10018 |  | 2026-02-23 |
-| SC-006 | single | PASS | 31602 |  | 2026-02-23 |
-| TE-001 | single | PASS | 9166 |  | 2026-02-23 |
-| TE-002 | single | PASS | 3206 |  | 2026-02-23 |
-| TE-003 | single | PASS | 3240 |  | 2026-02-23 |
-
+| CD-001 | single | PASS | 2918 |  | 2026-02-26 |
+| CD-002 | single | PASS | 4801 |  | 2026-02-26 |
+| CD-003 | single | PASS | 1261 |  | 2026-02-26 |
+| CD-004 | single | PASS | 8411 |  | 2026-02-26 |
+| CD-006 | single | FAIL | 1117 | missing skill: coding | 2026-02-26 |
+| CD-007 | single | PASS | 4022 |  | 2026-02-26 |
+| CD-008 | single | PASS | 9131 |  | 2026-02-26 |
+| CD-009 | single | PASS | 8539 |  | 2026-02-26 |
+| CD-010 | single | PASS | 12041 |  | 2026-02-26 |
+| CD-011 | single | PASS | 5628 |  | 2026-02-26 |
+| CD-012 | single | PASS | 10942 |  | 2026-02-26 |
+| DS-001 | single | PASS | 2889 |  | 2026-02-26 |
+| HK-001 | single | PASS | 5137 |  | 2026-02-26 |
+| PL-001 | single | PASS | 2709 |  | 2026-02-26 |
+| PL-002 | single | PASS | 3449 |  | 2026-02-26 |
+| PL-003 | single | PASS | 7190 |  | 2026-02-26 |
+| PL-004 | single | PASS | 11846 |  | 2026-02-26 |
+| PL-005 | single | PASS | 10434 |  | 2026-02-26 |
+| PL-006 | single | PASS | 5577 |  | 2026-02-26 |
+| R-CD-AUTH-001 | single | PASS | 9013 |  | 2026-02-26 |
+| R-CD-BUN-001 | single | PASS | 10629 |  | 2026-02-26 |
+| R-CD-INF-001 | single | PASS | 15104 |  | 2026-02-26 |
+| R-CD-PR-001 | single | PASS | 21033 |  | 2026-02-26 |
+| R-CD-REACT-001 | single | PASS | 50798 |  | 2026-02-26 |
+| R-CD-REFAC-001 | single | PASS | 14810 |  | 2026-02-26 |
+| R-CD-REFAC-002 | single | PASS | 12824 |  | 2026-02-26 |
+| R-CD-REFAC-003 | single | PASS | 13107 |  | 2026-02-26 |
+| R-CD-REFAC-004 | single | PASS | 22396 |  | 2026-02-26 |
+| R-CD-REFAC-005 | single | PASS | 28588 |  | 2026-02-26 |
+| R-CD-SMELL-001 | single | PASS | 10554 |  | 2026-02-26 |
+| R-CD-SMELL-002 | single | PASS | 14736 |  | 2026-02-26 |
+| R-CD-SMELL-003 | single | PASS | 11697 |  | 2026-02-26 |
+| R-CD-SMELL-004 | single | PASS | 10563 |  | 2026-02-26 |
+| R-CD-SOLID-001 | single | PASS | 20116 |  | 2026-02-26 |
+| R-CD-TAIL-001 | single | PASS | 16522 |  | 2026-02-26 |
+| R-CD-UI-001 | single | PASS | 10071 |  | 2026-02-26 |
+| R-DS-ANIM-001 | single | PASS | 7073 |  | 2026-02-26 |
+| R-DS-CRIT-001 | single | PASS | 7410 |  | 2026-02-26 |
+| R-DS-DIAL-001 | single | PASS | 10961 |  | 2026-02-26 |
+| R-HK-ARCH-001 | single | PASS | 5892 |  | 2026-02-26 |
+| R-HK-MIG-001 | single | PASS | 6628 |  | 2026-02-26 |
+| R-PL-ASK-001 | single | PASS | 5831 |  | 2026-02-26 |
+| R-PL-LINEAR-001 | single | PASS | 6576 |  | 2026-02-26 |
+| R-PL-SPEC-001 | single | PASS | 6258 |  | 2026-02-26 |
+| R-SC-CHECK-001 | single | PASS | 6542 |  | 2026-02-26 |
+| R-SC-RULES-001 | single | PASS | 20666 |  | 2026-02-26 |
+| R-SC-SKEL-001 | single | PASS | 35830 |  | 2026-02-26 |
+| SC-001 | single | PASS | 45984 |  | 2026-02-26 |
+| SC-002 | single | PASS | 8496 |  | 2026-02-26 |
+| SC-003 | single | PASS | 4896 |  | 2026-02-26 |
+| SC-004 | single | PASS | 4782 |  | 2026-02-26 |
+| SC-005 | single | PASS | 8862 |  | 2026-02-26 |
+| SC-006 | single | PASS | 43588 |  | 2026-02-26 |
+| TE-001 | single | PASS | 6622 |  | 2026-02-26 |
+| TE-002 | single | PASS | 3200 |  | 2026-02-26 |
+| TE-003 | single | PASS | 3176 |  | 2026-02-26 |
 
 ## Failures
-All cases passed.
+- **CD-006** (single): missing skill: coding
