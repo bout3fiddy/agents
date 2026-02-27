@@ -30,7 +30,7 @@
 - Keep `AGENTS.md` curated, not append-only: deduplicate, remove stale/conflicting notes, and collapse near-duplicate guidance when you touch related areas.
 - Use progressive disclosure architecture for agent docs: root `AGENTS.md` should stay concise (critical guardrails, task routing, canonical commands) and link to deeper docs for detailed/volatile content.
 - Prefer scoped context over global sprawl: add nested `AGENTS.md` files in major subtrees (for example `apps/frontend`, `infra`, `apps/agent`) when domain guidance is dense.
-- For AGENTS/CLAUDE architecture work (progressive disclosure, monolith cleanup, contradiction pruning), explicitly invoke the `housekeeping` skill and its references.
+- For AGENTS architecture work (progressive disclosure, monolith cleanup, contradiction pruning), explicitly invoke the `housekeeping` skill and its references.
 - If an existing `AGENTS.md` is a legacy monolith (for example very long, mixed-domain flat lists, or contradictory bullets), migrate it to the progressive-disclosure model while preserving behavior guidance.
 - Legacy migration action: move deep or volatile details into `.agents/repo-context/*`, add/refresh nested `AGENTS.md` for domain-specific instructions, and rewrite root `AGENTS.md` as a concise router.
 - For volatile operational facts, include freshness metadata when feasible (`owner`, `last_verified`, and/or date) so stale notes can be pruned safely.
