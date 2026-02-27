@@ -11,7 +11,7 @@
 - For edits under `skills/` or `SKILL.md`, **read `skills/skill-creator/SKILL.md` before responding** and do not open `coding`.
 - When editing another skill’s `SKILL.md`, ask the user to paste the relevant section instead of reading the file directly.
 - When the user asks for a plan/spec, open `skills/planning/SKILL.md` before drafting.
-- When refactoring is driven by a review work package folder (`docs/review/workpackages_<name>_<date>/`) or a continuation prompt, open `skills/coding/SKILL.md` and then `skills/coding/references/refactoring/index.md`.
+- When execution is driven by a work package folder (`docs/workpackages/<task_type>_<name>_<date>/`) or a continuation prompt, open `skills/coding/SKILL.md`; for `refactor`/`review` task types also open `skills/coding/references/refactoring/index.md`.
 
 ## Quality gates
 - If `.pre-commit-config.yaml` exists and you made code changes (source, tests, or executable build/lint/tooling config), run: `uv run prek run --all-files` (runs repo-defined hooks like ruff/ruff-format; it may modify files, so re-run and re-stage until clean). Skip `prek` for docs/planning-only changes (for example `docs/specs/**`, prose docs, and AGENTS/CLAUDE instruction edits) unless explicitly requested.
@@ -30,6 +30,7 @@
 - Keep `AGENTS.md` curated, not append-only: deduplicate, remove stale/conflicting notes, and collapse near-duplicate guidance when you touch related areas.
 - Use progressive disclosure architecture for agent docs: root `AGENTS.md` should stay concise (critical guardrails, task routing, canonical commands) and link to deeper docs for detailed/volatile content.
 - Prefer scoped context over global sprawl: add nested `AGENTS.md` files in major subtrees (for example `apps/frontend`, `infra`, `apps/agent`) when domain guidance is dense.
+- For AGENTS/CLAUDE architecture work (progressive disclosure, monolith cleanup, contradiction pruning), explicitly invoke the `housekeeping` skill and its references.
 - If an existing `AGENTS.md` is a legacy monolith (for example very long, mixed-domain flat lists, or contradictory bullets), migrate it to the progressive-disclosure model while preserving behavior guidance.
 - Legacy migration action: move deep or volatile details into `.agents/repo-context/*`, add/refresh nested `AGENTS.md` for domain-specific instructions, and rewrite root `AGENTS.md` as a concise router.
 - For volatile operational facts, include freshness metadata when feasible (`owner`, `last_verified`, and/or date) so stale notes can be pruned safely.
@@ -40,72 +41,71 @@
 - Run safe, routine commands by default. Only ask the user when a command is destructive, touches secrets, or needs explicit approval.
 - For routine diagnostics, run the command yourself; only ask the user when blocked by permissions or environment limits, and explain why.
 
-## Implementation code-smell guardrails
+## Code-smell and refactoring guardrails
 - For any code-writing task (not only explicit smell reviews), run a quick design check for these high-risk smells before finalizing changes: Speculative Generality (premature generalization), legacy compatibility aliases/shims, and fallback-first behavior.
 - Default to a single canonical implementation path and hard cutovers; do not add compatibility aliases, dual paths, or runtime fallback chains unless the user explicitly asks for that migration risk profile.
 - If a compatibility/fallback exception is explicitly approved, record owner, removal date, tracking issue/link, and validation plan in the same change.
 - If a required dependency or CLI is missing, fail fast with a clear setup/install error instead of silently cascading through alternate tools or runtimes.
 - Open and apply `skills/coding/references/code-smells/smells/speculative-generality.md` and `skills/coding/references/code-smells/smells/codex-code-smell.md` whenever this guardrail is in scope.
+- For work-package-driven refactoring execution, open and apply `skills/coding/SKILL.md` + `skills/coding/references/refactoring/index.md`.
+- When users ask for smell/refactoring reviews, run a diagnostic first (no auto-refactor), classify findings with canonical smell labels, include severity + concrete evidence, and provide refactoring options.
+- Open and apply `skills/coding/SKILL.md` + `skills/coding/references/code-smells/smells/index.md` for smell classification.
+- Implement refactors only when the user explicitly asks for code changes.
 
 ## Linear task completion
-- Treat Linear work as a lifecycle state machine, not a one-off update. Default semantic flow is `Unrefined -> Backlog -> In Progress -> In Review -> Completed`, then map those semantics to the team's actual Linear statuses before writing.
-- If work starts from `Backlog`/refined queue, move the issue to `In Progress` before implementation begins. If follow-up work happens after review, move it back to `In Progress` before making changes.
-- Move to `In Review` only when implementation is done and validation evidence is ready. Move to `Completed` only when the work is in production (or the user explicitly confirms production completion criteria).
-- Before closing your turn, add a PM-style comment to the issue that includes: work summary and acceptance criteria covered, validation/tests run (or why skipped), remaining follow-ups/caveats, and next owner + target state.
-- If you cannot transition the issue (permissions, missing sign-off, missing deployment), leave a blocker comment with the current state, required next state, and exact owner who must act.
-
-## PM lifecycle guardrails
-- Treat every planning or Linear-facing request as a PM handoff: read current status, decide the next lifecycle state, apply transition, verify the update, and comment.
-- Always narrate lifecycle intent in Linear comments (why this state now, what proves exit criteria, and what must happen next).
-- Use `skills/planning/references/linear-mcp-ops.md` for the operational checklist (state mapping, transition triggers, and comment templates).
+- Treat Linear work as operation-based (`create`, `refine`, `transition`, `status/report`, `comment-only`) rather than a single transition-only path.
+- For refinement work, investigate first (issue context plus codebase evidence), then update the issue description with concrete implementation guidance (`what`, `where`, `why`, `how`, acceptance criteria, and validation plan).
+- For refinement work, default to description updates and avoid comments unless explicitly requested by the user or required to record a blocker.
+- For transition work, map lifecycle semantics to team statuses, apply the status write, and verify by reading back the issue.
+- Move to `Completed` only when production completion is confirmed by deployment evidence or explicit user confirmation.
+- If a required write cannot be completed, leave a blocker note with current state, required next state, and explicit owner.
 
 ## Planning & Linear triggers
 - Planning work, specs, or anything that touches Linear tickets must use the planning skill and `skills/planning/references/linear-mcp-ops.md`.
-- When this trigger fires, explicitly record whether each issue is being created, refined, transitioned, or commented, and include issue IDs in the response.
+- Treat every planning or Linear-facing request as a PM operation handoff: first classify intent as `create`, `refine`, `transition`, `status/report`, or `comment-only`, then run the matching workflow.
+- Linear refinement prompts (`refine`, `scope this`, `investigate and refine`, `make this ticket actionable`, or equivalent intent) must execute the `refine` workflow, not a comment-first workflow.
+- For `refine` requests, run an investigation-first workflow before writing to Linear: read issue details, inspect the codebase to identify likely root cause/scope/files, and then update the issue description with concrete implementation guidance (`what`, `where`, `why`, `how`, acceptance criteria, and validation plan).
+- For `refine` requests, prefer updating the issue description over adding comments. Do not add Linear comments unless the user explicitly asks for comments or the refinement is blocked and a blocker note is required.
+- For `transition` requests, apply lifecycle transitions with verification and lifecycle rationale appropriate to the target state.
+- Use `skills/planning/references/linear-mcp-ops.md` for the operational checklist and operation-specific templates.
+- When this trigger fires, explicitly record whether each issue was created, refined, transitioned, commented, or left unchanged, and include issue IDs in the response.
+- For each refined issue, include a concise evidence trace in the response (for example: inspected modules/files and why they support the refinement) so refinement quality is auditable.
 
-## Refactoring work package standard
-- Refactoring work packages must be created in `docs/review/workpackages_<name>_<date>/`.
+## Work package standard
+- Work packages must be created in `docs/workpackages/<task_type>_<name>_<date>/`.
+- The folder name must include a task type prefix (`<task_type>`), for example `refactor`, `review`, `bugfix`, `migration`, or `feature`.
 - Each work package folder can contain multiple markdown docs (`*.md`); execution prompts may point to the folder root.
+- Creating a work package also requires creating or updating a linked Linear issue as a refined task (detailed scope, acceptance criteria, implementation guidance, validation plan), not a placeholder.
+- The linked Linear issue must be correctly routed and attributed: set the best matching project, apply task-type labels, set owner/assignee when available, and include the work package path in the description.
 - `overview.md` is required in each work package folder and is the canonical progress summary file.
 - `overview.md` must contain a rollup for every `WP-*` item (status, last-updated date, proof/validation pointer, and next action) so agents can assess state without opening every file.
-- Each work package must embed the standard execution directive block at the top, using `skills/coding/references/refactoring/workpackage-execution-directive.md`.
-- Work package metadata and each `WP-*` section must include `Skill references to invoke` as concrete files to open first (not only skill names); include coding and code-smell references by default.
-- Each `WP-*` recommendation must include rationale traceability: applicable coding rule IDs, targeted smell mitigation (or explicit none), and reference file paths.
+- `overview.md` should include the linked Linear issue ID/URL for traceability.
+- Each work package must embed an execution directive block at the top; for `refactor`/`review` task types, use `skills/coding/references/refactoring/workpackage-execution-directive.md`.
+- Work package metadata and each `WP-*` section must include `Skill references to invoke` as concrete files to open first (not only skill names), selected by task type.
+- Each `WP-*` recommendation must include rationale traceability with applicable rule IDs and reference file paths; include smell mitigation when relevant.
 - Every `WP-*` title must carry a status line: `[Status: Todo]`, `[Status: In Progress YYYY-MM-DD]`, or `[Status: Done YYYY-MM-DD]`.
 - For each completed `WP-*`, append `Implementation status (YYYY-MM-DD)`, `Why this works`, `Proof / validation`, and `How to test`.
+- When the user asks to start a work package, move the linked Linear issue to `In Progress` before implementation begins.
+- When the user asks to mark work package execution done, move the linked Linear issue to `In Review` with validation evidence captured in the issue description.
 - Treat repeated execution prompts as continuation signals; continue from the first non-done item unless staging release is already complete.
 - Standard directive command:
 ```text
-start implementing fixes per work package: docs/review/workpackages_<name>_<date>/
+start implementing work package: docs/workpackages/<task_type>_<name>_<date>/
 ```
 
 ## PR review bot loop
 - When asked to iteratively fix PR review feedback, run this loop for the specified PR.
+- Treat these phrases as explicit triggers for this loop: `gh pr review`, `github pr review`, `run pr review loop`, `fix pr review comments`, `iterate on PR feedback`.
 - Step 1: Fetch latest review + issue comments.
 - Step 2: For each new review/issue comment, classify whether it is a true positive.
 - Step 3: Only for true positives, fix actionable items, run relevant tests, then commit and push.
 - Step 4: Always respond to each GitHub comment in both cases: if true positive, reply with what was fixed; if false positive, reply with why no code change is needed.
 - Step 5: Check GitHub CI for the PR head commit and ensure all required checks/actions are passing.
 - Step 6: If any required CI check/action is failing, fix the issue, run relevant tests, commit/push, and respond on the PR with what changed.
-- Step 7: Sleep for 13 minutes (`sleep 780`) to allow review bots to post new findings.
+- Step 7: Sleep for 13 minutes (`sleep 780`) to allow review bots to post new findings. Then check whether any code-review bots are still in progress; if yes, wait in 1-minute increments (`sleep 60`) and poll again until all review bots finish.
 - Step 8: Fetch comments again and compare against the previous snapshot.
 - Step 9: If there are no new actionable comments and all required CI checks/actions are passing, create a staging release and stop.
 - Step 10: If there are new actionable comments or required CI checks/actions are not passing, repeat from Step 2.
-
-## Refactoring and code-smell review requests
-- For work-package-driven refactoring execution, open and apply `skills/coding/SKILL.md` + `skills/coding/references/refactoring/index.md`.
-- When users ask to check specific code for smells, refactoring opportunities, or quality concerns, perform a diagnostic review first (do not auto-refactor).
-- Open and apply `skills/coding/SKILL.md` + `skills/coding/references/code-smells/smells/index.md` for smell classification and recommendations.
-- Report findings with canonical smell labels, severity, concrete evidence, and suggested refactoring options.
-- Only implement refactors when the user explicitly asks for code changes.
-
-## Skills list (manual)
-- coding - core engineering rules for implementation, SQL, docs/config edits, technical guidance, and integrated refactoring/code-smell workflows via coding references. refs: `skills/coding/SKILL.md`, `skills/coding/references/refactoring/index.md`, `skills/coding/references/code-smells/smells/index.md`
-- database-migrations - safe planning and execution of schema/data migrations. refs: skills/database-migrations/references/migration-checklist.md
-- housekeeping - repository housekeeping for AGENTS/CLAUDE architecture, progressive disclosure, and legacy monolith migration. refs: skills/housekeeping/references/agents-architecture.md, skills/housekeeping/references/migration-playbook.md
-- planning - clarify scope, spec-first delivery, and Linear tracking. refs: clarifying questions, spec workflow, Linear ops
-- seo - SEO strategy and execution, including programmatic SEO at scale and SEO audits/diagnostics. refs: skills/seo/references/programmatic-seo.md, skills/seo/references/seo-audit.md
-- skill-creator - create/update/install skills (including planning/specs and edits to skills/*) workflow. refs: checklist + templates
 
 ## Skills index (auto-generated)
 - Pipe-delimited index built from `skills/*/SKILL.md` + `skills/*/references/*.md` during sync.
