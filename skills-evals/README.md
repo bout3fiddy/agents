@@ -38,8 +38,11 @@ Wrapper commands (from repo root):
   - Shared sandboxing is enabled by default; set `PI_EVAL_SHARED_CASE_SANDBOX=0` to disable it.
   - With it enabled, sandbox-safe cases are batched by `suite` and executed in suite-specific shared workspaces.
   - Cases inside each suite batch can run in parallel with `PI_EVAL_BATCH_CASE_PARALLELISM` (defaults to `PI_EVAL_CASE_PARALLELISM`).
-  - Set `PI_EVAL_SHARED_CASE_MUTABLE_PATHS` (comma-separated) to define writable case overlays (default: `skills-evals/fixtures`).
+  - Plan-level parallelism is auto-bounded to keep total concurrent cases near `PI_EVAL_CASE_PARALLELISM` (avoids over-subscribing sync/bootstrap work).
+  - Set `PI_EVAL_SHARED_CASE_MUTABLE_PATHS` (comma-separated) to define writable case overlays (default: `skills-evals/fixtures,instructions`).
   - Any paths outside mutable overlays are read via the shared workspace, so writes there can contaminate across cases; keep overlays covering all mutable targets.
+- Worker routing hint:
+  - Runner passes `PI_EVAL_SKILL_PATHS` to worker mode so the worker can enforce concise, deterministic skill-onboarding hints during each case.
 
 Direct invocation:
 
@@ -76,6 +79,7 @@ Sandbox model:
 Scoring model:
 
 - Checks expected/disallowed skills.
+- Skill expectations are satisfied either by direct `SKILL.md` reads or by routed reference reads under `skills/<name>/references/` (skill inferred from path).
 - Checks expected references.
 - Runs text assertions and file assertions.
 - Enforces optional token budgets.

@@ -76,7 +76,7 @@ bun --watch run server.ts      # Restart on changes
 bunx <package>                 # Execute without installing
 bunx playwright test
 bunx tsc --noEmit
-bunx create-react-app my-app
+bunx create-solid@latest my-app
 ```
 
 ### Testing

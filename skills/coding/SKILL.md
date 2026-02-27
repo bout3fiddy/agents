@@ -1,272 +1,139 @@
 ---
-
 name: coding
-description: Core engineering rules for implementation, refactors, bug fixes, SQL, docs/config edits, commands, and technical guidance, with indexed references for specialized workflows.
+description: Core engineering skill for implementation, bug fixes, refactors, and technical reviews with mandatory smell guardrails and targeted domain reference routing.
 metadata:
   id: coding.core
   version: "1"
   task_types:
+    - coding
     - implementation
-    - refactor
     - bugfix
+    - refactor
+    - code-review
     - technical-guidance
-    - coding
+    - platform
+    - solidjs
   trigger_phrases:
-    - implementation request
-    - refactor request
-    - bug fix
+    - implement
+    - fix bug
+    - refactor
     - code review
-    - build failure
-    - SQL
-    - test failure
-    - technical guidance
-    - docs/config edits
-    - coding
+    - code smell
+    - quality review
+    - solidjs
+    - infrastructure
+    - platform engineering
+    - deploy
+    - secrets
+    - pull request
+    - ci failure
   priority: 80
   load_strategy: progressive
-  operation_contracts:
-    implementation:
-      required_steps:
-        - identify target files
-        - implement minimal scoped changes
-        - validate with tests or checks
-      required_output_fields:
-        - what
-        - where
-        - why
-        - how
-      forbidden_actions:
-        - batch_unverified_changes
-    review_ci:
-      required_steps:
-        - identify failing checks
-        - map failures to concrete fixes
-        - validate each fix
-      required_output_fields:
-        - validation
-        - status
-        - risk
-      forbidden_actions:
-        - ignore_failing_ci
-    refactoring_workpackage_execute:
-      required_steps:
-        - follow work package flow
-        - execute WP items in order
-        - update overview status and evidence
-      required_output_fields:
-        - summary
-        - proof
-        - next_action
-      forbidden_actions:
-        - mark_done_without_update
-    security_auth:
-      required_steps:
-        - confirm operation scope
-        - apply safe-by-default guardrails
-        - avoid exposing secrets
-      required_output_fields:
-        - scope
-        - controls
-        - verification
-      forbidden_actions:
-        - print_secrets
-    smell_diagnostic:
-      required_steps:
-        - identify code smell indicators
-        - map to concrete remediation path
-      required_output_fields:
-        - findings
-        - priority
-        - mitigation
-      forbidden_actions:
-        - defer_safety_issues
   activation_policy: both
   workflow_triggers:
     - implementation_request_detected
-    - refactor_request_detected
     - bugfix_request_detected
-
+    - refactor_request_detected
+    - code_review_requested
+    - platform_request_detected
+  operation_contracts:
+    implementation:
+      required_steps:
+        - load_smell_baseline
+        - choose_targeted_smell_refs
+        - choose_domain_refs
+        - implement_minimal_change
+        - validate_changed_behavior
+      required_output_fields:
+        - summary
+        - files_changed
+        - validations
+        - risks_or_followups
+      forbidden_actions:
+        - fallback_first_compat_shims
+        - unrelated_refactors
+    smell_review:
+      required_steps:
+        - load_smell_catalog
+        - classify_findings
+        - provide_evidence
+        - propose_refactors_without_editing
+      required_output_fields:
+        - smell_labels
+        - severity
+        - evidence
+        - refactor_options
+      forbidden_actions:
+        - auto_refactor_without_request
+    pr_review_fix_loop:
+      required_steps:
+        - load_pr_review_workflow
+        - classify_comments
+        - fix_true_positives
+        - respond_to_each_comment
+        - check_required_ci
+      required_output_fields:
+        - true_positive_decisions
+        - fixes_applied
+        - ci_status
+        - unresolved_items
+      forbidden_actions:
+        - skip_comment_responses
 ---
 
+# Coding (Implementation + Review)
 
+Use this skill when the primary intent is implementation, bug fixing, refactoring, code-quality review, or technical guidance for repository code changes.
 
-# Coding (Core + Indexed References)
+## Scope and routing
+- Use this skill for code edits, code-quality reviews, PR feedback loops, and infra/platform implementation tasks.
+- If the request is planning/spec/lifecycle management, hand off to `planning`.
+- If the request is AGENTS architecture housekeeping, hand off to `housekeeping`.
+- If the request is under `skills/` or edits `SKILL.md`, hand off to `skill-creator`.
+- For frontend framework guidance, use SolidJS references only (`skills/coding/references/solidjs/...`).
 
-Use this skill for most engineering work, including implementation, refactors, bug fixes, SQL, docs/config edits, commands, and technical guidance. When a task clearly matches a reference trigger, open that reference before drafting the substantive response (ask brief clarifying questions first if needed).
+## Mandatory smell baseline (always for code changes)
+For implementation/bugfix/refactor/review operations, always open:
+- `skills/coding/references/code-smells/index.md`
 
-## Scope & routing
-- Use this skill for code changes and technical guidance across languages/tools.
-- Prefer to open this SKILL before providing concrete code, SQL, commands, or edits. If the user hasn't provided enough context, you may ask 1-2 clarifying questions first, then open the SKILL before drafting the solution.
-- **Hard rule:** if the request mentions `skills/`, `SKILL.md`, or creating/updating a skill, do **not** open coding. Use `skill-creator` instead (including plans/specs unless explicitly plan-only). If coding is already open, stop and hand off.
-- Never edit home-level agent instruction files (e.g., `~/.pi/agent/AGENTS.md`, `~/.claude/...`, `~/.codex/...`). Repo-local `AGENTS.md` or `CLAUDE.md` updates are OK only for durable repo-specific context.
-- When opening references, use full repo paths like `skills/coding/references/...` (not `references/...`). If a reference read fails, retry once with the full path.
-- When a trigger clearly matches, open the referenced file before drafting the substantive response. If you only need clarification, ask first.
-- If the user provides a word/length limit, minimize extra reads and keep the response short.
+Then open only the smell files that match detected patterns (for example: `ai-code-smell`, `long-method`, `duplicate-code`, `shotgun-surgery`, `speculative-generality`).
 
-## Quick topic scan (open refs when clearly relevant)
-- Infra/platform/ops/deploy/secrets/storage work
-- Auth/credentials/safety guidance
-- PR review or CI failures
-- Work-package-driven refactoring (audit, execution, continuation)
-- Code-smell diagnostics or refactoring opportunity reviews
-- JS/TS runtime or toolchain changes
-- Framework-specific guidance (ask which stack if unclear)
+## Core workflow
+1. Confirm scope, constraints, and acceptance criteria.
+2. Load mandatory smell baseline refs.
+3. Load domain refs relevant to the task.
+4. Read only necessary code paths.
+5. Implement minimal focused changes.
+6. Validate with targeted checks/tests.
+7. Summarize changes, validations, and remaining risks.
 
-## Reference triggers (open when clearly relevant)
-If the request explicitly names a framework/tool or clearly falls into a category below, open the matching reference before drafting the substantive response. If the stack/tooling is unclear, ask 1-2 clarifying questions first.
+## Domain reference triggers (open when clearly relevant)
+- Code smell / maintainability / quality diagnostics:
+  - `skills/coding/references/code-smells/index.md`
+  - `skills/coding/references/code-smells/smells/index.md`
+- Work-package refactoring execution:
+  - `skills/coding/references/refactoring/index.md`
+- SolidJS implementation/performance:
+  - `skills/coding/references/solidjs/index.md`
+  - `skills/coding/references/solidjs/rules/index.md`
+- Infra / deploy / platform ops:
+  - `skills/coding/references/platform-engineering/index.md`
+- Auth / credentials / secret handling:
+  - `skills/coding/references/secrets-and-auth-guardrails.md`
+- PR review bot loop / CI failure remediation:
+  - `skills/coding/references/gh-pr-review-fix.md`
+- JS/TS runtime and toolchain:
+  - `skills/coding/references/bun.md`
 
-- Infra/platform/ops/deploy/secrets/storage -> `skills/coding/references/platform-engineering/index.md`
-- PR review/CI/GitHub -> `skills/coding/references/gh-pr-review-fix.md`
-- JS/TS runtime or toolchain -> `skills/coding/references/bun.md`
-- Auth/secrets/credentials -> `skills/coding/references/secrets-and-auth-guardrails.md`
-- Work-package-driven refactoring/audit/continuation -> `skills/coding/references/refactoring/index.md`
-- Code smell/refactoring opportunity/maintainability/quality review -> `skills/coding/references/code-smells/smells/index.md`
-- React/Next.js -> `skills/coding/references/react/index.md`
-- SolidJS -> `skills/coding/references/solidjs/index.md` (and `skills/coding/references/solidjs/`)
+## Quality rules
+- Prefer hard cutovers over fallback-first compatibility branches.
+- Avoid over-defensive code that obscures normal control flow.
+- Preserve existing architecture unless the task explicitly asks for structural change.
+- Add/update tests when behavior changes.
+- Keep edits small, cohesive, and traceable to the request.
 
-## Conflicts & precedence
-
-- Skill-creator takes precedence for skill creation/updates (anything under `skills/`).
-- Security and secret guardrails override platform or tool-specific docs.
-- Follow the repo’s established toolchain and lockfile when incompatible with general preferences.
-
-## 1) Testing and bug fixes
-
-- Every bug fix must include a test that fails before the fix and passes after.
-- If a test is genuinely not feasible (rare), state why and how you verified the fix.
-- Prefer minimal tests that reproduce the bug and lock in the expected behavior.
-
-## 2) Async consistency
-
-- If a function is async, all I/O inside it must be async.
-- Avoid blocking calls in async code (`requests`, `open`, `psycopg2`, `time.sleep`).
-- Sync is acceptable for CPU-bound or purely in-memory work.
-- Use async equivalents: `httpx.AsyncClient`, `aiofiles`, `asyncpg`, `asyncio.sleep`.
-
-## 3) Input validation at boundaries
-
-- Validate all external input: request bodies, query params, path params, file uploads, webhooks, and external API responses.
-- Prefer schema-based validation (Pydantic/Zod); keep validation at boundaries.
-
-## 4) No code injection
-
-- Never execute user-provided code or paths.
-- No `eval`, `exec`, `new Function`, dynamic imports, or `shell=True` with user input.
-- Sanitize paths; verify ownership before serving resources.
-
-## 5) No secrets access
-
-- Never read or print secrets in conversation context.
-- Do not cat/grep `.env` files or secret stores.
-- Refer to secret names only; check presence without echoing values.
-
-## 6) Toolchain selection (must follow)
-
-- If `uv.lock` or `pyproject.toml` exists, use `uv` for Python deps and tests (`uv sync`, `uv run pytest`).  
-- Never use `pip install` or ad‑hoc venvs unless explicitly asked.  
-- For JS/TS, prefer `bun` over npm/yarn/pnpm when possible.  
-
-## 7) SQL safety and query limits
-
-- Always use parameterized queries (no string concatenation or formatting).
-- Every SELECT must be bounded (LIMIT, pagination, or a single-row predicate).
-- Exceptions: `COUNT(*)`, aggregation with bounded cardinality, or `WHERE id = ?`.
-
-## 8) Avoid race conditions
-
-- Avoid check-then-act and read-modify-write without atomic guards.
-- Use transactions, `ON CONFLICT`, `SELECT FOR UPDATE`, and constraints.
-
-## 9) Error handling
-
-- Never swallow exceptions. If you catch, log and re-raise or explain why continuing is safe.
-- No empty or silent `except` blocks.
-
-## 10) Configuration and constants
-
-- Do not hardcode magic numbers, URLs, or config values.
-- Centralize settings and use named constants.
-- Avoid scattered `os.getenv()` calls outside the settings module.
-
-## 11) Architecture and design
-
-- Prefer composition over inheritance; inheritance only for true IS-A or framework requirements.
-- Avoid circular imports; keep dependency direction one-way.
-- Apply DRY and SOLID: small, focused functions and interfaces.
-
-### DRY and SOLID quick reference
-
-- **DRY**: Extract repeated logic into reusable functions
-- **SRP**: One reason to change per function/class
-- **OCP**: Extend via abstraction, don't modify existing code
-- **LSP**: Subtypes must be substitutable for base types
-- **ISP**: Small, focused interfaces - don't force unused methods
-- **DIP**: Depend on abstractions, inject dependencies
-
-Checklist:
-1. Is this logic duplicated? → Extract it
-2. Does this do one thing? → Split if not
-3. Am I modifying existing code to extend? → Use abstraction
-4. Could I use Protocol instead of ABC? → Prefer Protocol
-
-### Composition over inheritance
-
-Prefer composition (HAS-A) over inheritance (IS-A). Inject dependencies instead of extending classes.
-
-Acceptable inheritance:
-- ABCs for interface definition only
-- Framework requirements (Django models, Exception subclasses)
-- True IS-A relationships (rare)
-
-Red flags:
-- Hierarchy > 2 levels deep
-- Overriding methods with different behavior
-- Mixin classes
-- `isinstance()` checks to determine behavior
-
-### Core primitives first
-
-- Prioritize fixes in core primitives (data models, invariants, core utilities, shared interfaces).
-- Prefer additive, backward-compatible, reversible changes.
-- Avoid patchwork (one-off conditionals, scattered flags, duplicated logic) unless no safe alternative exists.
-- If a patch is required, say why the primitive-first path is blocked and propose a follow-up improvement.
-- Always name the primitive being improved and how it reduces future patching.
-
-## 12) Frontend safety
-
-- No client-side console logging in production code.
-- Frontend must not access databases or secrets; route privileged ops through a backend API.
-- Do not use filesystem, process spawning, or dynamic code execution on the client.
-
-## 13) Database changes
-
-- Schema changes must update both schema and documentation.
-- Avoid destructive migrations without explicit confirmation.
-- Prefer reversible, incremental changes (add → migrate → remove).
-
-## 14) Supabase local safety (if applicable)
-
-- Never rename, delete, or edit applied migrations.
-- Destructive commands (`db reset`, `db push --force`) require explicit confirmation.
-- Create new migration files for changes instead of editing applied ones.
-
-## 15) Type hints (Python)
-
-- All Python functions require parameter and return type hints.
-- Use modern syntax (`list[str]`, `dict[str, int]`, `X | None`).
-
-## 16) Documentation hygiene
-
-- Do not create unnecessary docs files.
-- Necessary docs include user-requested docs, compliance/safety docs, spec-driven required specs for multi-step/exploratory work, and self-reporting logs when triggered.
-- If spec-driven is active, the spec is required and does not violate this rule.
-
-## References index (deep dives)
-
-- `skills/coding/references/platform-engineering/index.md` - platform ops and data infra workflows (GCP, Supabase)
-- `skills/coding/references/gh-pr-review-fix.md` - PR review triage + CI fix workflow
-- `skills/coding/references/bun.md` - Bun runtime/tooling reference
-- `skills/coding/references/secrets-and-auth-guardrails.md` - auth/secret handling and incident response
-- `skills/coding/references/refactoring/index.md` - work-package-driven refactoring standards and execution directive
-- `skills/coding/references/code-smells/smells/index.md` - canonical smell catalog and mitigation directions
-- `skills/coding/references/solidjs/index.md` and `skills/coding/references/solidjs/` - SolidJS performance and patterns
+## Output expectations
+- Explain decisions and key trade-offs.
+- List changed files.
+- Report validations run (or why skipped).
+- Call out unresolved risks and follow-up actions.

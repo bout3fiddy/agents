@@ -1,0 +1,11 @@
+┌ Pi Eval Run ┐
+│ Cases: 164  │
+└─────────────┘
+Parallelism: 10 case(s)
+
+Using shared case sandbox: d237f342-5390-4df5-ad97-f6264665737c
+OK CD-010
+OK CD-009
+OK CD-008
+OK SC-004
+FAIL sync failed (exit 1)

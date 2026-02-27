@@ -10,6 +10,11 @@
   - Plan/spec work, Linear workflows, or work-package lifecycle transitions -> `task_type` = `planning`.
   - Any `skills/` directory changes (`SKILL.md`, `references/`, skill metadata, routing files) -> `task_type` = `skill-creation`.
   - Work package execution/refinement follow-up -> `task_type` = `refactor`/`review`/`bugfix` as seen in package path and user intent.
+- Path-driven override:
+  - If the user prompt includes an explicit path under `skills/<name>/references/...`, immediately route to `<name>` and open `skills/<name>/SKILL.md` before opening that reference file.
+  - Apply the same rule when workflow state points to a concrete reference file path (even if the user did not request the skill by name).
+- Intent-driven multi-ref override:
+  - For design prompts that combine UI/layout intent with motion/animation intent, open both `skills/design/references/design-guidelines.md` and `skills/design/references/components-and-motion.md` after `skills/design/SKILL.md`.
 - For selected skill(s), load their `SKILL.md` via artifact path and read only the references explicitly needed for the request.
 - For `SKILL.md` writes in `skills/`, prefer `skill-creator` workflow; do not use `coding` as the primary skill for that operation.
 - If the user asks for a plan/spec, infer `planning` and run that workflow first, then proceed.

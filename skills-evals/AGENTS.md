@@ -25,6 +25,7 @@ Scope: applies to all files under `skills-evals/`.
 ## Path/Structure Guardrails
 
 When moving files or changing paths, update all affected scripts, specs, and docs in the same change.
+- `skills-evals/pi-eval/src` is organized by domain folders: `cli/`, `runtime/`, `data/`, `reporting/` (each includes a local `AGENTS.md` explainer).
 
 ## Cases and Fixtures
 
@@ -37,7 +38,7 @@ When moving files or changing paths, update all affected scripts, specs, and doc
 Run from repo root after functional changes to eval logic:
 
 ```bash
-bun test skills-evals/pi-eval/src/validation.test.ts
+bun test skills-evals/pi-eval/src/cli/validation.test.ts
 PI_EVAL_LOG=off ./skills-evals/run.sh
 ```
 

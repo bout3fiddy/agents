@@ -142,7 +142,7 @@ If the failure depends on environment, call that out and suggest a mitigation (e
 
 ## Notes & guardrails
 
-- Enforce `skills/coding/references/code-smells/smells/codex-code-smell.md` during review triage:
+- Enforce `skills/coding/references/code-smells/smells/ai-code-smell.md` during review triage:
   - treat fallback-first implementations as actionable defects by default
   - only accept exceptions when owner + removal date + tracking issue are documented
 - If the PR is in a fork or lacks permissions, report it and ask for access or an alternative.
