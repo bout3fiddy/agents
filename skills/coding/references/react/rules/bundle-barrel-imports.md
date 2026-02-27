@@ -1,9 +1,28 @@
 ---
+
 title: Avoid Barrel File Imports
 impact: CRITICAL
 impactDescription: 200-800ms import cost, slow builds
 tags: bundle, imports, tree-shaking, barrel-files, performance
+metadata:
+  id: coding.ref.react.rules.bundle-barrel-imports
+  version: "1"
+  task_types:
+    - coding
+  trigger_phrases:
+    - bundle barrel imports
+    - react
+    - references
+    - rules
+    - references react rules bundle-barrel-imports
+  priority: 72
+  load_strategy: progressive
+  activation_policy: both
+  workflow_triggers:
+  route_exclude: false
+
 ---
+
 
 ## Avoid Barrel File Imports
 

@@ -1,7 +1,27 @@
 ---
+
 name: ask-questions-if-underspecified
-description: Use when user requests implementation work (implement, add, create, build, refactor, fix) AND the request lacks clear acceptance criteria, scope, or constraints. Do NOT use during exploration, explanation, or continuation of ongoing work.
+description: Use when a request has implementation intent (build/fix/refactor/migrate/integrate/plan-to-build) but acceptance criteria, scope, constraints, or safety conditions are unclear. Run this before spec/work-package execution.
+metadata:
+  id: planning.ref.ask-questions-if-underspecified
+  version: "1"
+  task_types:
+    - clarify
+    - plan
+  trigger_phrases:
+    - ask questions if underspecified
+    - references
+    - references ask-questions-if-underspecified
+  priority: 72
+  load_strategy: progressive
+  activation_policy: both
+  workflow_triggers:
+    - implementation_intent_detected_without_constraints
+  route_exclude: false
+
 ---
+
+
 
 # Ask Questions If Underspecified
 
@@ -9,23 +29,37 @@ description: Use when user requests implementation work (implement, add, create,
 
 Ask the minimum set of clarifying questions needed to avoid wrong work; do not start implementing until the must-have questions are answered (or the user explicitly approves proceeding with stated assumptions).
 
+## Trigger guidance (quick test)
+
+Use this reference when both conditions are true:
+- There is implementation intent now or immediately after planning (for example: build, fix, refactor, migrate, integrate, ship, "plan then implement", "continue execution").
+- At least one must-have unknown remains (objective, done criteria, scope, constraints, safety/rollback, or target artifact).
+
+Strong trigger signals:
+- Multiple plausible interpretations of "what changes" or "what done means."
+- User points to a ticket/work package but does not define which item to execute first or what proof is required.
+- Prompt asks for speed ("just do it") while key constraints are missing.
+
+Do not use this reference for pure explanation, research-only requests, or deterministic continuation where the next step and acceptance criteria are already explicit.
+
 ## Workflow
 
 ### 1) Decide whether the request is underspecified
 
-Treat a request as underspecified if after exploring how to perform the work, some or all of the following are not clear:
+Treat a request as underspecified if, before committing to an implementation direction, some or all of the following are not clear:
 - Define the objective (what should change vs stay the same)
 - Define "done" (acceptance criteria, examples, edge cases)
 - Define scope (which files/components/users are in/out)
 - Define constraints (compatibility, performance, style, deps, time)
 - Identify environment (language/runtime versions, OS, build/test runner)
 - Clarify safety/reversibility (data migration, rollout/rollback, risk)
+- Clarify delivery vehicle when ambiguous (direct patch vs `docs/specs/*` vs work package execution)
 
 If multiple plausible interpretations exist, assume it is underspecified.
 
 ### 2) Ask must-have questions first (keep it small)
 
-Ask 1-5 questions in the first pass. Prefer questions that eliminate whole branches of work.
+Ask 1-4 questions in the first pass. Prefer questions that eliminate whole branches of work.
 
 Make questions easy to answer:
 - Optimize for scannability (short, numbered questions; avoid paragraphs)
@@ -39,7 +73,7 @@ Make questions easy to answer:
 ### 3) Pause before acting
 
 Until must-have answers arrive:
-- Do not run commands, edit files, or produce a detailed plan that depends on unknowns
+- Do not edit files or produce a directionally committed plan that depends on unknowns
 - Do perform a clearly labeled, low-risk discovery step only if it does not commit you to a direction (e.g., inspect repo structure, read relevant config files)
 
 If the user explicitly asks you to proceed without answers:
@@ -48,7 +82,19 @@ If the user explicitly asks you to proceed without answers:
 
 ### 4) Confirm interpretation, then proceed
 
-Once you have answers, restate the requirements in 1-3 sentences (including key constraints and what success looks like), then start work.
+Once you have answers, restate the requirements in 1-3 sentences (including key constraints and what success looks like), then pick an execution mode:
+- Multi-step or exploratory implementation: use `skills/planning/references/spec-driven-iterative-builder.md`.
+- Work-package execution prompt/path present: use spec-driven workflow in work-package mode and map the first concrete item.
+- Single deterministic change: proceed directly with the clarified scope.
+
+### 4b) Workpackage-specific must-haves
+
+For work-package execution prompts, do not proceed until all are confirmed:
+- Target item is explicit, or "first non-done from `overview.md`" is accepted.
+- Completion criteria include a required proof pointer and validation expectation.
+- Edit boundaries (files/directories) are explicit.
+
+If any are missing, ask a compact clarification set before editing.
 
 ## Question templates
 
@@ -67,11 +113,16 @@ c) Not sure - use default
 a) Current project defaults (default)
 b) Also support older versions: <specify>
 c) Not sure - use default
+3) Workpackage handling?
+a) Start from first non-done `WP-*` in `overview.md` (default)
+b) Execute explicit target `WP-*` (please specify)
+c) Not sure - use default
 
-Reply with: defaults (or 1a 2a)
+Reply with: defaults (or 1a 2a 3a)
 ```
 
 ## Anti-patterns
 
 - Don't ask questions you can answer with a quick, low-risk discovery read (e.g., configs, existing patterns, docs).
 - Don't ask open-ended questions if a tight multiple-choice or yes/no would eliminate ambiguity faster.
+- Don't repeatedly re-ask already answered constraints; confirm once, then proceed.

@@ -1,9 +1,28 @@
 ---
+
 title: Preload Based on User Intent
 impact: MEDIUM
 impactDescription: reduces perceived latency
 tags: bundle, preload, user-intent, hover
+metadata:
+  id: coding.ref.react.rules.bundle-preload
+  version: "1"
+  task_types:
+    - coding
+  trigger_phrases:
+    - bundle preload
+    - react
+    - references
+    - rules
+    - references react rules bundle-preload
+  priority: 72
+  load_strategy: progressive
+  activation_policy: both
+  workflow_triggers:
+  route_exclude: false
+
 ---
+
 
 ## Preload Based on User Intent
 

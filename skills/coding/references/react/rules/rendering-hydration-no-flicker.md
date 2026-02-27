@@ -1,9 +1,28 @@
 ---
+
 title: Prevent Hydration Mismatch Without Flickering
 impact: MEDIUM
 impactDescription: avoids visual flicker and hydration errors
 tags: rendering, ssr, hydration, localStorage, flicker
+metadata:
+  id: coding.ref.react.rules.rendering-hydration-no-flicker
+  version: "1"
+  task_types:
+    - coding
+  trigger_phrases:
+    - react
+    - references
+    - rendering hydration no flicker
+    - rules
+    - references react rules rendering-hydration-no-flicker
+  priority: 72
+  load_strategy: progressive
+  activation_policy: both
+  workflow_triggers:
+  route_exclude: false
+
 ---
+
 
 ## Prevent Hydration Mismatch Without Flickering
 

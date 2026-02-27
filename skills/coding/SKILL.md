@@ -1,7 +1,94 @@
 ---
+
 name: coding
 description: Core engineering rules for implementation, refactors, bug fixes, SQL, docs/config edits, commands, and technical guidance, with indexed references for specialized workflows.
+metadata:
+  id: coding.core
+  version: "1"
+  task_types:
+    - implementation
+    - refactor
+    - bugfix
+    - technical-guidance
+    - coding
+  trigger_phrases:
+    - implementation request
+    - refactor request
+    - bug fix
+    - code review
+    - build failure
+    - SQL
+    - test failure
+    - technical guidance
+    - docs/config edits
+    - coding
+  priority: 80
+  load_strategy: progressive
+  operation_contracts:
+    implementation:
+      required_steps:
+        - identify target files
+        - implement minimal scoped changes
+        - validate with tests or checks
+      required_output_fields:
+        - what
+        - where
+        - why
+        - how
+      forbidden_actions:
+        - batch_unverified_changes
+    review_ci:
+      required_steps:
+        - identify failing checks
+        - map failures to concrete fixes
+        - validate each fix
+      required_output_fields:
+        - validation
+        - status
+        - risk
+      forbidden_actions:
+        - ignore_failing_ci
+    refactoring_workpackage_execute:
+      required_steps:
+        - follow work package flow
+        - execute WP items in order
+        - update overview status and evidence
+      required_output_fields:
+        - summary
+        - proof
+        - next_action
+      forbidden_actions:
+        - mark_done_without_update
+    security_auth:
+      required_steps:
+        - confirm operation scope
+        - apply safe-by-default guardrails
+        - avoid exposing secrets
+      required_output_fields:
+        - scope
+        - controls
+        - verification
+      forbidden_actions:
+        - print_secrets
+    smell_diagnostic:
+      required_steps:
+        - identify code smell indicators
+        - map to concrete remediation path
+      required_output_fields:
+        - findings
+        - priority
+        - mitigation
+      forbidden_actions:
+        - defer_safety_issues
+  activation_policy: both
+  workflow_triggers:
+    - implementation_request_detected
+    - refactor_request_detected
+    - bugfix_request_detected
+
 ---
+
+
 
 # Coding (Core + Indexed References)
 
@@ -17,7 +104,6 @@ Use this skill for most engineering work, including implementation, refactors, b
 - If the user provides a word/length limit, minimize extra reads and keep the response short.
 
 ## Quick topic scan (open refs when clearly relevant)
-- UI/layout/styling or motion work
 - Infra/platform/ops/deploy/secrets/storage work
 - Auth/credentials/safety guidance
 - PR review or CI failures
@@ -29,7 +115,6 @@ Use this skill for most engineering work, including implementation, refactors, b
 ## Reference triggers (open when clearly relevant)
 If the request explicitly names a framework/tool or clearly falls into a category below, open the matching reference before drafting the substantive response. If the stack/tooling is unclear, ask 1-2 clarifying questions first.
 
-- UI/layout/motion or component design -> `skills/coding/references/frontend-engineering/index.md`
 - Infra/platform/ops/deploy/secrets/storage -> `skills/coding/references/platform-engineering/index.md`
 - PR review/CI/GitHub -> `skills/coding/references/gh-pr-review-fix.md`
 - JS/TS runtime or toolchain -> `skills/coding/references/bun.md`
@@ -38,7 +123,6 @@ If the request explicitly names a framework/tool or clearly falls into a categor
 - Code smell/refactoring opportunity/maintainability/quality review -> `skills/coding/references/code-smells/smells/index.md`
 - React/Next.js -> `skills/coding/references/react/index.md`
 - SolidJS -> `skills/coding/references/solidjs/index.md` (and `skills/coding/references/solidjs/`)
-- Utility-class styling (Tailwind) -> `skills/coding/references/frontend-engineering/tailwindcss-full.md`
 
 ## Conflicts & precedence
 
@@ -179,7 +263,6 @@ Red flags:
 
 ## References index (deep dives)
 
-- `skills/coding/references/frontend-engineering/index.md` - UI craft, design system rules, components, SolidJS patterns
 - `skills/coding/references/platform-engineering/index.md` - platform ops and data infra workflows (GCP, Supabase)
 - `skills/coding/references/gh-pr-review-fix.md` - PR review triage + CI fix workflow
 - `skills/coding/references/bun.md` - Bun runtime/tooling reference
@@ -187,4 +270,3 @@ Red flags:
 - `skills/coding/references/refactoring/index.md` - work-package-driven refactoring standards and execution directive
 - `skills/coding/references/code-smells/smells/index.md` - canonical smell catalog and mitigation directions
 - `skills/coding/references/solidjs/index.md` and `skills/coding/references/solidjs/` - SolidJS performance and patterns
-- `skills/coding/references/frontend-engineering/tailwindcss-full.md` - Tailwind CSS v4 reference

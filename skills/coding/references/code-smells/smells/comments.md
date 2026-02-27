@@ -1,6 +1,26 @@
 ---
+
 description: Signals and refactoring directions for Comments.
+metadata:
+  id: coding.ref.code-smells.smells.comments
+  version: "1"
+  task_types:
+    - coding
+    - code-smell
+  trigger_phrases:
+    - code smells
+    - comments
+    - references
+    - smells
+    - references code-smells smells comments
+  priority: 72
+  load_strategy: progressive
+  activation_policy: both
+  workflow_triggers:
+  route_exclude: false
+
 ---
+
 # Comments
 
 Category: Dispensables

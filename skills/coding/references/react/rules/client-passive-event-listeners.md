@@ -1,9 +1,28 @@
 ---
+
 title: Use Passive Event Listeners for Scrolling Performance
 impact: MEDIUM
 impactDescription: eliminates scroll delay caused by event listeners
 tags: client, event-listeners, scrolling, performance, touch, wheel
+metadata:
+  id: coding.ref.react.rules.client-passive-event-listeners
+  version: "1"
+  task_types:
+    - coding
+  trigger_phrases:
+    - client passive event listeners
+    - react
+    - references
+    - rules
+    - references react rules client-passive-event-listeners
+  priority: 72
+  load_strategy: progressive
+  activation_policy: both
+  workflow_triggers:
+  route_exclude: false
+
 ---
+
 
 ## Use Passive Event Listeners for Scrolling Performance
 

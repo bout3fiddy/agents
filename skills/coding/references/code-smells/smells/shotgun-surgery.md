@@ -1,6 +1,26 @@
 ---
+
 description: Signals and refactoring directions for Shotgun Surgery.
+metadata:
+  id: coding.ref.code-smells.smells.shotgun-surgery
+  version: "1"
+  task_types:
+    - coding
+    - code-smell
+  trigger_phrases:
+    - code smells
+    - references
+    - shotgun surgery
+    - smells
+    - references code-smells smells shotgun-surgery
+  priority: 72
+  load_strategy: progressive
+  activation_policy: both
+  workflow_triggers:
+  route_exclude: false
+
 ---
+
 # Shotgun Surgery
 
 Category: Change Preventers

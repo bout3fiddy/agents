@@ -1,9 +1,28 @@
 ---
+
 title: Use SWR for Automatic Deduplication
 impact: MEDIUM-HIGH
 impactDescription: automatic deduplication
 tags: client, swr, deduplication, data-fetching
+metadata:
+  id: coding.ref.react.rules.client-swr-dedup
+  version: "1"
+  task_types:
+    - coding
+  trigger_phrases:
+    - client swr dedup
+    - react
+    - references
+    - rules
+    - references react rules client-swr-dedup
+  priority: 72
+  load_strategy: progressive
+  activation_policy: both
+  workflow_triggers:
+  route_exclude: false
+
 ---
+
 
 ## Use SWR for Automatic Deduplication
 

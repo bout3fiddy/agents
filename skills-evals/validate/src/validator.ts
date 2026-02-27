@@ -5,6 +5,18 @@ import { findSkillMd, parseFrontmatter } from "./parser.js";
 export const MAX_SKILL_NAME_LENGTH = 64;
 export const MAX_DESCRIPTION_LENGTH = 1024;
 export const MAX_COMPATIBILITY_LENGTH = 500;
+const ALLOWED_ACTIVATION_POLICIES = new Set(["user_intent", "workflow_state", "both"]);
+const ALLOWED_METADATA_KEYS = new Set([
+	"id",
+	"version",
+	"task_types",
+	"trigger_phrases",
+	"priority",
+	"load_strategy",
+	"activation_policy",
+	"workflow_triggers",
+	"route_exclude",
+]);
 
 const ALLOWED_FIELDS = [
 	"name",
@@ -16,6 +28,77 @@ const ALLOWED_FIELDS = [
 ] as const;
 const ALLOWED_FIELD_SET = new Set<string>(ALLOWED_FIELDS);
 const ALLOWED_FIELDS_LABEL = `[${[...ALLOWED_FIELDS].sort().map((field) => `'${field}'`).join(", ")}]`;
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+	typeof value === "object" && value !== null && !Array.isArray(value);
+
+const validateMetadataContract = (metadata: unknown): string[] => {
+	const errors: string[] = [];
+
+	if (!isRecord(metadata)) {
+		errors.push("Field 'metadata' must be a mapping");
+		return errors;
+	}
+
+	for (const field of Object.keys(metadata)) {
+		if (!ALLOWED_METADATA_KEYS.has(field)) {
+			continue;
+		}
+
+		const value = metadata[field];
+		switch (field) {
+			case "id":
+			case "version":
+			case "load_strategy": {
+				if (typeof value !== "string") {
+					errors.push(`Field 'metadata.${field}' must be a string`);
+				}
+				break;
+			}
+			case "task_types":
+			case "trigger_phrases":
+			case "workflow_triggers": {
+				if (!Array.isArray(value)) {
+					errors.push(`Field 'metadata.${field}' must be an array`);
+					break;
+				}
+				for (const [index, item] of value.entries()) {
+					if (typeof item !== "string" || item.length === 0) {
+						errors.push(
+							`Field 'metadata.${field}[${index}]' must be a non-empty string`,
+						);
+					}
+				}
+				break;
+			}
+			case "priority": {
+				if (typeof value !== "number") {
+					errors.push("Field 'metadata.priority' must be a number");
+				}
+				break;
+			}
+			case "activation_policy": {
+				if (typeof value !== "string") {
+					errors.push("Field 'metadata.activation_policy' must be a string");
+					break;
+				}
+				if (!ALLOWED_ACTIVATION_POLICIES.has(value)) {
+					errors.push(
+						`Field 'metadata.activation_policy' must be one of: ${Array.from(ALLOWED_ACTIVATION_POLICIES).join(", ")}`,
+					);
+				}
+				break;
+			}
+			case "route_exclude": {
+				if (typeof value !== "boolean") {
+					errors.push("Field 'metadata.route_exclude' must be a boolean");
+				}
+				break;
+			}
+		}
+	}
+
+	return errors;
+};
 
 const validateName = (name: unknown, skillDirName?: string): string[] => {
 	const errors: string[] = [];
@@ -125,6 +208,10 @@ export const validateMetadata = (
 
 	if (Object.hasOwn(metadata, "compatibility")) {
 		errors.push(...validateCompatibility(metadata.compatibility));
+	}
+
+	if (Object.hasOwn(metadata, "metadata")) {
+		errors.push(...validateMetadataContract(metadata.metadata));
 	}
 
 	return errors;

@@ -1,9 +1,28 @@
 ---
+
 title: Defer Non-Critical Third-Party Libraries
 impact: MEDIUM
 impactDescription: loads after hydration
 tags: bundle, third-party, analytics, defer
+metadata:
+  id: coding.ref.react.rules.bundle-defer-third-party
+  version: "1"
+  task_types:
+    - coding
+  trigger_phrases:
+    - bundle defer third party
+    - react
+    - references
+    - rules
+    - references react rules bundle-defer-third-party
+  priority: 72
+  load_strategy: progressive
+  activation_policy: both
+  workflow_triggers:
+  route_exclude: false
+
 ---
+
 
 ## Defer Non-Critical Third-Party Libraries
 

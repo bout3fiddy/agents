@@ -174,6 +174,61 @@ test("valid with all fields", async () => {
 	await rm(sandboxDir, { recursive: true, force: true });
 });
 
+test("metadata contract values are supported", async () => {
+	const { sandboxDir, skillDir } = await makeSkillDir("my-skill");
+	await writeFile(
+		path.join(skillDir, "SKILL.md"),
+		[
+			"---",
+			"name: my-skill",
+			"description: A test skill",
+			"metadata:",
+			"  id: my-skill",
+			"  task_types:",
+			"    - implementation",
+			"    - refactor",
+			"  workflow_triggers:",
+			"    - implementation_request_detected",
+			"  route_exclude: false",
+			"  priority: 90",
+			"  activation_policy: both",
+			"---",
+			"Body",
+			"",
+		].join("\n"),
+	);
+	const errors = await validate(skillDir);
+	assert.deepEqual(errors, []);
+	await rm(sandboxDir, { recursive: true, force: true });
+});
+
+test("invalid metadata contract values are rejected", async () => {
+	const { sandboxDir, skillDir } = await makeSkillDir("my-skill");
+	await writeFile(
+		path.join(skillDir, "SKILL.md"),
+		[
+			"---",
+			"name: my-skill",
+			"description: A test skill",
+			"metadata:",
+			"  task_types: not-an-array",
+			"  priority: high",
+			"  route_exclude: maybe",
+			"  activation_policy: definitely-not-a-policy",
+			"---",
+			"Body",
+			"",
+		].join("\n"),
+	);
+	const errors = await validate(skillDir);
+	assert.equal(errors.length >= 4, true);
+	assert.ok(errors.some((error) => error === "Field 'metadata.task_types' must be an array"));
+	assert.ok(errors.some((error) => error === "Field 'metadata.priority' must be a number"));
+	assert.ok(errors.some((error) => error === "Field 'metadata.route_exclude' must be a boolean"));
+	assert.ok(errors.some((error) => error.startsWith("Field 'metadata.activation_policy' must be one of: ")));
+	await rm(sandboxDir, { recursive: true, force: true });
+});
+
 test("allowed-tools accepted", async () => {
 	const { sandboxDir, skillDir } = await makeSkillDir("my-skill");
 	await writeFile(

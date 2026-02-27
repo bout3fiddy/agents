@@ -1,9 +1,28 @@
 ---
+
 title: Prevent Waterfall Chains in API Routes
 impact: CRITICAL
 impactDescription: avoids request waterfalls
 tags: api-routes, waterfalls, parallelization
+metadata:
+  id: coding.ref.solidjs.rules.async-api-routes
+  version: "1"
+  task_types:
+    - coding
+  trigger_phrases:
+    - async api routes
+    - references
+    - rules
+    - solidjs
+    - references solidjs rules async-api-routes
+  priority: 72
+  load_strategy: progressive
+  activation_policy: both
+  workflow_triggers:
+  route_exclude: false
+
 ---
+
 
 ## Prevent Waterfall Chains in API Routes
 

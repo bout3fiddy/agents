@@ -1,9 +1,28 @@
 ---
+
 title: Per-Request Deduplication with React.cache()
 impact: MEDIUM
 impactDescription: deduplicates within request
 tags: server, cache, react-cache, deduplication
+metadata:
+  id: coding.ref.react.rules.server-cache-react
+  version: "1"
+  task_types:
+    - coding
+  trigger_phrases:
+    - react
+    - references
+    - rules
+    - server cache react
+    - references react rules server-cache-react
+  priority: 72
+  load_strategy: progressive
+  activation_policy: both
+  workflow_triggers:
+  route_exclude: false
+
 ---
+
 
 ## Per-Request Deduplication with React.cache()
 

@@ -1,6 +1,24 @@
 ---
+
 description: Standard structure for refactoring work packages, including status tracking, skill-reference invocation, rationale traceability, and implementation accountability proof.
+metadata:
+  id: coding.ref.refactoring.workpackage-template
+  version: "1"
+  task_types:
+    - coding
+  trigger_phrases:
+    - refactoring
+    - references
+    - workpackage template
+    - references refactoring workpackage-template
+  priority: 72
+  load_strategy: progressive
+  activation_policy: both
+  workflow_triggers:
+  route_exclude: true
+
 ---
+
 
 # Refactoring Work Package Template
 

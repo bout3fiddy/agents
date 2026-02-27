@@ -1,9 +1,28 @@
 ---
+
 title: Dependency-Based Parallelization
 impact: CRITICAL
 impactDescription: 2-10× improvement
 tags: async, parallelization, dependencies, better-all
+metadata:
+  id: coding.ref.react.rules.async-dependencies
+  version: "1"
+  task_types:
+    - coding
+  trigger_phrases:
+    - async dependencies
+    - react
+    - references
+    - rules
+    - references react rules async-dependencies
+  priority: 72
+  load_strategy: progressive
+  activation_policy: both
+  workflow_triggers:
+  route_exclude: false
+
 ---
+
 
 ## Dependency-Based Parallelization
 

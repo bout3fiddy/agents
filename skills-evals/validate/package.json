@@ -1,5 +1,8 @@
 {
 	"name": "skills-validate",
 	"private": true,
-	"type": "module"
+	"type": "module",
+	"scripts": {
+		"check-router-artifact": "bun run index.ts check-router-artifact"
+	}
 }

@@ -1,9 +1,35 @@
 ---
+
 description: Recommended AGENTS/CLAUDE architecture using concise root routing, scoped files, and .agents/repo-context deep docs.
+metadata:
+  id: housekeeping.ref.agents-architecture
+  version: "1"
+  task_types:
+    - housekeeping
+    - agents-architecture
+    - claude-architecture
+  trigger_phrases:
+    - AGENTS/CLAUDE architecture
+    - agents architecture
+    - CLAUDE.md
+    - references
+    - references agents-architecture
+  priority: 72
+  load_strategy: progressive
+  activation_policy: both
+  workflow_triggers: []
+  route_exclude: false
+
 ---
-# AGENTS Architecture
+
+
+# AGENTS/CLAUDE Architecture
 
 Use this structure as the default target for repository agent instructions.
+
+Canonical ownership:
+- `instructions/global.md` owns policy and precedence for instruction handling.
+- This reference defines the AGENTS/CLAUDE architecture pattern for implementation decisions; keep CLAUDE.md files as a mirror of root AGENTS intent where present.
 
 ## Target file tree
 

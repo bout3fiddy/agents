@@ -1,9 +1,28 @@
 ---
+
 title: Use toSorted() Instead of sort() for Immutability
 impact: MEDIUM-HIGH
 impactDescription: prevents mutation bugs in React state
 tags: javascript, arrays, immutability, react, state, mutation
+metadata:
+  id: coding.ref.react.rules.js-tosorted-immutable
+  version: "1"
+  task_types:
+    - coding
+  trigger_phrases:
+    - js tosorted immutable
+    - react
+    - references
+    - rules
+    - references react rules js-tosorted-immutable
+  priority: 72
+  load_strategy: progressive
+  activation_policy: both
+  workflow_triggers:
+  route_exclude: false
+
 ---
+
 
 ## Use toSorted() Instead of sort() for Immutability
 

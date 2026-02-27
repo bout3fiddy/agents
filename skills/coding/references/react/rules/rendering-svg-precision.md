@@ -1,9 +1,28 @@
 ---
+
 title: Optimize SVG Precision
 impact: LOW
 impactDescription: reduces file size
 tags: rendering, svg, optimization, svgo
+metadata:
+  id: coding.ref.react.rules.rendering-svg-precision
+  version: "1"
+  task_types:
+    - coding
+  trigger_phrases:
+    - react
+    - references
+    - rendering svg precision
+    - rules
+    - references react rules rendering-svg-precision
+  priority: 72
+  load_strategy: progressive
+  activation_policy: both
+  workflow_triggers:
+  route_exclude: false
+
 ---
+
 
 ## Optimize SVG Precision
 

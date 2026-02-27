@@ -1,6 +1,25 @@
 ---
-description: Index of reference files for references/react.
+
+description: Index of reference files for skills/coding/references/react.
+metadata:
+  id: coding.ref.react.index
+  version: "1"
+  task_types:
+    - coding
+  trigger_phrases:
+    - index
+    - react
+    - references
+    - references react index
+    - reference index
+  priority: 30
+  load_strategy: progressive
+  activation_policy: both
+  workflow_triggers:
+  route_exclude: true
+
 ---
+
 # React/Next.js Best Practices (Reference)
 
 Use this reference for React or Next.js performance, data fetching, rendering, and UI quality reviews.
@@ -11,8 +30,9 @@ Use this reference for React or Next.js performance, data fetching, rendering, a
 - Auditing UI quality or accessibility issues
 
 ## References
-- `references/react/react-best-practices.md` - full Vercel React/Next.js guide
-- `references/react/web-interface-guidelines.md` - UI review checklist source and workflow
+- `skills/coding/references/react/react-best-practices.md` - full Vercel React/Next.js guide
+- `skills/coding/references/react/rules/index.md` - rule-level React/Next.js index
+- `skills/coding/references/react/web-interface-guidelines.md` - UI review checklist source and workflow
 ## Rule Categories (by prefix)
 - `async-` — eliminating waterfalls
 - `bundle-` — bundle size optimization
@@ -25,8 +45,8 @@ Use this reference for React or Next.js performance, data fetching, rendering, a
 
 ## Quick lookup
 ```
-rg -n "async-" references/react/rules/
-rg -n "bundle-" references/react/rules/
-rg -n "server-" references/react/rules/
-rg -n "rendering-" references/react/rules/
+rg -n "async-" skills/coding/references/react/rules/
+rg -n "bundle-" skills/coding/references/react/rules/
+rg -n "server-" skills/coding/references/react/rules/
+rg -n "rendering-" skills/coding/references/react/rules/
 ```

@@ -1,9 +1,28 @@
 ---
+
 title: Hoist RegExp Creation
 impact: LOW-MEDIUM
 impactDescription: avoids recreation
 tags: javascript, regexp, optimization, memoization
+metadata:
+  id: coding.ref.react.rules.js-hoist-regexp
+  version: "1"
+  task_types:
+    - coding
+  trigger_phrases:
+    - js hoist regexp
+    - react
+    - references
+    - rules
+    - references react rules js-hoist-regexp
+  priority: 72
+  load_strategy: progressive
+  activation_policy: both
+  workflow_triggers:
+  route_exclude: false
+
 ---
+
 
 ## Hoist RegExp Creation
 

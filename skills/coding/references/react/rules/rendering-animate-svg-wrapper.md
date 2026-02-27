@@ -1,9 +1,28 @@
 ---
+
 title: Animate SVG Wrapper Instead of SVG Element
 impact: LOW
 impactDescription: enables hardware acceleration
 tags: rendering, svg, css, animation, performance
+metadata:
+  id: coding.ref.react.rules.rendering-animate-svg-wrapper
+  version: "1"
+  task_types:
+    - coding
+  trigger_phrases:
+    - react
+    - references
+    - rendering animate svg wrapper
+    - rules
+    - references react rules rendering-animate-svg-wrapper
+  priority: 72
+  load_strategy: progressive
+  activation_policy: both
+  workflow_triggers:
+  route_exclude: false
+
 ---
+
 
 ## Animate SVG Wrapper Instead of SVG Element
 

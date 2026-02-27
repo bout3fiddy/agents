@@ -1,9 +1,28 @@
 ---
+
 title: Optimize SVG Precision
 impact: MEDIUM
 impactDescription: reduces file size
 tags: rendering, svg, optimization, svgo
+metadata:
+  id: coding.ref.solidjs.rules.rendering-svg-precision
+  version: "1"
+  task_types:
+    - coding
+  trigger_phrases:
+    - references
+    - rendering svg precision
+    - rules
+    - solidjs
+    - references solidjs rules rendering-svg-precision
+  priority: 72
+  load_strategy: progressive
+  activation_policy: both
+  workflow_triggers:
+  route_exclude: false
+
 ---
+
 
 ## Optimize SVG Precision
 

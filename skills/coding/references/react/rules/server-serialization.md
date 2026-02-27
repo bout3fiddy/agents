@@ -1,9 +1,28 @@
 ---
+
 title: Minimize Serialization at RSC Boundaries
 impact: HIGH
 impactDescription: reduces data transfer size
 tags: server, rsc, serialization, props
+metadata:
+  id: coding.ref.react.rules.server-serialization
+  version: "1"
+  task_types:
+    - coding
+  trigger_phrases:
+    - react
+    - references
+    - rules
+    - server serialization
+    - references react rules server-serialization
+  priority: 72
+  load_strategy: progressive
+  activation_policy: both
+  workflow_triggers:
+  route_exclude: false
+
 ---
+
 
 ## Minimize Serialization at RSC Boundaries
 

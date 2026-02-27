@@ -1,3 +1,23 @@
+---
+metadata:
+  id: coding.ref.bun
+  version: "1"
+  task_types:
+    - coding
+  trigger_phrases:
+    - bun
+    - javascript runtime
+    - typescript runtime
+    - package manager
+    - references
+  priority: 72
+  load_strategy: progressive
+  activation_policy: both
+  workflow_triggers:
+  route_exclude: false
+
+---
+
 # Bun - JavaScript/TypeScript Runtime & Toolkit (Reference)
 
 Bun is the preferred JavaScript/TypeScript toolkit when the repo supports it. If a repo is locked to npm/yarn/pnpm, follow its established toolchain and lockfile.
@@ -247,3 +267,4 @@ Then in tsconfig.json:
   }
 }
 ```
+# Bun - JavaScript/TypeScript Runtime & Toolkit (Reference)

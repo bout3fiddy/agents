@@ -1,9 +1,28 @@
 ---
+
 title: Use Transitions for Non-Urgent Updates
 impact: MEDIUM
 impactDescription: maintains UI responsiveness
 tags: rerender, transitions, startTransition, performance
+metadata:
+  id: coding.ref.react.rules.rerender-transitions
+  version: "1"
+  task_types:
+    - coding
+  trigger_phrases:
+    - react
+    - references
+    - rerender transitions
+    - rules
+    - references react rules rerender-transitions
+  priority: 72
+  load_strategy: progressive
+  activation_policy: both
+  workflow_triggers:
+  route_exclude: false
+
 ---
+
 
 ## Use Transitions for Non-Urgent Updates
 

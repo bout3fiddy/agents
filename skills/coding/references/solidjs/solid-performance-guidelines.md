@@ -1,3 +1,22 @@
+---
+metadata:
+  id: coding.ref.solidjs.solid-performance-guidelines
+  version: "1"
+  task_types:
+    - coding
+  trigger_phrases:
+    - solidjs
+    - solidjs performance
+    - solidjs rules
+    - references
+  priority: 72
+  load_strategy: progressive
+  activation_policy: both
+  workflow_triggers:
+  route_exclude: false
+
+---
+
 # SolidJS Performance Guidelines
 
 **Version 0.1.0**
@@ -43,6 +62,6 @@ Performance optimization guide for SolidJS applications, ordered by impact. Rule
 
 ## References
 
-- `references/solidjs/rules/` - individual rule files organized by category
-- `references/solidjs/rules/_sections.md` - ordering and impact levels
-- `references/solidjs/rules/_template.md` - rule template
+- `skills/coding/references/solidjs/rules/` - individual rule files organized by category
+- `skills/coding/references/solidjs/rules/_sections.md` - ordering and impact levels
+- `skills/coding/references/solidjs/rules/_template.md` - rule template

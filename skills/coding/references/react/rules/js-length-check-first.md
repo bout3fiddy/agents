@@ -1,9 +1,28 @@
 ---
+
 title: Early Length Check for Array Comparisons
 impact: MEDIUM-HIGH
 impactDescription: avoids expensive operations when lengths differ
 tags: javascript, arrays, performance, optimization, comparison
+metadata:
+  id: coding.ref.react.rules.js-length-check-first
+  version: "1"
+  task_types:
+    - coding
+  trigger_phrases:
+    - js length check first
+    - react
+    - references
+    - rules
+    - references react rules js-length-check-first
+  priority: 72
+  load_strategy: progressive
+  activation_policy: both
+  workflow_triggers:
+  route_exclude: false
+
 ---
+
 
 ## Early Length Check for Array Comparisons
 

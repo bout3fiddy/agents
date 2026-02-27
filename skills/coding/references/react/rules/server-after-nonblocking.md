@@ -1,9 +1,28 @@
 ---
+
 title: Use after() for Non-Blocking Operations
 impact: MEDIUM
 impactDescription: faster response times
 tags: server, async, logging, analytics, side-effects
+metadata:
+  id: coding.ref.react.rules.server-after-nonblocking
+  version: "1"
+  task_types:
+    - coding
+  trigger_phrases:
+    - react
+    - references
+    - rules
+    - server after nonblocking
+    - references react rules server-after-nonblocking
+  priority: 72
+  load_strategy: progressive
+  activation_policy: both
+  workflow_triggers:
+  route_exclude: false
+
 ---
+
 
 ## Use after() for Non-Blocking Operations
 

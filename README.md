@@ -8,8 +8,10 @@ Repo-specific operating notes live in `AGENTS.md`.
 
 - Skills under `skills/<name>/` (`SKILL.md` plus optional `references/`)
 - Global instruction source at `instructions/global.md`
+- Machine routing artifacts:
+  - `instructions/skills.router.min.json` (primary runtime artifact)
 - Sync tooling in `bin/` (`sync.sh`)
-- Skills index tooling in `skills/skill-creator/scripts/build_agents_index.py`
+- Skills routing metadata tooling in `skills/skill-creator/scripts/build_agents_index.py`
 
 ## Repository layout
 
@@ -17,11 +19,12 @@ Repo-specific operating notes live in `AGENTS.md`.
 agents/
 ├── skills/                    # Skill packages: <name>/SKILL.md (+ references/)
 ├── instructions/
-│   └── global.md              # Source copied to ~/.agents/AGENTS.md
+│   ├── global.md              # Source copied to ~/.agents/AGENTS.md
+│   ├── skills.router.min.json # Source copied to ~/.agents/skills.router.min.json
 ├── bin/
 │   ├── sync.sh                # Hard sync to ~/.agents
 ├── skills/skill-creator/scripts/
-│   └── build_agents_index.py  # Regenerate auto skills index block (manual)
+│   └── build_agents_index.py      # Validate skill/routing metadata (no marker updates)
 ├── skills-evals/
 │   ├── run.sh                 # Eval runner wrapper (no flags)
 │   └── fixtures/
@@ -39,7 +42,7 @@ cd ~
 git clone https://github.com/bout3fiddy/agents.git .agents
 cd ~/.agents
 
-# Hard sync skills + instructions to ~/.agents
+# Hard sync skills + instructions + routing artifact to ~/.agents
 ./bin/sync.sh
 ```
 
@@ -51,14 +54,18 @@ export AGENTS_DIR="/absolute/path/to/agents"
 
 ## Sync behavior
 
-`bin/sync.sh` always performs a hard one-way sync from this repo to:
+`bin/sync.sh` performs hard sync from this repo to:
 
 - `~/.agents/skills/`
 - `~/.agents/AGENTS.md` (from `instructions/global.md`)
+- `~/.agents/skills.router.min.json` (from `instructions/skills.router.min.json`)
+- `sync` runs metadata validation + `check-router-artifact` before copy.
 
-### Index regeneration
+### Artifact regeneration
 
-Run `python3 skills/skill-creator/scripts/build_agents_index.py` manually when you want to refresh the auto-generated skills index block inside `instructions/global.md`.
+Run these when you need to refresh routing metadata locally:
+- `python3 skills/skill-creator/scripts/build_agents_index.py` (source validation)
+- `python3 skills/skill-creator/scripts/build_skills_router_artifact.py` (artifact regeneration)
 
 ## Creating or updating a skill
 
@@ -81,13 +88,15 @@ bun run skills-evals/validate/index.ts validate skills/<name>
 ## Useful commands
 
 ```bash
-# Rebuild only the skills index block
+# Rebuild routing artifact
 python3 skills/skill-creator/scripts/build_agents_index.py
+python3 skills/skill-creator/scripts/build_skills_router_artifact.py
+bun run skills-evals/validate/index.ts check-router-artifact
 ```
 
 ## Devcontainer rollout note
 
-`./bin/sync.sh` only syncs skills/instructions. It does not roll out devcontainer template changes.
+`./bin/sync.sh` only syncs skills, global instructions, and the machine routing artifact. It does not roll out devcontainer template changes.
 
 For devcontainer template rollout:
 

@@ -1,9 +1,28 @@
 ---
+
 title: Early Return from Functions
 impact: LOW-MEDIUM
 impactDescription: avoids unnecessary computation
 tags: javascript, functions, optimization, early-return
+metadata:
+  id: coding.ref.react.rules.js-early-exit
+  version: "1"
+  task_types:
+    - coding
+  trigger_phrases:
+    - js early exit
+    - react
+    - references
+    - rules
+    - references react rules js-early-exit
+  priority: 72
+  load_strategy: progressive
+  activation_policy: both
+  workflow_triggers:
+  route_exclude: false
+
 ---
+
 
 ## Early Return from Functions
 

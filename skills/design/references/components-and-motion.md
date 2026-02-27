@@ -1,3 +1,27 @@
+---
+metadata:
+  id: design.ref.components-and-motion
+  version: "1"
+  task_types:
+    - design
+  trigger_phrases:
+    - component design
+    - UI components
+    - component patterns
+    - motion
+    - UI motion
+    - animation
+    - transitions
+    - storyboard
+    - references
+  priority: 72
+  load_strategy: progressive
+  activation_policy: both
+  workflow_triggers:
+  route_exclude: false
+
+---
+
 # Frontend Components: Full Reference
 
 # Frontend Component Design Patterns

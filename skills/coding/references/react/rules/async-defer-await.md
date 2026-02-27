@@ -1,9 +1,28 @@
 ---
+
 title: Defer Await Until Needed
 impact: HIGH
 impactDescription: avoids blocking unused code paths
 tags: async, await, conditional, optimization
+metadata:
+  id: coding.ref.react.rules.async-defer-await
+  version: "1"
+  task_types:
+    - coding
+  trigger_phrases:
+    - async defer await
+    - react
+    - references
+    - rules
+    - references react rules async-defer-await
+  priority: 72
+  load_strategy: progressive
+  activation_policy: both
+  workflow_triggers:
+  route_exclude: false
+
 ---
+
 
 ## Defer Await Until Needed
 

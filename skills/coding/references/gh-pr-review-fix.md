@@ -1,3 +1,38 @@
+---
+metadata:
+  id: coding.ref.gh-pr-review-fix
+  version: "1"
+  task_types:
+    - coding
+  trigger_phrases:
+    - pr review
+    - review comments
+    - ci failures
+    - github actions
+    - references
+  priority: 80
+  load_strategy: progressive
+  activation_policy: both
+  workflow_triggers:
+  route_exclude: false
+  operation_contracts:
+    review_fix_loop:
+      required_steps:
+        - identify target review and feedback sources
+        - triage feedback and failing checks
+        - fix minimal safe change per item
+        - run targeted verification
+        - summarize updated state
+      required_output_fields:
+        - plan
+        - validation
+        - blockers
+      forbidden_actions:
+        - push_unvalidated_changes
+        - defer_failing_ci
+
+---
+
 # GH PR Review + CI Fix Workflow (Reference)
 
 Follow this workflow to find the latest PR, gather reviewer feedback + CI failures, organize them, and fix them one by one.
@@ -107,7 +142,7 @@ If the failure depends on environment, call that out and suggest a mitigation (e
 
 ## Notes & guardrails
 
-- Enforce `references/code-smells/smells/codex-code-smell.md` during review triage:
+- Enforce `skills/coding/references/code-smells/smells/codex-code-smell.md` during review triage:
   - treat fallback-first implementations as actionable defects by default
   - only accept exceptions when owner + removal date + tracking issue are documented
 - If the PR is in a fork or lacks permissions, report it and ask for access or an alternative.

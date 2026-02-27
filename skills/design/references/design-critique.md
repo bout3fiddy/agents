@@ -1,6 +1,24 @@
 ---
+
 description: Structured interface critique framework for screenshots, component files, or live pages.
+metadata:
+  id: design.ref.design-critique
+  version: "1"
+  task_types:
+    - design
+  trigger_phrases:
+    - design critique
+    - references
+    - references design-critique
+  priority: 72
+  load_strategy: progressive
+  activation_policy: both
+  workflow_triggers: []
+  route_exclude: false
+
 ---
+
+
 # Design Critique
 
 A systematic interface critique framework based on Josh Puckett's methodology from Interface Craft. Analyzes UI screenshots or component code and delivers specific, actionable feedback organized by visual design, interface design, interaction consistency, and user context.
@@ -125,7 +143,30 @@ Structure the critique as:
 [Ranked list of the 3-5 highest-impact changes, each in one sentence]
 ```
 
----
+## Output Contract (v1)
+
+Return the structured payload after your prose:
+
+```json
+{
+  "lane": "critique",
+  "context": "One-line task and audience summary",
+  "first_impressions": "Your immediate read on clarity and emotional fit.",
+  "top_opportunities": [
+    "List of highest impact recommendations"
+  ],
+  "evidence": [
+    {
+      "issue": "Name the issue succinctly",
+      "impact": "Why this hurts users",
+      "opportunity": "What to improve",
+      "priority": "structural | behavioral | visual"
+    }
+  ]
+}
+```
+
+--- 
 
 ## Voice Rules
 

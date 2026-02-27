@@ -1,9 +1,28 @@
 ---
+
 title: Cache Repeated Function Calls
 impact: MEDIUM
 impactDescription: avoid redundant computation
 tags: javascript, cache, memoization, performance
+metadata:
+  id: coding.ref.react.rules.js-cache-function-results
+  version: "1"
+  task_types:
+    - coding
+  trigger_phrases:
+    - js cache function results
+    - react
+    - references
+    - rules
+    - references react rules js-cache-function-results
+  priority: 72
+  load_strategy: progressive
+  activation_policy: both
+  workflow_triggers:
+  route_exclude: false
+
 ---
+
 
 ## Cache Repeated Function Calls
 

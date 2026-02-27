@@ -1,3 +1,23 @@
+---
+metadata:
+  id: coding.ref.react.react-best-practices
+  version: "1"
+  task_types:
+    - coding
+  trigger_phrases:
+    - react
+    - next.js
+    - performance rules
+    - optimization
+    - references
+  priority: 72
+  load_strategy: progressive
+  activation_policy: both
+  workflow_triggers:
+  route_exclude: false
+
+---
+
 # React Best Practices
 
 **Version 1.0.0**  

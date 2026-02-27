@@ -1,15 +1,37 @@
 ---
+
 name: linear-mcp-ops
 description: Manage Linear via MCP (create/update/search issues, tickets, tasks, projects, labels, comments, cycles). Auto-capture brainstorm/ideation into Linear, auto-check Linear context when conversation implies status/backlog/roadmap/priority/ownership, and auto-route items to the best project (create a project if needed).
+metadata:
+  id: planning.ref.linear-mcp-ops
+  version: "1"
+  task_types:
+    - linear
+    - plan
+  trigger_phrases:
+    - linear mcp ops
+    - references
+    - references linear-mcp-ops
+  priority: 72
+  load_strategy: progressive
+  activation_policy: both
+  workflow_triggers:
+    - linear_issue_context_detected
+  route_exclude: false
+
 ---
+
+
 
 # Linear MCP Ops
 
 ## Operating rules
 - Use MCP tools to read/write Linear; do not ask the user to run commands.
 - If only one team exists, use it by default.
-- When conversation implies Linear context (status, backlog, roadmap, ownership, “did we already do this?”), query Linear before answering.
+- If the prompt is an explicit workpackage execution request, defer non-essential Linear checks until a lifecycle transition is explicitly requested.
+- When conversation implies Linear context (status, backlog, roadmap, ownership, “did we already do this?”) and no workpackage execution is active, query Linear before answering.
 - When user is brainstorming or ideating, capture actionable items as issues automatically.
+- For workpackage-first execution prompts, apply workpackage sequencing first and only switch to these rules for explicit lifecycle actions.
 
 ## Brainstorm capture (auto)
 1) Extract actionable items from the conversation (one issue per item).
@@ -31,6 +53,7 @@ description: Manage Linear via MCP (create/update/search issues, tickets, tasks,
 ## Contextual checks (auto)
 - If the user asks about status, backlog, roadmap, priority, ownership, or “what’s next,” run a Linear search and summarize results with IDs/links.
 - If a task references a prior decision, search issues by keywords first.
+- For workpackage execution prompts, do not run lifecycle transition writes unless requested by explicit lifecycle intent.
 
 ## Lifecycle model (default semantics)
 - Use this semantic lifecycle by default: `Unrefined -> Backlog -> In Progress -> In Review -> Completed`.

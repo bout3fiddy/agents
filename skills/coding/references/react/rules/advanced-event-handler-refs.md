@@ -1,9 +1,28 @@
 ---
+
 title: Store Event Handlers in Refs
 impact: LOW
 impactDescription: stable subscriptions
 tags: advanced, hooks, refs, event-handlers, optimization
+metadata:
+  id: coding.ref.react.rules.advanced-event-handler-refs
+  version: "1"
+  task_types:
+    - coding
+  trigger_phrases:
+    - advanced event handler refs
+    - react
+    - references
+    - rules
+    - references react rules advanced-event-handler-refs
+  priority: 72
+  load_strategy: progressive
+  activation_policy: both
+  workflow_triggers:
+  route_exclude: false
+
 ---
+
 
 ## Store Event Handlers in Refs
 

@@ -1,9 +1,28 @@
 ---
+
 title: Batch DOM CSS Changes
 impact: MEDIUM
 impactDescription: reduces reflows/repaints
 tags: javascript, dom, css, performance, reflow
+metadata:
+  id: coding.ref.react.rules.js-batch-dom-css
+  version: "1"
+  task_types:
+    - coding
+  trigger_phrases:
+    - js batch dom css
+    - react
+    - references
+    - rules
+    - references react rules js-batch-dom-css
+  priority: 72
+  load_strategy: progressive
+  activation_policy: both
+  workflow_triggers:
+  route_exclude: false
+
 ---
+
 
 ## Batch DOM CSS Changes
 

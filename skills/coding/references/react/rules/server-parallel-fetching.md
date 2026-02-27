@@ -1,9 +1,28 @@
 ---
+
 title: Parallel Data Fetching with Component Composition
 impact: CRITICAL
 impactDescription: eliminates server-side waterfalls
 tags: server, rsc, parallel-fetching, composition
+metadata:
+  id: coding.ref.react.rules.server-parallel-fetching
+  version: "1"
+  task_types:
+    - coding
+  trigger_phrases:
+    - react
+    - references
+    - rules
+    - server parallel fetching
+    - references react rules server-parallel-fetching
+  priority: 72
+  load_strategy: progressive
+  activation_policy: both
+  workflow_triggers:
+  route_exclude: false
+
 ---
+
 
 ## Parallel Data Fetching with Component Composition
 

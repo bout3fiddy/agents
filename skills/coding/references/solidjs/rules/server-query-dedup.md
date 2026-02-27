@@ -1,9 +1,28 @@
 ---
+
 title: Use query() + createAsync() for request dedupe and shared caching
 impact: HIGH
 impactDescription: deduplicates and shares server fetches
 tags: server, query, createAsync, cache, solidstart
+metadata:
+  id: coding.ref.solidjs.rules.server-query-dedup
+  version: "1"
+  task_types:
+    - coding
+  trigger_phrases:
+    - references
+    - rules
+    - server query dedup
+    - solidjs
+    - references solidjs rules server-query-dedup
+  priority: 72
+  load_strategy: progressive
+  activation_policy: both
+  workflow_triggers:
+  route_exclude: false
+
 ---
+
 
 ## Use `query()` + `createAsync()` for request dedupe and shared caching
 

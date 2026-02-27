@@ -33,6 +33,13 @@ Wrapper commands (from repo root):
 - `models.jsonl` entry shape is `{"model":"provider/model","thinking":"low"}`.
 - Runs models in parallel; parallelism defaults to number of models and can be capped with `PI_EVAL_MAX_PARALLEL`.
 - Thinking mode is read per model from `models.jsonl`; if omitted, fallback is `PI_EVAL_THINKING` (default `low`).
+- Within each model run, eval cases execute in a case worker pool by default with `PI_EVAL_CASE_PARALLELISM=10` (can be overridden via env).
+- Shared case sandbox mode (default on):
+  - Shared sandboxing is enabled by default; set `PI_EVAL_SHARED_CASE_SANDBOX=0` to disable it.
+  - With it enabled, sandbox-safe cases are batched by `suite` and executed in suite-specific shared workspaces.
+  - Cases inside each suite batch can run in parallel with `PI_EVAL_BATCH_CASE_PARALLELISM` (defaults to `PI_EVAL_CASE_PARALLELISM`).
+  - Set `PI_EVAL_SHARED_CASE_MUTABLE_PATHS` (comma-separated) to define writable case overlays (default: `skills-evals/fixtures`).
+  - Any paths outside mutable overlays are read via the shared workspace, so writes there can contaminate across cases; keep overlays covering all mutable targets.
 
 Direct invocation:
 
@@ -54,15 +61,16 @@ Hard-fail unsupported flags:
 
 Runtime model:
 
-- Process-isolated per case.
+- Batches of similar cases (suite + safe tool usage) share one workspace instance each.
+- In batch mode, each workspace is reused for all cases in that suite batch and torn down after the batch.
 - Worker path enabled only with `PI_EVAL_WORKER=1`.
 - Worker captures skill/reference read attempts/invocations and returns JSON results for scoring.
 
 Sandbox model:
 
-- Workspace copy under `/tmp/pi-eval-sandbox/<case-id>/<uuid>`.
-- HOME under `/tmp/pi-eval-home/<case-id>/<uuid>`.
-- Per-case sync bootstrap via `bin/sync.sh` (with `HOME` set to sandbox home).
+- Workspace copy under `/tmp/pi-eval-sandbox/<batch-id>/<uuid>`.
+- HOME under `/tmp/pi-eval-home/<batch-id>/<uuid>`.
+- Each plan/batch/singleton gets a fresh workspace and `bin/sync.sh` bootstrap via `HOME` in sandbox home.
 - Excludes heavy/transient dirs like `.git`, `node_modules`, `.venv`, `dist`, `build`, `coverage`, `.cache`.
 
 Scoring model:

@@ -1,6 +1,26 @@
 ---
+
 description: Codex code-smell policy that forbids fallback-first implementations and enforces hard cutovers by default.
+metadata:
+  id: coding.ref.code-smells.smells.codex-code-smell
+  version: "1"
+  task_types:
+    - coding
+    - code-smell
+  trigger_phrases:
+    - code smells
+    - codex code smell
+    - references
+    - smells
+    - references code-smells smells codex-code-smell
+  priority: 72
+  load_strategy: progressive
+  activation_policy: both
+  workflow_triggers:
+  route_exclude: false
+
 ---
+
 # Codex Code Smell: Fallback-First Implementations
 
 Category: Change Preventers

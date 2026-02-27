@@ -1,9 +1,28 @@
 ---
+
 title: Use Lazy State Initialization
 impact: MEDIUM
 impactDescription: wasted computation on every render
 tags: react, hooks, useState, performance, initialization
+metadata:
+  id: coding.ref.react.rules.rerender-lazy-state-init
+  version: "1"
+  task_types:
+    - coding
+  trigger_phrases:
+    - react
+    - references
+    - rerender lazy state init
+    - rules
+    - references react rules rerender-lazy-state-init
+  priority: 72
+  load_strategy: progressive
+  activation_policy: both
+  workflow_triggers:
+  route_exclude: false
+
 ---
+
 
 ## Use Lazy State Initialization
 

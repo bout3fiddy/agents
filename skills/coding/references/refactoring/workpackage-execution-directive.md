@@ -1,6 +1,39 @@
 ---
+
 description: Standardized execution directive block for implementing refactoring work packages with resumable progress and release closure criteria.
+metadata:
+  id: coding.ref.refactoring.workpackage-execution-directive
+  version: "1"
+  task_types:
+    - coding
+  trigger_phrases:
+    - refactoring
+    - references
+    - workpackage execution directive
+    - references refactoring workpackage-execution-directive
+  priority: 72
+  load_strategy: progressive
+  activation_policy: both
+  workflow_triggers:
+  route_exclude: false
+  operation_contracts:
+    workpackage_execute:
+      required_steps:
+        - read overview and current WP status
+        - execute non-done items in order
+        - capture rationale and proof per item
+        - sync overview rollup with each change
+      required_output_fields:
+        - status
+        - proof
+        - validation
+        - next_action
+      forbidden_actions:
+        - skip_rollup_update
+        - mark_done_without_evidence
+
 ---
+
 
 # Refactoring Work Package Execution Directive
 
@@ -9,6 +42,8 @@ Embed this block near the top of the primary entry file in each refactoring work
 `## Execution Directive (Standard)`
 
 ```text
+REQUIRED: Replace every <VARIABLE> placeholder before running this directive. Do not leave any <...> token unresolved.
+
 start implementing fixes per work package: <WORK_PACKAGE_PATH_OR_DIR>
 
 if a directory path is provided (for example `docs/review/workpackages_<name>_<date>/`):

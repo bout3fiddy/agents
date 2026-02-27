@@ -2,8 +2,30 @@ import { stat } from "node:fs/promises";
 import path from "node:path";
 import { ParseError } from "./errors.js";
 
+type FrontmatterValue = string | number | boolean | null | FrontmatterValue[] | Record<string, FrontmatterValue>;
+
 const isRecord = (value: unknown): value is Record<string, unknown> => {
 	return typeof value === "object" && value !== null && !Array.isArray(value);
+};
+
+const normalizeMetadataValue = (value: unknown): FrontmatterValue => {
+	if (value === null) {
+		return null;
+	}
+
+	if (Array.isArray(value)) {
+		return value.map((item) => normalizeMetadataValue(item));
+	}
+
+	if (isRecord(value)) {
+		return Object.fromEntries(
+			Object.entries(value).map(([key, nested]) => [String(key), normalizeMetadataValue(nested)]),
+		);
+	}
+
+	return typeof value === "string" || typeof value === "number" || typeof value === "boolean"
+		? value
+		: String(value);
 };
 
 export const findSkillMd = async (skillDir: string): Promise<string | null> => {
@@ -56,9 +78,13 @@ export const parseFrontmatter = (content: string): Record<string, unknown> => {
 		}
 	}
 
-	if (isRecord(parsed.metadata)) {
+	if (Object.hasOwn(parsed, "metadata")) {
+		if (!isRecord(parsed.metadata)) {
+			throw new ParseError("Invalid YAML in frontmatter: field 'metadata' must be a mapping");
+		}
+
 		parsed.metadata = Object.fromEntries(
-			Object.entries(parsed.metadata).map(([key, value]) => [String(key), String(value)]),
+			Object.entries(parsed.metadata).map(([key, value]) => [String(key), normalizeMetadataValue(value)]),
 		);
 	}
 

@@ -1,6 +1,26 @@
 ---
+
 description: Signals and refactoring directions for Inappropriate Intimacy.
+metadata:
+  id: coding.ref.code-smells.smells.inappropriate-intimacy
+  version: "1"
+  task_types:
+    - coding
+    - code-smell
+  trigger_phrases:
+    - code smells
+    - inappropriate intimacy
+    - references
+    - smells
+    - references code-smells smells inappropriate-intimacy
+  priority: 72
+  load_strategy: progressive
+  activation_policy: both
+  workflow_triggers:
+  route_exclude: false
+
 ---
+
 # Inappropriate Intimacy
 
 Category: Couplers

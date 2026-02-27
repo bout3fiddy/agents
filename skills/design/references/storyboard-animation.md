@@ -1,6 +1,24 @@
 ---
+
 description: Pattern for refactoring React/Motion animations into readable stage-driven storyboards.
+metadata:
+  id: design.ref.storyboard-animation
+  version: "1"
+  task_types:
+    - design
+  trigger_phrases:
+    - references
+    - storyboard animation
+    - references storyboard-animation
+  priority: 72
+  load_strategy: progressive
+  activation_policy: both
+  workflow_triggers: []
+  route_exclude: false
+
 ---
+
+
 # Storyboard Animation
 
 **Adapted from Interface Craft by Josh Puckett**
@@ -199,3 +217,35 @@ Before finishing, verify:
 - [ ] Repeated elements use `.map()` over a data array
 - [ ] Stage values in JSX are `>=` checks (allows stages to be additive)
 - [ ] `replayTrigger` in the dependency array for dev/debug replay support
+
+## Storyboard Contract (v1)
+
+Required JSON payload keys:
+- `lane` (must be `"storyboard_spec"`)
+- `timing_ms` (ordered object/map of stage delays)
+- `stages` (array of named stage steps)
+- `elements` (named config object map)
+- `springs` (named spring config map)
+- `replay_trigger` (prop or state name used to replay)
+
+```json
+{
+  "lane": "storyboard_spec",
+  "timing_ms": {
+    "card": 300,
+    "heading": 900,
+    "rows": 1500
+  },
+  "stages": [
+    { "name": "card", "at_ms": 300, "goal": "focus" },
+    { "name": "heading", "at_ms": 900, "goal": "announce" }
+  ],
+  "elements": {
+    "card": { "initialScale": 0.85, "finalScale": 1.0 }
+  },
+  "springs": {
+    "default": { "type": "spring", "stiffness": 300, "damping": 30 }
+  },
+  "replay_trigger": "replayTrigger"
+}
+```

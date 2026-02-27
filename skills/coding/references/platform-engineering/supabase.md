@@ -1,7 +1,25 @@
 ---
+
 name: supabase
 description: Supabase CLI and local development workflow. Use for database migrations, linking local to production, RLS policies, storage buckets, and schema management.
+metadata:
+  id: coding.ref.platform-engineering.supabase
+  version: "1"
+  task_types:
+    - coding
+  trigger_phrases:
+    - platform engineering
+    - references
+    - supabase
+    - references platform-engineering supabase
+  priority: 72
+  load_strategy: progressive
+  activation_policy: both
+  workflow_triggers:
+  route_exclude: false
+
 ---
+
 
 # Supabase CLI Reference
 
@@ -272,7 +290,7 @@ WHERE tablename = 'your_table';
 
 ## 7. Environment Variables
 
-Follow `references/secrets-and-auth-guardrails.md`. Store keys in your secret manager or local env files. Do not print or paste keys into chat or logs.
+Follow `skills/coding/references/secrets-and-auth-guardrails.md`. Store keys in your secret manager or local env files. Do not print or paste keys into chat or logs.
 
 ### Required for Production
 

@@ -1,0 +1,16 @@
+id: design.ref.config-patterns
+version: "1"
+task_types:
+  - design
+  - dialkit
+trigger_phrases:
+  - dialkit defaults
+  - dialkit schema
+  - config-patterns
+priority: 20
+load_strategy: progressive
+activation_policy: both
+workflow_triggers:
+  - design_request_detected
+  - dialkit_request_detected
+route_exclude: true

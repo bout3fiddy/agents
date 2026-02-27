@@ -1,9 +1,28 @@
 ---
+
 title: Cross-Request LRU Caching
 impact: HIGH
 impactDescription: caches across requests
 tags: server, cache, lru, cross-request
+metadata:
+  id: coding.ref.react.rules.server-cache-lru
+  version: "1"
+  task_types:
+    - coding
+  trigger_phrases:
+    - react
+    - references
+    - rules
+    - server cache lru
+    - references react rules server-cache-lru
+  priority: 72
+  load_strategy: progressive
+  activation_policy: both
+  workflow_triggers:
+  route_exclude: false
+
 ---
+
 
 ## Cross-Request LRU Caching
 

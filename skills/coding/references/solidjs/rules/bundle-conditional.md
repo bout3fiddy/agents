@@ -1,9 +1,28 @@
 ---
+
 title: Conditional Module Loading
 impact: CRITICAL
 impactDescription: loads large data only when needed
 tags: bundle, conditional-loading, lazy-loading
+metadata:
+  id: coding.ref.solidjs.rules.bundle-conditional
+  version: "1"
+  task_types:
+    - coding
+  trigger_phrases:
+    - bundle conditional
+    - references
+    - rules
+    - solidjs
+    - references solidjs rules bundle-conditional
+  priority: 72
+  load_strategy: progressive
+  activation_policy: both
+  workflow_triggers:
+  route_exclude: false
+
 ---
+
 
 ## Conditional Module Loading
 

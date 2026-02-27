@@ -1,9 +1,28 @@
 ---
+
 title: Cache Storage API Calls
 impact: LOW-MEDIUM
 impactDescription: reduces expensive I/O
 tags: javascript, localStorage, storage, caching, performance
+metadata:
+  id: coding.ref.react.rules.js-cache-storage
+  version: "1"
+  task_types:
+    - coding
+  trigger_phrases:
+    - js cache storage
+    - react
+    - references
+    - rules
+    - references react rules js-cache-storage
+  priority: 72
+  load_strategy: progressive
+  activation_policy: both
+  workflow_triggers:
+  route_exclude: false
+
 ---
+
 
 ## Cache Storage API Calls
 

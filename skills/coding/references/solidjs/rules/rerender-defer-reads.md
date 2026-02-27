@@ -1,9 +1,28 @@
 ---
+
 title: Defer Reactive Reads to Usage Point
 impact: MEDIUM
 impactDescription: avoids unnecessary subscriptions
 tags: reactivity, searchParams, localStorage, optimization
+metadata:
+  id: coding.ref.solidjs.rules.rerender-defer-reads
+  version: "1"
+  task_types:
+    - coding
+  trigger_phrases:
+    - references
+    - rerender defer reads
+    - rules
+    - solidjs
+    - references solidjs rules rerender-defer-reads
+  priority: 72
+  load_strategy: progressive
+  activation_policy: both
+  workflow_triggers:
+  route_exclude: false
+
 ---
+
 
 ## Defer Reactive Reads to Usage Point
 

@@ -1,9 +1,28 @@
 ---
+
 title: Cache Property Access in Loops
 impact: LOW-MEDIUM
 impactDescription: reduces lookups
 tags: javascript, loops, optimization, caching
+metadata:
+  id: coding.ref.react.rules.js-cache-property-access
+  version: "1"
+  task_types:
+    - coding
+  trigger_phrases:
+    - js cache property access
+    - react
+    - references
+    - rules
+    - references react rules js-cache-property-access
+  priority: 72
+  load_strategy: progressive
+  activation_policy: both
+  workflow_triggers:
+  route_exclude: false
+
 ---
+
 
 ## Cache Property Access in Loops
 

@@ -1,9 +1,28 @@
 ---
+
 title: CSS content-visibility for Long Lists
 impact: MEDIUM
 impactDescription: 10× faster initial render
 tags: rendering, css, content-visibility, long-lists
+metadata:
+  id: coding.ref.solidjs.rules.rendering-content-visibility
+  version: "1"
+  task_types:
+    - coding
+  trigger_phrases:
+    - references
+    - rendering content visibility
+    - rules
+    - solidjs
+    - references solidjs rules rendering-content-visibility
+  priority: 72
+  load_strategy: progressive
+  activation_policy: both
+  workflow_triggers:
+  route_exclude: false
+
 ---
+
 
 ## CSS content-visibility for Long Lists
 

@@ -1,9 +1,28 @@
 ---
+
 title: Deduplicate Global Event Listeners
 impact: MEDIUM-HIGH
 impactDescription: single listener for N components
-tags: client, swr, event-listeners, subscription
+tags: client, event-listeners, subscription, dom-events
+metadata:
+  id: coding.ref.solidjs.rules.client-event-listeners
+  version: "1"
+  task_types:
+    - coding
+  trigger_phrases:
+    - client event listeners
+    - references
+    - rules
+    - solidjs
+    - references solidjs rules client-event-listeners
+  priority: 72
+  load_strategy: progressive
+  activation_policy: both
+  workflow_triggers:
+  route_exclude: false
+
 ---
+
 
 ## Deduplicate Global Event Listeners
 

@@ -1,9 +1,28 @@
 ---
+
 title: Use Activity Component for Show/Hide
 impact: MEDIUM
 impactDescription: preserves state/DOM
 tags: rendering, activity, visibility, state-preservation
+metadata:
+  id: coding.ref.solidjs.rules.rendering-activity
+  version: "1"
+  task_types:
+    - coding
+  trigger_phrases:
+    - references
+    - rendering activity
+    - rules
+    - solidjs
+    - references solidjs rules rendering-activity
+  priority: 72
+  load_strategy: progressive
+  activation_policy: both
+  workflow_triggers:
+  route_exclude: false
+
 ---
+
 
 ## Use Activity Component for Show/Hide
 

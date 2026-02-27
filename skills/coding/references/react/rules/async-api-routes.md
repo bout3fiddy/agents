@@ -1,9 +1,28 @@
 ---
+
 title: Prevent Waterfall Chains in API Routes
 impact: CRITICAL
 impactDescription: 2-10× improvement
 tags: api-routes, server-actions, waterfalls, parallelization
+metadata:
+  id: coding.ref.react.rules.async-api-routes
+  version: "1"
+  task_types:
+    - coding
+  trigger_phrases:
+    - async api routes
+    - react
+    - references
+    - rules
+    - references react rules async-api-routes
+  priority: 72
+  load_strategy: progressive
+  activation_policy: both
+  workflow_triggers:
+  route_exclude: false
+
 ---
+
 
 ## Prevent Waterfall Chains in API Routes
 

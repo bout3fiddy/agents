@@ -1,9 +1,32 @@
 ---
+
 description: Workflow to migrate large legacy AGENTS files into concise progressive-disclosure architecture.
+metadata:
+  id: housekeeping.ref.migration-playbook
+  version: "1"
+  task_types:
+    - housekeeping
+    - agents-architecture
+    - claude-architecture
+  trigger_phrases:
+    - migration playbook
+    - AGENTS/CLAUDE migration
+    - references
+    - references migration-playbook
+  priority: 72
+  load_strategy: progressive
+  activation_policy: both
+  workflow_triggers: []
+  route_exclude: false
+
 ---
+
+
 # Legacy Monolith Migration Playbook
 
 Use this when an existing `AGENTS.md` is long, mixed-domain, or contradictory.
+
+Canonical ownership note: keep any `AGENTS.md` and `CLAUDE.md` intent aligned during the same migration pass; use the AGENTS doc as primary and mirror required constraints into CLAUDE.md.
 
 ## Trigger signals
 
@@ -43,3 +66,4 @@ After:
 - [ ] Deep details are linked, not duplicated.
 - [ ] Contradictions and stale bullets removed.
 - [ ] Volatile entries include `owner` and `last_verified` where feasible.
+- [ ] Canonical owner declared; CLAUDE mirror verified non-conflicting.

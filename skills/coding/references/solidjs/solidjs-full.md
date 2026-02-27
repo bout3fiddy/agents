@@ -1,3 +1,22 @@
+---
+metadata:
+  id: coding.ref.solidjs.solidjs-full
+  version: "1"
+  task_types:
+    - coding
+  trigger_phrases:
+    - solidjs
+    - solidjs development
+    - solidjs full reference
+    - references
+  priority: 72
+  load_strategy: progressive
+  activation_policy: both
+  workflow_triggers:
+  route_exclude: false
+
+---
+
 # SolidJS Full Reference
 
 # SolidJS Development Skill
@@ -976,8 +995,8 @@ src/
 ## SolidJS Performance Rules
 
 Performance rules have been moved to:
-- `references/solid-performance-guidelines.md`
-- `references/solidjs/rules/`
+- `skills/coding/references/solid-performance-guidelines.md`
+- `skills/coding/references/solidjs/rules/`
 
 
 ## Testing

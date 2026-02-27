@@ -1,9 +1,28 @@
 ---
+
 title: Use Functional setState Updates
 impact: MEDIUM
 impactDescription: prevents stale closures and unnecessary callback recreations
 tags: react, hooks, useState, useCallback, callbacks, closures
+metadata:
+  id: coding.ref.react.rules.rerender-functional-setstate
+  version: "1"
+  task_types:
+    - coding
+  trigger_phrases:
+    - react
+    - references
+    - rerender functional setstate
+    - rules
+    - references react rules rerender-functional-setstate
+  priority: 72
+  load_strategy: progressive
+  activation_policy: both
+  workflow_triggers:
+  route_exclude: false
+
 ---
+
 
 ## Use Functional setState Updates
 

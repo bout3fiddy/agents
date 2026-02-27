@@ -1,6 +1,25 @@
 ---
-description: Index of reference files for references/solidjs.
+
+description: Index of reference files for skills/coding/references/solidjs.
+metadata:
+  id: coding.ref.solidjs.index
+  version: "1"
+  task_types:
+    - coding
+  trigger_phrases:
+    - index
+    - references
+    - solidjs
+    - references solidjs index
+    - reference index
+  priority: 30
+  load_strategy: progressive
+  activation_policy: both
+  workflow_triggers:
+  route_exclude: true
+
 ---
+
 # SolidJS Best Practices (Reference)
 
 Performance-focused guidelines for SolidJS apps, ordered by impact. Apply these patterns when writing or reviewing Solid components, data fetching, and UI performance.
@@ -40,9 +59,10 @@ Reference these guidelines when:
 - Preload on user intent
 
 ## References
-- `references/solidjs/solid-performance-guidelines.md` - complete guide with rule index
-- `references/solidjs/solidjs-full.md` - full SolidJS development reference
-## Rule Categories in `references/solidjs/rules/`
+- `skills/coding/references/solidjs/solid-performance-guidelines.md` - complete guide with rule index
+- `skills/coding/references/solidjs/solidjs-full.md` - full SolidJS development reference
+- `skills/coding/references/solidjs/rules/index.md` - full SolidJS rule index
+## Rule Categories in `skills/coding/references/solidjs/rules/`
 
 - `async-*` — waterfall elimination
 - `bundle-*` — bundle size optimization

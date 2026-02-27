@@ -1,3 +1,26 @@
+---
+metadata:
+  id: design.ref.tailwindcss-full
+  version: "1"
+  task_types:
+    - design
+  trigger_phrases:
+    - tailwind
+    - tailwind css
+    - utility classes
+    - utility-first
+    - UI styling
+    - responsive layout
+    - design system
+    - references
+  priority: 72
+  load_strategy: progressive
+  activation_policy: both
+  workflow_triggers:
+  route_exclude: false
+
+---
+
 # Tailwind CSS Full Reference
 
 # Tailwind CSS v4 Comprehensive Skill

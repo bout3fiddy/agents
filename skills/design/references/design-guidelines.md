@@ -1,3 +1,26 @@
+---
+metadata:
+  id: design.ref.design-guidelines
+  version: "1"
+  task_types:
+    - design
+  trigger_phrases:
+    - visual design
+    - design system
+    - design language
+    - typography
+    - spacing system
+    - UI hierarchy
+    - layout direction
+    - references
+  priority: 72
+  load_strategy: progressive
+  activation_policy: both
+  workflow_triggers:
+  route_exclude: false
+
+---
+
 # Frontend Design Guidelines (Reference)
 
 ## Depth and layering

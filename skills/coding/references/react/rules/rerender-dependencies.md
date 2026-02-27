@@ -1,9 +1,28 @@
 ---
+
 title: Narrow Effect Dependencies
 impact: LOW
 impactDescription: minimizes effect re-runs
 tags: rerender, useEffect, dependencies, optimization
+metadata:
+  id: coding.ref.react.rules.rerender-dependencies
+  version: "1"
+  task_types:
+    - coding
+  trigger_phrases:
+    - react
+    - references
+    - rerender dependencies
+    - rules
+    - references react rules rerender-dependencies
+  priority: 72
+  load_strategy: progressive
+  activation_policy: both
+  workflow_triggers:
+  route_exclude: false
+
 ---
+
 
 ## Narrow Effect Dependencies
 

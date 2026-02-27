@@ -1,9 +1,28 @@
 ---
+
 title: Extract to Memoized Components
 impact: MEDIUM
 impactDescription: enables early returns
 tags: rerender, memo, useMemo, optimization
+metadata:
+  id: coding.ref.react.rules.rerender-memo
+  version: "1"
+  task_types:
+    - coding
+  trigger_phrases:
+    - react
+    - references
+    - rerender memo
+    - rules
+    - references react rules rerender-memo
+  priority: 72
+  load_strategy: progressive
+  activation_policy: both
+  workflow_triggers:
+  route_exclude: false
+
 ---
+
 
 ## Extract to Memoized Components
 

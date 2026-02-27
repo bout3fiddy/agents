@@ -1,9 +1,28 @@
 ---
+
 title: Defer State Reads to Usage Point
 impact: MEDIUM
 impactDescription: avoids unnecessary subscriptions
 tags: rerender, searchParams, localStorage, optimization
+metadata:
+  id: coding.ref.react.rules.rerender-defer-reads
+  version: "1"
+  task_types:
+    - coding
+  trigger_phrases:
+    - react
+    - references
+    - rerender defer reads
+    - rules
+    - references react rules rerender-defer-reads
+  priority: 72
+  load_strategy: progressive
+  activation_policy: both
+  workflow_triggers:
+  route_exclude: false
+
 ---
+
 
 ## Defer State Reads to Usage Point
 

@@ -1,9 +1,28 @@
 ---
+
 title: useLatest for Stable Callback Refs
 impact: LOW
 impactDescription: prevents effect re-runs
 tags: advanced, hooks, useLatest, refs, optimization
+metadata:
+  id: coding.ref.react.rules.advanced-use-latest
+  version: "1"
+  task_types:
+    - coding
+  trigger_phrases:
+    - advanced use latest
+    - react
+    - references
+    - rules
+    - references react rules advanced-use-latest
+  priority: 72
+  load_strategy: progressive
+  activation_policy: both
+  workflow_triggers:
+  route_exclude: false
+
 ---
+
 
 ## useLatest for Stable Callback Refs
 

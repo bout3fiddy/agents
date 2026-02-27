@@ -1,3 +1,38 @@
+---
+metadata:
+  id: coding.ref.secrets-and-auth-guardrails
+  version: "1"
+  task_types:
+    - coding
+  trigger_phrases:
+    - secrets
+    - auth
+    - credentials
+    - key rotation
+    - references
+  priority: 90
+  load_strategy: progressive
+  activation_policy: both
+  workflow_triggers:
+  route_exclude: false
+  operation_contracts:
+    secret_incident_response:
+      required_steps:
+        - confirm scope and expected exposure
+        - perform safe remediations without printing secrets
+        - validate repository and tooling state
+        - capture follow-up prevention actions
+      required_output_fields:
+        - scope
+        - actions
+        - verification
+        - prevent_next
+      forbidden_actions:
+        - print_secrets
+        - edit_secret_files_in_place
+
+---
+
 # Secrets and Auth Guardrails (Reference)
 
 ## Absolute rules

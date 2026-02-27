@@ -1,3 +1,22 @@
+---
+metadata:
+  id: coding.ref.solidjs.rules._sections
+  version: "1"
+  task_types:
+    - coding
+  trigger_phrases:
+    - solidjs sections
+    - solidjs rules
+    - rule categories
+    - references
+  priority: 20
+  load_strategy: progressive
+  activation_policy: both
+  workflow_triggers:
+  route_exclude: true
+
+---
+
 # Sections
 
 This file defines all sections, their ordering, impact levels, and descriptions.

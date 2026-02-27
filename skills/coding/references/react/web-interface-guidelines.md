@@ -1,3 +1,23 @@
+---
+metadata:
+  id: coding.ref.react.web-interface-guidelines
+  version: "1"
+  task_types:
+    - coding
+  trigger_phrases:
+    - ui review
+    - design review
+    - web interface
+    - react review
+    - references
+  priority: 72
+  load_strategy: progressive
+  activation_policy: both
+  workflow_triggers:
+  route_exclude: false
+
+---
+
 # Web Interface Guidelines (UI Review Reference)
 
 Use this when reviewing React/Next.js UI for design/accessibility/UX quality.

@@ -1,9 +1,25 @@
 ---
+
 name: gcp-operations
 description: Use when asked to check GCP status/logs, operate Cloud Run, manage secrets, or deploy services. Generic GCP workflows with project/region discovery steps.
 metadata:
-  version: "2.0.0"
+  id: coding.ref.platform-engineering.gcp-operations
+  version: "1"
+  task_types:
+    - coding
+  trigger_phrases:
+    - gcp operations
+    - platform engineering
+    - references
+    - references platform-engineering gcp-operations
+  priority: 72
+  load_strategy: progressive
+  activation_policy: both
+  workflow_triggers:
+  route_exclude: false
+
 ---
+
 
 # GCP Operations (Generic)
 
@@ -103,7 +119,7 @@ gcloud logging read \
 
 ## Secret Manager
 
-Follow `references/secrets-and-auth-guardrails.md`. Do not read or print secret values.
+Follow `skills/coding/references/secrets-and-auth-guardrails.md`. Do not read or print secret values.
 
 ```bash
 # List secrets

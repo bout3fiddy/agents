@@ -1,9 +1,28 @@
 ---
+
 title: CSS content-visibility for Long Lists
 impact: HIGH
 impactDescription: faster initial render
 tags: rendering, css, content-visibility, long-lists
+metadata:
+  id: coding.ref.react.rules.rendering-content-visibility
+  version: "1"
+  task_types:
+    - coding
+  trigger_phrases:
+    - react
+    - references
+    - rendering content visibility
+    - rules
+    - references react rules rendering-content-visibility
+  priority: 72
+  load_strategy: progressive
+  activation_policy: both
+  workflow_triggers:
+  route_exclude: false
+
 ---
+
 
 ## CSS content-visibility for Long Lists
 

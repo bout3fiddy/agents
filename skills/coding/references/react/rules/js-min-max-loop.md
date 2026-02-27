@@ -1,9 +1,28 @@
 ---
+
 title: Use Loop for Min/Max Instead of Sort
 impact: LOW
 impactDescription: O(n) instead of O(n log n)
 tags: javascript, arrays, performance, sorting, algorithms
+metadata:
+  id: coding.ref.react.rules.js-min-max-loop
+  version: "1"
+  task_types:
+    - coding
+  trigger_phrases:
+    - js min max loop
+    - react
+    - references
+    - rules
+    - references react rules js-min-max-loop
+  priority: 72
+  load_strategy: progressive
+  activation_policy: both
+  workflow_triggers:
+  route_exclude: false
+
 ---
+
 
 ## Use Loop for Min/Max Instead of Sort
 

@@ -1,9 +1,28 @@
 ---
-description: Index of reference files for references/references.
+
+description: Index of planning reference files for `skills/planning/references`.
+metadata:
+  id: planning.ref.index
+  version: "1"
+  task_types:
+    - planning
+  trigger_phrases:
+    - index
+    - references
+    - references index
+    - reference index
+  priority: 30
+  load_strategy: progressive
+  activation_policy: both
+  workflow_triggers:
+  route_exclude: true
+
 ---
+
+
 # References Index
 
 ## References
-- `references/ask-questions-if-underspecified.md` - Use when user requests implementation work (implement, add, create, build, refactor, fix) AND the request lacks clear acceptance criteria, scope, or constraints. Do NOT use during exploration, explanation, or continua...
-- `references/linear-mcp-ops.md` - Manage Linear via MCP (create/update/search issues, tickets, tasks, projects, labels, comments, cycles). Auto-capture brainstorm/ideation into Linear, auto-check Linear context when conversation implies status/backlog...
-- `references/spec-driven-iterative-builder.md` - Spec-first, iterative delivery workflow. Use when asked to tackle future considerations, do research/architecture, try approaches, keep progress in docs/specs, or continue building without frequent check-ins.
+- `skills/planning/references/ask-questions-if-underspecified.md` - Clarify ambiguous implementation intent before committing to a plan or code direction.
+- `skills/planning/references/linear-mcp-ops.md` - Run Linear lifecycle transitions, contextual lookups, and brainstorm-to-issue capture through MCP.
+- `skills/planning/references/spec-driven-iterative-builder.md` - Drive multi-step implementation via `docs/specs/*`, including work-package continuation/sync mode.

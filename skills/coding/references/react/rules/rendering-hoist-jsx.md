@@ -1,9 +1,28 @@
 ---
+
 title: Hoist Static JSX Elements
 impact: LOW
 impactDescription: avoids re-creation
 tags: rendering, jsx, static, optimization
+metadata:
+  id: coding.ref.react.rules.rendering-hoist-jsx
+  version: "1"
+  task_types:
+    - coding
+  trigger_phrases:
+    - react
+    - references
+    - rendering hoist jsx
+    - rules
+    - references react rules rendering-hoist-jsx
+  priority: 72
+  load_strategy: progressive
+  activation_policy: both
+  workflow_triggers:
+  route_exclude: false
+
 ---
+
 
 ## Hoist Static JSX Elements
 

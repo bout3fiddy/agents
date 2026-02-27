@@ -5,9 +5,9 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-START_MARKER = "<!-- AGENTS_SKILLS_INDEX_START -->"
-END_MARKER = "<!-- AGENTS_SKILLS_INDEX_END -->"
-INDEX_HEADER = "AUTO-GENERATED SKILLS INDEX. SOURCE: skills/*/SKILL.md + skills/*/references/*.md"
+from frontmatter_parser import parse_frontmatter_text, parse_frontmatter_metadata, normalize_path
+
+INDEX_AUDIT_LABEL = "Skills routing metadata audit"
 DESCRIPTION_KEYS = ("description", "summary", "impactDescription")
 
 
@@ -23,28 +23,12 @@ def add_result(target: list[Result], kind: str, path: str, detail: str, fix: str
     target.append(Result(kind=kind, path=path, detail=detail, fix=fix))
 
 
-def parse_frontmatter(text: str) -> dict[str, str]:
-    if not text.startswith("---"):
-        return {}
-    parts = text.split("---", 2)
-    if len(parts) < 3:
-        return {}
-
-    data: dict[str, str] = {}
-    for line in parts[1].splitlines():
-        line = line.strip()
-        if not line or line.startswith("#") or ":" not in line:
-            continue
-        key, value = line.split(":", 1)
-        data[key.strip()] = value.strip().strip("'\"")
-    return data
-
-
 def strip_frontmatter(text: str) -> str:
-    if not text.startswith("---"):
+    fm = parse_frontmatter_text(text)
+    if not fm:
         return text
-    parts = text.split("---", 2)
-    return parts[2] if len(parts) >= 3 else text
+    marker_len = text.find("---", 3)
+    return text[marker_len + 3 :] if marker_len != -1 else text
 
 
 def first_heading(text: str) -> str:
@@ -93,15 +77,6 @@ def normalize_text(value: str, max_len: int = 220) -> str:
 
 def sanitize(value: str) -> str:
     return normalize_text(value).replace("|", "/").strip()
-
-
-def normalize_ref_path(skill_name: str, ref: str) -> str:
-    ref = ref.strip().strip("`")
-    if ref.startswith("skills/"):
-        return ref
-    if ref.startswith("./"):
-        ref = ref[2:]
-    return f"skills/{skill_name}/{ref}"
 
 
 def parse_triggers(text: str) -> list[tuple[str, str]]:
@@ -170,7 +145,8 @@ def scan_skills(
             continue
 
         text = skill_file.read_text(encoding="utf-8")
-        fm = parse_frontmatter(text)
+        fm = parse_frontmatter_text(text)
+        metadata = parse_frontmatter_metadata(text)
         name = fm.get("name") or skill_path.name
         desc = fm.get("description", "")
 
@@ -191,13 +167,27 @@ def scan_skills(
                 "Add description: ... to frontmatter.",
             )
 
+        if metadata.get("route_exclude") is True:
+            continue
+
         skill_entries.append(
-            f"skill|{sanitize(name)}|{sanitize(desc)}|skills/{skill_path.name}/SKILL.md"
+            f"skill|{sanitize(str(name))}|{sanitize(str(desc))}|skills/{skill_path.name}/SKILL.md"
         )
+
+        if metadata.get("id"):
+            id_meta = str(metadata["id"])
+            if not id_meta:
+                add_result(
+                    warnings,
+                    "skill",
+                    f"skills/{skill_path.name}/SKILL.md",
+                    "metadata.id is empty; derived id will be used.",
+                    "Set metadata.id explicitly.",
+                )
 
         for trigger, ref in parse_triggers(text):
             trigger_count += 1
-            norm_path = normalize_ref_path(skill_path.name, ref)
+            norm_path = normalize_path(skill_path.name, ref)
             if not (root / norm_path).exists():
                 add_result(
                     errors,
@@ -207,7 +197,7 @@ def scan_skills(
                     "Fix trigger path or add the referenced file.",
                 )
             trigger_entries.append(
-                f"trigger|{sanitize(name)}|{sanitize(trigger)}|{norm_path}"
+                f"trigger|{sanitize(str(name))}|{sanitize(trigger)}|{norm_path}"
             )
 
         refs_dir = skill_path / "references"
@@ -217,7 +207,7 @@ def scan_skills(
         for index_file in sorted(refs_dir.rglob("index.md")):
             index_text = index_file.read_text(encoding="utf-8", errors="ignore")
             for ref_path, desc_text in parse_reference_index(index_text):
-                normalized = normalize_ref_path(skill_path.name, ref_path)
+                normalized = normalize_path(skill_path.name, ref_path)
                 index_listed_paths.add(normalized)
 
                 if not desc_text:
@@ -248,8 +238,8 @@ def scan_skills(
             ref_count += 1
             rel = ref_file.relative_to(root).as_posix()
             ref_text = ref_file.read_text(encoding="utf-8", errors="ignore")
-            ref_fm = parse_frontmatter(ref_text)
-            title = ref_fm.get("title") or first_heading(ref_text)
+            ref_fm = parse_frontmatter_text(ref_text)
+            title = ref_fm.get("title") if isinstance(ref_fm.get("title"), str) else first_heading(ref_text)
 
             if not title:
                 title = ref_file.stem.replace("-", " ")
@@ -283,7 +273,7 @@ def scan_skills(
             if not desc:
                 for key in DESCRIPTION_KEYS:
                     field = ref_fm.get(key)
-                    if field:
+                    if isinstance(field, str) and field.strip():
                         desc = normalize_text(field)
                         break
 
@@ -311,7 +301,7 @@ def scan_skills(
                 desc = ""
 
             ref_entries.append(
-                f"ref|{sanitize(name)}|{rel}|{sanitize(title)}|{sanitize(desc)}"
+                f"ref|{sanitize(str(name))}|{rel}|{sanitize(str(title))}|{sanitize(desc)}"
             )
 
     return (
@@ -325,44 +315,18 @@ def scan_skills(
     )
 
 
-def build_index(root: Path, instructions_path: Path) -> tuple[int, int, int, bool, list[Result], list[Result]]:
-    if not instructions_path.exists():
-        raise SystemExit(f"Missing instructions file: {instructions_path}")
-
-    content = instructions_path.read_text(encoding="utf-8")
-    if START_MARKER not in content or END_MARKER not in content:
-        raise SystemExit("Skills index markers missing in instructions/global.md")
-
+def build_index(root: Path) -> tuple[int, int, int, bool, list[Result], list[Result]]:
     (
         skill_entries,
-        trigger_entries,
-        ref_entries,
+        _trigger_entries,
+        _ref_entries,
         trigger_count,
         ref_count,
         errors,
         warnings,
     ) = scan_skills(root)
 
-    lines = [
-        INDEX_HEADER,
-        *sorted(skill_entries),
-        *sorted(trigger_entries),
-        *sorted(ref_entries),
-    ]
-    index_text = "\n".join(lines)
-
-    start_index = content.index(START_MARKER) + len(START_MARKER)
-    end_index = content.index(END_MARKER)
-    new_block = f"\n{index_text}\n"
-    existing_block = content[start_index:end_index]
-
-    updated = False
-    if existing_block != new_block:
-        updated = True
-        updated_content = content[:start_index] + new_block + content[end_index:]
-        instructions_path.write_text(updated_content, encoding="utf-8")
-
-    return len(skill_entries), trigger_count, ref_count, updated, errors, warnings
+    return len(skill_entries), trigger_count, ref_count, False, errors, warnings
 
 
 def print_results(
@@ -372,10 +336,9 @@ def print_results(
     updated: bool,
     errors: list[Result],
     warnings: list[Result],
-    instructions_path: Path,
 ) -> None:
     status = "FAIL" if errors else "OK"
-    print(f"Skills index audit: {status}")
+    print(f"{INDEX_AUDIT_LABEL}: {status}")
     print(
         "Skills: {skills} | Triggers: {triggers} | References: {refs} | Errors: {errors} | Warnings: {warnings}".format(
             skills=skills_count,
@@ -397,18 +360,16 @@ def print_results(
             print(f" - [{row.kind}] {row.path} :: {row.detail} | Fix: {row.fix}")
 
     if updated:
-        print(f"Updated skills index in {instructions_path}")
+        print("Index block updates are disabled under router-first (no global marker contract).")
     else:
-        print(f"Skills index unchanged in {instructions_path}")
+        print("No in-source index mutation is performed in this hard-cutover model.")
 
 
 def main() -> int:
     root = Path(__file__).resolve().parents[3]
-    instructions_path = root / "instructions" / "global.md"
 
     skills_count, trigger_count, ref_count, updated, errors, warnings = build_index(
         root=root,
-        instructions_path=instructions_path,
     )
 
     print_results(
@@ -418,7 +379,6 @@ def main() -> int:
         updated=updated,
         errors=errors,
         warnings=warnings,
-        instructions_path=instructions_path,
     )
 
     return 1 if errors else 0

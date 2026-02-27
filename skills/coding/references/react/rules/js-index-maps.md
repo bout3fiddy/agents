@@ -1,9 +1,28 @@
 ---
+
 title: Build Index Maps for Repeated Lookups
 impact: LOW-MEDIUM
 impactDescription: 1M ops to 2K ops
 tags: javascript, map, indexing, optimization, performance
+metadata:
+  id: coding.ref.react.rules.js-index-maps
+  version: "1"
+  task_types:
+    - coding
+  trigger_phrases:
+    - js index maps
+    - react
+    - references
+    - rules
+    - references react rules js-index-maps
+  priority: 72
+  load_strategy: progressive
+  activation_policy: both
+  workflow_triggers:
+  route_exclude: false
+
 ---
+
 
 ## Build Index Maps for Repeated Lookups
 

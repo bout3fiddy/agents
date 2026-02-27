@@ -1,9 +1,28 @@
 ---
+
 title: Subscribe to Derived State
 impact: MEDIUM
 impactDescription: reduces re-render frequency
 tags: rerender, derived-state, media-query, optimization
+metadata:
+  id: coding.ref.react.rules.rerender-derived-state
+  version: "1"
+  task_types:
+    - coding
+  trigger_phrases:
+    - react
+    - references
+    - rerender derived state
+    - rules
+    - references react rules rerender-derived-state
+  priority: 72
+  load_strategy: progressive
+  activation_policy: both
+  workflow_triggers:
+  route_exclude: false
+
 ---
+
 
 ## Subscribe to Derived State
 

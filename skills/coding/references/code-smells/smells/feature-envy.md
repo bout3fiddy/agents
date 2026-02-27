@@ -1,6 +1,26 @@
 ---
+
 description: Signals and refactoring directions for Feature Envy.
+metadata:
+  id: coding.ref.code-smells.smells.feature-envy
+  version: "1"
+  task_types:
+    - coding
+    - code-smell
+  trigger_phrases:
+    - code smells
+    - feature envy
+    - references
+    - smells
+    - references code-smells smells feature-envy
+  priority: 72
+  load_strategy: progressive
+  activation_policy: both
+  workflow_triggers:
+  route_exclude: false
+
 ---
+
 # Feature Envy
 
 Category: Couplers

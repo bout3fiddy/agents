@@ -1,9 +1,28 @@
 ---
+
 title: Promise.all() for Independent Operations
 impact: CRITICAL
 impactDescription: 2-10× improvement
 tags: async, parallelization, promises, waterfalls
+metadata:
+  id: coding.ref.react.rules.async-parallel
+  version: "1"
+  task_types:
+    - coding
+  trigger_phrases:
+    - async parallel
+    - react
+    - references
+    - rules
+    - references react rules async-parallel
+  priority: 72
+  load_strategy: progressive
+  activation_policy: both
+  workflow_triggers:
+  route_exclude: false
+
 ---
+
 
 ## Promise.all() for Independent Operations
 

@@ -1,9 +1,28 @@
 ---
+
 title: Deduplicate Global Event Listeners
 impact: LOW
 impactDescription: single listener for N components
 tags: client, swr, event-listeners, subscription
+metadata:
+  id: coding.ref.react.rules.client-event-listeners
+  version: "1"
+  task_types:
+    - coding
+  trigger_phrases:
+    - client event listeners
+    - react
+    - references
+    - rules
+    - references react rules client-event-listeners
+  priority: 72
+  load_strategy: progressive
+  activation_policy: both
+  workflow_triggers:
+  route_exclude: false
+
 ---
+
 
 ## Deduplicate Global Event Listeners
 

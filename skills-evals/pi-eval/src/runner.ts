@@ -14,7 +14,15 @@ import { loadCases, filterCases } from "./cases.js";
 import { loadEvalConfig } from "./config.js";
 import { color, renderPanel, renderTable, symbols } from "./logger.js";
 import { buildReport, readReportRows, renderReportNotice, updateIndex, writeReport } from "./report.js";
-import { createSandbox, createSandboxHome, cleanupSandbox, cleanupSandboxHome, mapSkillPathsToSandbox, runEvalSync } from "./sandbox.js";
+import {
+	createSandbox,
+	createSharedCaseWorkspace,
+	createSandboxHome,
+	cleanupSandbox,
+	cleanupSandboxHome,
+	mapSkillPathsToSandbox,
+	runEvalSync,
+} from "./sandbox.js";
 import { buildCaseResult, evaluateCase } from "./scoring.js";
 import { discoverSkills } from "./skills.js";
 import type {
@@ -27,8 +35,19 @@ import type {
 } from "./types.js";
 import { fileExists, formatDuration, normalizePath, resolvePath } from "./utils.js";
 
+type IndexedCase = { index: number; evalCase: EvalCase };
+type CaseExecution = { index: number; evaluation: CaseEvaluation };
+type CasePlan = {
+	id: string;
+	suite: string;
+	mode: "batch" | "single";
+	cases: IndexedCase[];
+};
+
 const DEFAULT_CASES_PATH = "skills-evals/fixtures/eval-cases.jsonl";
 const CASE_TIMEOUT_MS = 180_000;
+const DEFAULT_CASE_PARALLELISM = 10;
+const DEFAULT_SHARED_CASE_MUTABLE_PATHS = ["skills-evals/fixtures"];
 
 const extensionRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const extensionEntry = path.join(extensionRoot, "index.ts");
@@ -147,6 +166,82 @@ const renderRunSummary = (evaluations: CaseEvaluation[], durationMs: number) => 
 	console.log("");
 };
 
+const parsePositiveIntEnv = (value: string | undefined, defaultValue: number): number => {
+	const parsed = Number.parseInt(value ?? `${defaultValue}`, 10);
+	if (!Number.isFinite(parsed) || parsed < 1) {
+		throw new Error("PI_EVAL_CASE_PARALLELISM must be a positive integer.");
+	}
+	return parsed;
+};
+
+const parseBoolEnv = (value: string | undefined, defaultValue: boolean): boolean => {
+	if (value === undefined) return defaultValue;
+	const normalized = value.trim().toLowerCase();
+	return ["1", "true", "yes", "on"].includes(normalized);
+};
+
+const parsePathListEnv = (value: string | undefined, defaultValue: string[]): string[] => {
+	if (!value) return defaultValue;
+	const list = value
+		.split(",")
+		.map((item) => item.trim())
+		.filter((item) => item.length > 0);
+	return list.length > 0 ? list : defaultValue;
+};
+
+const runItemsInParallel = async <TItem, TResult>(
+	items: TItem[],
+	parallelism: number,
+	runItem: (item: TItem) => Promise<TResult>,
+): Promise<TResult[]> => {
+	const results = new Array<TResult>(items.length);
+	let nextIndex = 0;
+
+	const worker = async () => {
+		while (true) {
+			const itemIndex = nextIndex;
+			nextIndex += 1;
+			if (itemIndex >= items.length) return;
+			results[itemIndex] = await runItem(items[itemIndex]);
+		}
+	};
+
+	const workerCount = Math.min(Math.max(parallelism, 1), items.length);
+	await Promise.all(Array.from({ length: workerCount }, () => worker()));
+	return results;
+};
+
+const runCasePlansInParallel = async (
+	cases: CasePlan[],
+	totalCaseCount: number,
+	caseWorkerCount: number,
+	runPlan: (plan: CasePlan) => Promise<CaseExecution[]>,
+): Promise<CaseEvaluation[]> => {
+	const evaluations = new Array<CaseEvaluation>(totalCaseCount);
+	let nextIndex = 0;
+
+	const worker = async () => {
+		while (true) {
+			const planIndex = nextIndex;
+			nextIndex += 1;
+			if (planIndex >= cases.length) return;
+
+			const plan = cases[planIndex];
+			const results = await runPlan(plan);
+			for (const item of results) {
+				evaluations[item.index] = item.evaluation;
+				console.log(
+					`${item.evaluation.status === "pass" ? symbols.ok : symbols.fail} ${item.evaluation.caseId}`,
+				);
+			}
+		}
+	};
+
+	const workers = Array.from({ length: Math.min(caseWorkerCount, cases.length) }, () => worker());
+	await Promise.all(workers);
+	return evaluations;
+};
+
 const buildCaseTable = (evaluations: CaseEvaluation[]): string => {
 	const rows = evaluations.map((item) => {
 		const status = item.status === "pass" ? symbols.ok : symbols.fail;
@@ -181,6 +276,49 @@ const resolveTools = (evalCase: EvalCase): string[] => {
 	return tools;
 };
 
+const resolveCaseSkillPaths = (
+	evalCase: EvalCase,
+	skillMap: Map<string, SkillInfo>,
+): { paths: string[]; missing: string[] } => {
+	const baseSkillSet = evalCase.skillSet ?? Array.from(skillMap.keys());
+	return resolveSkillPaths(baseSkillSet, skillMap);
+};
+
+const canBatchCase = (evalCase: EvalCase): boolean => {
+	if (!resolveSandbox(evalCase)) return false;
+	const tools = resolveTools(evalCase);
+	return !tools.includes("write") && !tools.includes("edit");
+};
+
+const planCaseExecution = (cases: IndexedCase[]): CasePlan[] => {
+	const plans: CasePlan[] = [];
+	const suiteIndex = new Map<string, number>();
+	for (const item of cases) {
+		if (!canBatchCase(item.evalCase)) {
+			plans.push({
+				id: `single-${item.evalCase.id}-${item.index}`,
+				suite: item.evalCase.suite,
+				mode: "single",
+				cases: [item],
+			});
+			continue;
+		}
+
+		const existingIndex = suiteIndex.get(item.evalCase.suite);
+		if (existingIndex === undefined) {
+			suiteIndex.set(item.evalCase.suite, plans.length);
+			plans.push({
+				id: `batch-${item.evalCase.suite}-${item.evalCase.id}`,
+				suite: item.evalCase.suite,
+				mode: "batch",
+				cases: [],
+			});
+		}
+		plans[suiteIndex.get(item.evalCase.suite)!].cases.push(item);
+	}
+	return plans;
+};
+
 const resolveSandbox = (evalCase: EvalCase): boolean => evalCase.sandbox ?? true;
 
 const buildStubResult = (
@@ -201,6 +339,162 @@ const buildStubResult = (
 	errors,
 	workspaceDir: null,
 });
+
+const runCaseInWorkspace = async (params: {
+	evalCase: EvalCase;
+	skillPaths: string[];
+	model: ModelSpec;
+	agentDir: string;
+	cwd: string;
+	dryRun: boolean;
+	thinkingLevel: string;
+	tools: string[];
+	globalInstructionsPath?: string | null;
+	homeDir?: string | null;
+}): Promise<CaseEvaluation> => {
+	const {
+		evalCase,
+		skillPaths,
+		model,
+		agentDir,
+		cwd,
+		dryRun,
+		thinkingLevel,
+		tools,
+		globalInstructionsPath,
+		homeDir,
+	} = params;
+
+	const result = await runCaseProcess({
+		evalCase,
+		skillPaths,
+		model,
+		agentDir,
+		cwd,
+		dryRun,
+		thinkingLevel,
+		tools,
+		globalInstructionsPath,
+		homeDir,
+	});
+	result.workspaceDir = agentDir;
+	return await evaluateCase(evalCase, result);
+};
+
+const runSharedCaseBatch = async (params: {
+	batch: CasePlan;
+	skillMap: Map<string, SkillInfo>;
+	model: ModelSpec;
+	sharedCaseAgentDir: string;
+	sharedCaseMutablePaths: string[];
+	thinkingLevel: string;
+	authSourcePath?: string | null;
+	resolveDryRun: (evalCase: EvalCase) => boolean;
+	batchCaseParallelism: number;
+}): Promise<CaseExecution[]> => {
+	const {
+		batch,
+		skillMap,
+		model,
+		sharedCaseAgentDir,
+		sharedCaseMutablePaths,
+		thinkingLevel,
+		authSourcePath,
+		resolveDryRun,
+		batchCaseParallelism,
+	} = params;
+
+	let sandboxDir: string | null = null;
+	let sandboxHomeDir: string | null = null;
+	try {
+		sandboxDir = await createSharedCaseWorkspace(
+			sharedCaseAgentDir,
+			batch.id,
+			sharedCaseMutablePaths,
+		);
+		sandboxHomeDir = await createSandboxHome(batch.id);
+		try {
+			await runEvalSync({
+				agentDir: sandboxDir,
+				homeDir: sandboxHomeDir,
+				authSourcePath,
+			});
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
+			return batch.cases.map((item) => {
+				const dryRun = resolveDryRun(item.evalCase);
+				return {
+					index: item.index,
+					evaluation: buildCaseResult(
+						item.evalCase.id,
+						buildStubResult(item.evalCase.id, dryRun, [`sync failed: ${message}`]),
+						item.evalCase,
+						[`sync failed: ${message}`],
+					),
+				};
+			});
+		}
+		const caseGlobalInstructionsPath = path.join(sandboxHomeDir, ".pi", "agent", "AGENTS.md");
+		const runBatchCase = async (item: IndexedCase): Promise<CaseExecution> => {
+			const dryRun = resolveDryRun(item.evalCase);
+			try {
+				const { paths, missing } = resolveCaseSkillPaths(item.evalCase, skillMap);
+				if (missing.length > 0) {
+					return {
+						index: item.index,
+						evaluation: buildCaseResult(
+							item.evalCase.id,
+							buildStubResult(item.evalCase.id, dryRun, [`missing skills: ${missing.join(", ")}`]),
+							item.evalCase,
+							[`missing skills: ${missing.join(", ")}`],
+						),
+					};
+				}
+
+				const caseSkillPaths = mapSkillPathsToSandbox(paths, sharedCaseAgentDir, sandboxDir);
+				const tools = resolveTools(item.evalCase);
+				const result = await runCaseProcess({
+					evalCase: item.evalCase,
+					skillPaths: caseSkillPaths,
+					model,
+					agentDir: sandboxDir,
+					cwd: sandboxDir,
+					dryRun,
+					thinkingLevel,
+					tools,
+					globalInstructionsPath: caseGlobalInstructionsPath,
+					homeDir: sandboxHomeDir,
+				});
+				result.workspaceDir = sandboxDir;
+				return {
+					index: item.index,
+					evaluation: await evaluateCase(item.evalCase, result),
+				};
+			} catch (error) {
+				const message = error instanceof Error ? error.message : String(error);
+				return {
+					index: item.index,
+					evaluation: buildCaseResult(
+						item.evalCase.id,
+						buildStubResult(item.evalCase.id, dryRun, [`run error: ${message}`]),
+						item.evalCase,
+						[`run error: ${message}`],
+					),
+				};
+			}
+		};
+		const effectiveBatchCaseParallelism = Math.min(batchCaseParallelism, batch.cases.length);
+		const results = await runItemsInParallel(
+			batch.cases,
+			effectiveBatchCaseParallelism,
+			runBatchCase,
+		);
+		return results;
+	} finally {
+		await cleanupSandbox(sandboxDir);
+		await cleanupSandboxHome(sandboxHomeDir);
+	}
+};
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -382,11 +676,23 @@ const runCase = async (params: {
 	agentDir: string;
 	dryRun: boolean;
 	thinkingLevel: string;
+	sharedCaseAgentDir?: string | null;
+	sharedCaseMutablePaths?: string[];
 	authSourcePath?: string | null;
 }): Promise<CaseEvaluation> => {
-	const { evalCase, skillMap, model, agentDir, dryRun, thinkingLevel, authSourcePath } = params;
-	const baseSkillSet = evalCase.skillSet ?? Array.from(skillMap.keys());
-	const { paths, missing } = resolveSkillPaths(baseSkillSet, skillMap);
+	const {
+		evalCase,
+		skillMap,
+		model,
+		agentDir,
+		dryRun,
+		thinkingLevel,
+		sharedCaseAgentDir,
+		sharedCaseMutablePaths,
+		authSourcePath,
+	} = params;
+
+	const { paths, missing } = resolveCaseSkillPaths(evalCase, skillMap);
 	if (missing.length > 0) {
 		return buildCaseResult(
 			evalCase.id,
@@ -405,10 +711,22 @@ const runCase = async (params: {
 		let caseCwd = agentDir;
 		let caseSkillPaths = paths;
 		if (sandbox) {
-			sandboxDir = await createSandbox(agentDir, evalCase.id);
+			if (sharedCaseAgentDir) {
+				sandboxDir = await createSharedCaseWorkspace(
+					sharedCaseAgentDir,
+					evalCase.id,
+					sharedCaseMutablePaths ?? DEFAULT_SHARED_CASE_MUTABLE_PATHS,
+				);
+			} else {
+				sandboxDir = await createSandbox(agentDir, evalCase.id);
+			}
 			caseAgentDir = sandboxDir;
 			caseCwd = sandboxDir;
-			caseSkillPaths = mapSkillPathsToSandbox(paths, agentDir, sandboxDir);
+			caseSkillPaths = mapSkillPathsToSandbox(
+				paths,
+				sharedCaseAgentDir ?? agentDir,
+				sandboxDir,
+			);
 		}
 
 		sandboxHomeDir = await createSandboxHome(evalCase.id);
@@ -418,8 +736,7 @@ const runCase = async (params: {
 			authSourcePath,
 		});
 		const caseGlobalInstructionsPath = path.join(sandboxHomeDir, ".pi", "agent", "AGENTS.md");
-
-		const result = await runCaseProcess({
+		const result = await runCaseInWorkspace({
 			evalCase,
 			skillPaths: caseSkillPaths,
 			model,
@@ -431,8 +748,7 @@ const runCase = async (params: {
 			globalInstructionsPath: caseGlobalInstructionsPath,
 			homeDir: sandboxHomeDir,
 		});
-		result.workspaceDir = sandboxDir;
-		return await evaluateCase(evalCase, result);
+		return result;
 	} catch (error) {
 		const message = error instanceof Error ? error.message : String(error);
 		return buildCaseResult(
@@ -509,7 +825,9 @@ export const registerEvalCommand = (pi: ExtensionAPI) => {
 				const skillsPaths = resolveSkillsPaths(config, agentDir);
 
 				if (flags["--reuse"] || flags["--reuse-process"]) {
-					throw new Error("Flag --reuse was removed. Runs are always process-isolated.");
+					throw new Error(
+						"Flag --reuse was removed. Use PI_EVAL_CASE_PARALLELISM and shared sandbox controls instead.",
+					);
 				}
 				if (flags["--matrix"]) {
 					throw new Error("Flag --matrix is not supported in minimal eval mode.");
@@ -543,6 +861,23 @@ export const registerEvalCommand = (pi: ExtensionAPI) => {
 				const limitOverride = parseLimitFlag(flags["--limit"]);
 				const dryRunOverride = Boolean(flags["--dry-run"]);
 				const thinkingLevel = parseStringFlag("--thinking", flags["--thinking"]) ?? "medium";
+				const caseParallelism = parsePositiveIntEnv(
+					process.env.PI_EVAL_CASE_PARALLELISM,
+					DEFAULT_CASE_PARALLELISM,
+				);
+				const batchCaseParallelism = parsePositiveIntEnv(
+					process.env.PI_EVAL_BATCH_CASE_PARALLELISM,
+					caseParallelism,
+				);
+				const useSharedCaseSandbox = parseBoolEnv(
+					process.env.PI_EVAL_SHARED_CASE_SANDBOX,
+					true,
+				);
+				const sharedCaseMutablePaths = parsePathListEnv(
+					process.env.PI_EVAL_SHARED_CASE_MUTABLE_PATHS,
+					DEFAULT_SHARED_CASE_MUTABLE_PATHS,
+				);
+				let sharedCaseAgentDir: string | null = null;
 
 				const casesPathResolved = normalizePath(path.resolve(casesPath));
 				const defaultCasesResolved = normalizePath(path.resolve(defaultCasesPath));
@@ -557,82 +892,133 @@ export const registerEvalCommand = (pi: ExtensionAPI) => {
 					console.log(`${symbols.warn} ${color.warning("No cases matched.")}`);
 					return;
 				}
+				const useSharedCaseSandboxForRun =
+					useSharedCaseSandbox && cases.some((evalCase) => resolveSandbox(evalCase));
 
 				const skills = await discoverSkills(skillsPaths);
 				const skillMap = resolveSkillMap(skills);
-				const evaluations: CaseEvaluation[] = [];
 				const runStart = Date.now();
 
 				console.log(renderPanel("Pi Eval Run", `${color.accent("Cases")}: ${cases.length}`));
+				console.log(`${color.accent("Parallelism")}: ${caseParallelism} case(s)`);
+				console.log(`${color.accent("Batch parallelism")}: ${batchCaseParallelism} case(s)`);
 				console.log("");
 
-				for (const evalCase of cases) {
-					const dryRun = dryRunOverride ? true : evalCase.dryRun ?? config.defaults?.dryRun ?? false;
-					const evaluation = await runCase({
-						evalCase,
-						skillMap,
+				try {
+					if (useSharedCaseSandboxForRun) {
+						sharedCaseAgentDir = await createSandbox(agentDir, "shared-case");
+						console.log(
+							`${color.muted(`Using shared case sandbox: ${path.basename(sharedCaseAgentDir)}`)}`,
+						);
+					}
+
+					const indexedCases = cases.map((evalCase, index) => ({ index, evalCase }));
+					const executionPlans = useSharedCaseSandboxForRun ? planCaseExecution(indexedCases) : indexedCases.map(
+						(item) => ({
+							id: `single-${item.evalCase.id}-${item.index}`,
+							suite: item.evalCase.suite,
+							mode: "single",
+							cases: [item],
+						} satisfies CasePlan),
+					);
+
+					const resolveDryRun = (item: EvalCase) =>
+						dryRunOverride ? true : item.dryRun ?? config.defaults?.dryRun ?? false;
+
+					const evaluations = await runCasePlansInParallel(
+						executionPlans,
+						cases.length,
+						caseParallelism,
+						async (plan) => {
+							if (plan.mode === "batch") {
+								if (!sharedCaseAgentDir) {
+									throw new Error("Shared case sandbox was not prepared.");
+								}
+									return runSharedCaseBatch({
+										batch: plan,
+										skillMap,
+										model,
+										sharedCaseAgentDir,
+										sharedCaseMutablePaths,
+										thinkingLevel,
+										authSourcePath: evalAuthSource,
+										resolveDryRun,
+										batchCaseParallelism,
+									});
+								}
+
+							const item = plan.cases[0];
+							const dryRun = resolveDryRun(item.evalCase);
+							const evaluation = await runCase({
+								evalCase: item.evalCase,
+								skillMap,
+								model,
+								agentDir,
+								dryRun,
+								thinkingLevel,
+								sharedCaseAgentDir,
+								sharedCaseMutablePaths,
+								authSourcePath: evalAuthSource,
+							});
+							return [{ index: item.index, evaluation }];
+						},
+					);
+
+					console.log("");
+					console.log(buildCaseTable(evaluations));
+					console.log("");
+
+					const durationMs = Date.now() - runStart;
+					renderRunSummary(evaluations, durationMs);
+
+					const commitSha = await getCommitSha();
+					const reportRoots = allReportRootsFor(agentDir);
+					const reportPath = reportPathFor(reportRoots[0], model);
+					const indexPath = indexPathFor(reportRoots[0]);
+					const mirrorReportPaths = reportRoots.slice(1).map((root) => reportPathFor(root, model));
+					const mirrorIndexPaths = reportRoots.slice(1).map((root) => indexPathFor(root));
+					const runTimestamp = new Date().toISOString();
+					const previousRows = await readReportRows(reportPath);
+					const reportContent = buildReport({
 						model,
-						agentDir,
-						dryRun,
-						thinkingLevel,
-						authSourcePath: evalAuthSource,
+						commitSha,
+						runTimestamp,
+						evaluations,
+						durationMs,
+						allCases,
+						previousRows,
+						runScope: isFullRun ? "full" : "partial",
+						filter,
+						limit: limitOverride,
+						casesPathLabel: normalizePath(path.relative(agentDir, casesPath)),
 					});
-					evaluations.push(evaluation);
-					console.log(`${evaluation.status === "pass" ? symbols.ok : symbols.fail} ${evalCase.id}`);
-				}
 
-				console.log("");
-				console.log(buildCaseTable(evaluations));
-				console.log("");
-
-				const durationMs = Date.now() - runStart;
-				renderRunSummary(evaluations, durationMs);
-
-				const commitSha = await getCommitSha();
-				const reportRoots = allReportRootsFor(agentDir);
-				const reportPath = reportPathFor(reportRoots[0], model);
-				const indexPath = indexPathFor(reportRoots[0]);
-				const mirrorReportPaths = reportRoots.slice(1).map((root) => reportPathFor(root, model));
-				const mirrorIndexPaths = reportRoots.slice(1).map((root) => indexPathFor(root));
-				const runTimestamp = new Date().toISOString();
-				const previousRows = await readReportRows(reportPath);
-				const reportContent = buildReport({
-					model,
-					commitSha,
-					runTimestamp,
-					evaluations,
-					durationMs,
-					allCases,
-					previousRows,
-					runScope: isFullRun ? "full" : "partial",
-					filter,
-					limit: limitOverride,
-					casesPathLabel: normalizePath(path.relative(agentDir, casesPath)),
-				});
-
-				await writeReport(reportPath, reportContent);
-				for (const mirrorPath of mirrorReportPaths) {
-					await writeReport(mirrorPath, reportContent);
-				}
-				if (isFullRun) {
-					await updateIndex(indexPath, model.key, { sha: commitSha, timestamp: runTimestamp });
-					for (const mirrorIndexPath of mirrorIndexPaths) {
-						await updateIndex(mirrorIndexPath, model.key, {
-							sha: commitSha,
-							timestamp: runTimestamp,
-						});
+					await writeReport(reportPath, reportContent);
+					for (const mirrorPath of mirrorReportPaths) {
+						await writeReport(mirrorPath, reportContent);
 					}
-				}
-				renderReportNotice(reportPath, indexPath, { indexUpdated: isFullRun });
-				for (const mirrorPath of mirrorReportPaths) {
-					console.log(color.success(`Report written: ${mirrorPath}`));
-				}
-				for (const mirrorIndexPath of mirrorIndexPaths) {
 					if (isFullRun) {
-						console.log(color.muted(`Index updated: ${mirrorIndexPath}`));
-					} else {
-						console.log(color.warning(`Index not updated (partial run): ${mirrorIndexPath}`));
+						await updateIndex(indexPath, model.key, { sha: commitSha, timestamp: runTimestamp });
+						for (const mirrorIndexPath of mirrorIndexPaths) {
+							await updateIndex(mirrorIndexPath, model.key, {
+								sha: commitSha,
+								timestamp: runTimestamp,
+							});
+						}
 					}
+					renderReportNotice(reportPath, indexPath, { indexUpdated: isFullRun });
+					for (const mirrorPath of mirrorReportPaths) {
+						console.log(color.success(`Report written: ${mirrorPath}`));
+					}
+					for (const mirrorIndexPath of mirrorIndexPaths) {
+						if (isFullRun) {
+							console.log(color.muted(`Index updated: ${mirrorIndexPath}`));
+						} else {
+							console.log(color.warning(`Index not updated (partial run): ${mirrorIndexPath}`));
+						}
+					}
+				} finally {
+					await cleanupSandbox(sharedCaseAgentDir);
 				}
 			} catch (error) {
 				const message = error instanceof Error ? error.message : String(error);

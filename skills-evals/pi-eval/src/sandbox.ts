@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { chmod, copyFile, cp, mkdir, rm } from "node:fs/promises";
+import { chmod, copyFile, cp, mkdir, readdir, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileExists, normalizePath } from "./utils.js";
@@ -36,6 +36,79 @@ export const createSandbox = async (agentDir: string, caseId: string): Promise<s
 		force: true,
 		filter: (source) => shouldCopyToSandbox(source, agentDir),
 	});
+	return sandboxDir;
+};
+
+const normalizeMutablePath = (value: string): string => {
+	const cleaned = normalizePath(value.trim());
+	return cleaned
+		.replace(/^\.\/+/, "")
+		.replace(/^\/+/, "")
+		.replace(/\/+$/g, "");
+};
+
+const buildMutableRoots = (paths: string[]): string[] => {
+	const set = new Set<string>();
+	for (const value of paths) {
+		const normalized = normalizeMutablePath(value);
+		if (!normalized) continue;
+		set.add(normalized);
+	}
+	return Array.from(set);
+};
+
+const createSymlinkOrFallbackCopy = async (
+	sourcePath: string,
+	targetPath: string,
+	isDirectory: boolean,
+) => {
+	try {
+		await symlink(sourcePath, targetPath, isDirectory ? "dir" : "file");
+		return;
+	} catch {
+		await cp(sourcePath, targetPath, { recursive: true, force: true });
+	}
+};
+
+export const createSharedCaseWorkspace = async (
+	sharedAgentDir: string,
+	caseId: string,
+	mutablePaths: string[],
+): Promise<string> => {
+	const sandboxDir = path.join(
+		tmpdir(),
+		"pi-eval-sandbox",
+		`${caseId}-shared`,
+		randomUUID(),
+	);
+	await mkdir(sandboxDir, { recursive: true });
+
+	const mutableRoots = buildMutableRoots(mutablePaths);
+	const isMutableAncestor = (entryName: string): boolean =>
+		mutableRoots.some((root) => root === entryName || root.startsWith(`${entryName}/`));
+
+	const entries = await readdir(sharedAgentDir, { withFileTypes: true });
+	for (const entry of entries) {
+		const sourcePath = path.join(sharedAgentDir, entry.name);
+		const targetPath = path.join(sandboxDir, entry.name);
+		if (isMutableAncestor(entry.name)) {
+			await cp(sourcePath, targetPath, { recursive: true, force: true });
+			continue;
+		}
+		await createSymlinkOrFallbackCopy(sourcePath, targetPath, entry.isDirectory());
+	}
+
+	for (const value of mutableRoots) {
+		const sourcePath = path.join(sharedAgentDir, value);
+		const targetPath = path.join(sandboxDir, value);
+		if (!(await fileExists(sourcePath))) {
+			continue;
+		}
+		const parent = path.dirname(targetPath);
+		await mkdir(parent, { recursive: true });
+		await cp(sourcePath, targetPath, { recursive: true, force: true });
+	}
+
 	return sandboxDir;
 };
 

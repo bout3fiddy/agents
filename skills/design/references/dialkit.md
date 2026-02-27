@@ -1,6 +1,24 @@
 ---
+
 description: DialKit control-generation workflow for live-tuning motion and style values in React.
+metadata:
+  id: design.ref.dialkit
+  version: "1"
+  task_types:
+    - design
+  trigger_phrases:
+    - dialkit
+    - references
+    - references dialkit
+  priority: 72
+  load_strategy: progressive
+  activation_policy: both
+  workflow_triggers: []
+  route_exclude: false
+
 ---
+
+
 # DialKit
 
 **Adapted from Interface Craft by Josh Puckett**
@@ -69,21 +87,17 @@ Keep it fast - 2-3 questions max:
 
 ## Smart Defaults
 
-Use these defaults for common properties (users can adjust in the panel):
+Use the canonical defaults and control schema in:
 
-| Property | Default | Min | Max | Step |
-|----------|---------|-----|-----|------|
-| blur | 0 | 0 | 100 | 1 |
-| opacity | 1 | 0 | 1 | 0.01 |
-| scale | 1 | 0.5 | 2 | 0.1 |
-| rotation | 0 | -180 | 180 | 1 |
-| offsetX | 0 | -100 | 100 | 1 |
-| offsetY | 0 | -100 | 100 | 1 |
-| borderRadius | 0 | 0 | 50 | 1 |
-| shadowBlur | 16 | 0 | 48 | 1 |
-| shadowOffsetY | 8 | 0 | 24 | 1 |
-| gap | 16 | 0 | 48 | 1 |
-| padding | 16 | 0 | 48 | 1 |
+- `config-patterns.json`
+
+Only use this file as the source of truth; the table below should not be duplicated by hand.
+
+```json
+{
+  "defaults_source": "config-patterns.json"
+}
+```
 
 ## Control Types
 
@@ -262,3 +276,34 @@ const params = useDialKit('Slideshow', {
 3. **Use Time mode springs** by default (simpler for most users)
 4. **Include usage comments** showing how to apply each param
 5. **Match user's coding style** if they shared code
+
+## DialKit Contract (v1)
+
+Required JSON payload keys:
+- `lane` (must be `"dialkit_config"`)
+- `panel_name` (targeted control panel name)
+- `dial_config` (full DialKit config object)
+- `defaults_source` (`"config-patterns.json"`)
+- `usage_targets` (list of component props/CSS fields consuming each control)
+
+```json
+{
+  "lane": "dialkit_config",
+  "panel_name": "Effects",
+  "dial_config": {
+    "blur": [0, 0, 100],
+    "opacity": [1, 0, 1],
+    "spring": {
+      "type": "spring",
+      "visualDuration": 0.3,
+      "bounce": 0.2
+    }
+  },
+  "defaults_source": "config-patterns.json",
+  "usage_targets": [
+    "motion div style.filter",
+    "motion div style.opacity",
+    "motion transition"
+  ]
+}
+```

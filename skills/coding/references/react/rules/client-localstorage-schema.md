@@ -1,9 +1,28 @@
 ---
+
 title: Version and Minimize localStorage Data
 impact: MEDIUM
 impactDescription: prevents schema conflicts, reduces storage size
 tags: client, localStorage, storage, versioning, data-minimization
+metadata:
+  id: coding.ref.react.rules.client-localstorage-schema
+  version: "1"
+  task_types:
+    - coding
+  trigger_phrases:
+    - client localstorage schema
+    - react
+    - references
+    - rules
+    - references react rules client-localstorage-schema
+  priority: 72
+  load_strategy: progressive
+  activation_policy: both
+  workflow_triggers:
+  route_exclude: false
+
 ---
+
 
 ## Version and Minimize localStorage Data
 
