@@ -27,6 +27,7 @@ export type EvalCase = {
 	tokenBudget?: number | null;
 	assertions?: string[];
 	notes?: string;
+	persistArtifacts?: boolean;
 };
 
 export type EvalConfig = {
@@ -81,16 +82,38 @@ export type CaseRunResult = {
 	workspaceDir?: string | null;
 };
 
+export type FailureCategory =
+	| "BOOTSTRAP_FAILURE"
+	| "POLICY_FAILURE"
+	| "ROUTING_FAILURE"
+	| "TASK_FAILURE";
+
+export type FailureReason = {
+	category: FailureCategory;
+	message: string;
+};
+
+export type RoutingScorecard = {
+	readSkills: string[];
+	readSkillFiles: string[];
+	readRefs: string[];
+	missingSkillFileReads: string[];
+	missingRefs: string[];
+	unexpectedRefs: string[];
+};
+
 export type CaseEvaluation = {
 	caseId: string;
 	suite: string;
 	mode: "single";
 	status: "pass" | "fail";
 	reasons: string[];
+	failureReasons: FailureReason[];
 	result: CaseRunResult;
 	expectedSkills: string[];
 	disallowedSkills: string[];
 	expectedRefs: string[];
+	routing: RoutingScorecard;
 	assertions: string[];
 	tokenBudget?: number | null;
 };

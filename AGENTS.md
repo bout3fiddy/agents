@@ -17,6 +17,7 @@
 - Runtime routing contract: `instructions/skills.router.min.json` is primary and sufficient for agent routing.
 - `bin/sync.sh` does not run sync-time gates; it only syncs files.
 - Eval cases source of truth is `skills-evals/fixtures/eval-cases.jsonl`; reports mirror to `docs/specs/pi-eval/reports/`.
+- Per-case routing/read telemetry traces are written to `skills-evals/reports/routing-traces/<provider-model>/<case-id>.json` on each eval run.
 - Guardrail: when evals fail on skill/ref/global-instruction behavior, improve `skills/`, `skills/*/references/`, and `instructions/global.md` first; do not weaken eval expectations just to pass.
 - Canonical eval wrapper is `skills-evals/run.sh`.
 - `DEVC_DISABLE_MCP_SERVERS` in `devcontainer/devcontainer.json` can disable MCP startup in containers (comma/space/semi-colon separated list); use it to skip auth-heavy servers (e.g. `sentry` and/or `linear`) on non-interactive session starts.

@@ -11,3 +11,7 @@
 - `worker-contract.ts`: shared runner↔worker env/runtime contract.
 - `model-registry.ts`: model selection/auth helpers.
 - `parallel.ts`: generic parallel work executor.
+- Harness policy: `case-process.ts` must execute only fixture-provided prompts (no runtime routing prompt injection).
+- Sandbox policy: `worker.ts` enforces sandbox boundary checks for `read`, `edit`, and `write`, and emits `FORBIDDEN_WORKSPACE_VIOLATION` on boundary breaches.
+- Boundary helpers live in `sandbox-boundary.ts` so unit tests can validate sandbox business logic without loading `pi-coding-agent` runtime dependencies.
+- Cases with `persistArtifacts: true` copy files listed in `fileAssertions[].path` from sandbox workspace back to the host repo before sandbox cleanup (used by CD-015 visual diff workflow).

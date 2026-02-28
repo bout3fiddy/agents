@@ -2,7 +2,11 @@ import type { AssistantMessage, ToolResultMessage } from "@mariozechner/pi-ai";
 import { createEditTool, createReadTool, createWriteTool } from "@mariozechner/pi-coding-agent";
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { constants } from "node:fs";
-import { access as fsAccess, readFile as fsReadFile, realpath as fsRealpath, writeFile } from "node:fs/promises";
+import {
+	access as fsAccess,
+	readFile as fsReadFile,
+	writeFile,
+} from "node:fs/promises";
 import path from "node:path";
 import {
 	captureReadAttempt,
@@ -13,71 +17,19 @@ import {
 } from "./capture.js";
 import { modelSpecFromModel } from "./model-registry.js";
 import type { CaseRunResult, TokenUsage } from "../data/types.js";
-import { ensureDir, normalizePath } from "../data/utils.js";
+import { assertReadablePath, createPathDenyPolicy, type PathDenyPolicy } from "./read-policy.js";
+import { ensureDir } from "../data/utils.js";
 import { parseWorkerRuntimeConfig } from "./worker-contract.js";
+import {
+	FORBIDDEN_WORKSPACE_VIOLATION,
+	assertWithinSandboxBoundary,
+	createSandboxBoundary,
+	wrapToolWithSandboxBoundary,
+	type SandboxBoundary,
+	type ToolWithExecute,
+} from "./sandbox-boundary.js";
 
 const DRY_RUN_SKILL_STUB = "Dry-run mode: file content unavailable.";
-const FORBIDDEN_READ_ERROR = "ENOENT: no such file or directory";
-
-type PathDenyPolicy = {
-	logicalRoots: string[];
-	canonicalRoots: string[];
-	deniedReads: Set<string>;
-	canonicalCache: Map<string, string | null>;
-};
-
-const hasPathPrefix = (candidate: string, root: string): boolean =>
-	candidate === root ||
-	candidate.startsWith(root.endsWith(path.sep) ? root : `${root}${path.sep}`);
-
-const resolveCanonical = async (
-	absolutePath: string,
-	cache: Map<string, string | null>,
-): Promise<string | null> => {
-	const cached = cache.get(absolutePath);
-	if (cached !== undefined) return cached;
-	try {
-		const canonical = await fsRealpath(absolutePath);
-		cache.set(absolutePath, canonical);
-		return canonical;
-	} catch {
-		cache.set(absolutePath, null);
-		return null;
-	}
-};
-
-const createPathDenyPolicy = async (cwd: string, readDenyPaths: string[]): Promise<PathDenyPolicy> => {
-	const logicalRoots = readDenyPaths.map((entry) => path.resolve(cwd, entry));
-	const canonicalRoots: string[] = [];
-	for (const root of logicalRoots) {
-		const canonical = await fsRealpath(root).catch(() => null);
-		if (canonical) canonicalRoots.push(canonical);
-	}
-	return {
-		logicalRoots,
-		canonicalRoots,
-		deniedReads: new Set<string>(),
-		canonicalCache: new Map<string, string | null>(),
-	};
-};
-
-const assertReadablePath = async (absolutePath: string, policy: PathDenyPolicy): Promise<void> => {
-	const logical = path.resolve(absolutePath);
-	for (const root of policy.logicalRoots) {
-		if (hasPathPrefix(logical, root)) {
-			policy.deniedReads.add(normalizePath(logical));
-			throw new Error(FORBIDDEN_READ_ERROR);
-		}
-	}
-	const canonical = await resolveCanonical(logical, policy.canonicalCache);
-	if (!canonical) return;
-	for (const root of policy.canonicalRoots) {
-		if (hasPathPrefix(canonical, root)) {
-			policy.deniedReads.add(normalizePath(canonical));
-			throw new Error(FORBIDDEN_READ_ERROR);
-		}
-	}
-};
 
 const collectAssistantText = (messages: Array<AssistantMessage | ToolResultMessage>): string => {
 	const chunks: string[] = [];
@@ -114,26 +66,29 @@ const sumUsage = (messages: Array<AssistantMessage | ToolResultMessage>): TokenU
 	return { input, output, cacheRead, cacheWrite, totalTokens };
 };
 
-type ToolWithExecute = {
-	execute: (toolCallId: string, args: Record<string, unknown>, ...rest: unknown[]) => Promise<unknown>;
-};
-
 const adaptToolExecute = <T extends ToolWithExecute>(tool: T): T => ({
 	...tool,
 	execute: (toolCallId: string, args: Record<string, unknown>) =>
 		tool.execute(toolCallId, args, undefined),
 });
 
-const createEvalReadTool = async (cwd: string, dryRunEnabled: boolean, readDenyPaths: string[]) => {
+const createEvalReadTool = async (
+	cwd: string,
+	dryRunEnabled: boolean,
+	readDenyPaths: string[],
+	boundary: SandboxBoundary,
+) => {
 	const denyPolicy = await createPathDenyPolicy(cwd, readDenyPaths);
 	const base = createReadTool(cwd, {
 		operations: {
 			access: async (absolutePath: string) => {
+				await assertWithinSandboxBoundary(absolutePath, boundary);
 				await assertReadablePath(absolutePath, denyPolicy);
 				if (dryRunEnabled && isSkillPath(absolutePath)) return;
 				await fsAccess(absolutePath, constants.R_OK);
 			},
 			readFile: async (absolutePath: string) => {
+				await assertWithinSandboxBoundary(absolutePath, boundary);
 				await assertReadablePath(absolutePath, denyPolicy);
 				if (dryRunEnabled && isSkillPath(absolutePath)) return Buffer.from(DRY_RUN_SKILL_STUB);
 				return fsReadFile(absolutePath);
@@ -221,6 +176,7 @@ const buildResult = (params: {
 	bootstrapManifestHash: string | null;
 	readCapture: ReadCapture;
 	denyPolicy: PathDenyPolicy | null;
+	sandboxBoundary: SandboxBoundary;
 	acc: WorkerAccumulator;
 	startedAt: number;
 	model: any;
@@ -233,6 +189,7 @@ const buildResult = (params: {
 		bootstrapManifestHash,
 		readCapture,
 		denyPolicy,
+		sandboxBoundary,
 		acc,
 		startedAt,
 		model,
@@ -241,8 +198,12 @@ const buildResult = (params: {
 	const deniedReadErrors = denyPolicy
 		? Array.from(denyPolicy.deniedReads).sort().map((entry) => `forbidden read: ${entry}`)
 		: [];
-	if (bootstrapProfile === "no_payload" && deniedReadErrors.length > 0) {
-		deniedReadErrors.unshift("forbidden read attempted in no_payload profile");
+	const boundaryErrors = Array.from(sandboxBoundary.violations)
+		.sort()
+		.map((entry) => `${FORBIDDEN_WORKSPACE_VIOLATION}: ${entry}`);
+	const errors = [...boundaryErrors, ...deniedReadErrors];
+	if (bootstrapProfile === "no_payload" && errors.length > 0) {
+		errors.unshift("policy deny triggered in no_payload profile");
 	}
 
 	return {
@@ -261,7 +222,7 @@ const buildResult = (params: {
 		outputText: acc.outputChunks.join("\n").trim(),
 		tokens: acc.tokenTotals,
 		durationMs: Date.now() - startedAt,
-		errors: deniedReadErrors,
+		errors,
 	};
 };
 
@@ -270,14 +231,28 @@ export const registerEvalWorker = async (pi: ExtensionAPI): Promise<boolean> => 
 	const config = parseWorkerRuntimeConfig(process.env, cwd);
 	if (!config) return false;
 
+	const sandboxBoundary = await createSandboxBoundary(cwd, config.agentDir);
 	let denyPolicy: PathDenyPolicy | null = null;
 	if (config.allowedTools.has("read")) {
-		const readSetup = await createEvalReadTool(cwd, config.dryRun, config.readDenyPaths);
+		const readSetup = await createEvalReadTool(
+			cwd,
+			config.dryRun,
+			config.readDenyPaths,
+			sandboxBoundary,
+		);
 		denyPolicy = readSetup.denyPolicy;
 		pi.registerTool(readSetup.tool);
 	}
-	if (config.allowedTools.has("edit")) pi.registerTool(adaptToolExecute(createEditTool(cwd)));
-	if (config.allowedTools.has("write")) pi.registerTool(adaptToolExecute(createWriteTool(cwd)));
+	if (config.allowedTools.has("edit")) {
+		pi.registerTool(
+			wrapToolWithSandboxBoundary(adaptToolExecute(createEditTool(cwd)), sandboxBoundary),
+		);
+	}
+	if (config.allowedTools.has("write")) {
+		pi.registerTool(
+			wrapToolWithSandboxBoundary(adaptToolExecute(createWriteTool(cwd)), sandboxBoundary),
+		);
+	}
 
 	const startedAt = Date.now();
 	const readCapture = createReadCapture();
@@ -299,6 +274,7 @@ export const registerEvalWorker = async (pi: ExtensionAPI): Promise<boolean> => 
 			bootstrapManifestHash: config.bootstrapManifestHash,
 			readCapture,
 			denyPolicy,
+			sandboxBoundary,
 			acc,
 			startedAt,
 			model: ctx.model,

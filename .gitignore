@@ -24,3 +24,4 @@ docs/
 venv*/
 skills-evals/specs/pi-eval/logs/
 skills-evals/specs/
+skills-evals/fixtures/review/

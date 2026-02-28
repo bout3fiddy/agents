@@ -1,0 +1,36 @@
+{
+  "caseId": "CD-015",
+  "mode": "single",
+  "status": "pass",
+  "runTimestamp": "2026-02-28T19:01:13.283Z",
+  "model": "openai-codex/gpt-5.3-codex",
+  "expectedSkills": [
+    "coding"
+  ],
+  "expectedRefs": [
+    "skills/coding/references/code-smells/smells/ai-code-smell.md"
+  ],
+  "routing": {
+    "readSkills": [
+      "coding"
+    ],
+    "readSkillFiles": [
+      "coding"
+    ],
+    "readRefs": [
+      "/private/var/folders/w7/3c51j_5j2gq4n13mljt4rrb80000gn/T/pi-eval-sandbox/CD-015/c383c269-a91a-4ff5-9152-62d341d2bfb0/skills/coding/references/code-smells/index.md",
+      "/private/var/folders/w7/3c51j_5j2gq4n13mljt4rrb80000gn/T/pi-eval-sandbox/CD-015/c383c269-a91a-4ff5-9152-62d341d2bfb0/skills/coding/references/code-smells/smells/ai-code-smell.md",
+      "/private/var/folders/w7/3c51j_5j2gq4n13mljt4rrb80000gn/T/pi-eval-sandbox/CD-015/c383c269-a91a-4ff5-9152-62d341d2bfb0/skills/coding/references/code-smells/smells/fallback-first.md",
+      "/private/var/folders/w7/3c51j_5j2gq4n13mljt4rrb80000gn/T/pi-eval-sandbox/CD-015/c383c269-a91a-4ff5-9152-62d341d2bfb0/skills/coding/references/code-smells/smells/speculative-generality.md"
+    ],
+    "missingSkillFileReads": [],
+    "missingRefs": [],
+    "unexpectedRefs": [
+      "/private/var/folders/w7/3c51j_5j2gq4n13mljt4rrb80000gn/T/pi-eval-sandbox/CD-015/c383c269-a91a-4ff5-9152-62d341d2bfb0/skills/coding/references/code-smells/index.md",
+      "/private/var/folders/w7/3c51j_5j2gq4n13mljt4rrb80000gn/T/pi-eval-sandbox/CD-015/c383c269-a91a-4ff5-9152-62d341d2bfb0/skills/coding/references/code-smells/smells/fallback-first.md",
+      "/private/var/folders/w7/3c51j_5j2gq4n13mljt4rrb80000gn/T/pi-eval-sandbox/CD-015/c383c269-a91a-4ff5-9152-62d341d2bfb0/skills/coding/references/code-smells/smells/speculative-generality.md"
+    ]
+  },
+  "reasons": [],
+  "failureReasons": []
+}

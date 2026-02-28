@@ -1,0 +1,1 @@
+Treat eval-cases.jsonl as eval cases that test the agent harness. If you find yourself trying to change the case just to pass an eval: don't. That defeats the purpose of the eval. Eval Failures are fine. Consider solutions to fix the skill or skill router itself but never the eval case.

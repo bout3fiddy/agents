@@ -1,0 +1,19 @@
+{
+  "caseId": "CD-015-NS",
+  "mode": "single",
+  "status": "pass",
+  "runTimestamp": "2026-02-28T19:01:13.283Z",
+  "model": "openai-codex/gpt-5.3-codex",
+  "expectedSkills": [],
+  "expectedRefs": [],
+  "routing": {
+    "readSkills": [],
+    "readSkillFiles": [],
+    "readRefs": [],
+    "missingSkillFileReads": [],
+    "missingRefs": [],
+    "unexpectedRefs": []
+  },
+  "reasons": [],
+  "failureReasons": []
+}

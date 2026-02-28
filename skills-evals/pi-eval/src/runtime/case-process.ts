@@ -9,37 +9,6 @@ import { fileExists } from "../data/utils.js";
 import { buildWorkerEnv } from "./worker-contract.js";
 
 const CASE_TIMEOUT_MS = 180_000;
-const buildRoutingPrompt = (
-	evalCase: EvalCase,
-	bootstrapProfile: BootstrapProfile,
-): string | null => {
-	if (bootstrapProfile !== "full_payload") return null;
-	const text = `${evalCase.prompt}\n${(evalCase.turns ?? []).join("\n")}`.toLowerCase();
-	const refs = new Set<string>();
-	if (evalCase.id === "CD-015") {
-		refs.add("skills/coding/SKILL.md");
-		refs.add("skills/coding/references/code-smells/smells/ai-code-smell.md");
-	}
-	if (/(auth|secret|credential|oauth|api key|token)/.test(text)) {
-		refs.add("skills/coding/references/secrets-and-auth-guardrails.md");
-	}
-	if (/(infra|platform|deploy|gcp|cloud run|supabase|storage)/.test(text)) {
-		refs.add("skills/coding/references/platform-engineering/index.md");
-	}
-	if (/(tailwind|utility class|utility-class|tailwindcss)/.test(text)) {
-		refs.add("skills/design/references/tailwindcss-full.md");
-	}
-	if (refs.size === 0) return null;
-	const lines = Array.from(refs)
-		.sort()
-		.map((entry) => `- ${entry}`)
-		.join("\n");
-	return [
-		"Before solving the task, run AGENTS-based routing and read/apply these files if present:",
-		lines,
-		"After reading them, complete the task.",
-	].join("\n");
-};
 
 type RpcState = {
 	promptError: string | null;
@@ -200,8 +169,7 @@ export const runCaseProcess = async (params: {
 		globalInstructionsPath,
 		homeDir,
 	} = params;
-	const routingPrompt = buildRoutingPrompt(evalCase, bootstrapProfile);
-	const prompts = [...(routingPrompt ? [routingPrompt] : []), evalCase.prompt, ...(evalCase.turns ?? [])];
+	const prompts = [evalCase.prompt, ...(evalCase.turns ?? [])];
 	const outputDir = path.join(tmpdir(), "pi-eval", randomUUID());
 	const outputPath = path.join(outputDir, `${evalCase.id}.json`);
 	const env = buildWorkerEnv(

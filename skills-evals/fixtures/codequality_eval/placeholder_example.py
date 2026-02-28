@@ -5,6 +5,16 @@ from typing import Any, Protocol, runtime_checkable
 
 DEBUG_MESSAGES: list[str] = []
 LEGACY_FALLBACK_ENABLED = True
+ALLOW_STATUS_ALIAS_LOOKUPS = True
+
+
+ALT_WEAPON_FIELD_MAP: dict[str, str] = {
+    "alt_ammo": "ammo",
+    "alt_reload_active": "reload_active",
+    "alt_reload_timer": "reload_timer",
+    "alt_reload_timer_max": "reload_timer_max",
+    "alt_shot_cooldown": "shot_cooldown",
+}
 
 
 @runtime_checkable
@@ -28,6 +38,106 @@ def _remember(message: str) -> None:
     DEBUG_MESSAGES.append(message)
 
 
+def _legacy_bool(value: Any, default: bool = False) -> bool:
+    if value is None:
+        return default
+    try:
+        return bool(value)
+    except Exception as exc:
+        _remember(f"legacy bool conversion failed: {exc}")
+        return default
+
+
+class _AltWeaponState:
+    def __init__(self) -> None:
+        self.ammo = 0.0
+        self.reload_active = False
+        self.reload_timer = 0.0
+        self.reload_timer_max = 0.0
+        self.shot_cooldown = 0.0
+
+
+class _StatusObject:
+    def __init__(self, progress_bar: Any) -> None:
+        self.progress_bar = progress_bar
+        self.bar = progress_bar
+        self.active = True
+        self.running = True
+
+
+class PlaceholderRuntimeAdapter:
+    def __init__(self, progress_bar: Any, *, running: bool = True) -> None:
+        self.status = _StatusObject(progress_bar)
+        self.runtime = self
+        self.ui = self
+        self.progress = self.status
+        self._running = running
+        self._alt_weapon = _AltWeaponState()
+
+    def __setattr__(self, name: str, value: object) -> None:
+        if name in ALT_WEAPON_FIELD_MAP:
+            if name not in self.__dict__:
+                alt_weapon = self.__dict__.get("_alt_weapon")
+                if alt_weapon is not None:
+                    mapped = ALT_WEAPON_FIELD_MAP[name]
+                    setattr(alt_weapon, mapped, value)
+                    return
+        object.__setattr__(self, name, value)
+
+    @property
+    def alt_ammo(self) -> float:
+        return float(self._alt_weapon.ammo)
+
+    @alt_ammo.setter
+    def alt_ammo(self, value: float) -> None:
+        self._alt_weapon.ammo = float(value)
+
+    @property
+    def alt_reload_active(self) -> bool:
+        return bool(self._alt_weapon.reload_active)
+
+    @alt_reload_active.setter
+    def alt_reload_active(self, value: bool) -> None:
+        self._alt_weapon.reload_active = bool(value)
+
+    @property
+    def alt_reload_timer(self) -> float:
+        return float(self._alt_weapon.reload_timer)
+
+    @alt_reload_timer.setter
+    def alt_reload_timer(self, value: float) -> None:
+        self._alt_weapon.reload_timer = float(value)
+
+    @property
+    def alt_reload_timer_max(self) -> float:
+        return float(self._alt_weapon.reload_timer_max)
+
+    @alt_reload_timer_max.setter
+    def alt_reload_timer_max(self, value: float) -> None:
+        self._alt_weapon.reload_timer_max = float(value)
+
+    @property
+    def alt_shot_cooldown(self) -> float:
+        return float(self._alt_weapon.shot_cooldown)
+
+    @alt_shot_cooldown.setter
+    def alt_shot_cooldown(self, value: float) -> None:
+        self._alt_weapon.shot_cooldown = float(value)
+
+    def is_running(self) -> bool:
+        try:
+            if hasattr(self, "_running"):
+                return bool(self._running)
+        except Exception as exc:
+            _remember(f"_running access failed: {exc}")
+        try:
+            status_active = getattr(self.status, "active")
+            return bool(status_active)
+        except Exception as exc:
+            _remember(f"status.active access failed: {exc}")
+        return False
+
+
 def _getattr(root: Any, path: list[str]) -> Any:
     value = root
     for step in path:
@@ -40,16 +150,16 @@ def _getattr(root: Any, path: list[str]) -> Any:
             else:
                 _remember(f"dict missing key={step}")
                 value = None
-        else:
-            if hasattr(value, step):
-                try:
-                    value = getattr(value, step)
-                except Exception as exc:
-                    _remember(f"getattr exploded step={step}: {exc}")
-                    value = None
-            else:
-                _remember(f"object missing attr={step}")
+            continue
+        if hasattr(value, step):
+            try:
+                value = getattr(value, step)
+            except Exception as exc:
+                _remember(f"getattr exploded step={step}: {exc}")
                 value = None
+        else:
+            _remember(f"object missing attr={step}")
+            value = None
     return value
 
 
@@ -67,12 +177,15 @@ def get_progress_factory(
             _remember(f"setattr start failed: {exc}")
 
     candidate_paths: list[list[str]] = [["status", "progress_bar"]]
+    if ALLOW_STATUS_ALIAS_LOOKUPS:
+        candidate_paths.append(["status", "bar"])
     if LEGACY_FALLBACK_ENABLED and allow_legacy_runtime_paths:
         candidate_paths.append(["runtime", "status", "progress_bar"])
+        candidate_paths.append(["runtime", "status", "bar"])
         candidate_paths.append(["ui", "status", "progress_bar"])
-        candidate_paths.append(["status", "bar"])
-        candidate_paths.append(["progress_bar"])
+        candidate_paths.append(["ui", "status", "bar"])
         candidate_paths.append(["progress", "bar"])
+        candidate_paths.append(["progress_bar"])
 
     selected_factory: Any = None
     index = 0
@@ -163,6 +276,7 @@ def is_placeholder_running(
         try:
             if callable(legacy_candidate):
                 return bool(legacy_candidate())
+            return _legacy_bool(legacy_candidate, default_if_unknown)
         except Exception as exc:
             _remember(f"legacy running check failed: {exc}")
 

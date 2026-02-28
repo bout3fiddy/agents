@@ -1,5 +1,17 @@
 import { fileExists, resolvePath } from "../data/utils.js";
 
+export const assertAllowedFlags = (
+	flags: Record<string, string | boolean>,
+	allowedFlags: readonly string[],
+): void => {
+	const allowed = new Set(allowedFlags);
+	const unknown = Object.keys(flags)
+		.filter((flag) => !allowed.has(flag))
+		.sort();
+	if (unknown.length === 0) return;
+	throw new Error(`Unknown flag(s): ${unknown.join(", ")}`);
+};
+
 export const parseStringFlag = (
 	name: string,
 	value: string | boolean | undefined,

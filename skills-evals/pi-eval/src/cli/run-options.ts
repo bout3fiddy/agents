@@ -4,12 +4,27 @@ import path from "node:path";
 import { ensureModelAuth, resolveModelSpec } from "../runtime/model-registry.js";
 import type { EvalConfig, EvalRunOptions } from "../data/types.js";
 import { fileExists, normalizePath, resolvePath } from "../data/utils.js";
-import { parseLimitFlag, parseStringFlag, resolveCasesPath } from "./validation.js";
+import {
+	assertAllowedFlags,
+	parseLimitFlag,
+	parseStringFlag,
+	resolveCasesPath,
+} from "./validation.js";
 
 export const DEFAULT_CASES_PATH = "skills-evals/fixtures/eval-cases.jsonl";
 export const DEFAULT_CASE_PARALLELISM = 10;
 
 type EvalFlags = Record<string, string | boolean>;
+
+const ALLOWED_RUN_FLAGS = [
+	"--agent-dir",
+	"--model",
+	"--cases",
+	"--filter",
+	"--limit",
+	"--dry-run",
+	"--thinking",
+] as const;
 
 const parsePositiveIntEnv = (value: string | undefined, defaultValue: number): number => {
 	const parsed = Number.parseInt(value ?? `${defaultValue}`, 10);
@@ -42,6 +57,7 @@ export const resolveRunOptions = async (
 	ctx: ExtensionCommandContext,
 	config: EvalConfig,
 ): Promise<EvalRunOptions> => {
+	assertAllowedFlags(flags, ALLOWED_RUN_FLAGS);
 	const agentDirFlag = parseStringFlag("--agent-dir", flags["--agent-dir"]);
 	const agentDir = resolvePath(agentDirFlag ?? config.defaults?.agentDir ?? ctx.cwd, ctx.cwd);
 	const model = await resolveModelSpec(parseStringFlag("--model", flags["--model"]), config, ctx);

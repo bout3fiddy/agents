@@ -4,7 +4,12 @@ import { mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { parseLimitFlag, parseStringFlag, resolveCasesPath } from "./validation.js";
+import {
+	assertAllowedFlags,
+	parseLimitFlag,
+	parseStringFlag,
+	resolveCasesPath,
+} from "./validation.js";
 
 test("parseStringFlag requires a value", () => {
 	assert.equal(parseStringFlag("--model", "gpt-4"), "gpt-4");
@@ -20,6 +25,22 @@ test("parseLimitFlag enforces positive integers", () => {
 	assert.throws(() => parseLimitFlag("-1"), /--limit/);
 	assert.throws(() => parseLimitFlag("1.5"), /--limit/);
 	assert.throws(() => parseLimitFlag(true), /--limit/);
+});
+
+test("assertAllowedFlags rejects unknown flags", () => {
+	assert.doesNotThrow(() =>
+		assertAllowedFlags(
+			{
+				"--model": "gpt-5",
+				"--dry-run": true,
+			},
+			["--model", "--dry-run"],
+		)
+	);
+	assert.throws(
+		() => assertAllowedFlags({ "--model": "gpt-5", "--skill": "coding" }, ["--model"]),
+		/Unknown flag\(s\): --skill/,
+	);
 });
 
 test("resolveCasesPath checks for existing files", async () => {

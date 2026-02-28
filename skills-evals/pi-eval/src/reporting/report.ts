@@ -9,6 +9,11 @@ type ReportRow = {
 	mode: string;
 	status: string;
 	tokens: number;
+	skillsRead: number;
+	skillFilesRead: number;
+	refsRead: number;
+	missingRefs: string;
+	unexpectedRefs: string;
 	notes: string;
 	run: string;
 };
@@ -18,6 +23,10 @@ const buildRowKey = (caseId: string, mode: string): string => `${caseId}::${mode
 const normalizeStatus = (value: string): string => value.trim().toUpperCase();
 
 const runDateFromTimestamp = (timestamp: string): string => timestamp.split("T")[0] ?? timestamp;
+const joinRoutingList = (values: string[] | undefined): string => {
+	if (!values || values.length === 0) return "-";
+	return values.join(", ");
+};
 
 const formatTokenStats = (tokens: number[]) => {
 	return {
@@ -42,6 +51,11 @@ const parseReportRows = (content: string): Map<string, ReportRow> => {
 	const modeIdx = columnIndex("Mode");
 	const statusIdx = columnIndex("Status");
 	const tokensIdx = columnIndex("Tokens");
+	const skillsReadIdx = columnIndex("Skills Read");
+	const skillFilesReadIdx = columnIndex("Skill Files Read");
+	const refsReadIdx = columnIndex("Refs Read");
+	const missingRefsIdx = columnIndex("Missing Refs");
+	const unexpectedRefsIdx = columnIndex("Unexpected Refs");
 	const notesIdx = columnIndex("Notes");
 	const runIdx = columnIndex("Run");
 	if (caseIdx < 0 || modeIdx < 0) return rows;
@@ -57,10 +71,33 @@ const parseReportRows = (content: string): Map<string, ReportRow> => {
 		if (!caseId || !mode) continue;
 		const tokensValue = Number.parseInt(cells[tokensIdx] ?? "0", 10);
 		const tokens = Number.isFinite(tokensValue) ? tokensValue : 0;
+		const skillsReadValue = Number.parseInt(skillsReadIdx >= 0 ? (cells[skillsReadIdx] ?? "0") : "0", 10);
+		const skillsRead = Number.isFinite(skillsReadValue) ? skillsReadValue : 0;
+		const skillFilesReadValue = Number.parseInt(
+			skillFilesReadIdx >= 0 ? (cells[skillFilesReadIdx] ?? "0") : "0",
+			10,
+		);
+		const skillFilesRead = Number.isFinite(skillFilesReadValue) ? skillFilesReadValue : 0;
+		const refsReadValue = Number.parseInt(refsReadIdx >= 0 ? (cells[refsReadIdx] ?? "0") : "0", 10);
+		const refsRead = Number.isFinite(refsReadValue) ? refsReadValue : 0;
+		const missingRefs = missingRefsIdx >= 0 ? (cells[missingRefsIdx] ?? "-") : "-";
+		const unexpectedRefs = unexpectedRefsIdx >= 0 ? (cells[unexpectedRefsIdx] ?? "-") : "-";
 		const status = cells[statusIdx] ?? "";
 		const notes = cells[notesIdx] ?? "";
 		const run = runIdx >= 0 ? cells[runIdx] ?? "-" : "-";
-		rows.set(buildRowKey(caseId, mode), { caseId, mode, status, tokens, notes, run });
+		rows.set(buildRowKey(caseId, mode), {
+			caseId,
+			mode,
+			status,
+			tokens,
+			skillsRead,
+			skillFilesRead,
+			refsRead,
+			missingRefs,
+			unexpectedRefs,
+			notes,
+			run,
+		});
 	}
 
 	return rows;
@@ -98,6 +135,11 @@ const mergeReportRows = (params: {
 			mode: evaluation.mode,
 			status: evaluation.status === "pass" ? "PASS" : "FAIL",
 			tokens: evaluation.result.tokens.totalTokens || 0,
+			skillsRead: evaluation.routing.readSkills.length,
+			skillFilesRead: evaluation.routing.readSkillFiles.length,
+			refsRead: evaluation.routing.readRefs.length,
+			missingRefs: joinRoutingList(evaluation.routing.missingRefs),
+			unexpectedRefs: joinRoutingList(evaluation.routing.unexpectedRefs),
 			notes: evaluation.reasons.join("; "),
 			run: runDate,
 		};
@@ -147,6 +189,11 @@ const mergeReportRows = (params: {
 					mode,
 					status: "SKIP",
 					tokens: 0,
+					skillsRead: 0,
+					skillFilesRead: 0,
+					refsRead: 0,
+					missingRefs: "-",
+					unexpectedRefs: "-",
 					notes: "not run",
 					run: "-",
 				} satisfies ReportRow);
@@ -161,11 +208,11 @@ const renderCaseTable = (rows: ReportRow[]): string => {
 	const outputRows = rows.map((row) => {
 		const status = normalizeStatus(row.status) || "";
 		const tokenCount = row.tokens || 0;
-		return `| ${row.caseId} | ${row.mode} | ${status} | ${tokenCount} | ${row.notes} | ${row.run} |`;
+		return `| ${row.caseId} | ${row.mode} | ${status} | ${tokenCount} | ${row.skillsRead} | ${row.skillFilesRead} | ${row.refsRead} | ${row.missingRefs} | ${row.unexpectedRefs} | ${row.notes} | ${row.run} |`;
 	});
 	return [
-		"| Case | Mode | Status | Tokens | Notes | Run |",
-		"| --- | --- | --- | --- | --- | --- |",
+		"| Case | Mode | Status | Tokens | Skills Read | Skill Files Read | Refs Read | Missing Refs | Unexpected Refs | Notes | Run |",
+		"| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
 		...outputRows,
 	].join("\n");
 };
