@@ -98,7 +98,7 @@ const mergeReportRows = (params: {
 			mode: evaluation.mode,
 			status: evaluation.status === "pass" ? "PASS" : "FAIL",
 			tokens: evaluation.result.tokens.totalTokens || 0,
-			notes: evaluation.reasons[0] ?? "",
+			notes: evaluation.reasons.join("; "),
 			run: runDate,
 		};
 		updatedRows.set(key, row);

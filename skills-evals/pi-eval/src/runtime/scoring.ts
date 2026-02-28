@@ -31,21 +31,47 @@ export const evaluateCase = async (
 ): Promise<CaseEvaluation> => {
 	const reasons: string[] = [];
 	const useAttempts = result.dryRun;
+	const availableSkills = result.availableSkills ?? [];
 	const invokedSkills = useAttempts ? result.skillAttempts : result.skillInvocations;
+	const invokedSkillFiles = useAttempts
+		? (result.skillFileAttempts ?? [])
+		: (result.skillFileInvocations ?? []);
 	const invokedRefs = useAttempts ? result.refAttempts : result.refInvocations;
 	const normalizedInvokedRefs = invokedRefs.map(normalizeRefPath);
 
+	const expectedProfile = evalCase.bootstrapProfile ?? (evalCase.disableHarness ? "no_payload" : "full_payload");
+	if (result.bootstrapProfile && result.bootstrapProfile !== expectedProfile) {
+		reasons.push(
+			`bootstrap profile mismatch: expected ${expectedProfile}, got ${result.bootstrapProfile}`,
+		);
+	}
+
 	for (const skill of evalCase.expectedSkills ?? []) {
-		if (!invokedSkills.includes(skill)) reasons.push(`missing skill: ${skill}`);
+		if (!availableSkills.includes(skill)) reasons.push(`missing bootstrap skill: ${skill}`);
+		if (evalCase.requireSkillFileRead) {
+			if (!invokedSkillFiles.includes(skill)) reasons.push(`missing skill read: ${skill}`);
+		}
 	}
 	for (const skill of evalCase.disallowedSkills ?? []) {
-		if (invokedSkills.includes(skill)) reasons.push(`unexpected skill: ${skill}`);
+		if (expectedProfile === "no_payload" && availableSkills.includes(skill)) {
+			reasons.push(`unexpected bootstrap skill: ${skill}`);
+		}
+		if (invokedSkills.includes(skill)) reasons.push(`unexpected skill read: ${skill}`);
 	}
 	for (const ref of evalCase.expectedRefs ?? []) {
 		const normalizedExpected = normalizeRefPath(ref);
-		const matched = normalizedInvokedRefs.some(
+		let matched = normalizedInvokedRefs.some(
 			(item) => item === normalizedExpected || item.endsWith(`/${normalizedExpected}`),
 		);
+		if (!matched && normalizedExpected.endsWith("/index.md")) {
+			const expectedDir = normalizedExpected.slice(0, -"/index.md".length);
+			matched = normalizedInvokedRefs.some(
+				(item) =>
+					item === expectedDir ||
+					item.startsWith(`${expectedDir}/`) ||
+					item.includes(`/${expectedDir}/`),
+			);
+		}
 		if (!matched) reasons.push(`missing reference: ${ref}`);
 	}
 

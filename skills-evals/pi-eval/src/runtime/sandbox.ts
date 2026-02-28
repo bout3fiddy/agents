@@ -219,13 +219,18 @@ export const runEvalSync = async (params: {
 		}
 
 		if (authSourcePath) {
-			const targetAuthPath = path.join(homeDir, ".pi", "agent", "auth.json");
-			await mkdir(path.dirname(targetAuthPath), { recursive: true });
-			await copyFile(authSourcePath, targetAuthPath);
-			try {
-				await chmod(targetAuthPath, 0o600);
-			} catch {
-				// ignore chmod failures
+			const targetAuthPaths = [
+				path.join(homeDir, ".pi", "agent", "auth.json"),
+				path.join(homeDir, ".agents", "auth.json"),
+			];
+			for (const targetAuthPath of targetAuthPaths) {
+				await mkdir(path.dirname(targetAuthPath), { recursive: true });
+				await copyFile(authSourcePath, targetAuthPath);
+				try {
+					await chmod(targetAuthPath, 0o600);
+				} catch {
+					// ignore chmod failures
+				}
 			}
 		}
 	} finally {

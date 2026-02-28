@@ -34,6 +34,31 @@ Category: Change Preventers
   - tracking issue/link
   - non-destructive validation plan
 
+### Adapter/minimal-wrapper guardrail
+When implementing small adapter or wrapper functions, do not recreate defensive compatibility scaffolding from source modules.
+
+- Do not copy `Protocol`/typing scaffolding unless the user explicitly asks for types.
+- Do not add `callable(...)` guards or broad `try/except` around normal-path calls.
+- Do not wrap already-boolean return values in `bool(...)`.
+- Prefer direct, explicit returns over kwargs accumulation and fallback variants.
+- If only 2-3 functions are requested, implement only those functions unless additional structure is explicitly required.
+
+#### Minimal wrapper template (preferred)
+
+```python
+def get_progress_factory(placeholder_module):
+    return placeholder_module.status.progress_bar
+
+def call_progress_factory(placeholder_module, *, total=None, title=None):
+    return get_progress_factory(placeholder_module)(total=total, title=title)
+
+def is_placeholder_running(placeholder_module):
+    return placeholder_module.is_running()
+```
+
+Use this pattern when the task already names the exact access path(s) to call.
+Keep adapter outputs compact (target <=15 non-empty lines when only a few wrappers are requested).
+
 ## Signals
 - New logic keeps the old path "just in case."
 - Feature flags preserve both old and new behavior without expiry.

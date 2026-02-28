@@ -1,3 +1,5 @@
+import type { BootstrapProfile } from "../data/types.js";
+
 export const WORKER_ENV_KEYS = {
 	mode: "PI_EVAL_WORKER",
 	outputPath: "PI_EVAL_OUTPUT",
@@ -7,6 +9,9 @@ export const WORKER_ENV_KEYS = {
 	agentDir: "PI_EVAL_AGENT_DIR",
 	allowedTools: "PI_EVAL_ALLOWED_TOOLS",
 	readDenyPaths: "PI_EVAL_READ_DENY_PATHS",
+	bootstrapProfile: "PI_EVAL_BOOTSTRAP_PROFILE",
+	availableSkills: "PI_EVAL_AVAILABLE_SKILLS",
+	bootstrapManifestHash: "PI_EVAL_BOOTSTRAP_MANIFEST_HASH",
 	globalInstructionsPath: "PI_EVAL_GLOBAL_INSTRUCTIONS_PATH",
 } as const;
 
@@ -26,6 +31,9 @@ export type WorkerLaunchConfig = {
 	agentDir: string;
 	allowedTools: string[];
 	readDenyPaths: string[];
+	bootstrapProfile: BootstrapProfile;
+	availableSkills: string[];
+	bootstrapManifestHash: string | null;
 	globalInstructionsPath?: string | null;
 	homeDir?: string | null;
 };
@@ -51,10 +59,18 @@ export const buildWorkerEnv = (
 	[WORKER_ENV_KEYS.agentDir]: config.agentDir,
 	[WORKER_ENV_KEYS.allowedTools]: config.allowedTools.join(","),
 	[WORKER_ENV_KEYS.readDenyPaths]: JSON.stringify(config.readDenyPaths),
+	[WORKER_ENV_KEYS.bootstrapProfile]: config.bootstrapProfile,
+	[WORKER_ENV_KEYS.availableSkills]: JSON.stringify(config.availableSkills),
+	[WORKER_ENV_KEYS.bootstrapManifestHash]: config.bootstrapManifestHash ?? "",
 	...(config.globalInstructionsPath
 		? { [WORKER_ENV_KEYS.globalInstructionsPath]: config.globalInstructionsPath }
 		: {}),
-	...(config.homeDir ? { HOME: config.homeDir } : {}),
+	...(config.homeDir
+		? {
+			HOME: config.homeDir,
+			PI_CODING_AGENT_DIR: `${config.homeDir}/.agents`,
+		}
+		: {}),
 });
 
 const parseJsonArray = (raw: string | undefined): string[] => {
@@ -77,6 +93,11 @@ const parseExpectedTurns = (raw: string | undefined): number => {
 	return Number.isFinite(value) && value > 0 ? value : 1;
 };
 
+const parseBootstrapProfile = (raw: string | undefined): BootstrapProfile => {
+	if (raw === "no_payload") return "no_payload";
+	return "full_payload";
+};
+
 export type WorkerRuntimeConfig = {
 	outputPath: string;
 	caseId: string;
@@ -85,6 +106,9 @@ export type WorkerRuntimeConfig = {
 	agentDir: string;
 	allowedTools: Set<string>;
 	readDenyPaths: string[];
+	bootstrapProfile: BootstrapProfile;
+	availableSkills: string[];
+	bootstrapManifestHash: string | null;
 };
 
 export const parseWorkerRuntimeConfig = (
@@ -102,5 +126,8 @@ export const parseWorkerRuntimeConfig = (
 		agentDir: env[WORKER_ENV_KEYS.agentDir] ?? cwd,
 		allowedTools: parseAllowedTools(env[WORKER_ENV_KEYS.allowedTools]),
 		readDenyPaths: mergeReadDenyPaths(parseJsonArray(env[WORKER_ENV_KEYS.readDenyPaths])),
+		bootstrapProfile: parseBootstrapProfile(env[WORKER_ENV_KEYS.bootstrapProfile]),
+		availableSkills: parseJsonArray(env[WORKER_ENV_KEYS.availableSkills]),
+		bootstrapManifestHash: env[WORKER_ENV_KEYS.bootstrapManifestHash] || null,
 	};
 };

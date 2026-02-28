@@ -2,20 +2,18 @@ import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { tokenizeArgs, parseFlags } from "../cli/args.js";
-import { evaluateSelectedCases, resolveSkillMap } from "./case-execution.js";
+import { evaluateSelectedCases } from "./case-execution.js";
 import { loadCases, filterCases } from "../data/cases.js";
 import { loadEvalConfig } from "../data/config.js";
 import { persistRunReport } from "../reporting/report-persistence.js";
-import { discoverSkills } from "../data/skills.js";
 import { formatDuration } from "../data/utils.js";
 import {
 	isSameResolvedPath,
 	resolveRunOptions,
-	resolveSkillsPaths,
 	validateRunMode,
 } from "../cli/run-options.js";
 
-const extensionRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const extensionRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const extensionEntry = path.join(extensionRoot, "index.ts");
 
 export const registerEvalCommand = (pi: ExtensionAPI) => {
@@ -34,14 +32,11 @@ export const registerEvalCommand = (pi: ExtensionAPI) => {
 			const cases = filterCases(selectedCases, options.filter, options.limitOverride);
 			if (cases.length === 0) return;
 
-			const skills = await discoverSkills(resolveSkillsPaths(config, options.agentDir));
-			const skillMap = resolveSkillMap(skills);
 			const runStart = Date.now();
 			const evaluations = await evaluateSelectedCases({
 				cases,
 				options,
 				config,
-				skillMap,
 				extensionEntry,
 			});
 			const durationMs = Date.now() - runStart;

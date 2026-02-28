@@ -10,13 +10,18 @@ export const loadCases = async (filePath: string): Promise<EvalCase[]> => {
 		if (!trimmed.startsWith("{")) return;
 		try {
 			const parsed = JSON.parse(trimmed) as EvalCase;
-			cases.push({
-				...parsed,
-				expectedSkills: parsed.expectedSkills ?? [],
-				disallowedSkills: parsed.disallowedSkills ?? [],
-				expectedRefs: parsed.expectedRefs ?? [],
-				assertions: parsed.assertions ?? [],
-			});
+			const bootstrapProfile = parsed.bootstrapProfile ??
+				(parsed.disableHarness ? "no_payload" : "full_payload");
+				cases.push({
+					...parsed,
+					expectedSkills: parsed.expectedSkills ?? [],
+					disallowedSkills: parsed.disallowedSkills ?? [],
+					expectedRefs: parsed.expectedRefs ?? [],
+					sandbox: parsed.sandbox ?? true,
+					bootstrapProfile,
+					requireSkillFileRead: parsed.requireSkillFileRead ?? false,
+					assertions: parsed.assertions ?? [],
+				});
 		} catch (error) {
 			throw new Error(`Failed to parse case on line ${index + 1}: ${error}`);
 		}

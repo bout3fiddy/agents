@@ -147,6 +147,8 @@ const createEvalReadTool = async (cwd: string, dryRunEnabled: boolean, readDenyP
 const createReadCapture = (): ReadCapture => ({
 	skillAttempts: new Set<string>(),
 	skillInvocations: new Set<string>(),
+	skillFileAttempts: new Set<string>(),
+	skillFileInvocations: new Set<string>(),
 	refAttempts: new Set<string>(),
 	refInvocations: new Set<string>(),
 });
@@ -214,24 +216,46 @@ const shouldFinalize = (acc: WorkerAccumulator, expectedTurns: number): boolean 
 const buildResult = (params: {
 	caseId: string;
 	dryRun: boolean;
+	bootstrapProfile: "full_payload" | "no_payload";
+	availableSkills: string[];
+	bootstrapManifestHash: string | null;
 	readCapture: ReadCapture;
 	denyPolicy: PathDenyPolicy | null;
 	acc: WorkerAccumulator;
 	startedAt: number;
 	model: any;
 }): CaseRunResult => {
-	const { caseId, dryRun, readCapture, denyPolicy, acc, startedAt, model } = params;
+	const {
+		caseId,
+		dryRun,
+		bootstrapProfile,
+		availableSkills,
+		bootstrapManifestHash,
+		readCapture,
+		denyPolicy,
+		acc,
+		startedAt,
+		model,
+	} = params;
 	const capturedReads = serializeReadCapture(readCapture);
 	const deniedReadErrors = denyPolicy
 		? Array.from(denyPolicy.deniedReads).sort().map((entry) => `forbidden read: ${entry}`)
 		: [];
+	if (bootstrapProfile === "no_payload" && deniedReadErrors.length > 0) {
+		deniedReadErrors.unshift("forbidden read attempted in no_payload profile");
+	}
 
 	return {
 		caseId,
 		dryRun,
 		model: model ? modelSpecFromModel(model) : null,
+		bootstrapProfile,
+		availableSkills,
+		bootstrapManifestHash,
 		skillInvocations: capturedReads.skillInvocations,
 		skillAttempts: capturedReads.skillAttempts,
+		skillFileInvocations: capturedReads.skillFileInvocations,
+		skillFileAttempts: capturedReads.skillFileAttempts,
 		refInvocations: capturedReads.refInvocations,
 		refAttempts: capturedReads.refAttempts,
 		outputText: acc.outputChunks.join("\n").trim(),
@@ -261,12 +285,18 @@ export const registerEvalWorker = async (pi: ExtensionAPI): Promise<boolean> => 
 	registerReadCaptureHooks(pi, config.agentDir, readCapture);
 
 	pi.on("agent_end", async (event, ctx) => {
-		appendAgentEnd(acc, event.messages as Array<AssistantMessage | ToolResultMessage>);
+		const messages = Array.isArray(event.messages)
+			? (event.messages as Array<AssistantMessage | ToolResultMessage>)
+			: [];
+		appendAgentEnd(acc, messages);
 		if (!shouldFinalize(acc, config.expectedTurns)) return;
 
 		const result = buildResult({
 			caseId: config.caseId,
 			dryRun: config.dryRun,
+			bootstrapProfile: config.bootstrapProfile,
+			availableSkills: config.availableSkills,
+			bootstrapManifestHash: config.bootstrapManifestHash,
 			readCapture,
 			denyPolicy,
 			acc,

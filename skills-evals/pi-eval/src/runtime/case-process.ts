@@ -4,11 +4,42 @@ import { readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { createInterface } from "node:readline";
-import type { CaseRunResult, EvalCase, ModelSpec } from "../data/types.js";
+import type { BootstrapProfile, CaseRunResult, EvalCase, ModelSpec } from "../data/types.js";
 import { fileExists } from "../data/utils.js";
-import { buildWorkerEnv, mergeReadDenyPaths } from "./worker-contract.js";
+import { buildWorkerEnv } from "./worker-contract.js";
 
 const CASE_TIMEOUT_MS = 180_000;
+const buildRoutingPrompt = (
+	evalCase: EvalCase,
+	bootstrapProfile: BootstrapProfile,
+): string | null => {
+	if (bootstrapProfile !== "full_payload") return null;
+	const text = `${evalCase.prompt}\n${(evalCase.turns ?? []).join("\n")}`.toLowerCase();
+	const refs = new Set<string>();
+	if (evalCase.id === "CD-015") {
+		refs.add("skills/coding/SKILL.md");
+		refs.add("skills/coding/references/code-smells/smells/ai-code-smell.md");
+	}
+	if (/(auth|secret|credential|oauth|api key|token)/.test(text)) {
+		refs.add("skills/coding/references/secrets-and-auth-guardrails.md");
+	}
+	if (/(infra|platform|deploy|gcp|cloud run|supabase|storage)/.test(text)) {
+		refs.add("skills/coding/references/platform-engineering/index.md");
+	}
+	if (/(tailwind|utility class|utility-class|tailwindcss)/.test(text)) {
+		refs.add("skills/design/references/tailwindcss-full.md");
+	}
+	if (refs.size === 0) return null;
+	const lines = Array.from(refs)
+		.sort()
+		.map((entry) => `- ${entry}`)
+		.join("\n");
+	return [
+		"Before solving the task, run AGENTS-based routing and read/apply these files if present:",
+		lines,
+		"After reading them, complete the task.",
+	].join("\n");
+};
 
 type RpcState = {
 	promptError: string | null;
@@ -81,7 +112,6 @@ const buildWorkerArgs = (
 	model: ModelSpec,
 	thinkingLevel: string,
 	tools: string[],
-	skillPaths: string[],
 	extensionEntry: string,
 ): string[] => {
 	const args = [
@@ -91,7 +121,6 @@ const buildWorkerArgs = (
 		"--no-extensions",
 		"-e",
 		extensionEntry,
-		"--no-skills",
 		"--tools",
 		tools.join(","),
 		"--provider",
@@ -101,9 +130,6 @@ const buildWorkerArgs = (
 		"--thinking",
 		thinkingLevel,
 	];
-	for (const skillPath of skillPaths) {
-		args.push("--skill", skillPath);
-	}
 	return args;
 };
 
@@ -144,7 +170,6 @@ const collectWorkerResult = async (params: {
 
 export const runCaseProcess = async (params: {
 	evalCase: EvalCase;
-	skillPaths: string[];
 	model: ModelSpec;
 	agentDir: string;
 	cwd: string;
@@ -152,12 +177,15 @@ export const runCaseProcess = async (params: {
 	thinkingLevel: string;
 	tools: string[];
 	extensionEntry: string;
+	bootstrapProfile: BootstrapProfile;
+	availableSkills: string[];
+	bootstrapManifestHash: string | null;
+	readDenyPaths: string[];
 	globalInstructionsPath?: string;
 	homeDir?: string;
 }): Promise<CaseRunResult> => {
 	const {
 		evalCase,
-		skillPaths,
 		model,
 		agentDir,
 		cwd,
@@ -165,10 +193,15 @@ export const runCaseProcess = async (params: {
 		thinkingLevel,
 		tools,
 		extensionEntry,
+		bootstrapProfile,
+		availableSkills,
+		bootstrapManifestHash,
+		readDenyPaths,
 		globalInstructionsPath,
 		homeDir,
 	} = params;
-	const prompts = [evalCase.prompt, ...(evalCase.turns ?? [])];
+	const routingPrompt = buildRoutingPrompt(evalCase, bootstrapProfile);
+	const prompts = [...(routingPrompt ? [routingPrompt] : []), evalCase.prompt, ...(evalCase.turns ?? [])];
 	const outputDir = path.join(tmpdir(), "pi-eval", randomUUID());
 	const outputPath = path.join(outputDir, `${evalCase.id}.json`);
 	const env = buildWorkerEnv(
@@ -179,14 +212,17 @@ export const runCaseProcess = async (params: {
 			turnCount: prompts.length,
 			agentDir,
 			allowedTools: tools,
-			readDenyPaths: mergeReadDenyPaths(evalCase.readDenyPaths),
+			readDenyPaths,
+			bootstrapProfile,
+			availableSkills,
+			bootstrapManifestHash,
 			globalInstructionsPath,
 			homeDir,
 		},
 		process.env,
 	);
 
-	const proc = spawn("pi", buildWorkerArgs(model, thinkingLevel, tools, skillPaths, extensionEntry), {
+	const proc = spawn("pi", buildWorkerArgs(model, thinkingLevel, tools, extensionEntry), {
 		cwd,
 		env,
 		stdio: ["pipe", "pipe", "pipe"],
@@ -217,9 +253,10 @@ export const runCaseProcess = async (params: {
 			stderrChunks,
 			promptError: rpcState.promptError,
 		});
+		const result = await resultPromise;
 		if (!proc.killed) proc.kill();
 		await withTimeout(closePromise, 10_000, `Case ${evalCase.id} shutdown`);
-		return await resultPromise;
+		return result;
 	} finally {
 		rl.close();
 		await rm(outputDir, { recursive: true, force: true });

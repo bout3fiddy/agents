@@ -5,6 +5,8 @@ export type FileAssertion = {
 	maxNonEmptyLines?: number;
 };
 
+export type BootstrapProfile = "full_payload" | "no_payload";
+
 export type EvalCase = {
 	id: string;
 	suite: string;
@@ -18,6 +20,8 @@ export type EvalCase = {
 	sandbox?: boolean;
 	fileAssertions?: FileAssertion[];
 	readDenyPaths?: string[];
+	bootstrapProfile?: BootstrapProfile;
+	requireSkillFileRead?: boolean;
 	disableHarness?: boolean;
 	dryRun?: boolean;
 	tokenBudget?: number | null;
@@ -63,12 +67,17 @@ export type CaseRunResult = {
 	model: ModelSpec | null;
 	skillInvocations: string[];
 	skillAttempts: string[];
+	skillFileInvocations?: string[];
+	skillFileAttempts?: string[];
 	refInvocations: string[];
 	refAttempts: string[];
 	outputText: string;
 	tokens: TokenUsage;
 	durationMs: number;
 	errors: string[];
+	bootstrapProfile?: BootstrapProfile;
+	availableSkills?: string[];
+	bootstrapManifestHash?: string | null;
 	workspaceDir?: string | null;
 };
 
