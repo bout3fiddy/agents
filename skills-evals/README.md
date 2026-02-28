@@ -10,6 +10,7 @@
 - `fixtures/eval-cases.jsonl`: source-of-truth eval case registry.
 - `fixtures/models.jsonl`: models matrix consumed by `run.sh` when `--model` is omitted.
 - `reports/`: primary model-specific eval reports and `index.json`.
+- `reports/routing-traces/`: per-case routing telemetry artifacts by model.
 - `validate/`: TypeScript port of `agentskills validate`.
 
 ## pi-eval Extension
@@ -81,8 +82,16 @@ Scoring model:
 - Checks expected/disallowed skills.
 - Skill expectations are satisfied either by direct `SKILL.md` reads or by routed reference reads under `skills/<name>/references/` (skill inferred from path).
 - Checks expected references.
+- Produces routing scorecards per case: read skills, read skill files, read refs, missing refs, unexpected refs.
 - Runs text assertions and file assertions.
 - Enforces optional token budgets.
+
+Routing assertions (optional per case):
+
+- `must_read_ref:<path>`
+- `must_not_read_ref:<path>`
+- `must_read_refs_count_at_least:<n>`
+- `must_read_exact_refs:<comma-separated-paths>`
 
 ## Cases And Reports
 
@@ -94,6 +103,17 @@ Primary reports:
 
 - `skills-evals/reports/<provider>-<model>.md`
 - `skills-evals/reports/index.json`
+- Report table includes routing columns:
+  - `Skills Read`
+  - `Skill Files Read`
+  - `Refs Read`
+  - `Missing Refs`
+  - `Unexpected Refs`
+
+Routing trace artifacts:
+
+- `skills-evals/reports/routing-traces/<provider>-<model>/<case-id>.json`
+- Each artifact includes `expectedSkills`, `expectedRefs`, routing scorecard fields, and failure reasons for that case.
 
 Mirrored reports:
 
