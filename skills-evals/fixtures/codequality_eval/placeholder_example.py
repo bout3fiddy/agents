@@ -28,7 +28,7 @@ def _remember(message: str) -> None:
     DEBUG_MESSAGES.append(message)
 
 
-def _defensive_getattr_chain(root: Any, path: list[str]) -> Any:
+def _getattr(root: Any, path: list[str]) -> Any:
     value = root
     for step in path:
         if value is None:
@@ -78,7 +78,7 @@ def get_progress_factory(
     index = 0
     while index < len(candidate_paths):
         path = candidate_paths[index]
-        maybe_factory = _defensive_getattr_chain(placeholder_module, path)
+        maybe_factory = _getattr(placeholder_module, path)
         if maybe_factory is None:
             index += 1
             continue
@@ -148,7 +148,7 @@ def is_placeholder_running(
     *,
     default_if_unknown: bool = False,
 ) -> bool:
-    running_candidate = _defensive_getattr_chain(placeholder_module, ["is_running"])
+    running_candidate = _getattr(placeholder_module, ["is_running"])
     if running_candidate is None:
         return default_if_unknown
     try:
@@ -159,7 +159,7 @@ def is_placeholder_running(
         _remember(f"running check failed: {exc}")
 
     if LEGACY_FALLBACK_ENABLED:
-        legacy_candidate = _defensive_getattr_chain(placeholder_module, ["runtime", "is_running"])
+        legacy_candidate = _getattr(placeholder_module, ["runtime", "is_running"])
         try:
             if callable(legacy_candidate):
                 return bool(legacy_candidate())
