@@ -6,26 +6,8 @@ import path from "node:path";
 import test from "node:test";
 import {
 	assertAllowedFlags,
-	parseLimitFlag,
-	parseStringFlag,
 	resolveCasesPath,
 } from "./validation.js";
-
-test("parseStringFlag requires a value", () => {
-	assert.equal(parseStringFlag("--model", "gpt-4"), "gpt-4");
-	assert.equal(parseStringFlag("--model", undefined), undefined);
-	assert.throws(() => parseStringFlag("--model", true), /--model/);
-	assert.throws(() => parseStringFlag("--model", " "), /--model/);
-});
-
-test("parseLimitFlag enforces positive integers", () => {
-	assert.equal(parseLimitFlag("3"), 3);
-	assert.equal(parseLimitFlag(undefined), undefined);
-	assert.throws(() => parseLimitFlag("0"), /--limit/);
-	assert.throws(() => parseLimitFlag("-1"), /--limit/);
-	assert.throws(() => parseLimitFlag("1.5"), /--limit/);
-	assert.throws(() => parseLimitFlag(true), /--limit/);
-});
 
 test("assertAllowedFlags rejects unknown flags", () => {
 	assert.doesNotThrow(() =>

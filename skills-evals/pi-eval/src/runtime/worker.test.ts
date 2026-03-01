@@ -104,6 +104,25 @@ test("assertWithinSandboxBoundary denies symlink escapes from sandbox", async ()
 	await rm(outsideRoot, { recursive: true, force: true });
 });
 
+test("assertWithinSandboxBoundary denies absolute paths outside sandbox root", async () => {
+	const cwd = await mkdtemp(path.join(tmpdir(), "pi-eval-worker-absolute-"));
+	const sandboxDir = path.join(cwd, "sandbox");
+	await mkdir(sandboxDir, { recursive: true });
+	const outsideRoot = await mkdtemp(path.join(tmpdir(), "pi-eval-worker-absolute-outside-"));
+
+	const boundary = await createSandboxBoundary(cwd, sandboxDir);
+	const absoluteOutsidePath = path.join(outsideRoot, "secrets.txt");
+
+	await assert.rejects(
+		() => assertWithinSandboxBoundary(absoluteOutsidePath, boundary),
+		new RegExp(FORBIDDEN_WORKSPACE_VIOLATION),
+	);
+	assert.equal(boundary.violations.size, 1);
+
+	await rm(cwd, { recursive: true, force: true });
+	await rm(outsideRoot, { recursive: true, force: true });
+});
+
 test("wrapToolWithSandboxBoundary blocks tool execution for out-of-sandbox write/edit paths", async () => {
 	const cwd = await mkdtemp(path.join(tmpdir(), "pi-eval-worker-wrap-"));
 	const sandboxDir = path.join(cwd, "sandbox");

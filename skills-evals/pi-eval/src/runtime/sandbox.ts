@@ -4,6 +4,7 @@ import { chmod, copyFile, cp, mkdir, readdir, rm, symlink } from "node:fs/promis
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileExists, normalizePath } from "../data/utils.js";
+import { assertManagedTempPath, toSafePathSegment } from "./path-safety.js";
 
 const SANDBOX_EXCLUDES = [
 	".git",
@@ -19,6 +20,9 @@ const SANDBOX_EXCLUDES = [
 	"docs/specs/pi-eval/reports",
 	"docs/specs/pi-eval/logs",
 ];
+
+const SANDBOX_ROOT = path.join(tmpdir(), "pi-eval-sandbox");
+const HOME_ROOT = path.join(tmpdir(), "pi-eval-home");
 
 let activeSyncCount = 0;
 const syncWaitQueue: Array<() => void> = [];
@@ -62,7 +66,8 @@ const shouldCopyToSandbox = (sourcePath: string, baseDir: string): boolean => {
 };
 
 export const createSandbox = async (agentDir: string, caseId: string): Promise<string> => {
-	const sandboxDir = path.join(tmpdir(), "pi-eval-sandbox", caseId, randomUUID());
+	const safeCaseId = toSafePathSegment(caseId, "case");
+	const sandboxDir = path.join(SANDBOX_ROOT, safeCaseId, randomUUID());
 	await mkdir(sandboxDir, { recursive: true });
 	await cp(agentDir, sandboxDir, {
 		recursive: true,
@@ -108,10 +113,10 @@ export const createSharedCaseWorkspace = async (
 	caseId: string,
 	mutablePaths: string[],
 ): Promise<string> => {
+	const safeCaseId = toSafePathSegment(caseId, "case");
 	const sandboxDir = path.join(
-		tmpdir(),
-		"pi-eval-sandbox",
-		`${caseId}-shared`,
+		SANDBOX_ROOT,
+		`${safeCaseId}-shared`,
 		randomUUID(),
 	);
 	await mkdir(sandboxDir, { recursive: true });
@@ -147,18 +152,21 @@ export const createSharedCaseWorkspace = async (
 
 export const cleanupSandbox = async (sandboxDir: string | null): Promise<void> => {
 	if (!sandboxDir) return;
-	await rm(sandboxDir, { recursive: true, force: true });
+	const safePath = assertManagedTempPath(sandboxDir, SANDBOX_ROOT, "sandbox cleanup");
+	await rm(safePath, { recursive: true, force: true });
 };
 
 export const createSandboxHome = async (caseId: string): Promise<string> => {
-	const homeDir = path.join(tmpdir(), "pi-eval-home", caseId, randomUUID());
+	const safeCaseId = toSafePathSegment(caseId, "case");
+	const homeDir = path.join(HOME_ROOT, safeCaseId, randomUUID());
 	await mkdir(homeDir, { recursive: true });
 	return homeDir;
 };
 
 export const cleanupSandboxHome = async (homeDir: string | null): Promise<void> => {
 	if (!homeDir) return;
-	await rm(homeDir, { recursive: true, force: true });
+	const safePath = assertManagedTempPath(homeDir, HOME_ROOT, "home cleanup");
+	await rm(safePath, { recursive: true, force: true });
 };
 
 const withTimeout = async <T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> => {

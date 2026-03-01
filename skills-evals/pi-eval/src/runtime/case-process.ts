@@ -7,6 +7,7 @@ import { createInterface } from "node:readline";
 import type { BootstrapProfile, CaseRunResult, EvalCase, ModelSpec } from "../data/types.js";
 import { fileExists } from "../data/utils.js";
 import { buildWorkerEnv } from "./worker-contract.js";
+import { toSafePathSegment } from "./path-safety.js";
 
 const CASE_TIMEOUT_MS = 180_000;
 
@@ -171,7 +172,8 @@ export const runCaseProcess = async (params: {
 	} = params;
 	const prompts = [evalCase.prompt, ...(evalCase.turns ?? [])];
 	const outputDir = path.join(tmpdir(), "pi-eval", randomUUID());
-	const outputPath = path.join(outputDir, `${evalCase.id}.json`);
+	const outputFile = `${toSafePathSegment(evalCase.id, "case")}.json`;
+	const outputPath = path.join(outputDir, outputFile);
 	const env = buildWorkerEnv(
 		{
 			outputPath,

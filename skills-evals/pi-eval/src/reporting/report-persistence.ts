@@ -3,6 +3,7 @@ import path from "node:path";
 import { buildReport, readReportRows, updateIndex, writeReport } from "./report.js";
 import type { CaseEvaluation, EvalCase, EvalRunOptions, ModelSpec } from "../data/types.js";
 import { ensureDir } from "../data/utils.js";
+import { toSafePathSegment } from "../runtime/path-safety.js";
 
 const modelSafeKey = (model: ModelSpec): string =>
 	`${model.provider}-${model.id}`.replace(/[^a-zA-Z0-9-_]+/g, "-");
@@ -72,7 +73,7 @@ const writeRoutingTraceArtifacts = async (params: {
 			reasons: evaluation.reasons,
 			failureReasons: evaluation.failureReasons,
 		};
-		const tracePath = path.join(traceDir, `${evaluation.caseId}.json`);
+		const tracePath = path.join(traceDir, `${toSafePathSegment(evaluation.caseId, "case")}.json`);
 		await writeFile(tracePath, JSON.stringify(payload, null, 2));
 	}
 };
