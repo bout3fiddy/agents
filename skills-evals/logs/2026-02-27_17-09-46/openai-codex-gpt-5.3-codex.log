@@ -1,8 +1,0 @@
-┌ Pi Eval Run ┐
-│ Cases: 164  │
-└─────────────┘
-Parallelism: 1 case(s)
-
-Using shared case sandbox: 83ffcb25-30b5-406e-8faf-168db6fab498
-FAIL sync failed (exit 1): error: Module not found "skills-evals/validate/index.ts"
-sync: generated router artifact validation failed.

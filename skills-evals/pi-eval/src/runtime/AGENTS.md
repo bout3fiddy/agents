@@ -3,6 +3,8 @@
 - `runner.ts`: registers `/eval` and orchestrates a run.
 - `worker.ts`: worker-mode runtime that captures reads and writes results.
 - `case-process.ts`: low-level worker process/RPC lifecycle.
+- `sandbox-engine.ts`: mandatory sandbox interface and provider allowlist policy.
+- `gondolin-engine.ts`: Gondolin VM-backed implementation of worker launch.
 - `case-lifecycle.ts`: sandbox/home lifecycle and per-case execution flow.
 - `case-execution.ts`: parallel case execution entrypoint.
 - `sandbox.ts`: sandbox filesystem and home setup/cleanup.
@@ -15,3 +17,5 @@
 - Sandbox policy: `worker.ts` enforces sandbox boundary checks for `read`, `edit`, and `write`, and emits `FORBIDDEN_WORKSPACE_VIOLATION` on boundary breaches.
 - Boundary helpers live in `sandbox-boundary.ts` so unit tests can validate sandbox business logic without loading `pi-coding-agent` runtime dependencies.
 - Cases with `persistArtifacts: true` copy files listed in `fileAssertions[].path` from sandbox workspace back to the host repo before sandbox cleanup (used by CD-015 visual diff workflow).
+- RPC lifecycle nuance: some providers emit an intermediate `agent_end` with `stopReason:error` and `errorMessage:terminated` before `auto_retry_start`; treat that `agent_end` as provisional until retry settlement (`auto_retry_start`/`auto_retry_end`) to avoid premature case finalization.
+- Full-payload bootstrap mirrors synced home assets into workspace canonical paths (`/workspace/AGENTS.md`, `/workspace/instructions/skills.router.min.json`, `/workspace/skills/*`) because models often resolve project instructions relative to `/workspace`.

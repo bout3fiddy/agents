@@ -12,7 +12,6 @@ export const WORKER_ENV_KEYS = {
 	bootstrapProfile: "PI_EVAL_BOOTSTRAP_PROFILE",
 	availableSkills: "PI_EVAL_AVAILABLE_SKILLS",
 	bootstrapManifestHash: "PI_EVAL_BOOTSTRAP_MANIFEST_HASH",
-	globalInstructionsPath: "PI_EVAL_GLOBAL_INSTRUCTIONS_PATH",
 } as const;
 
 export const DEFAULT_READ_DENY_PATHS = [
@@ -34,7 +33,6 @@ export type WorkerLaunchConfig = {
 	bootstrapProfile: BootstrapProfile;
 	availableSkills: string[];
 	bootstrapManifestHash: string | null;
-	globalInstructionsPath?: string | null;
 	homeDir?: string | null;
 };
 
@@ -62,9 +60,6 @@ export const buildWorkerEnv = (
 	[WORKER_ENV_KEYS.bootstrapProfile]: config.bootstrapProfile,
 	[WORKER_ENV_KEYS.availableSkills]: JSON.stringify(config.availableSkills),
 	[WORKER_ENV_KEYS.bootstrapManifestHash]: config.bootstrapManifestHash ?? "",
-	...(config.globalInstructionsPath
-		? { [WORKER_ENV_KEYS.globalInstructionsPath]: config.globalInstructionsPath }
-		: {}),
 	...(config.homeDir
 		? {
 			HOME: config.homeDir,

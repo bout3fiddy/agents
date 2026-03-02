@@ -4,14 +4,60 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 EXT_PATH="$ROOT_DIR/skills-evals/pi-eval/index.ts"
 MODELS_FILE_DEFAULT="$ROOT_DIR/skills-evals/fixtures/models.jsonl"
+DEFAULT_GONDOLIN_IMAGE_PATH="$ROOT_DIR/skills-evals/gondolin/image/current"
+CASE_FILTER=""
+
+usage() {
+	cat <<'EOF'
+Usage: skills-evals/run.sh [--case CASE_ID]
+
+Options:
+  --case CASE_ID   Run only the matching case ID (applies --filter CASE_ID --limit 1)
+  -h, --help       Show this help message
+EOF
+}
+
+while [[ "$#" -gt 0 ]]; do
+	case "$1" in
+	--case)
+		if [[ "$#" -lt 2 || -z "${2//[[:space:]]/}" ]]; then
+			echo "--case requires a non-empty case ID." >&2
+			usage >&2
+			exit 1
+		fi
+		CASE_FILTER="$2"
+		shift 2
+		;;
+	-h | --help)
+		usage
+		exit 0
+		;;
+	*)
+		echo "Unknown argument: $1" >&2
+		usage >&2
+		exit 1
+		;;
+	esac
+done
 
 if ! command -v pi >/dev/null 2>&1; then
 	echo "pi is not installed or not on PATH." >&2
 	exit 1
 fi
 
-if [[ "$#" -ne 0 ]]; then
-	echo "run.sh takes no arguments. Configure models in skills-evals/fixtures/models.jsonl." >&2
+if [[ -z "${PI_EVAL_GONDOLIN_IMAGE_PATH:-}" ]]; then
+	export PI_EVAL_GONDOLIN_IMAGE_PATH="$DEFAULT_GONDOLIN_IMAGE_PATH"
+fi
+
+if [[ ! -d "${PI_EVAL_GONDOLIN_IMAGE_PATH}" ]]; then
+	echo "Gondolin image directory not found: ${PI_EVAL_GONDOLIN_IMAGE_PATH}" >&2
+	echo "Build it with ./skills-evals/gondolin/scripts/build-image.sh or set PI_EVAL_GONDOLIN_IMAGE_PATH." >&2
+	exit 1
+fi
+
+if [[ ! -f "${PI_EVAL_GONDOLIN_IMAGE_PATH}/manifest.json" ]]; then
+	echo "Gondolin image directory is missing manifest.json: ${PI_EVAL_GONDOLIN_IMAGE_PATH}/manifest.json" >&2
+	echo "Build it with ./skills-evals/gondolin/scripts/build-image.sh or set PI_EVAL_GONDOLIN_IMAGE_PATH." >&2
 	exit 1
 fi
 
@@ -89,10 +135,13 @@ run_for_model() {
 	local model="$1"
 	local thinking="$2"
 	local prompt="/eval run --thinking $thinking --model $model"
+	if [[ -n "$CASE_FILTER" ]]; then
+		prompt="$prompt --filter $CASE_FILTER --limit 1"
+	fi
 
 	if ((LOG_OFF == 0)); then
 		local run_log
-		if [[ -n "$LOG_PATH" && "${#MODELS[@]}" -eq 1 ]]; then
+		if [[ -n "$LOG_PATH" && "${#MODEL_SPECS[@]}" -eq 1 ]]; then
 			run_log="$LOG_PATH"
 		else
 			run_log="$LOG_DIR/$RUN_STAMP/$(safe_model_name "$model").log"
@@ -126,6 +175,9 @@ fi
 
 echo "Running ${#MODEL_SPECS[@]} model(s); max parallel=$MAX_PARALLEL"
 echo "Models source: $MODELS_FILE"
+if [[ -n "$CASE_FILTER" ]]; then
+	echo "Case filter: $CASE_FILTER (limit=1)"
+fi
 
 failed=0
 PIDS=()

@@ -35,16 +35,8 @@ export type EvalConfig = {
 	models?: Record<string, { globalInstructions: string[] }>;
 	defaults?: {
 		agentDir?: string;
-		skillsPaths?: string[];
 		dryRun?: boolean;
 	};
-};
-
-export type SkillInfo = {
-	name: string;
-	description?: string;
-	skillDir: string;
-	skillFile: string;
 };
 
 export type ModelSpec = {
@@ -62,16 +54,56 @@ export type TokenUsage = {
 	totalTokens: number;
 };
 
+export type ToolUsageSummary = {
+	allowedTools: string[];
+	writeCalls: number;
+	editCalls: number;
+	writeFailures: number;
+	editFailures: number;
+};
+
+export type RpcToolCallDiagnostics = {
+	id: string;
+	toolName: string;
+	startCount: number;
+	deltaCount: number;
+	endCount: number;
+	executionStartCount: number;
+	executionEndCount: number;
+	executionSuccessCount: number;
+	executionFailureCount: number;
+	maxPartialJsonLength: number;
+	seenInAgentEnd: boolean;
+};
+
+export type RpcDiagnostics = {
+	rawLineCount: number;
+	parsedEventCount: number;
+	parseErrorCount: number;
+	eventCounts: Record<string, number>;
+	autoRetryStartCount: number;
+	autoRetryEndCount: number;
+	terminalAgentErrorCount: number;
+	lastAgentStopReason: string | null;
+	lastAgentErrorMessage: string | null;
+	toolCalls: RpcToolCallDiagnostics[];
+	anomalies: string[];
+};
+
 export type CaseRunResult = {
 	caseId: string;
 	dryRun: boolean;
 	model: ModelSpec | null;
+	workerReady?: boolean;
 	skillInvocations: string[];
 	skillAttempts: string[];
+	skillDenied?: string[];
 	skillFileInvocations?: string[];
 	skillFileAttempts?: string[];
+	skillFileDenied?: string[];
 	refInvocations: string[];
 	refAttempts: string[];
+	refDenied?: string[];
 	outputText: string;
 	tokens: TokenUsage;
 	durationMs: number;
@@ -80,6 +112,8 @@ export type CaseRunResult = {
 	availableSkills?: string[];
 	bootstrapManifestHash?: string | null;
 	workspaceDir?: string | null;
+	toolUsage?: ToolUsageSummary;
+	rpcDiagnostics?: RpcDiagnostics;
 };
 
 export type FailureCategory =
@@ -97,6 +131,15 @@ export type RoutingScorecard = {
 	readSkills: string[];
 	readSkillFiles: string[];
 	readRefs: string[];
+	attemptedSkills?: string[];
+	successfulSkills?: string[];
+	deniedSkills?: string[];
+	attemptedSkillFiles?: string[];
+	successfulSkillFiles?: string[];
+	deniedSkillFiles?: string[];
+	attemptedRefs?: string[];
+	successfulRefs?: string[];
+	deniedRefs?: string[];
 	missingSkillFileReads: string[];
 	missingRefs: string[];
 	unexpectedRefs: string[];

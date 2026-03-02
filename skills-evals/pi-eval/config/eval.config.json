@@ -7,7 +7,6 @@
   },
   "defaults": {
     "agentDir": ".",
-    "skillsPaths": ["skills"],
     "dryRun": false
   }
 }

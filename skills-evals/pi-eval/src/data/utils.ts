@@ -37,8 +37,6 @@ export const fileExists = async (filePath: string): Promise<boolean> => {
 	}
 };
 
-export const unique = <T>(items: Iterable<T>): T[] => Array.from(new Set(items));
-
 export const formatDuration = (ms: number): string => {
 	if (ms < 1000) return `${ms}ms`;
 	const seconds = ms / 1000;

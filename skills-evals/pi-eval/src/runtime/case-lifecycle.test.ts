@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { homedir } from "node:os";
 import test from "node:test";
 import type { EvalCase } from "../data/types.js";
 import { fileExists } from "../data/utils.js";
@@ -10,6 +9,8 @@ import {
 	buildProfileReadDenyPaths,
 	collectPolicyDenyProbeErrors,
 	hardenNoPayloadWorkspace,
+	mirrorBootstrapPayloadToWorkspace,
+	resolveSandboxExtensionEntry,
 } from "./case-lifecycle.js";
 
 const buildEvalCase = (bootstrapProfile: "full_payload" | "no_payload" = "full_payload"): EvalCase => ({
@@ -22,10 +23,9 @@ const buildEvalCase = (bootstrapProfile: "full_payload" | "no_payload" = "full_p
 	bootstrapProfile,
 });
 
-test("buildProfileReadDenyPaths hardens no-payload with workspace, home, and host home skill surfaces", async () => {
+test("buildProfileReadDenyPaths hardens no-payload with workspace and sandbox-home skill surfaces", async () => {
 	const workspaceAgentDir = await mkdtemp(path.join(tmpdir(), "pi-eval-workspace-"));
 	const homeDir = await mkdtemp(path.join(tmpdir(), "pi-eval-home-"));
-	const hostWorkspaceDir = process.cwd();
 
 	const denyPaths = buildProfileReadDenyPaths({
 		evalCase: buildEvalCase("no_payload"),
@@ -40,20 +40,12 @@ test("buildProfileReadDenyPaths hardens no-payload with workspace, home, and hos
 		path.join(workspaceAgentDir, ".agents"),
 		path.join(workspaceAgentDir, ".codex"),
 		path.join(workspaceAgentDir, ".pi"),
-		path.join(homeDir, ".agents"),
-		path.join(homeDir, ".codex"),
-		path.join(homeDir, ".codex", "skills"),
-		path.join(homeDir, ".pi"),
-		path.join(hostWorkspaceDir, "skills"),
-		path.join(hostWorkspaceDir, "instructions"),
-		path.join(hostWorkspaceDir, ".agents"),
-		path.join(hostWorkspaceDir, ".codex"),
-		path.join(hostWorkspaceDir, ".pi"),
-		path.join(homedir(), ".agents"),
-		path.join(homedir(), ".codex"),
-		path.join(homedir(), ".codex", "skills"),
-		path.join(homedir(), ".pi"),
-	];
+		path.join(workspaceAgentDir, "AGENTS.md"),
+			path.join(homeDir, ".agents"),
+			path.join(homeDir, ".codex"),
+			path.join(homeDir, ".codex", "skills"),
+			path.join(homeDir, ".pi"),
+		];
 	for (const expectedPath of expected) {
 		assert.ok(denyPaths.includes(expectedPath), `missing deny path: ${expectedPath}`);
 	}
@@ -79,6 +71,7 @@ test("buildProfileReadDenyPaths does not inject no-payload-specific blocks into 
 		path.join(workspaceAgentDir, ".agents"),
 		path.join(workspaceAgentDir, ".codex"),
 		path.join(workspaceAgentDir, ".pi"),
+		path.join(workspaceAgentDir, "AGENTS.md"),
 		path.join(homeDir, ".agents"),
 		path.join(homeDir, ".codex"),
 		path.join(homeDir, ".codex", "skills"),
@@ -100,6 +93,7 @@ test("hardenNoPayloadWorkspace removes blocklisted skill and directive paths", a
 		path.join(workspaceAgentDir, ".agents"),
 		path.join(workspaceAgentDir, ".codex"),
 		path.join(workspaceAgentDir, ".pi"),
+		path.join(workspaceAgentDir, "AGENTS.md"),
 		path.join(workspaceAgentDir, "keepme"),
 	];
 
@@ -110,12 +104,41 @@ test("hardenNoPayloadWorkspace removes blocklisted skill and directive paths", a
 
 	await hardenNoPayloadWorkspace(workspaceAgentDir);
 
-	for (const target of blocklisted.slice(0, 5)) {
+	for (const target of blocklisted.slice(0, 6)) {
 		assert.equal(await fileExists(target), false, `expected removed path: ${target}`);
 	}
-	assert.equal(await fileExists(blocklisted[5]), true, "non-blocklisted path should remain");
+	assert.equal(await fileExists(blocklisted[6]), true, "non-blocklisted path should remain");
 
 	await rm(workspaceAgentDir, { recursive: true, force: true });
+});
+
+test("mirrorBootstrapPayloadToWorkspace projects synced bootstrap files into workspace root paths", async () => {
+	const workspaceAgentDir = await mkdtemp(path.join(tmpdir(), "pi-eval-workspace-bootstrap-"));
+	const homeDir = await mkdtemp(path.join(tmpdir(), "pi-eval-home-bootstrap-"));
+	try {
+		await mkdir(path.join(homeDir, ".agents", "skills", "coding"), { recursive: true });
+		await writeFile(path.join(homeDir, ".agents", "AGENTS.md"), "# sandbox instructions\n", "utf-8");
+		await writeFile(path.join(homeDir, ".agents", "skills.router.min.json"), "{\"schema_version\":\"1\"}\n", "utf-8");
+		await writeFile(path.join(homeDir, ".agents", "skills", "coding", "SKILL.md"), "# coding skill\n", "utf-8");
+
+		await mirrorBootstrapPayloadToWorkspace({
+			workspaceAgentDir,
+			homeDir,
+		});
+
+		assert.equal(await fileExists(path.join(workspaceAgentDir, "AGENTS.md")), true);
+		assert.equal(
+			await fileExists(path.join(workspaceAgentDir, "instructions", "skills.router.min.json")),
+			true,
+		);
+		assert.equal(
+			await fileExists(path.join(workspaceAgentDir, "skills", "coding", "SKILL.md")),
+			true,
+		);
+	} finally {
+		await rm(workspaceAgentDir, { recursive: true, force: true });
+		await rm(homeDir, { recursive: true, force: true });
+	}
 });
 
 test("collectPolicyDenyProbeErrors emits forbidden read evidence for must_trigger_policy_deny assertions", async () => {
@@ -132,4 +155,25 @@ test("collectPolicyDenyProbeErrors emits forbidden read evidence for must_trigge
 	assert.match(probeErrors[0] ?? "", /skills\/coding\/SKILL\.md$/);
 
 	await rm(cwd, { recursive: true, force: true });
+});
+
+test("resolveSandboxExtensionEntry remaps host extension paths into sandbox workspace", () => {
+	const mapped = resolveSandboxExtensionEntry({
+		hostExtensionEntry: "/Users/example/agents/skills-evals/pi-eval/index.ts",
+		hostAgentDir: "/Users/example/agents",
+		sandboxAgentDir: "/tmp/pi-eval-sandbox/workspace",
+	});
+	assert.equal(mapped, "/tmp/pi-eval-sandbox/workspace/skills-evals/pi-eval/index.ts");
+});
+
+test("resolveSandboxExtensionEntry rejects extension paths outside the host agent dir", () => {
+	assert.throws(
+		() =>
+			resolveSandboxExtensionEntry({
+				hostExtensionEntry: "/Users/example/other/index.ts",
+				hostAgentDir: "/Users/example/agents",
+				sandboxAgentDir: "/tmp/pi-eval-sandbox/workspace",
+			}),
+		/inside agent dir/,
+	);
 });

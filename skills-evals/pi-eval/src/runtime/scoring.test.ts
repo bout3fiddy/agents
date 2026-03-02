@@ -71,6 +71,9 @@ test("evaluateCase passes when routing and bootstrap signals match", async () =>
 	assert.deepEqual(evaluation.failureReasons, []);
 	assert.deepEqual(evaluation.routing.missingRefs, []);
 	assert.deepEqual(evaluation.routing.missingSkillFileReads, []);
+	assert.deepEqual(evaluation.routing.attemptedRefs, ["skills/coding/references/index.md"]);
+	assert.deepEqual(evaluation.routing.successfulRefs, ["skills/coding/references/index.md"]);
+	assert.deepEqual(evaluation.routing.deniedRefs, []);
 });
 
 test("evaluateCase uses attempts in dry-run mode", async () => {
@@ -95,6 +98,8 @@ test("evaluateCase uses attempts in dry-run mode", async () => {
 	assert.deepEqual(evaluation.routing.readSkills, ["coding"]);
 	assert.deepEqual(evaluation.routing.readSkillFiles, ["coding"]);
 	assert.deepEqual(evaluation.routing.readRefs, ["skills/coding/references/index.md"]);
+	assert.deepEqual(evaluation.routing.attemptedRefs, ["skills/coding/references/index.md"]);
+	assert.deepEqual(evaluation.routing.successfulRefs, []);
 });
 
 test("evaluateCase categorizes policy, bootstrap, and task errors", async () => {
@@ -128,6 +133,31 @@ test("evaluateCase categorizes policy, bootstrap, and task errors", async () => 
 			item.message.includes("assertion failed: must_trigger_policy_deny:")
 		),
 		false,
+	);
+});
+
+test("evaluateCase fails must_trigger_policy_deny when deny signal is missing", async () => {
+	const evalCase = buildEvalCase({
+		assertions: ["must_trigger_policy_deny:skills/private/SKILL.md"],
+		expectedRefs: [],
+		requireSkillFileRead: false,
+	});
+	const result = buildResult(evalCase, {
+		refInvocations: [],
+		refAttempts: [],
+		errors: ["policy deny missing: /tmp/work/skills/private/SKILL.md"],
+	});
+
+	const evaluation = await evaluateCase(evalCase, result, {
+		expectedBootstrapManifestHash: result.bootstrapManifestHash,
+	});
+
+	assert.equal(evaluation.status, "fail");
+	assert.equal(
+		evaluation.failureReasons.some((item) =>
+			item.message.includes("assertion failed: must_trigger_policy_deny:skills/private/SKILL.md")
+		),
+		true,
 	);
 });
 

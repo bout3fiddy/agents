@@ -1,28 +1,28 @@
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { chmod, copyFile, cp, mkdir, readdir, rm, symlink } from "node:fs/promises";
+import { chmod, copyFile, cp, mkdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { fileExists, normalizePath } from "../data/utils.js";
+import { fileExists } from "../data/utils.js";
 import { assertManagedTempPath, toSafePathSegment } from "./path-safety.js";
 
-const SANDBOX_EXCLUDES = [
-	".git",
-	"node_modules",
-	".venv",
-	"dist",
-	"build",
-	"coverage",
-	".cache",
-	"AGENTS.md",
-	"skills-evals/reports",
-	"skills-evals/logs",
-	"docs/specs/pi-eval/reports",
-	"docs/specs/pi-eval/logs",
+const WORKSPACE_INCLUDE_PATHS = [
+	path.join("skills-evals", "fixtures"),
+	path.join("skills-evals", "pi-eval", "index.ts"),
+	path.join("skills-evals", "pi-eval", "worker.ts"),
+	path.join("skills-evals", "pi-eval", "src"),
+	path.join("skills-evals", "pi-eval", "config"),
+];
+const SYNC_SOURCE_INCLUDE_PATHS = [
+	path.join("bin", "sync.sh"),
+	"skills",
+	"instructions",
+	path.join("skills-evals", "validate"),
 ];
 
 const SANDBOX_ROOT = path.join(tmpdir(), "pi-eval-sandbox");
 const HOME_ROOT = path.join(tmpdir(), "pi-eval-home");
+const SYNC_SOURCE_ROOT = path.join(tmpdir(), "pi-eval-sync-source");
 
 let activeSyncCount = 0;
 const syncWaitQueue: Array<() => void> = [];
@@ -57,96 +57,39 @@ const releaseSyncSlot = (): void => {
 	next?.();
 };
 
-const shouldCopyToSandbox = (sourcePath: string, baseDir: string): boolean => {
-	const relative = normalizePath(path.relative(baseDir, sourcePath));
-	if (!relative || relative === ".") return true;
-	return !SANDBOX_EXCLUDES.some(
-		(entry) => relative === entry || relative.startsWith(`${entry}/`),
-	);
+const copyWorkspaceEntry = async (params: {
+	agentDir: string;
+	sandboxDir: string;
+	relativePath: string;
+}): Promise<void> => {
+	const sourcePath = path.join(params.agentDir, params.relativePath);
+	if (!(await fileExists(sourcePath))) return;
+	const targetPath = path.join(params.sandboxDir, params.relativePath);
+	await mkdir(path.dirname(targetPath), { recursive: true });
+	await cp(sourcePath, targetPath, { recursive: true, force: true });
+};
+
+const createSyncSource = async (sourceAgentDir: string): Promise<string> => {
+	const syncSourceDir = path.join(SYNC_SOURCE_ROOT, randomUUID());
+	await mkdir(syncSourceDir, { recursive: true });
+	for (const relativePath of SYNC_SOURCE_INCLUDE_PATHS) {
+		const sourcePath = path.join(sourceAgentDir, relativePath);
+		if (!(await fileExists(sourcePath))) continue;
+		const targetPath = path.join(syncSourceDir, relativePath);
+		await mkdir(path.dirname(targetPath), { recursive: true });
+		await cp(sourcePath, targetPath, { recursive: true, force: true });
+	}
+	return syncSourceDir;
 };
 
 export const createSandbox = async (agentDir: string, caseId: string): Promise<string> => {
 	const safeCaseId = toSafePathSegment(caseId, "case");
 	const sandboxDir = path.join(SANDBOX_ROOT, safeCaseId, randomUUID());
 	await mkdir(sandboxDir, { recursive: true });
-	await cp(agentDir, sandboxDir, {
-		recursive: true,
-		force: true,
-		filter: (source) => shouldCopyToSandbox(source, agentDir),
-	});
-	return sandboxDir;
-};
-
-const normalizeMutablePath = (value: string): string => {
-	const cleaned = normalizePath(value.trim());
-	return cleaned
-		.replace(/^\.\/+/, "")
-		.replace(/^\/+/, "")
-		.replace(/\/+$/g, "");
-};
-
-const buildMutableRoots = (paths: string[]): string[] => {
-	const set = new Set<string>();
-	for (const value of paths) {
-		const normalized = normalizeMutablePath(value);
-		if (!normalized) continue;
-		set.add(normalized);
+	for (const relativePath of WORKSPACE_INCLUDE_PATHS) {
+		await copyWorkspaceEntry({ agentDir, sandboxDir, relativePath });
 	}
-	return Array.from(set);
-};
-
-const createSymlinkOrFallbackCopy = async (
-	sourcePath: string,
-	targetPath: string,
-	isDirectory: boolean,
-) => {
-	try {
-		await symlink(sourcePath, targetPath, isDirectory ? "dir" : "file");
-		return;
-	} catch {
-		await cp(sourcePath, targetPath, { recursive: true, force: true });
-	}
-};
-
-export const createSharedCaseWorkspace = async (
-	sharedAgentDir: string,
-	caseId: string,
-	mutablePaths: string[],
-): Promise<string> => {
-	const safeCaseId = toSafePathSegment(caseId, "case");
-	const sandboxDir = path.join(
-		SANDBOX_ROOT,
-		`${safeCaseId}-shared`,
-		randomUUID(),
-	);
-	await mkdir(sandboxDir, { recursive: true });
-
-	const mutableRoots = buildMutableRoots(mutablePaths);
-	const isMutableAncestor = (entryName: string): boolean =>
-		mutableRoots.some((root) => root === entryName || root.startsWith(`${entryName}/`));
-
-	const entries = await readdir(sharedAgentDir, { withFileTypes: true });
-	for (const entry of entries) {
-		const sourcePath = path.join(sharedAgentDir, entry.name);
-		const targetPath = path.join(sandboxDir, entry.name);
-		if (isMutableAncestor(entry.name)) {
-			await cp(sourcePath, targetPath, { recursive: true, force: true });
-			continue;
-		}
-		await createSymlinkOrFallbackCopy(sourcePath, targetPath, entry.isDirectory());
-	}
-
-	for (const value of mutableRoots) {
-		const sourcePath = path.join(sharedAgentDir, value);
-		const targetPath = path.join(sandboxDir, value);
-		if (!(await fileExists(sourcePath))) {
-			continue;
-		}
-		const parent = path.dirname(targetPath);
-		await mkdir(parent, { recursive: true });
-		await cp(sourcePath, targetPath, { recursive: true, force: true });
-	}
-
+	await mkdir(path.join(sandboxDir, "skills-evals", "generated"), { recursive: true });
 	return sandboxDir;
 };
 
@@ -182,28 +125,29 @@ const withTimeout = async <T>(promise: Promise<T>, timeoutMs: number, label: str
 };
 
 export const runEvalSync = async (params: {
-	agentDir: string;
+	sourceAgentDir: string;
 	homeDir: string;
 	authSourcePath?: string | null;
 }): Promise<void> => {
-	const { agentDir, homeDir, authSourcePath } = params;
-	const syncScript = path.join(agentDir, "bin", "sync.sh");
-	if (!(await fileExists(syncScript))) {
-		throw new Error(`Sync script not found: ${syncScript}`);
-	}
+	const { sourceAgentDir, homeDir, authSourcePath } = params;
+	const syncSourceDir = await createSyncSource(sourceAgentDir);
+	const syncScript = path.join(syncSourceDir, "bin", "sync.sh");
 
 	await acquireSyncSlot();
 	try {
+		if (!(await fileExists(syncScript))) {
+			throw new Error(`Sync script not found: ${syncScript}`);
+		}
 		const env = {
 			...process.env,
 			HOME: homeDir,
-			AGENTS_DIR: agentDir,
+			AGENTS_DIR: syncSourceDir,
 		};
 
 		const stdoutChunks: string[] = [];
 		const stderrChunks: string[] = [];
 		const proc = spawn("bash", [syncScript], {
-			cwd: agentDir,
+			cwd: syncSourceDir,
 			env,
 			stdio: ["ignore", "pipe", "pipe"],
 		});
@@ -216,7 +160,7 @@ export const runEvalSync = async (params: {
 				proc.on("error", (error) => reject(error));
 			}),
 			30_000,
-			`sync ${path.basename(agentDir)}`,
+			`sync ${path.basename(syncSourceDir)}`,
 		);
 
 		if (exitCode !== 0) {
@@ -243,11 +187,6 @@ export const runEvalSync = async (params: {
 		}
 	} finally {
 		releaseSyncSlot();
+		await rm(syncSourceDir, { recursive: true, force: true });
 	}
 };
-
-export const mapSkillPathsToSandbox = (
-	paths: string[],
-	agentDir: string,
-	sandboxDir: string,
-): string[] => paths.map((skillPath) => path.join(sandboxDir, path.relative(agentDir, skillPath)));

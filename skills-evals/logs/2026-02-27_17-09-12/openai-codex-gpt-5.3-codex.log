@@ -1,8 +1,0 @@
-┌ Pi Eval Run ┐
-│ Cases: 164  │
-└─────────────┘
-Parallelism: 10 case(s)
-
-Using shared case sandbox: 1502c48f-32ea-4afd-8a91-c94daeefa7a2
-FAIL CD-010
-FAIL ENOTEMPTY: directory not empty, rmdir '/var/folders/7_/h7v6vmpj2gq9g2gm0v6_ngkw0000gn/T/pi-eval-sandbox/shared-case/1502c48f-32ea-4afd-8a91-c94daeefa7a2'

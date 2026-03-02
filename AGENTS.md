@@ -17,9 +17,22 @@
 - Runtime routing contract: `instructions/skills.router.min.json` is primary and sufficient for agent routing.
 - `bin/sync.sh` does not run sync-time gates; it only syncs files.
 - Eval cases source of truth is `skills-evals/fixtures/eval-cases.jsonl`; reports mirror to `docs/specs/pi-eval/reports/`.
+- Eval fixture convention: skill-driven baseline cases in `skills-evals/fixtures/eval-cases.jsonl` should declare targeted `expectedRefs`; only explicit no-skill/no-payload controls and pure assertion probes should keep `expectedRefs` empty.
 - Per-case routing/read telemetry traces are written to `skills-evals/reports/routing-traces/<provider-model>/<case-id>.json` on each eval run.
+- `pi-eval` runtime now treats case IDs as data only: filesystem path segments are sanitized, and sandbox/home recursive cleanup is restricted to managed tmp roots (`/tmp/pi-eval-sandbox`, `/tmp/pi-eval-home`) with depth checks.
+- `pi-eval` case worker launches are mandatory-sandboxed via Gondolin VM runtime; there is no runtime toggle to disable sandboxing, and launch failures fail closed (no plain host `spawn` fallback).
+- Running `pi-eval` with Gondolin requires host QEMU binaries on PATH (`qemu-system-aarch64`; `qemu-img` when rootfs mode is `cow`/checkpoint-enabled); missing binaries now surface explicit install guidance in runtime errors.
+- `pi-eval` Gondolin launches resolve image path from `PI_EVAL_GONDOLIN_IMAGE_PATH` or fallback `skills-evals/gondolin/image/current`, and runtime preflights guest `command -v pi` before case execution.
+- Repo-local custom image recipe/lock live under `skills-evals/gondolin/` (`pi-eval-image.json`, `guest-source.lock.json`, `image.lock.json`, and `scripts/build-image.sh`).
+- Current Gondolin runtime wiring in `skills-evals/pi-eval/src/runtime/gondolin-engine.ts` uses `VmCheckpoint` disk snapshots (create + resume) with lock-guarded checkpoint creation and cache-backed storage (default: `$XDG_CACHE_HOME` or `~/.cache/pi-eval/gondolin-checkpoints`; override via `PI_EVAL_GONDOLIN_CHECKPOINT_DIR`).
+- `pi-eval` full-payload bootstrap now stages a temporary sync-source snapshot under `/tmp/pi-eval-sync-source/<uuid>` before invoking `bin/sync.sh`, so router/index generation happens on the staged copy (not the host repo) while output still lands in sandbox home (`$HOME/.agents`).
+- `pi-eval` workspace staging is allowlist-based and currently copies `skills-evals/fixtures`, `skills-evals/pi-eval/index.ts`, `skills-evals/pi-eval/worker.ts`, `skills-evals/pi-eval/src`, and `skills-evals/pi-eval/config` into the sandbox (plus an empty `skills-evals/generated` output root).
 - Guardrail: when evals fail on skill/ref/global-instruction behavior, improve `skills/`, `skills/*/references/`, and `instructions/global.md` first; do not weaken eval expectations just to pass.
 - Canonical eval wrapper is `skills-evals/run.sh`.
+- `skills-evals/run.sh` supports optional `--case <CASE_ID>`, which maps to `/eval run --filter <CASE_ID> --limit 1` for targeted case runs.
+- `pi-eval` case timing controls: `PI_EVAL_CASE_TIMEOUT_MS` governs prompt/turn completion wait (default `300000`), and `PI_EVAL_CASE_SHUTDOWN_TIMEOUT_MS` governs post-run worker exit wait (default `30000`).
+- When `PI_EVAL_RPC_TRACE_DIR` is set, `runCaseProcess` now writes both `<case-id>.jsonl` raw RPC traces and `<case-id>.diagnostics.json` lifecycle summaries; timeout errors include a compact RPC diagnostics hint (`raw/parsed/last_stop/events`).
+- `pi-eval` tests currently live in `skills-evals/pi-eval/src/cli/validation.test.ts`, `skills-evals/pi-eval/src/runtime/path-safety.test.ts`, `skills-evals/pi-eval/src/runtime/sandbox.test.ts`, `skills-evals/pi-eval/src/runtime/worker.test.ts`, `skills-evals/pi-eval/src/runtime/case-lifecycle.test.ts`, `skills-evals/pi-eval/src/runtime/case-process.test.ts`, `skills-evals/pi-eval/src/runtime/scoring.test.ts`, and `skills-evals/pi-eval/src/reporting/report-persistence.test.ts`; run all with `bun test skills-evals/pi-eval/src/**/*.test.ts`.
 - `DEVC_DISABLE_MCP_SERVERS` in `devcontainer/devcontainer.json` can disable MCP startup in containers (comma/space/semi-colon separated list); use it to skip auth-heavy servers (e.g. `sentry` and/or `linear`) on non-interactive session starts.
 - Third-party skill installers may land content in `~/.agents/skills/<name>`; to vendor into this repo, copy into `skills/<name>/`, ensure progressive disclosure (`SKILL.md` + `references/`), then run:
   - `python3 skills/skill-creator/scripts/build_agents_index.py`

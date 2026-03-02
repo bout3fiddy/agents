@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -22,7 +22,19 @@ test("createSandbox and createSandboxHome sanitize case IDs and stay under manag
 	let sandboxDir: string | null = null;
 	let homeDir: string | null = null;
 	try {
-		await writeFile(path.join(agentDir, "probe.txt"), "probe");
+		const fixturePath = path.join(agentDir, "skills-evals", "fixtures", "probe.txt");
+		const extensionEntryPath = path.join(agentDir, "skills-evals", "pi-eval", "index.ts");
+		const workerEntryPath = path.join(agentDir, "skills-evals", "pi-eval", "worker.ts");
+		const runtimePath = path.join(agentDir, "skills-evals", "pi-eval", "src", "index.ts");
+		await mkdir(path.dirname(fixturePath), { recursive: true });
+		await mkdir(path.dirname(extensionEntryPath), { recursive: true });
+		await mkdir(path.dirname(workerEntryPath), { recursive: true });
+		await mkdir(path.dirname(runtimePath), { recursive: true });
+		await writeFile(fixturePath, "fixture", "utf-8");
+		await writeFile(extensionEntryPath, "export default () => {};\n", "utf-8");
+		await writeFile(workerEntryPath, "export default () => {};\n", "utf-8");
+		await writeFile(runtimePath, "export {};\n", "utf-8");
+		await writeFile(path.join(agentDir, "AGENTS.md"), "# Agent instructions", "utf-8");
 		sandboxDir = await createSandbox(agentDir, "../../../../../etc/passwd");
 		homeDir = await createSandboxHome("/tmp/../../evil");
 
@@ -30,6 +42,30 @@ test("createSandbox and createSandboxHome sanitize case IDs and stay under manag
 		assert.equal(isInsideRoot(homeDir, homeRoot), true);
 		assert.equal(sandboxDir.includes(".."), false);
 		assert.equal(homeDir.includes(".."), false);
+		const sandboxFixture = await readFile(
+			path.join(sandboxDir, "skills-evals", "fixtures", "probe.txt"),
+			"utf-8",
+		);
+		const sandboxEntry = await readFile(
+			path.join(sandboxDir, "skills-evals", "pi-eval", "index.ts"),
+			"utf-8",
+		);
+		const sandboxWorkerEntry = await readFile(
+			path.join(sandboxDir, "skills-evals", "pi-eval", "worker.ts"),
+			"utf-8",
+		);
+		const sandboxRuntime = await readFile(
+			path.join(sandboxDir, "skills-evals", "pi-eval", "src", "index.ts"),
+			"utf-8",
+		);
+		assert.match(sandboxFixture, /fixture/);
+		assert.match(sandboxEntry, /export default/);
+		assert.match(sandboxWorkerEntry, /export default/);
+		assert.match(sandboxRuntime, /export/);
+		await assert.rejects(
+			() => readFile(path.join(sandboxDir, "AGENTS.md"), "utf-8"),
+			/ENOENT/,
+		);
 	} finally {
 		await cleanupSandbox(sandboxDir);
 		await cleanupSandboxHome(homeDir);
