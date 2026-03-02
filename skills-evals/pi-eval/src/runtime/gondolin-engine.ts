@@ -3,6 +3,7 @@ import {
 	createHttpHooks,
 	ensureGuestAssets,
 	MemoryProvider,
+	ReadonlyProvider,
 	RealFSProvider,
 	type VMOptions,
 	VmCheckpoint,
@@ -12,28 +13,12 @@ import { mkdir, rm, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { Writable } from "node:stream";
 import path from "node:path";
-import { fetch as undiciFetch, Agent } from "undici";
 import {
 	type SandboxEngine,
 	type SandboxLaunchRequest,
 	type SandboxedProcessHandle,
 	resolveProviderAllowedHosts,
 } from "./sandbox-engine.js";
-
-const robustAgent = new Agent({
-	keepAliveTimeout: 10,
-	keepAliveMaxTimeout: 10,
-	pipelining: 0,
-	headersTimeout: 15000,
-	bodyTimeout: 30000,
-});
-
-const robustFetch = (url: any, init?: any) => {
-	return undiciFetch(url, {
-		...init,
-		dispatcher: robustAgent,
-	}) as any;
-};
 
 const GUEST_WORKSPACE_DIR = "/workspace";
 const GUEST_HOME_DIR = "/home/sandbox";
@@ -347,15 +332,6 @@ export const createGondolinSandboxEngine = (
 			const { httpHooks, env: hookEnv } = dependencies.createHttpHooks({
 				allowedHosts,
 				blockInternalRanges: true,
-				onRequest: async (req) => {
-					return {
-						...req,
-						headers: {
-							...req.headers,
-							connection: "close",
-						},
-					};
-				},
 			});
 
 			const outputDir = path.resolve(path.dirname(policy.workerOutputPath));
@@ -369,6 +345,7 @@ export const createGondolinSandboxEngine = (
 				...hookEnv,
 				HOME: GUEST_HOME_DIR,
 				PI_CODING_AGENT_DIR: `${GUEST_HOME_DIR}/.agents`,
+				NODE_EXTRA_CA_CERTS: "/etc/gondolin/mitm/ca.crt",
 			});
 
 			const vmOptions: VMOptions = {
@@ -379,7 +356,6 @@ export const createGondolinSandboxEngine = (
 					mode: rootfsMode,
 				},
 				httpHooks,
-				fetch: robustFetch,
 				env: vmEnv,
 				vfs: {
 					mounts: {
@@ -387,6 +363,9 @@ export const createGondolinSandboxEngine = (
 						[GUEST_HOME_DIR]: policy.sandboxHomeDir
 							? new RealFSProvider(homeDir)
 							: new MemoryProvider(),
+						[`${GUEST_HOME_DIR}/.codex`]: new ReadonlyProvider(
+							new RealFSProvider(path.join(homedir(), ".codex")),
+						),
 						"/tmp/pi-eval-out": new RealFSProvider(outputDir),
 					},
 				},

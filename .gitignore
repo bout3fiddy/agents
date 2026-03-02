@@ -31,3 +31,4 @@ skills-evals/logs/
 skills-evals/reports/
 skills-evals/gondolin/image/current/*
 !skills-evals/gondolin/image/current/.gitkeep
+traces/
