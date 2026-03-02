@@ -10,8 +10,34 @@ custom Gondolin image used by `pi-eval`.
 - `image.lock.json`: generated lock metadata for the built image.
 - `scripts/build-image.sh`: builds and verifies the image into `image/current`.
 - `scripts/write-image-lock.ts`: emits lock metadata from built assets.
+- `vendor/gondolin/`: vendored Gondolin source tracked as a **git subtree** from `https://github.com/bout3fiddy/gondolin.git` (branch `main`, squash-merged).
 
-## Build
+## Vendored Gondolin (git subtree)
+
+`vendor/gondolin/` is a git subtree of the upstream Gondolin repo. `pi-eval` depends on
+`vendor/gondolin/host` via a `file:` dependency instead of the npm-published package, so
+local patches are picked up immediately without waiting for an npm release.
+
+### Pull upstream updates
+
+```bash
+git subtree pull --prefix=skills-evals/gondolin/vendor/gondolin \
+  https://github.com/bout3fiddy/gondolin.git main --squash
+```
+
+Then rebuild and reinstall:
+
+```bash
+cd skills-evals/gondolin/vendor/gondolin && pnpm install && pnpm --filter @earendil-works/gondolin run build
+cd skills-evals/pi-eval && npm install
+```
+
+### Notes
+
+- `host/dist/` is gitignored upstream, so it is **not** part of the subtree. You must build after every subtree add/pull.
+- `vendor/gondolin/node_modules/` is likewise not tracked; `pnpm install` in the vendor root handles it.
+
+## Image Build
 
 From repo root:
 
@@ -28,7 +54,6 @@ The build script runs:
 1. `gondolin build --config ... --output ...`
 2. `gondolin build --verify ...`
 3. lock generation into `skills-evals/gondolin/image.lock.json`
-4. guest source sync into `skills-evals/gondolin/vendor/gondolin` (when needed)
 
 ## Runtime usage
 
