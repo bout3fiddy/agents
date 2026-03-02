@@ -1,0 +1,120 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version tag (e.g., v0.1.0)"
+        required: true
+        type: string
+
+jobs:
+  create-release:
+    name: Create Package Release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.version || github.ref }}
+          fetch-depth: 0
+
+      - name: Get version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "version=${{ inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Get npm version
+        id: npm_version
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          echo "version=${VERSION#v}" >> $GITHUB_OUTPUT
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.version.outputs.version }}
+          name: Release ${{ steps.version.outputs.version }}
+          draft: false
+          prerelease: ${{ contains(steps.version.outputs.version, '-') }}
+          body: |
+            ## Gondolin ${{ steps.version.outputs.version }}
+
+            ### NPM Package
+
+            ```bash
+            npm install @earendil-works/gondolin@${{ steps.npm_version.outputs.version }}
+            ```
+
+            ### Guest Images
+
+            Guest images are published independently via the Image Release workflow.
+
+            Runtime image resolution uses `builtin-image-registry.json` from the main branch.
+
+  publish-npm:
+    name: Publish to NPM
+    needs: [create-release]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.version || github.ref }}
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v2
+        with:
+          version: 8
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Get version from tag
+        id: tag_version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ inputs.version }}"
+          else
+            VERSION="${GITHUB_REF#refs/tags/}"
+          fi
+          VERSION="${VERSION#v}"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Verify version matches
+        run: |
+          cd host
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          TAG_VERSION="${{ steps.tag_version.outputs.version }}"
+          if [ "$PKG_VERSION" != "$TAG_VERSION" ]; then
+            echo "❌ Version mismatch: package.json has $PKG_VERSION but tag is v$TAG_VERSION"
+            echo "   Update host/package.json version to $TAG_VERSION before releasing"
+            exit 1
+          fi
+          echo "✅ Version matches: $PKG_VERSION"
+
+      - name: Build package artifacts
+        run: pnpm --filter @earendil-works/gondolin run build
+
+      - name: Verify packaged CLI runtime
+        run: node host/dist/bin/gondolin.js --help >/dev/null
+
+      - name: Publish to NPM (with provenance)
+        run: |
+          cd host
+          npm publish --access public --provenance
