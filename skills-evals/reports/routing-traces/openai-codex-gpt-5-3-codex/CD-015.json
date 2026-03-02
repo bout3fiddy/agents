@@ -1,8 +1,8 @@
 {
   "caseId": "CD-015",
   "mode": "single",
-  "status": "pass",
-  "runTimestamp": "2026-02-28T19:01:13.283Z",
+  "status": "fail",
+  "runTimestamp": "2026-03-02T02:33:16.026Z",
   "model": "openai-codex/gpt-5.3-codex",
   "expectedSkills": [
     "coding"
@@ -10,27 +10,36 @@
   "expectedRefs": [
     "skills/coding/references/code-smells/smells/ai-code-smell.md"
   ],
+  "toolUsage": null,
+  "rpcDiagnostics": null,
+  "outputTextPreview": "",
+  "resultErrors": [
+    "run error: Case CD-015 timed out after 90000ms rpc diagnostics: raw=38 parsed=38 parse_errors=0 last_stop=error last_error=502 Bad Gateway\n events=[message_update:14, message_start:5, message_end:5, turn_start:3]"
+  ],
   "routing": {
-    "readSkills": [
-      "coding"
-    ],
-    "readSkillFiles": [
-      "coding"
-    ],
-    "readRefs": [
-      "/private/var/folders/w7/3c51j_5j2gq4n13mljt4rrb80000gn/T/pi-eval-sandbox/CD-015/c383c269-a91a-4ff5-9152-62d341d2bfb0/skills/coding/references/code-smells/index.md",
-      "/private/var/folders/w7/3c51j_5j2gq4n13mljt4rrb80000gn/T/pi-eval-sandbox/CD-015/c383c269-a91a-4ff5-9152-62d341d2bfb0/skills/coding/references/code-smells/smells/ai-code-smell.md",
-      "/private/var/folders/w7/3c51j_5j2gq4n13mljt4rrb80000gn/T/pi-eval-sandbox/CD-015/c383c269-a91a-4ff5-9152-62d341d2bfb0/skills/coding/references/code-smells/smells/fallback-first.md",
-      "/private/var/folders/w7/3c51j_5j2gq4n13mljt4rrb80000gn/T/pi-eval-sandbox/CD-015/c383c269-a91a-4ff5-9152-62d341d2bfb0/skills/coding/references/code-smells/smells/speculative-generality.md"
-    ],
+    "readSkills": [],
+    "readSkillFiles": [],
+    "readRefs": [],
+    "attemptedSkills": [],
+    "successfulSkills": [],
+    "deniedSkills": [],
+    "attemptedSkillFiles": [],
+    "successfulSkillFiles": [],
+    "deniedSkillFiles": [],
+    "attemptedRefs": [],
+    "successfulRefs": [],
+    "deniedRefs": [],
     "missingSkillFileReads": [],
     "missingRefs": [],
-    "unexpectedRefs": [
-      "/private/var/folders/w7/3c51j_5j2gq4n13mljt4rrb80000gn/T/pi-eval-sandbox/CD-015/c383c269-a91a-4ff5-9152-62d341d2bfb0/skills/coding/references/code-smells/index.md",
-      "/private/var/folders/w7/3c51j_5j2gq4n13mljt4rrb80000gn/T/pi-eval-sandbox/CD-015/c383c269-a91a-4ff5-9152-62d341d2bfb0/skills/coding/references/code-smells/smells/fallback-first.md",
-      "/private/var/folders/w7/3c51j_5j2gq4n13mljt4rrb80000gn/T/pi-eval-sandbox/CD-015/c383c269-a91a-4ff5-9152-62d341d2bfb0/skills/coding/references/code-smells/smells/speculative-generality.md"
-    ]
+    "unexpectedRefs": []
   },
-  "reasons": [],
-  "failureReasons": []
+  "reasons": [
+    "TASK_FAILURE: run error: Case CD-015 timed out after 90000ms rpc diagnostics: raw=38 parsed=38 parse_errors=0 last_stop=error last_error=502 Bad Gateway\n events=[message_update:14, message_start:5, message_end:5, turn_start:3]"
+  ],
+  "failureReasons": [
+    {
+      "category": "TASK_FAILURE",
+      "message": "run error: Case CD-015 timed out after 90000ms rpc diagnostics: raw=38 parsed=38 parse_errors=0 last_stop=error last_error=502 Bad Gateway\n events=[message_update:14, message_start:5, message_end:5, turn_start:3]"
+    }
+  ]
 }

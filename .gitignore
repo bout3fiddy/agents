@@ -14,6 +14,7 @@ Thumbs.db
 
 # Python
 .ruff_cache/
+__pycache__/
 
 # Node (if any scripts need it)
 node_modules/
@@ -24,4 +25,10 @@ docs/
 venv*/
 skills-evals/specs/pi-eval/logs/
 skills-evals/specs/
+skills-evals/generated/
 skills-evals/fixtures/review/
+skills-evals/logs/
+skills-evals/reports/
+skills-evals/gondolin/vendor/
+skills-evals/gondolin/image/current/*
+!skills-evals/gondolin/image/current/.gitkeep

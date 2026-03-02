@@ -1,8 +1,8 @@
 {
   "caseId": "CD-015-NS",
   "mode": "single",
-  "status": "pass",
-  "runTimestamp": "2026-02-28T19:01:13.283Z",
+  "status": "fail",
+  "runTimestamp": "2026-03-01T23:44:07.021Z",
   "model": "openai-codex/gpt-5.3-codex",
   "expectedSkills": [],
   "expectedRefs": [],
@@ -10,10 +10,26 @@
     "readSkills": [],
     "readSkillFiles": [],
     "readRefs": [],
+    "attemptedSkills": [],
+    "successfulSkills": [],
+    "deniedSkills": [],
+    "attemptedSkillFiles": [],
+    "successfulSkillFiles": [],
+    "deniedSkillFiles": [],
+    "attemptedRefs": [],
+    "successfulRefs": [],
+    "deniedRefs": [],
     "missingSkillFileReads": [],
     "missingRefs": [],
     "unexpectedRefs": []
   },
-  "reasons": [],
-  "failureReasons": []
+  "reasons": [
+    "TASK_FAILURE: run error: Gondolin guest is missing `pi` in PATH. Rebuild the custom Gondolin image with `pi` installed and set PI_EVAL_GONDOLIN_IMAGE_PATH to that image."
+  ],
+  "failureReasons": [
+    {
+      "category": "TASK_FAILURE",
+      "message": "run error: Gondolin guest is missing `pi` in PATH. Rebuild the custom Gondolin image with `pi` installed and set PI_EVAL_GONDOLIN_IMAGE_PATH to that image."
+    }
+  ]
 }
