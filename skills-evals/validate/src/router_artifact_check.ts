@@ -1,27 +1,11 @@
 import { readFile, stat } from "node:fs/promises";
+import { activationPolicies, isRecord, schema } from "./schema.js";
 
-const REQUIRED_TOP_LEVEL_KEYS = [
-	"schema_version",
-	"generated_at",
-	"skills",
-	"by_task_type",
-	"by_workflow_trigger",
-] as const;
+const routerArtifact = schema.router_artifact as Record<string, unknown>;
 
-const REQUIRED_SKILL_KEYS = [
-	"id",
-	"path",
-	"task_types",
-	"priority",
-	"activation_policy",
-	"workflow_triggers",
-	"primary_refs",
-] as const;
-
-const ALLOWED_ACTIVATION_POLICIES = new Set(["user_intent", "workflow_state", "both"]);
-
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-	typeof value === "object" && value !== null && !Array.isArray(value);
+const REQUIRED_TOP_LEVEL_KEYS = routerArtifact.required_top_level_keys as string[];
+const REQUIRED_SKILL_KEYS = routerArtifact.required_skill_keys as string[];
+const ALLOWED_ACTIVATION_POLICIES = activationPolicies;
 
 const validateSkillNode = (skill: unknown, index: number): { errors: string[]; skillId?: string } => {
 	const errors: string[] = [];

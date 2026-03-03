@@ -33,7 +33,8 @@
 - Guardrail: when evals fail on skill/ref/global-instruction behavior, improve `skills/`, `skills/*/references/`, and `instructions/global.md` first; do not weaken eval expectations just to pass.
 - Canonical eval wrapper is `skills-evals/run.sh`.
 - `skills-evals/run.sh` supports optional `--case <CASE_ID>`, which maps to `/eval run --filter <CASE_ID> --limit 1` for targeted case runs.
-- `skills-evals/manage.sh` calls `skills-evals/pi-eval/src/cli/list-cases.ts` and `skills-evals/pi-eval/src/cli/purge-report.ts`, but currently duplicates `slugFromId` (`src/data/cases.ts`) and `traceFileName`/`toSafePathSegment` (`src/reporting/report-persistence.ts` + `src/runtime/path-safety.ts`) transforms in shell; update both sides together when case-id/path sanitization changes.
+- `skills-evals/manage.sh` delegates target resolution for `remove` to `skills-evals/pi-eval/src/cli/manage-remove.ts` (canonical `slugFromId` and `traceFileName` from TS data layer); shell retains argument parsing, confirmation prompt, and deletion execution.
+- `skills-evals/schemas/skill-metadata.schema.json` is the single source of truth for skill metadata constants shared across `skills-evals/validate/` (TS) and `bin/build_skills_router_artifact.py` (Python); update the schema first when changing metadata fields or constraints.
 - `pi-eval` case timing controls: `PI_EVAL_CASE_TIMEOUT_MS` governs prompt/turn completion wait (default `300000`), and `PI_EVAL_CASE_SHUTDOWN_TIMEOUT_MS` governs post-run worker exit wait (default `30000`).
 - When `PI_EVAL_RPC_TRACE_DIR` is set, `runCaseProcess` now writes both `<case-id>.jsonl` raw RPC traces and `<case-id>.diagnostics.json` lifecycle summaries; timeout errors include a compact RPC diagnostics hint (`raw/parsed/last_stop/events`).
 - `pi-eval` tests live in `skills-evals/pi-eval/test/`; run all with `bun test` from `skills-evals/pi-eval/`.

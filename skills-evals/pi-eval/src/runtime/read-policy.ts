@@ -1,6 +1,6 @@
 import { realpath as fsRealpath } from "node:fs/promises";
 import path from "node:path";
-import { hasPathPrefix, normalizePath } from "../data/utils.js";
+import { hasPathPrefix, normalizePath, resolveCanonicalPath } from "./path-policy.js";
 
 export const FORBIDDEN_READ_ERROR = "ENOENT: no such file or directory";
 
@@ -29,22 +29,6 @@ export const createPathDenyPolicy = async (
 	};
 };
 
-const resolveCanonical = async (
-	absolutePath: string,
-	cache: Map<string, string | null>,
-): Promise<string | null> => {
-	const cached = cache.get(absolutePath);
-	if (cached !== undefined) return cached;
-	try {
-		const canonical = await fsRealpath(absolutePath);
-		cache.set(absolutePath, canonical);
-		return canonical;
-	} catch {
-		cache.set(absolutePath, null);
-		return null;
-	}
-};
-
 export const assertReadablePath = async (
 	absolutePath: string,
 	policy: PathDenyPolicy,
@@ -56,7 +40,7 @@ export const assertReadablePath = async (
 			throw new Error(FORBIDDEN_READ_ERROR);
 		}
 	}
-	const canonical = await resolveCanonical(logical, policy.canonicalCache);
+	const canonical = await resolveCanonicalPath(logical, policy.canonicalCache);
 	if (!canonical) return;
 	for (const root of policy.canonicalRoots) {
 		if (hasPathPrefix(canonical, root)) {

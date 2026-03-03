@@ -30,6 +30,12 @@ Scope: applies to all files under `skills-evals/`.
 When moving files or changing paths, update all affected scripts, specs, and docs in the same change.
 - `skills-evals/pi-eval/src` is organized by domain folders: `cli/`, `runtime/`, `data/`, `reporting/` (each includes a local `AGENTS.md` explainer).
 
+## Shared Schema
+
+- `skills-evals/schemas/skill-metadata.schema.json` is the single source of truth for skill metadata constants (activation policies, metadata keys, frontmatter fields, router artifact structure, limits, defaults).
+- Consumed by: `skills-evals/validate/src/validator.ts`, `skills-evals/validate/src/router_artifact_check.ts`, and `bin/build_skills_router_artifact.py`.
+- When adding/changing skill metadata fields or constraints, update the schema first, then update consumers.
+
 ## Cases and Fixtures
 
 - Source of truth for cases: `skills-evals/fixtures/eval-cases/` (one JSONL per case).

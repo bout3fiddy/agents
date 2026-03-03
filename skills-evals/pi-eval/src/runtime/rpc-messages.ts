@@ -18,6 +18,27 @@ export const collectAssistantText = (messages: unknown[]): string => {
 	return chunks.join("\n").trim();
 };
 
+/**
+ * Extract the terminal error string from the last assistant message in a
+ * messages array.  Used by both worker.ts (prompt-level retry, typed
+ * AssistantMessage) and case-process.ts (case-level RPC retry, raw
+ * unknown[]).  Works on raw `unknown[]` so it can serve both call sites.
+ */
+export const extractTerminalErrorFromMessages = (messages: unknown[]): string => {
+	for (let i = messages.length - 1; i >= 0; i -= 1) {
+		const msg = messages[i];
+		if (!msg || typeof msg !== "object") continue;
+		const record = msg as Record<string, unknown>;
+		if (record.role !== "assistant") continue;
+		if (typeof record.errorMessage === "string") {
+			const trimmed = record.errorMessage.trim();
+			return trimmed.length > 0 ? trimmed : "terminated";
+		}
+		return "terminated";
+	}
+	return "terminated";
+};
+
 export const sumUsageFromMessages = (messages: unknown[]): TokenUsage => {
 	let input = 0;
 	let output = 0;

@@ -3,7 +3,7 @@ import path from "node:path";
 import { buildReport, readReportRows, updateIndex, writeReport } from "./report.js";
 import type { CaseEvaluation, EvalBundle, EvalRunOptions, JudgeBundleVerdict, ModelSpec, ResolvedEvalCase } from "../data/types.js";
 import { ensureDir, sleep } from "../data/utils.js";
-import { toSafePathSegment } from "../runtime/path-safety.js";
+import { toSafePathSegment } from "../runtime/path-policy.js";
 
 const modelSafeKey = (model: ModelSpec): string =>
 	`${model.provider}-${model.id}`.replace(/[^a-zA-Z0-9-_]+/g, "-");
@@ -55,7 +55,7 @@ const withReportWriteLock = async <T>(lockPath: string, handler: () => Promise<T
 };
 
 /** Convert case IDs with colons to filesystem-safe names using -- separator */
-const traceFileName = (caseId: string): string => {
+export const traceFileName = (caseId: string): string => {
 	// Replace colon separator (bundle:tag) with double-dash for readability
 	const safeName = caseId.replace(/:/g, "--");
 	return toSafePathSegment(safeName, "case");

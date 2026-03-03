@@ -1,6 +1,6 @@
 import { realpath as fsRealpath } from "node:fs/promises";
 import path from "node:path";
-import { hasPathPrefix, normalizePath } from "../data/utils.js";
+import { hasPathPrefix, normalizePath, resolveCanonicalPath } from "./path-policy.js";
 
 export const FORBIDDEN_WORKSPACE_VIOLATION = "FORBIDDEN_WORKSPACE_VIOLATION";
 
@@ -13,6 +13,7 @@ export type SandboxBoundary = {
 	sandboxRoot: string;
 	sandboxRootCanonical: string | null;
 	violations: Set<string>;
+	canonicalCache: Map<string, string | null>;
 };
 
 export const createSandboxBoundary = async (
@@ -26,6 +27,7 @@ export const createSandboxBoundary = async (
 		sandboxRoot,
 		sandboxRootCanonical,
 		violations: new Set<string>(),
+		canonicalCache: new Map<string, string | null>(),
 	};
 };
 
@@ -33,22 +35,6 @@ const registerSandboxViolation = (boundary: SandboxBoundary, targetPath: string)
 	const normalized = normalizePath(targetPath);
 	boundary.violations.add(normalized);
 	throw new Error(`${FORBIDDEN_WORKSPACE_VIOLATION}: Attempted to access path outside sandbox: ${targetPath}`);
-};
-
-const canonicalizeNearestParent = async (targetPath: string): Promise<string | null> => {
-	let current = targetPath;
-	const trailingSegments: string[] = [];
-	while (true) {
-		try {
-			const real = await fsRealpath(current);
-			return path.join(real, ...trailingSegments);
-		} catch {
-			const parent = path.dirname(current);
-			if (parent === current) return null;
-			trailingSegments.unshift(path.basename(current));
-			current = parent;
-		}
-	}
 };
 
 export const assertWithinSandboxBoundary = async (
@@ -60,16 +46,9 @@ export const assertWithinSandboxBoundary = async (
 		registerSandboxViolation(boundary, resolvedPath);
 	}
 	if (!boundary.sandboxRootCanonical) return;
-	const canonicalPath = await fsRealpath(resolvedPath).catch(() => null);
-	if (canonicalPath) {
-		if (!hasPathPrefix(canonicalPath, boundary.sandboxRootCanonical)) {
-			registerSandboxViolation(boundary, canonicalPath);
-		}
-	} else {
-		const parentCanonical = await canonicalizeNearestParent(resolvedPath);
-		if (parentCanonical && !hasPathPrefix(parentCanonical, boundary.sandboxRootCanonical)) {
-			registerSandboxViolation(boundary, resolvedPath);
-		}
+	const canonicalPath = await resolveCanonicalPath(resolvedPath, boundary.canonicalCache);
+	if (canonicalPath && !hasPathPrefix(canonicalPath, boundary.sandboxRootCanonical)) {
+		registerSandboxViolation(boundary, canonicalPath);
 	}
 };
 

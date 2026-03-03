@@ -5,7 +5,13 @@
  */
 import { readFile, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { UNPAIRED_TABLE_SENTINEL, normalizeStatus } from "../reporting/report.js";
+import {
+	UNPAIRED_TABLE_SENTINEL,
+	extractRowCells,
+	findTableBoundaries,
+	normalizeStatus,
+	recalculateHeaderStats,
+} from "../reporting/report-document.js";
 
 // ---------------------------------------------------------------------------
 // Core purge logic (exported for testing)
@@ -32,19 +38,14 @@ export const purgeRowsFromReport = (
 	const lines = content.split("\n");
 
 	// --- 1. Remove matching rows from the standalone table ---
-	const sentinelIdx = lines.findIndex((l) => l.trim() === UNPAIRED_TABLE_SENTINEL);
-	const tableHeaderIdx = lines.findIndex(
-		(l, i) => i >= (sentinelIdx >= 0 ? sentinelIdx : 0) && l.trimStart().startsWith("| Case "),
-	);
+	const { headerIndex: tableHeaderIdx, dataStart } = findTableBoundaries(lines);
 
 	if (tableHeaderIdx >= 0) {
-		// Table data starts 2 lines after header (header + separator)
-		const dataStart = tableHeaderIdx + 2;
 		const toRemove: number[] = [];
 		for (let i = dataStart; i < lines.length; i++) {
 			const line = lines[i];
 			if (!line.trim().startsWith("|")) break;
-			const cells = line.split("|").slice(1, -1).map((c) => c.trim());
+			const cells = extractRowCells(line);
 			const caseCell = cells[0] ?? "";
 			if (casePatterns.has(caseCell)) {
 				toRemove.push(i);
@@ -120,71 +121,6 @@ export const purgeRowsFromReport = (
 		removedBundleSections,
 		updatedContent: lines.join("\n"),
 	};
-};
-
-/**
- * Recalculate `Case rows:` and `Cases in spec:` header lines based on
- * remaining table rows (both standalone and bundle variant tables).
- */
-const recalculateHeaderStats = (lines: string[]): void => {
-	// Find all table rows across the report to count stats
-	let rowPass = 0;
-	let rowFail = 0;
-	let rowSkip = 0;
-	const caseIds = new Set<string>();
-
-	// Count standalone table rows
-	const sentinelIdx = lines.findIndex((l) => l.trim() === UNPAIRED_TABLE_SENTINEL);
-	const tableHeaderIdx = lines.findIndex(
-		(l, i) => i >= (sentinelIdx >= 0 ? sentinelIdx : 0) && l.trimStart().startsWith("| Case "),
-	);
-	if (tableHeaderIdx >= 0) {
-		for (let i = tableHeaderIdx + 2; i < lines.length; i++) {
-			const line = lines[i];
-			if (!line.trim().startsWith("|")) break;
-			const cells = line.split("|").slice(1, -1).map((c) => c.trim());
-			const caseId = cells[0] ?? "";
-			const status = cells[2] ?? "";
-			if (!caseId) continue;
-			caseIds.add(caseId);
-			const s = normalizeStatus(status);
-			if (s === "PASS") rowPass++;
-			else if (s === "FAIL") rowFail++;
-			else if (s === "SKIP") rowSkip++;
-		}
-	}
-
-	// Count bundle variant table rows (tables under ### headings)
-	for (let i = 0; i < lines.length; i++) {
-		const line = lines[i];
-		if (!line.startsWith("| Variant ")) continue;
-		// This is a bundle variant table header
-		for (let j = i + 2; j < lines.length; j++) {
-			const row = lines[j];
-			if (!row.trim().startsWith("|")) break;
-			const cells = row.split("|").slice(1, -1).map((c) => c.trim());
-			const variantId = cells[0] ?? "";
-			const status = cells[1] ?? "";
-			if (!variantId) continue;
-			caseIds.add(variantId);
-			const s = normalizeStatus(status);
-			if (s === "PASS") rowPass++;
-			else if (s === "FAIL") rowFail++;
-			else if (s === "SKIP") rowSkip++;
-		}
-	}
-
-	const totalRows = rowPass + rowFail + rowSkip;
-	const totalCases = caseIds.size;
-
-	// Update header lines
-	for (let i = 0; i < Math.min(lines.length, 20); i++) {
-		if (lines[i].startsWith("- Case rows:")) {
-			lines[i] = `- Case rows: ${totalRows} (pass ${rowPass}, fail ${rowFail}, skip ${rowSkip})`;
-		} else if (lines[i].startsWith("- Cases in spec:")) {
-			lines[i] = `- Cases in spec: ${totalCases}`;
-		}
-	}
 };
 
 // ---------------------------------------------------------------------------

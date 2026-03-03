@@ -2,25 +2,13 @@ import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { CaseEvaluation, EvalBundle, JudgeBundleVerdict, ModelSpec, ResolvedEvalCase } from "../data/types.js";
 import { ensureDir, fileExists, formatDuration, median, percentile } from "../data/utils.js";
-
-type ReportRow = {
-	caseId: string;
-	mode: string;
-	status: string;
-	tokens: number;
-	turns: number;
-	skillsRead: number;
-	skillFilesRead: number;
-	refsRead: number;
-	missingRefs: string;
-	unexpectedRefs: string;
-	notes: string;
-	run: string;
-};
-
-const buildRowKey = (caseId: string, mode: string): string => `${caseId}::${mode}`;
-
-export const normalizeStatus = (value: string): string => value.trim().toUpperCase();
+import {
+	UNPAIRED_TABLE_SENTINEL,
+	buildRowKey,
+	normalizeStatus,
+	parseStandaloneTable,
+	type ReportRow,
+} from "./report-document.js";
 
 const runDateFromTimestamp = (timestamp: string): string => timestamp.split("T")[0] ?? timestamp;
 const joinRoutingList = (values: string[] | undefined): string => {
@@ -34,75 +22,10 @@ const formatTokenStats = (tokens: number[]) => ({
 	p95: percentile(tokens, 95),
 });
 
-export const UNPAIRED_TABLE_SENTINEL = "<!-- UNPAIRED_TABLE_START -->";
-
-const safeParseInt = (value: string): number => {
-	const n = Number.parseInt(value, 10);
-	return Number.isFinite(n) ? n : 0;
-};
-
-const cellStr = (cells: string[], idx: number, fallback: string): string =>
-	idx >= 0 ? (cells[idx] ?? fallback) : fallback;
-
-const parseReportRows = (content: string): Map<string, ReportRow> => {
-	const rows = new Map<string, ReportRow>();
-	const lines = content.split("\n");
-	const sentinelIndex = lines.findIndex((line) => line.trim() === UNPAIRED_TABLE_SENTINEL);
-	const searchStart = sentinelIndex >= 0 ? sentinelIndex : 0;
-	const headerIndex = lines.findIndex((line, idx) => idx >= searchStart && line.trimStart().startsWith("| Case "));
-	if (headerIndex === -1) return rows;
-	const headerCells = lines[headerIndex]
-		.split("|")
-		.slice(1, -1)
-		.map((cell) => cell.trim());
-	const col = (name: string): number =>
-		headerCells.findIndex((cell) => cell.toLowerCase() === name.toLowerCase());
-	const caseIdx = col("Case");
-	const modeIdx = col("Mode");
-	const statusIdx = col("Status");
-	const tokensIdx = col("Tokens");
-	const turnsIdx = col("Turns");
-	const skillsReadIdx = col("Skills Read");
-	const skillFilesReadIdx = col("Skill Files Read");
-	const refsReadIdx = col("Refs Read");
-	const missingRefsIdx = col("Missing Refs");
-	const unexpectedRefsIdx = col("Unexpected Refs");
-	const notesIdx = col("Notes");
-	const runIdx = col("Run");
-	if (caseIdx < 0 || modeIdx < 0) return rows;
-
-	for (let i = headerIndex + 2; i < lines.length; i += 1) {
-		const line = lines[i] ?? "";
-		if (!line.trim().startsWith("|")) break;
-		const cells = line.split("|").slice(1, -1).map((cell) => cell.trim());
-		const requiredMax = Math.max(caseIdx, modeIdx, statusIdx, tokensIdx, notesIdx, runIdx);
-		if (cells.length <= requiredMax) continue;
-		const caseId = cells[caseIdx] ?? "";
-		const mode = cells[modeIdx] ?? "";
-		if (!caseId || !mode) continue;
-		rows.set(buildRowKey(caseId, mode), {
-			caseId,
-			mode,
-			status: cells[statusIdx] ?? "",
-			tokens: safeParseInt(cells[tokensIdx] ?? "0"),
-			turns: safeParseInt(cellStr(cells, turnsIdx, "0")),
-			skillsRead: safeParseInt(cellStr(cells, skillsReadIdx, "0")),
-			skillFilesRead: safeParseInt(cellStr(cells, skillFilesReadIdx, "0")),
-			refsRead: safeParseInt(cellStr(cells, refsReadIdx, "0")),
-			missingRefs: cellStr(cells, missingRefsIdx, "-"),
-			unexpectedRefs: cellStr(cells, unexpectedRefsIdx, "-"),
-			notes: cells[notesIdx] ?? "",
-			run: cellStr(cells, runIdx, "-"),
-		});
-	}
-
-	return rows;
-};
-
 export const readReportRows = async (filePath: string): Promise<Map<string, ReportRow>> => {
 	if (!(await fileExists(filePath))) return new Map();
 	const raw = await readFile(filePath, "utf-8");
-	return parseReportRows(raw);
+	return parseStandaloneTable(raw.split("\n"));
 };
 
 const mergeReportRows = (params: {

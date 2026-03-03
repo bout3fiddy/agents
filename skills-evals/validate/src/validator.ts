@@ -1,35 +1,19 @@
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { findSkillMd, parseFrontmatter } from "./parser.js";
+import { activationPolicies, isRecord, schema } from "./schema.js";
 
-export const MAX_SKILL_NAME_LENGTH = 64;
-export const MAX_DESCRIPTION_LENGTH = 1024;
-export const MAX_COMPATIBILITY_LENGTH = 500;
-const ALLOWED_ACTIVATION_POLICIES = new Set(["user_intent", "workflow_state", "both"]);
-const ALLOWED_METADATA_KEYS = new Set([
-	"id",
-	"version",
-	"task_types",
-	"trigger_phrases",
-	"priority",
-	"load_strategy",
-	"activation_policy",
-	"workflow_triggers",
-	"route_exclude",
-]);
+const limits = schema.limits as Record<string, number>;
 
-const ALLOWED_FIELDS = [
-	"name",
-	"description",
-	"license",
-	"allowed-tools",
-	"metadata",
-	"compatibility",
-] as const;
+export const MAX_SKILL_NAME_LENGTH = limits.max_skill_name_length;
+export const MAX_DESCRIPTION_LENGTH = limits.max_description_length;
+export const MAX_COMPATIBILITY_LENGTH = limits.max_compatibility_length;
+const ALLOWED_ACTIVATION_POLICIES = activationPolicies;
+const ALLOWED_METADATA_KEYS = new Set(schema.metadata_keys as string[]);
+
+const ALLOWED_FIELDS = schema.frontmatter_fields as string[];
 const ALLOWED_FIELD_SET = new Set<string>(ALLOWED_FIELDS);
-const ALLOWED_FIELDS_LABEL = `[${[...ALLOWED_FIELDS].sort().map((field) => `'${field}'`).join(", ")}]`;
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-	typeof value === "object" && value !== null && !Array.isArray(value);
+const ALLOWED_FIELDS_LABEL = `[${ALLOWED_FIELDS.slice().sort().map((field) => `'${field}'`).join(", ")}]`;
 
 const validateMetadataContract = (metadata: unknown): string[] => {
 	const errors: string[] = [];

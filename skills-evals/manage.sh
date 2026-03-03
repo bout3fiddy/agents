@@ -7,6 +7,7 @@ REPORTS_DIR="$ROOT_DIR/skills-evals/reports"
 GENERATED_DIR="$ROOT_DIR/skills-evals/generated"
 PURGE_SCRIPT="$ROOT_DIR/skills-evals/pi-eval/src/cli/purge-report.ts"
 LIST_SCRIPT="$ROOT_DIR/skills-evals/pi-eval/src/cli/list-cases.ts"
+MANAGE_REMOVE_SCRIPT="$ROOT_DIR/skills-evals/pi-eval/src/cli/manage-remove.ts"
 
 usage() {
 	cat <<'EOF'
@@ -20,21 +21,8 @@ Commands:
 EOF
 }
 
-# Must match slugFromId in pi-eval/src/data/cases.ts
-slug_from_id() {
-	printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | tr -cd 'a-z0-9'
-}
-
-# Must match traceFileName in pi-eval/src/reporting/report-persistence.ts
-# (replace colons with --, then apply toSafePathSegment sanitization)
-trace_file_name() {
-	local name="$1"
-	# Replace colons with double-dash (matches traceFileName `:` -> `--`)
-	name="${name//:/--}"
-	# Apply toSafePathSegment: replace non-safe chars with -, collapse separators, trim edges
-	name="$(printf '%s' "$name" | sed -E 's/[^a-zA-Z0-9._-]+/-/g; s/[-._]{2,}/-/g; s/^-+//; s/-+$//')"
-	printf '%s' "${name:-case}"
-}
+# slug_from_id / trace_file_name are now in pi-eval/src/cli/manage-remove.ts
+# (canonical implementations: slugFromId in data/cases.ts, traceFileName in reporting/report-persistence.ts)
 
 cmd_list() {
 	bun run "$LIST_SCRIPT" --cases-dir "$CASES_DIR"
@@ -79,62 +67,32 @@ cmd_remove() {
 		exit 1
 	fi
 
-	# Detect bundle vs standalone and extract metadata via bun
-	local is_bundle=0 suite="" variant_tags=""
-	local parsed
-	parsed="$(bun -e "
-const d = JSON.parse(await Bun.file('$jsonl_path').text());
-const variants = Array.isArray(d.variants) ? d.variants : [];
-const tags = variants.map(v => v.tag || '').filter(Boolean).join(',');
-console.log([tags ? '1' : '0', d.suite || '', tags].join('\t'));
+	# Resolve targets via TS (canonical slug/traceFileName from data layer)
+	local targets_json
+	targets_json="$(bun -e "
+import { resolveRemoveTargets } from '$MANAGE_REMOVE_SCRIPT';
+const targets = await resolveRemoveTargets('$case_id', {
+  casesDir: '$CASES_DIR',
+  reportsDir: '$REPORTS_DIR',
+  generatedDir: '$GENERATED_DIR',
+});
+console.log(JSON.stringify(targets));
 ")"
 
-	is_bundle="$(echo "$parsed" | cut -f1)"
-	suite="$(echo "$parsed" | cut -f2)"
-	variant_tags="$(echo "$parsed" | cut -f3)"
+	local is_bundle variant_tags_csv
+	is_bundle="$(echo "$targets_json" | bun -e "const d=JSON.parse(await Bun.stdin.text()); console.log(d.isBundle ? '1' : '0')")"
+	variant_tags_csv="$(echo "$targets_json" | bun -e "const d=JSON.parse(await Bun.stdin.text()); console.log(d.variantTags.join(','))")"
 
-	local slug
-	slug="$(slug_from_id "$case_id")"
-
-	# Build deletion list
-	local files_to_delete=()
-	local dirs_to_delete=()
-
-	# 1. JSONL definition
-	files_to_delete+=("$jsonl_path")
-
-	# 2. Routing traces — use trace_file_name to match report-persistence.ts naming
-	if [[ "$is_bundle" == "1" ]]; then
-		IFS=',' read -ra tags <<< "$variant_tags"
-		for model_dir in "$REPORTS_DIR/routing-traces"/*/; do
-			for tag in "${tags[@]}"; do
-				local variant_trace
-				variant_trace="$(trace_file_name "${case_id}:${tag}")"
-				files_to_delete+=("${model_dir}${variant_trace}.json")
-			done
-			local verdict_trace
-			verdict_trace="$(trace_file_name "${case_id}")--verdict"
-			files_to_delete+=("${model_dir}${verdict_trace}.json")
-		done
-	else
-		for model_dir in "$REPORTS_DIR/routing-traces"/*/; do
-			local standalone_trace
-			standalone_trace="$(trace_file_name "${case_id}")"
-			files_to_delete+=("${model_dir}${standalone_trace}.json")
-		done
-	fi
-
-	# 3. Generated artifacts (bundle only) — validate suite/slug before constructing path
-	if [[ "$is_bundle" == "1" && -n "$suite" && -n "$slug" && -d "$GENERATED_DIR/$suite/$slug" ]]; then
-		dirs_to_delete+=("$GENERATED_DIR/$suite/$slug")
-	fi
-
-	# Build purge args once; conditionally append --dry-run below
-	local purge_args=("--case" "$case_id" "--reports-dir" "$REPORTS_DIR")
-	[[ "$is_bundle" == "1" ]] && purge_args+=("--variants" "$variant_tags")
+	# Read file/dir lists from JSON
+	local -a files_to_delete=()
+	local -a dirs_to_delete=()
+	local -a purge_args=()
+	while IFS= read -r f; do files_to_delete+=("$f"); done < <(echo "$targets_json" | bun -e "const d=JSON.parse(await Bun.stdin.text()); d.filesToDelete.forEach(f=>console.log(f))")
+	while IFS= read -r d; do dirs_to_delete+=("$d"); done < <(echo "$targets_json" | bun -e "const d=JSON.parse(await Bun.stdin.text()); d.dirsToDelete.forEach(f=>console.log(f))")
+	while IFS= read -r a; do purge_args+=("$a"); done < <(echo "$targets_json" | bun -e "const d=JSON.parse(await Bun.stdin.text()); d.purgeArgs.forEach(a=>console.log(a))")
 
 	# Display plan
-	echo "Case: $case_id ($([ "$is_bundle" == "1" ] && echo "bundle: $variant_tags" || echo "standalone"))"
+	echo "Case: $case_id ($([ "$is_bundle" == "1" ] && echo "bundle: $variant_tags_csv" || echo "standalone"))"
 	echo ""
 	echo "Files to delete:"
 	for f in "${files_to_delete[@]}"; do

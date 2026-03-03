@@ -21,7 +21,7 @@ const normalizeRawCase = (raw: any): EvalCase => {
 	return raw as EvalCase;
 };
 
-const slugFromId = (id: string): string => id.toLowerCase().replace(/[^a-z0-9]+/g, "");
+export const slugFromId = (id: string): string => id.toLowerCase().replace(/[^a-z0-9]+/g, "");
 
 const resolveArtifactPath = (_suite: string, caseSlug: string, tag: string): string =>
 	`output/${caseSlug}/${tag}/solution.py`;

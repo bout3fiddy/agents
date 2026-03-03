@@ -4,7 +4,7 @@ import { chmod, copyFile, cp, mkdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileExists, parsePositiveInt, withTimeout } from "../data/utils.js";
-import { assertManagedTempPath, toSafePathSegment } from "./path-safety.js";
+import { assertManagedTempPath, toSafePathSegment } from "./path-policy.js";
 
 const WORKSPACE_INCLUDE_PATHS = [
 	path.join("skills-evals", "fixtures"),

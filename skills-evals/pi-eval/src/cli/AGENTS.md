@@ -6,3 +6,4 @@
 - `validation.test.ts`: unit tests for CLI argument and path validation.
 - `list-cases.ts`: standalone script listing all eval cases from the cases directory.
 - `purge-report.ts`: standalone script purging case rows/sections from markdown reports.
+- `manage-remove.ts`: target resolution and execution for `manage.sh remove` (delegates `slugFromId` and `traceFileName` to canonical TS data layer).

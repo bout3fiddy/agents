@@ -5,13 +5,13 @@ import path from "node:path";
 import test from "node:test";
 import type { EvalCase } from "../../src/data/types.js";
 import { fileExists } from "../../src/data/utils.js";
+import { resolveSandboxExtensionEntry } from "../../src/runtime/case-lifecycle.js";
 import {
 	buildProfileReadDenyPaths,
 	collectPolicyDenyProbeErrors,
 	hardenNoPayloadWorkspace,
-	mirrorBootstrapPayloadToWorkspace,
-	resolveSandboxExtensionEntry,
-} from "../../src/runtime/case-lifecycle.js";
+} from "../../src/runtime/case-policy.js";
+import { mirrorBootstrapPayloadToWorkspace } from "../../src/runtime/bootstrap.js";
 
 const buildEvalCase = (bootstrapProfile: "full_payload" | "no_payload" = "full_payload"): EvalCase => ({
 	id: "CD-015-NS-UT",

@@ -1,43 +1,35 @@
 import type { AssistantMessage, ToolResultMessage } from "@mariozechner/pi-ai";
-import { createEditTool, createReadTool, createWriteTool } from "@mariozechner/pi-coding-agent";
+import { createEditTool, createWriteTool } from "@mariozechner/pi-coding-agent";
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
-import { constants } from "node:fs";
-import {
-	access as fsAccess,
-	readdir as fsReadDir,
-	readFile as fsReadFile,
-	stat as fsStat,
-	writeFile,
-} from "node:fs/promises";
+import { writeFile } from "node:fs/promises";
 import path from "node:path";
-import {
-	captureReadAttempt,
-	captureReadDenied,
-	captureReadInvocation,
-	captureReadSize,
-	isReferencePath,
-	isSkillPath,
-	serializeReadCapture,
-	type ReadCapture,
-} from "./capture.js";
-import { modelSpecFromModel } from "./model-registry.js";
-import type { CaseRunResult, ReadBreakdownEntry, TokenUsage, TurnTokenUsage, ToolUsageSummary } from "../data/types.js";
-import { assertReadablePath, createPathDenyPolicy, type PathDenyPolicy } from "./read-policy.js";
+import type { PathDenyPolicy } from "./read-policy.js";
 import { ensureDir } from "../data/utils.js";
-import { collectAssistantText, sumUsageFromMessages } from "./rpc-messages.js";
+import { extractTerminalErrorFromMessages } from "./rpc-messages.js";
 import { parseWorkerRuntimeConfig } from "./worker-contract.js";
 import {
-	FORBIDDEN_WORKSPACE_VIOLATION,
-	assertWithinSandboxBoundary,
 	createSandboxBoundary,
 	wrapToolWithSandboxBoundary,
-	type SandboxBoundary,
-	type ToolWithExecute,
 } from "./sandbox-boundary.js";
+import {
+	createAccumulator,
+	createToolUsageCapture,
+	appendAgentEnd,
+	shouldFinalize,
+	buildResult,
+} from "./worker-accumulator.js";
+import {
+	adaptToolExecute,
+	createEvalReadTool,
+	createReadCapture,
+	registerReadCaptureHooks,
+} from "./worker-tools.js";
 
-const DRY_RUN_SKILL_STUB = "Dry-run mode: file content unavailable.";
+// Prompt-level retry settle window (3s). See also RETRYABLE_AGENT_END_SETTLE_MS
+// in case-process.ts (1.5s) which operates at the RPC/case level.
 const RETRYABLE_TERMINATION_SETTLE_MS = 3_000;
 
+// ── Retryable termination helpers ────────────────────────────────────────
 
 const getLastAssistantMessage = (
 	messages: Array<AssistantMessage | ToolResultMessage>,
@@ -60,315 +52,11 @@ const isRetryableTermination = (
 	);
 };
 
-const extractTerminalError = (messages: Array<AssistantMessage | ToolResultMessage>): string => {
-	const lastAssistant = getLastAssistantMessage(messages);
-	if (!lastAssistant || typeof lastAssistant.errorMessage !== "string") return "terminated";
-	const trimmed = lastAssistant.errorMessage.trim();
-	return trimmed.length > 0 ? trimmed : "terminated";
-};
+/** Delegates to shared extractTerminalErrorFromMessages (rpc-messages.ts). */
+const extractTerminalError = (messages: Array<AssistantMessage | ToolResultMessage>): string =>
+	extractTerminalErrorFromMessages(messages as unknown[]);
 
-
-const adaptToolExecute = <T extends ToolWithExecute>(tool: T): T => ({
-	...tool,
-	execute: (toolCallId: string, args: Record<string, unknown>) =>
-		tool.execute(toolCallId, args, undefined),
-});
-
-const createEvalReadTool = async (
-	cwd: string,
-	agentDir: string,
-	dryRunEnabled: boolean,
-	readDenyPaths: string[],
-	boundary: SandboxBoundary,
-	readCapture: ReadCapture,
-) => {
-	const denyPolicy = await createPathDenyPolicy(cwd, readDenyPaths);
-	const base = createReadTool(cwd, {
-		operations: {
-			access: async (absolutePath: string) => {
-				captureReadAttempt(absolutePath, agentDir, readCapture);
-				try {
-					await assertWithinSandboxBoundary(absolutePath, boundary);
-					await assertReadablePath(absolutePath, denyPolicy);
-					if (dryRunEnabled && isSkillPath(absolutePath)) {
-						captureReadInvocation(absolutePath, agentDir, readCapture);
-						return;
-					}
-					await fsAccess(absolutePath, constants.R_OK);
-					captureReadInvocation(absolutePath, agentDir, readCapture);
-				} catch (error) {
-					captureReadDenied(absolutePath, agentDir, readCapture);
-					throw error;
-				}
-			},
-			readFile: async (absolutePath: string) => {
-				captureReadAttempt(absolutePath, agentDir, readCapture);
-				try {
-					await assertWithinSandboxBoundary(absolutePath, boundary);
-						await assertReadablePath(absolutePath, denyPolicy);
-						if (dryRunEnabled && isSkillPath(absolutePath)) {
-							captureReadInvocation(absolutePath, agentDir, readCapture);
-							const stub = Buffer.from(DRY_RUN_SKILL_STUB);
-							captureReadSize(absolutePath, stub.length, readCapture);
-							return stub;
-						}
-						const stat = await fsStat(absolutePath);
-						if (stat.isDirectory()) {
-							const entries = await fsReadDir(absolutePath, { withFileTypes: true });
-							const listing = entries
-								.map((entry) => `${entry.name}${entry.isDirectory() ? "/" : ""}`)
-								.sort((left, right) => left.localeCompare(right))
-								.join("\n");
-							captureReadInvocation(absolutePath, agentDir, readCapture);
-							const listingBuf = Buffer.from(listing);
-							captureReadSize(absolutePath, listingBuf.length, readCapture);
-							return listingBuf;
-						}
-						const content = await fsReadFile(absolutePath);
-						captureReadInvocation(absolutePath, agentDir, readCapture);
-						captureReadSize(absolutePath, content.length, readCapture);
-						return content;
-				} catch (error) {
-					captureReadDenied(absolutePath, agentDir, readCapture);
-					throw error;
-				}
-			},
-		},
-	});
-
-	return { denyPolicy, tool: adaptToolExecute(base) };
-};
-
-const createReadCapture = (): ReadCapture => ({
-	skillAttempts: new Set<string>(),
-	skillInvocations: new Set<string>(),
-	skillDenied: new Set<string>(),
-	skillFileAttempts: new Set<string>(),
-	skillFileInvocations: new Set<string>(),
-	skillFileDenied: new Set<string>(),
-	refAttempts: new Set<string>(),
-	refInvocations: new Set<string>(),
-	refDenied: new Set<string>(),
-	readSizes: new Map<string, number>(),
-});
-
-const isSuccessfulToolResultEvent = (event: Record<string, unknown>): boolean => {
-	if (typeof event.success === "boolean") return event.success;
-	if ("error" in event && event.error) return false;
-	return true;
-};
-
-const extractToolPath = (input: unknown): string | null => {
-	if (!input || typeof input !== "object") return null;
-	const record = input as Record<string, unknown>;
-	for (const key of ["path", "filePath", "targetPath", "file", "target"]) {
-		const value = record[key];
-		if (typeof value === "string" && value.trim().length > 0) return value;
-	}
-	return null;
-};
-
-const registerReadCaptureHooks = (
-	pi: ExtensionAPI,
-	agentDir: string,
-	readCapture: ReadCapture,
-	toolFailures: Set<string>,
-	toolUsage: ToolUsageCapture,
-): void => {
-	pi.on("tool_call", async (event, ctx) => {
-		if (event.toolName !== "read") return undefined;
-		const rawPath = event.input?.path;
-		if (typeof rawPath !== "string") return undefined;
-		captureReadAttempt(path.resolve(ctx.cwd, rawPath), agentDir, readCapture);
-		return undefined;
-	});
-
-	pi.on("tool_call", async (event) => {
-		if (event.toolName === "write") toolUsage.writeCalls += 1;
-		if (event.toolName === "edit") toolUsage.editCalls += 1;
-		return undefined;
-	});
-
-	pi.on("tool_result", async (event, ctx) => {
-		if (event.toolName !== "read") return undefined;
-		const rawPath = event.input?.path;
-		if (typeof rawPath !== "string") return undefined;
-		const absolutePath = path.resolve(ctx.cwd, rawPath);
-		if (isSuccessfulToolResultEvent(event as unknown as Record<string, unknown>)) {
-			captureReadInvocation(absolutePath, agentDir, readCapture);
-		} else {
-			captureReadDenied(absolutePath, agentDir, readCapture);
-		}
-		return undefined;
-	});
-
-	pi.on("tool_result", async (event) => {
-		if (event.toolName !== "write" && event.toolName !== "edit") return undefined;
-		const eventRecord = event as unknown as Record<string, unknown>;
-		if (isSuccessfulToolResultEvent(eventRecord)) return undefined;
-		if (event.toolName === "write") toolUsage.writeFailures += 1;
-		if (event.toolName === "edit") toolUsage.editFailures += 1;
-		const toolPath = extractToolPath(event.input);
-		const rawError = eventRecord.error;
-		const message = typeof rawError === "string" && rawError.trim().length > 0
-			? rawError.trim()
-			: "tool returned an unknown error";
-		const location = toolPath ? ` (${toolPath})` : "";
-		toolFailures.add(`${event.toolName} tool failed${location}: ${message}`);
-		return undefined;
-	});
-};
-
-type WorkerAccumulator = {
-	outputChunks: string[];
-	tokenTotals: TokenUsage;
-	turnBreakdown: TurnTokenUsage[];
-	completedTurns: number;
-	finalized: boolean;
-};
-
-type ToolUsageCapture = ToolUsageSummary;
-
-const createAccumulator = (): WorkerAccumulator => ({
-	outputChunks: [],
-	tokenTotals: {
-		input: 0,
-		output: 0,
-		cacheRead: 0,
-		cacheWrite: 0,
-		totalTokens: 0,
-	},
-	turnBreakdown: [],
-	completedTurns: 0,
-	finalized: false,
-});
-
-const createToolUsageCapture = (allowedTools: Set<string>): ToolUsageCapture => ({
-	allowedTools: Array.from(allowedTools).sort(),
-	writeCalls: 0,
-	editCalls: 0,
-	writeFailures: 0,
-	editFailures: 0,
-});
-
-const appendAgentEnd = (
-	acc: WorkerAccumulator,
-	messages: Array<AssistantMessage | ToolResultMessage>,
-	countTurn = true,
-): void => {
-	const outputText = collectAssistantText(messages);
-	if (outputText) acc.outputChunks.push(outputText);
-	const usage = sumUsageFromMessages(messages);
-	if (countTurn) {
-		acc.turnBreakdown.push({
-			turn: acc.completedTurns + 1,
-			input: usage.input,
-			output: usage.output,
-			cacheRead: usage.cacheRead,
-			cacheWrite: usage.cacheWrite,
-			totalTokens: usage.totalTokens,
-		});
-	}
-	acc.tokenTotals.input += usage.input;
-	acc.tokenTotals.output += usage.output;
-	acc.tokenTotals.cacheRead += usage.cacheRead;
-	acc.tokenTotals.cacheWrite += usage.cacheWrite;
-	acc.tokenTotals.totalTokens += usage.totalTokens;
-	if (countTurn) acc.completedTurns += 1;
-};
-
-const shouldFinalize = (acc: WorkerAccumulator, expectedTurns: number, force = false): boolean => {
-	if (acc.finalized) return false;
-	if (!force && acc.completedTurns < expectedTurns) return false;
-	acc.finalized = true;
-	return true;
-};
-
-const buildReadBreakdown = (readCapture: ReadCapture): ReadBreakdownEntry[] => {
-	const entries: ReadBreakdownEntry[] = [];
-	for (const [filePath, bytes] of readCapture.readSizes) {
-		let category: ReadBreakdownEntry["category"] = "task";
-		if (isSkillPath(filePath)) category = "skill";
-		else if (isReferencePath(filePath)) category = "ref";
-		entries.push({
-			path: filePath,
-			category,
-			bytes,
-			estTokens: Math.ceil(bytes / 4),
-		});
-	}
-	return entries.sort((a, b) => a.path.localeCompare(b.path));
-};
-
-const buildResult = (params: {
-	caseId: string;
-	dryRun: boolean;
-	bootstrapProfile: "full_payload" | "no_payload";
-	availableSkills: string[];
-	bootstrapManifestHash: string | null;
-	readCapture: ReadCapture;
-	denyPolicy: PathDenyPolicy | null;
-	sandboxBoundary: SandboxBoundary;
-	toolFailures: Set<string>;
-	toolUsage: ToolUsageCapture;
-	acc: WorkerAccumulator;
-	startedAt: number;
-	model: any;
-}): CaseRunResult => {
-	const {
-		caseId,
-		dryRun,
-		bootstrapProfile,
-		availableSkills,
-		bootstrapManifestHash,
-		readCapture,
-		denyPolicy,
-		sandboxBoundary,
-		toolFailures,
-		toolUsage,
-		acc,
-		startedAt,
-		model,
-	} = params;
-	const capturedReads = serializeReadCapture(readCapture);
-	const deniedReadErrors = denyPolicy
-		? Array.from(denyPolicy.deniedReads).sort().map((entry) => `forbidden read: ${entry}`)
-		: [];
-	const boundaryErrors = Array.from(sandboxBoundary.violations)
-		.sort()
-		.map((entry) => `${FORBIDDEN_WORKSPACE_VIOLATION}: ${entry}`);
-	const toolFailureErrors = Array.from(toolFailures).sort();
-	const errors = [...boundaryErrors, ...deniedReadErrors, ...toolFailureErrors];
-	if (bootstrapProfile === "no_payload" && errors.length > 0) {
-		errors.unshift("policy deny triggered in no_payload profile");
-	}
-
-	return {
-		caseId,
-		dryRun,
-		model: model ? modelSpecFromModel(model) : null,
-		workerReady: true,
-		bootstrapProfile,
-		availableSkills,
-		bootstrapManifestHash,
-		skillInvocations: capturedReads.skillInvocations,
-		skillAttempts: capturedReads.skillAttempts,
-		skillDenied: capturedReads.skillDenied,
-		skillFileInvocations: capturedReads.skillFileInvocations,
-		skillFileAttempts: capturedReads.skillFileAttempts,
-		skillFileDenied: capturedReads.skillFileDenied,
-		refInvocations: capturedReads.refInvocations,
-		refAttempts: capturedReads.refAttempts,
-		refDenied: capturedReads.refDenied,
-		outputText: acc.outputChunks.join("\n").trim(),
-		tokens: acc.tokenTotals,
-		durationMs: Date.now() - startedAt,
-		errors,
-		toolUsage,
-		readBreakdown: buildReadBreakdown(readCapture),
-		turnBreakdown: acc.turnBreakdown,
-	};
-};
+// ── Worker registration ──────────────────────────────────────────────────
 
 export const registerEvalWorker = async (pi: ExtensionAPI): Promise<boolean> => {
 	const cwd = process.cwd();

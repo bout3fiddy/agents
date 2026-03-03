@@ -1,0 +1,52 @@
+{
+  "_comment": "Single source of truth for skill metadata constants shared across TS validator, TS router artifact checker, and Python router artifact builder.",
+  "activation_policies": ["user_intent", "workflow_state", "both"],
+  "metadata_keys": [
+    "id",
+    "version",
+    "task_types",
+    "trigger_phrases",
+    "priority",
+    "load_strategy",
+    "activation_policy",
+    "workflow_triggers",
+    "route_exclude"
+  ],
+  "frontmatter_fields": [
+    "name",
+    "description",
+    "license",
+    "allowed-tools",
+    "metadata",
+    "compatibility"
+  ],
+  "router_artifact": {
+    "schema_version": "1",
+    "required_top_level_keys": [
+      "schema_version",
+      "generated_at",
+      "skills",
+      "by_task_type",
+      "by_workflow_trigger"
+    ],
+    "required_skill_keys": [
+      "id",
+      "path",
+      "task_types",
+      "priority",
+      "activation_policy",
+      "workflow_triggers",
+      "primary_refs"
+    ],
+    "max_primary_refs": 8
+  },
+  "defaults": {
+    "priority": 50,
+    "load_strategy": "progressive"
+  },
+  "limits": {
+    "max_skill_name_length": 64,
+    "max_description_length": 1024,
+    "max_compatibility_length": 500
+  }
+}

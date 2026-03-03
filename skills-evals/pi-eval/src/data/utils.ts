@@ -2,6 +2,10 @@ import { access, mkdir, readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
 
+// Re-export path predicates from their canonical home so existing consumers
+// that import from data/utils.js continue to work unchanged.
+export { hasPathPrefix, isPathInsideRoot, normalizePath, resolveInsideRoot } from "../runtime/path-policy.js";
+
 export const sleep = (ms: number): Promise<void> =>
 	new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -33,23 +37,6 @@ export const parsePositiveInt = (
 	return parsed;
 };
 
-export const hasPathPrefix = (candidate: string, root: string): boolean =>
-	candidate === root ||
-	candidate.startsWith(root.endsWith(path.sep) ? root : `${root}${path.sep}`);
-
-export const isPathInsideRoot = (targetPath: string, rootPath: string): boolean => {
-	const relative = path.relative(rootPath, targetPath);
-	return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
-};
-
-export const resolveInsideRoot = (rootPath: string, relativePath: string): string => {
-	const resolved = path.resolve(rootPath, relativePath);
-	if (!isPathInsideRoot(resolved, rootPath)) {
-		throw new Error(`path escapes root: ${relativePath} (root=${rootPath})`);
-	}
-	return resolved;
-};
-
 export const uniqueSorted = (values: string[]): string[] =>
 	Array.from(
 		new Set(values.map((v) => v.trim()).filter((v) => v.length > 0)),
@@ -57,8 +44,6 @@ export const uniqueSorted = (values: string[]): string[] =>
 
 export const errorMessage = (error: unknown): string =>
 	error instanceof Error ? error.message : String(error);
-
-export const normalizePath = (value: string): string => value.replace(/\\/g, "/");
 
 const expandHome = (value: string): string => {
 	if (!value.startsWith("~")) {

@@ -11,11 +11,17 @@ from typing import Any
 
 from frontmatter_parser import parse_frontmatter_metadata, normalize_path
 
-SCHEMA_VERSION = "1"
-MAX_PRIMARY_REFS = 8
-ACTIVATION_POLICIES = {"user_intent", "workflow_state", "both"}
-DEFAULT_PRIORITY = 50
-DEFAULT_LOAD_STRATEGY = "progressive"
+_SCHEMA_PATH = Path(__file__).resolve().parent.parent / "skills-evals" / "schemas" / "skill-metadata.schema.json"
+_SCHEMA = json.loads(_SCHEMA_PATH.read_text()) if _SCHEMA_PATH.exists() else {}
+SCHEMA_VERSION: str = _SCHEMA.get("router_artifact", {}).get("schema_version", "1")
+MAX_PRIMARY_REFS: int = _SCHEMA.get("router_artifact", {}).get("max_primary_refs", 8)
+ACTIVATION_POLICIES: set[str] = set(_SCHEMA.get("activation_policies", ["user_intent", "workflow_state", "both"]))
+DEFAULT_PRIORITY: int = _SCHEMA.get("defaults", {}).get("priority", 50)
+DEFAULT_LOAD_STRATEGY: str = _SCHEMA.get("defaults", {}).get("load_strategy", "progressive")
+METADATA_KEYS: set[str] = set(_SCHEMA.get("metadata_keys", [
+    "id", "version", "task_types", "trigger_phrases", "priority",
+    "load_strategy", "activation_policy", "workflow_triggers", "route_exclude",
+]))
 TRIGGER_RE = r"`([^`]+)`"
 TRIGGER_PATTERN = __import__("re").compile(TRIGGER_RE)
 TRIGGER_REF_RE = __import__("re").compile(r"-\s*.*?->\s*`([^`]+)`")
@@ -268,17 +274,7 @@ def collect_routeable_refs(root: Path) -> tuple[dict[str, RefNode], dict[str, li
             text = ref_file.read_text(encoding="utf-8", errors="ignore")
             metadata = parse_frontmatter_metadata(
                 text,
-                fallback_keys={
-                    "id",
-                    "version",
-                    "task_types",
-                    "trigger_phrases",
-                    "priority",
-                    "load_strategy",
-                    "route_exclude",
-                    "activation_policy",
-                    "workflow_triggers",
-                },
+                fallback_keys=METADATA_KEYS,
             )
 
             route_exclude = as_bool(metadata.get("route_exclude", False))
@@ -355,16 +351,7 @@ def collect_skills(
         text = skill_file.read_text(encoding="utf-8", errors="ignore")
         metadata = parse_frontmatter_metadata(
             text,
-            fallback_keys={
-                "id",
-                "version",
-                "task_types",
-                "trigger_phrases",
-                "priority",
-                "load_strategy",
-                "activation_policy",
-                "workflow_triggers",
-            },
+            fallback_keys=METADATA_KEYS,
         )
 
         route_exclude = as_bool(metadata.get("route_exclude", False))
