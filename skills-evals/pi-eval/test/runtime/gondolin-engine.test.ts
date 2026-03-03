@@ -5,7 +5,7 @@ import path from "node:path";
 import { PassThrough } from "node:stream";
 import test from "node:test";
 import { VM } from "@earendil-works/gondolin";
-import { createGondolinSandboxEngine } from "./gondolin-engine.js";
+import { createGondolinSandboxEngine } from "../../src/runtime/gondolin-engine.js";
 
 const TEST_IMAGE_DIR = mkdtempSync(path.join(tmpdir(), "pi-eval-gondolin-image-"));
 writeFileSync(

@@ -90,6 +90,19 @@ export type RpcDiagnostics = {
 	anomalies: string[];
 };
 
+export type ReadBreakdownEntry = {
+	path: string;
+	category: "skill" | "ref" | "task";
+	bytes: number;
+	estTokens: number;
+};
+
+export type BootstrapBreakdownEntry = {
+	path: string;
+	bytes: number;
+	estTokens: number;
+};
+
 export type CaseRunResult = {
 	caseId: string;
 	dryRun: boolean;
@@ -114,6 +127,8 @@ export type CaseRunResult = {
 	workspaceDir?: string | null;
 	toolUsage?: ToolUsageSummary;
 	rpcDiagnostics?: RpcDiagnostics;
+	readBreakdown?: ReadBreakdownEntry[];
+	bootstrapBreakdown?: BootstrapBreakdownEntry[];
 };
 
 export type FailureCategory =

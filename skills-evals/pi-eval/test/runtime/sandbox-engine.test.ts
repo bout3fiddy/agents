@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { resolveProviderAllowedHosts } from "./sandbox-engine.js";
+import { resolveProviderAllowedHosts } from "../../src/runtime/sandbox-engine.js";
 
 test("resolveProviderAllowedHosts includes openai-codex alias", () => {
 	const hosts = resolveProviderAllowedHosts({
@@ -34,4 +34,3 @@ test("resolveProviderAllowedHosts fails closed for unknown providers", () => {
 		/network allowlist/,
 	);
 });
-

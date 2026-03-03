@@ -11,6 +11,7 @@ export type ReadCapture = {
 	refAttempts: Set<string>;
 	refInvocations: Set<string>;
 	refDenied: Set<string>;
+	readSizes: Map<string, number>;
 };
 
 const toRelativePath = (filePath: string, baseDir: string): string => {
@@ -115,6 +116,14 @@ export const captureReadDenied = (
 	captureRead(capture, absolutePath, agentDir, "denied");
 };
 
+export const captureReadSize = (
+	canonicalPath: string,
+	bytes: number,
+	capture: ReadCapture,
+): void => {
+	capture.readSizes.set(canonicalPath, bytes);
+};
+
 const toSortedArray = (items: Set<string>) => Array.from(items).sort();
 
 export const serializeReadCapture = (capture: ReadCapture) => ({
@@ -127,4 +136,7 @@ export const serializeReadCapture = (capture: ReadCapture) => ({
 	refAttempts: toSortedArray(capture.refAttempts),
 	refInvocations: toSortedArray(capture.refInvocations),
 	refDenied: toSortedArray(capture.refDenied),
+	readSizes: Object.fromEntries(
+		Array.from(capture.readSizes.entries()).sort(([a], [b]) => a.localeCompare(b)),
+	),
 });

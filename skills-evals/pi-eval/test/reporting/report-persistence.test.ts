@@ -3,9 +3,9 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
-import type { CaseEvaluation, EvalCase, EvalRunOptions, ModelSpec } from "../data/types.js";
-import { fileExists } from "../data/utils.js";
-import { persistRunReport } from "./report-persistence.js";
+import type { CaseEvaluation, EvalCase, EvalRunOptions, ModelSpec } from "../../src/data/types.js";
+import { fileExists } from "../../src/data/utils.js";
+import { persistRunReport } from "../../src/reporting/report-persistence.js";
 
 const TEST_MODEL: ModelSpec = {
 	provider: "openai",

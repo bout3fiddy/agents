@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { chmod, copyFile, cp, mkdir, readdir, rm } from "node:fs/promises";
+import { chmod, copyFile, cp, mkdir, readdir, rm, stat } from "node:fs/promises";
 import path from "node:path";
 import {
 	createSandbox,
@@ -9,7 +9,7 @@ import {
 	runEvalSync,
 } from "./sandbox.js";
 import { buildCaseResult, evaluateCase } from "./scoring.js";
-import type { BootstrapProfile, CaseEvaluation, EvalCase, ModelSpec } from "../data/types.js";
+import type { BootstrapBreakdownEntry, BootstrapProfile, CaseEvaluation, EvalCase, ModelSpec } from "../data/types.js";
 import { fileExists } from "../data/utils.js";
 import { DEFAULT_ALLOWED_TOOLS, mergeReadDenyPaths } from "./worker-contract.js";
 import { buildStubResult, runCaseProcess } from "./case-process.js";
@@ -26,6 +26,7 @@ type HomeSetup = {
 	bootstrapProfile: BootstrapProfile;
 	availableSkills: string[];
 	bootstrapManifestHash: string;
+	bootstrapBreakdown: BootstrapBreakdownEntry[];
 };
 
 const resolveBootstrapProfile = (evalCase: EvalCase): BootstrapProfile => {
@@ -266,10 +267,24 @@ const copyAuthIfPresent = async (authSourcePath: string | null, sandboxHomeDir: 
 	}
 };
 
+const measureDirBytes = async (dirPath: string): Promise<number> => {
+	let total = 0;
+	const entries = await readdir(dirPath, { withFileTypes: true });
+	for (const entry of entries) {
+		const entryPath = path.join(dirPath, entry.name);
+		if (entry.isDirectory()) {
+			total += await measureDirBytes(entryPath);
+		} else {
+			total += (await stat(entryPath)).size;
+		}
+	}
+	return total;
+};
+
 export const mirrorBootstrapPayloadToWorkspace = async (params: {
 	workspaceAgentDir: string;
 	homeDir: string;
-}): Promise<void> => {
+}): Promise<BootstrapBreakdownEntry[]> => {
 	const projections = [
 		{
 			source: path.join(params.homeDir, ".agents", "AGENTS.md"),
@@ -285,11 +300,22 @@ export const mirrorBootstrapPayloadToWorkspace = async (params: {
 		},
 	];
 
+	const breakdown: BootstrapBreakdownEntry[] = [];
 	for (const projection of projections) {
 		if (!(await fileExists(projection.source))) continue;
+		const sourceStat = await stat(projection.source);
+		const bytes = sourceStat.isDirectory()
+			? await measureDirBytes(projection.source)
+			: sourceStat.size;
+		breakdown.push({
+			path: projection.target,
+			bytes,
+			estTokens: Math.ceil(bytes / 4),
+		});
 		await mkdir(path.dirname(projection.target), { recursive: true });
 		await cp(projection.source, projection.target, { recursive: true, force: true });
 	}
+	return breakdown;
 };
 
 const setupCaseHome = async (params: {
@@ -313,6 +339,7 @@ const setupCaseHome = async (params: {
 				profile: bootstrapProfile,
 				availableSkills: [],
 			}),
+			bootstrapBreakdown: [],
 		};
 	}
 
@@ -321,7 +348,7 @@ const setupCaseHome = async (params: {
 		homeDir,
 		authSourcePath,
 	});
-	await mirrorBootstrapPayloadToWorkspace({
+	const bootstrapBreakdown = await mirrorBootstrapPayloadToWorkspace({
 		workspaceAgentDir,
 		homeDir,
 	});
@@ -335,6 +362,7 @@ const setupCaseHome = async (params: {
 			profile: bootstrapProfile,
 			availableSkills,
 		}),
+		bootstrapBreakdown,
 	};
 };
 
@@ -511,6 +539,7 @@ export const runCase = async (params: {
 			sandboxAgentDir: workspace.agentDir,
 		});
 		result.workspaceDir = workspace.agentDir;
+		result.bootstrapBreakdown = homeSetup.bootstrapBreakdown;
 		return evaluateCase(evalCase, result, {
 			expectedBootstrapManifestHash: homeSetup.bootstrapManifestHash,
 		});

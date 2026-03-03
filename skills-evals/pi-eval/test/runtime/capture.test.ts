@@ -7,7 +7,7 @@ import {
 	captureReadInvocation,
 	serializeReadCapture,
 	type ReadCapture,
-} from "./capture.js";
+} from "../../src/runtime/capture.js";
 
 const createReadCapture = (): ReadCapture => ({
 	skillAttempts: new Set<string>(),
@@ -19,6 +19,7 @@ const createReadCapture = (): ReadCapture => ({
 	refAttempts: new Set<string>(),
 	refInvocations: new Set<string>(),
 	refDenied: new Set<string>(),
+	readSizes: new Map<string, number>(),
 });
 
 test("captureRead tracks attempted, successful, and denied reference reads separately", () => {

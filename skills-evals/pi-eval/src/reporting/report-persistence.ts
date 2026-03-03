@@ -76,6 +76,8 @@ const writeRoutingTraceArtifacts = async (params: {
 			routing: evaluation.routing,
 			reasons: evaluation.reasons,
 			failureReasons: evaluation.failureReasons,
+			readBreakdown: evaluation.result.readBreakdown ?? [],
+			bootstrapBreakdown: evaluation.result.bootstrapBreakdown ?? [],
 		};
 		const tracePath = path.join(traceDir, `${toSafePathSegment(evaluation.caseId, "case")}.json`);
 		await writeFile(tracePath, JSON.stringify(payload, null, 2));

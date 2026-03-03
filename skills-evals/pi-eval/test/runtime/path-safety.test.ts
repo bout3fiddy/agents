@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import path from "node:path";
 import test from "node:test";
 import { tmpdir } from "node:os";
-import { assertManagedTempPath, toSafePathSegment } from "./path-safety.js";
+import { assertManagedTempPath, toSafePathSegment } from "../../src/runtime/path-safety.js";
 
 test("toSafePathSegment strips traversal and absolute-path characters", () => {
 	assert.equal(toSafePathSegment("../../etc/passwd"), "etc-passwd");

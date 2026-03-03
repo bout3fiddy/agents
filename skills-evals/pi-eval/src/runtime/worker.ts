@@ -14,12 +14,14 @@ import {
 	captureReadAttempt,
 	captureReadDenied,
 	captureReadInvocation,
+	captureReadSize,
+	isReferencePath,
 	isSkillPath,
 	serializeReadCapture,
 	type ReadCapture,
 } from "./capture.js";
 import { modelSpecFromModel } from "./model-registry.js";
-import type { CaseRunResult, TokenUsage, ToolUsageSummary } from "../data/types.js";
+import type { CaseRunResult, ReadBreakdownEntry, TokenUsage, ToolUsageSummary } from "../data/types.js";
 import { assertReadablePath, createPathDenyPolicy, type PathDenyPolicy } from "./read-policy.js";
 import { ensureDir } from "../data/utils.js";
 import { parseWorkerRuntimeConfig } from "./worker-contract.js";
@@ -138,7 +140,9 @@ const createEvalReadTool = async (
 						await assertReadablePath(absolutePath, denyPolicy);
 						if (dryRunEnabled && isSkillPath(absolutePath)) {
 							captureReadInvocation(absolutePath, agentDir, readCapture);
-							return Buffer.from(DRY_RUN_SKILL_STUB);
+							const stub = Buffer.from(DRY_RUN_SKILL_STUB);
+							captureReadSize(absolutePath, stub.length, readCapture);
+							return stub;
 						}
 						const stat = await fsStat(absolutePath);
 						if (stat.isDirectory()) {
@@ -148,10 +152,13 @@ const createEvalReadTool = async (
 								.sort((left, right) => left.localeCompare(right))
 								.join("\n");
 							captureReadInvocation(absolutePath, agentDir, readCapture);
-							return Buffer.from(listing);
+							const listingBuf = Buffer.from(listing);
+							captureReadSize(absolutePath, listingBuf.length, readCapture);
+							return listingBuf;
 						}
 						const content = await fsReadFile(absolutePath);
 						captureReadInvocation(absolutePath, agentDir, readCapture);
+						captureReadSize(absolutePath, content.length, readCapture);
 						return content;
 				} catch (error) {
 					captureReadDenied(absolutePath, agentDir, readCapture);
@@ -174,6 +181,7 @@ const createReadCapture = (): ReadCapture => ({
 	refAttempts: new Set<string>(),
 	refInvocations: new Set<string>(),
 	refDenied: new Set<string>(),
+	readSizes: new Map<string, number>(),
 });
 
 const isSuccessfulToolResultEvent = (event: Record<string, unknown>): boolean => {
@@ -296,6 +304,22 @@ const shouldFinalize = (acc: WorkerAccumulator, expectedTurns: number, force = f
 	return true;
 };
 
+const buildReadBreakdown = (readCapture: ReadCapture): ReadBreakdownEntry[] => {
+	const entries: ReadBreakdownEntry[] = [];
+	for (const [filePath, bytes] of readCapture.readSizes) {
+		let category: ReadBreakdownEntry["category"] = "task";
+		if (isSkillPath(filePath)) category = "skill";
+		else if (isReferencePath(filePath)) category = "ref";
+		entries.push({
+			path: filePath,
+			category,
+			bytes,
+			estTokens: Math.ceil(bytes / 4),
+		});
+	}
+	return entries.sort((a, b) => a.path.localeCompare(b.path));
+};
+
 const buildResult = (params: {
 	caseId: string;
 	dryRun: boolean;
@@ -361,6 +385,7 @@ const buildResult = (params: {
 		durationMs: Date.now() - startedAt,
 		errors,
 		toolUsage,
+		readBreakdown: buildReadBreakdown(readCapture),
 	};
 };
 

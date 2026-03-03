@@ -8,7 +8,7 @@ import {
 	cleanupSandboxHome,
 	createSandbox,
 	createSandboxHome,
-} from "./sandbox.js";
+} from "../../src/runtime/sandbox.js";
 
 const isInsideRoot = (candidate: string, root: string): boolean => {
 	const relative = path.relative(root, candidate);

@@ -7,7 +7,7 @@ import test from "node:test";
 import {
 	assertAllowedFlags,
 	resolveCasesPath,
-} from "./validation.js";
+} from "../../src/cli/validation.js";
 
 test("assertAllowedFlags rejects unknown flags", () => {
 	assert.doesNotThrow(() =>

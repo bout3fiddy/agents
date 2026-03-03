@@ -3,14 +3,14 @@ import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { FORBIDDEN_READ_ERROR, assertReadablePath, createPathDenyPolicy } from "./read-policy.js";
+import { FORBIDDEN_READ_ERROR, assertReadablePath, createPathDenyPolicy } from "../../src/runtime/read-policy.js";
 import {
 	FORBIDDEN_WORKSPACE_VIOLATION,
 	assertWithinSandboxBoundary,
 	createSandboxBoundary,
 	extractPathCandidates,
 	wrapToolWithSandboxBoundary,
-} from "./sandbox-boundary.js";
+} from "../../src/runtime/sandbox-boundary.js";
 
 test("assertReadablePath denies reads that match logical deny roots", async () => {
 	const cwd = await mkdtemp(path.join(tmpdir(), "pi-eval-deny-logical-"));

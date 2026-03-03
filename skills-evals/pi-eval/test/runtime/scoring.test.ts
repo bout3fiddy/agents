@@ -4,8 +4,8 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
-import type { BootstrapProfile, CaseRunResult, EvalCase } from "../data/types.js";
-import { evaluateCase } from "./scoring.js";
+import type { BootstrapProfile, CaseRunResult, EvalCase } from "../../src/data/types.js";
+import { evaluateCase } from "../../src/runtime/scoring.js";
 
 const buildManifestHash = (
 	caseId: string,

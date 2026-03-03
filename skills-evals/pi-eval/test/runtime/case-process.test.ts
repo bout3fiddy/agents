@@ -4,9 +4,9 @@ import { chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
-import type { EvalCase, ModelSpec } from "../data/types.js";
-import { runCaseProcess } from "./case-process.js";
-import type { SandboxEngine } from "./sandbox-engine.js";
+import type { EvalCase, ModelSpec } from "../../src/data/types.js";
+import { runCaseProcess } from "../../src/runtime/case-process.js";
+import type { SandboxEngine } from "../../src/runtime/sandbox-engine.js";
 
 const TEST_MODEL: ModelSpec = {
 	provider: "openai",
