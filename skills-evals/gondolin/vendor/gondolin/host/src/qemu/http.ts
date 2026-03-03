@@ -117,6 +117,17 @@ export type HttpSession = {
   sentContinue?: boolean;
 };
 
+function resetTaintState(
+  backend: QemuNetworkBackend,
+  httpSession: HttpSession,
+) {
+  if (httpSession.upstreamTainted && httpSession.upstreamOriginKey) {
+    evictSharedDispatcher(backend, httpSession.upstreamOriginKey);
+  }
+  httpSession.upstreamTainted = false;
+  httpSession.upstreamOriginKey = null;
+}
+
 function getMaxHttpStreamingPendingBytes(backend: QemuNetworkBackend): number {
   let maxPending = 0;
   for (const session of backend.tcpSessions.values()) {
@@ -730,8 +741,7 @@ export async function handleHttpDataWithWriter(
         });
       } finally {
         releaseHttpConcurrency?.();
-        httpSession.upstreamTainted = false;
-        httpSession.upstreamOriginKey = null;
+        resetTaintState(backend, httpSession);
         httpSession.processing = false;
         httpSession.closed = true;
         options.finish();
@@ -919,8 +929,7 @@ export async function handleHttpDataWithWriter(
         } finally {
           releaseHttpConcurrency?.();
           cleanupStreamingBodyState(backend, httpSession);
-          httpSession.upstreamTainted = false;
-          httpSession.upstreamOriginKey = null;
+          resetTaintState(backend, httpSession);
           httpSession.processing = false;
           if (!httpSession.closed) {
             httpSession.closed = true;
@@ -1023,8 +1032,7 @@ export async function handleHttpDataWithWriter(
       }
     } finally {
       releaseHttpConcurrency?.();
-      httpSession.upstreamTainted = false;
-      httpSession.upstreamOriginKey = null;
+      resetTaintState(backend, httpSession);
       httpSession.processing = false;
       if (!httpSession.closed) {
         httpSession.closed = true;
@@ -1051,8 +1059,7 @@ export async function handleHttpDataWithWriter(
 
     // Abort any active upstream body stream.
     cleanupStreamingBodyState(backend, httpSession, error);
-    httpSession.upstreamTainted = false;
-    httpSession.upstreamOriginKey = null;
+    resetTaintState(backend, httpSession);
 
     httpSession.closed = true;
     options.finish();
@@ -1225,8 +1232,8 @@ export async function fetchHookRequestAndRespond(
 
     /** whether the initial body stream carries a request body */
     initialBodyStreamHasBody?: boolean;
-    /** optional session state for dispatcher taint tracking */
-    httpSession?: HttpSession;
+    /** session state for dispatcher taint tracking */
+    httpSession: HttpSession;
   },
 ) {
   const {
@@ -1243,13 +1250,6 @@ export async function fetchHookRequestAndRespond(
   const fetcher = backend.options.fetch ?? undiciFetch;
 
   let pendingRequest: InternalHttpRequest = initialRequest;
-
-  const maybeEvictTaintedDispatcher = (originKey: string | null) => {
-    if (!httpSession?.upstreamTainted) return;
-    const key = httpSession.upstreamOriginKey ?? originKey;
-    if (!key) return;
-    evictSharedDispatcher(backend, key);
-  };
 
   for (
     let redirectCount = 0;
@@ -1323,9 +1323,7 @@ export async function fetchHookRequestAndRespond(
     const originKey = useDefaultFetch
       ? `${protocol}://${currentUrl.hostname}:${port}`
       : null;
-    if (httpSession) {
-      httpSession.upstreamOriginKey = originKey;
-    }
+    httpSession.upstreamOriginKey = originKey;
     const dispatcher = useDefaultFetch
       ? getCheckedDispatcher(backend, {
           hostname: currentUrl.hostname,
@@ -1501,7 +1499,6 @@ export async function fetchHookRequestAndRespond(
         normalizeHookResponseForGuest(hookResponse, currentRequest.method),
         httpVersion,
       );
-      maybeEvictTaintedDispatcher(originKey);
       return;
     }
 
@@ -1586,7 +1583,6 @@ export async function fetchHookRequestAndRespond(
         );
       }
 
-      maybeEvictTaintedDispatcher(originKey);
       return;
     }
 
@@ -1649,7 +1645,6 @@ export async function fetchHookRequestAndRespond(
         `http bridge body complete ${requestLabel} ${hookResponse.body.length} bytes in ${elapsed}ms`,
       );
     }
-    maybeEvictTaintedDispatcher(originKey);
     return;
   }
 }

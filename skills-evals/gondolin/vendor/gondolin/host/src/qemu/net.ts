@@ -69,6 +69,8 @@ import type {
 } from "./contracts.ts";
 import { QemuIcmpTracker, type IcmpTiming } from "./icmp.ts";
 
+const GUEST_CLOSED_ERR = new Error("guest closed");
+
 export const DEFAULT_MAX_HTTP_BODY_BYTES = 64 * 1024 * 1024;
 // Default cap for buffering upstream HTTP *responses* (not streaming).
 // This primarily applies when httpHooks.onResponse is installed.
@@ -908,7 +910,7 @@ export class QemuNetworkBackend extends EventEmitter {
     session.pendingWrites = [];
     session.pendingWriteBytes = 0;
     session.flowControlPaused = false;
-    this.resolveFlowResume(key);
+    this.settleFlowResume(key);
 
     this.stack?.handleTcpError({ key });
     this.tcpSessions.delete(key);
@@ -986,7 +988,7 @@ export class QemuNetworkBackend extends EventEmitter {
         session.http.upstreamTainted = true;
         const controller = session.http.streamingBody.controller;
         try {
-          controller?.error(new Error("guest closed"));
+          controller?.error(GUEST_CLOSED_ERR);
         } catch {
           // ignore
         }
@@ -995,12 +997,15 @@ export class QemuNetworkBackend extends EventEmitter {
         updateQemuRxPauseState(this);
       }
 
+      // NB: fetchHookRequestAndRespond holds its own reference to the HttpSession,
+      // so setting session.http = undefined does not invalidate the taint flag for
+      // the in-flight request — the taint is read and cleared inside http.ts.
       session.http = undefined;
       session.ws = undefined;
       session.pendingWrites = [];
       session.pendingWriteBytes = 0;
       session.flowControlPaused = false;
-      this.resolveFlowResume(message.key, new Error("guest closed"));
+      this.settleFlowResume(message.key, GUEST_CLOSED_ERR);
       if (session.tls) {
         if (message.destroy) {
           session.tls.socket.destroy();
@@ -1039,14 +1044,14 @@ export class QemuNetworkBackend extends EventEmitter {
     if (session.socket) {
       session.socket.resume();
     }
-    this.resolveFlowResume(message.key);
+    this.settleFlowResume(message.key);
   }
 
   /** @internal */
   waitForFlowResume(key: string): Promise<void> {
     const session = this.tcpSessions.get(key);
     if (!session) {
-      return Promise.reject(new Error("guest closed"));
+      return Promise.reject(GUEST_CLOSED_ERR);
     }
     if (!session.flowControlPaused) {
       return Promise.resolve();
@@ -1059,16 +1064,13 @@ export class QemuNetworkBackend extends EventEmitter {
   }
 
   /** @internal */
-  resolveFlowResume(key: string, err?: Error) {
+  settleFlowResume(key: string, err?: Error) {
     const waiters = this.flowResumeWaiters.get(key);
     if (!waiters) return;
     this.flowResumeWaiters.delete(key);
-    const session = this.tcpSessions.get(key);
     for (const waiter of waiters) {
       if (err) {
         waiter.reject(err);
-      } else if (!session) {
-        waiter.reject(new Error("guest closed"));
       } else {
         waiter.resolve();
       }
@@ -1102,14 +1104,14 @@ export class QemuNetworkBackend extends EventEmitter {
 
     socket.on("close", () => {
       this.stack?.handleTcpClosed({ key });
-      this.resolveFlowResume(key);
+      this.settleFlowResume(key);
       cleanupSshTcpSession(this, session);
       this.tcpSessions.delete(key);
     });
 
     socket.on("error", () => {
       this.stack?.handleTcpError({ key });
-      this.resolveFlowResume(key);
+      this.settleFlowResume(key);
       cleanupSshTcpSession(this, session);
       this.tcpSessions.delete(key);
     });
@@ -1153,7 +1155,7 @@ export class QemuNetworkBackend extends EventEmitter {
 
     tlsSocket.on("close", () => {
       this.stack?.handleTcpClosed({ key });
-      this.resolveFlowResume(key);
+      this.settleFlowResume(key);
       this.tcpSessions.delete(key);
     });
 
