@@ -1496,3 +1496,84 @@ test("network-stack: high-priority TX evicts low-priority frames when capped", (
     "expected ARP reply to be present despite low-priority queue being full",
   );
 });
+
+/**
+ * Helper: count TCP payload bytes from raw QEMU TX output.
+ * Parses Ethernet → IPv4 → TCP, sums payload bytes (after TCP header).
+ */
+function countTcpPayloadBytes(txBuf: Buffer): number {
+  if (txBuf.length === 0) return 0;
+  const frames = decodeFramesFromQemuData(txBuf);
+  let total = 0;
+  for (const frame of frames) {
+    if (frame.length < 14) continue;
+    const etherType = frame.readUInt16BE(12);
+    if (etherType !== 0x0800) continue; // IPv4 only
+    const ipPayload = frame.subarray(14);
+    if (ipPayload.length < 20) continue;
+    const protocol = ipPayload[9];
+    if (protocol !== 6) continue; // TCP only
+    const ihl = (ipPayload[0] & 0x0f) * 4;
+    const ipTotalLen = ipPayload.readUInt16BE(2);
+    const tcpSegment = ipPayload.subarray(ihl, ipTotalLen);
+    if (tcpSegment.length < 20) continue;
+    const tcpDataOffset = (tcpSegment[12] >> 4) * 4;
+    const payloadLen = tcpSegment.length - tcpDataOffset;
+    if (payloadLen > 0) total += payloadLen;
+  }
+  return total;
+}
+
+test("network-stack: drainOutboundTcp respects per-tick burst limit", async () => {
+  const gatewayMac = mac([0x5a, 0x94, 0xef, 0xe4, 0x0c, 0xdd]);
+  const vmMac = mac([0x02, 0x00, 0x00, 0x00, 0x00, 0x01]);
+  let key = "";
+
+  const stack = new NetworkStack({
+    gatewayMac,
+    vmMac,
+    dnsServers: ["8.8.8.8"],
+    callbacks: {
+      onUdpSend: () => {},
+      onTcpConnect: (m) => (key = m.key),
+      onTcpSend: () => {},
+      onTcpClose: () => {},
+      onTcpPause: () => {},
+      onTcpResume: () => {},
+    },
+  });
+
+  const srcIP = ip([192, 168, 127, 3]);
+  const dstIP = ip([93, 184, 216, 34]);
+  const BURST_LIMIT = 16 * 1024;
+
+  // 3-way handshake: SYN → SYN-ACK → ACK
+  stack.handleTCP(
+    buildTcpSegment({ srcPort: 50001, dstPort: 80, seq: 1, ack: 0, flags: 0x02 }),
+    srcIP, dstIP,
+  );
+  stack.handleTcpConnected({ key });
+  drainAllQemuTx(stack);
+  const session = (stack as any).natTable.get(key);
+  stack.handleTCP(
+    buildTcpSegment({ srcPort: 50001, dstPort: 80, seq: 2, ack: session.mySeq, flags: 0x10 }),
+    srcIP, dstIP,
+  );
+
+  // Queue 48KB — 3× the burst limit.
+  stack.handleTcpData({ key, data: Buffer.alloc(48 * 1024, 0x42) });
+
+  // First drain must send at most one burst of TCP payload.
+  const firstDrainBytes = countTcpPayloadBytes(drainAllQemuTx(stack));
+  assert.ok(firstDrainBytes > 0, `expected data, got ${firstDrainBytes}`);
+  assert.ok(
+    firstDrainBytes <= BURST_LIMIT,
+    `first drain should respect burst limit: ${firstDrainBytes} <= ${BURST_LIMIT}`,
+  );
+
+  // Remaining data arrives via setImmediate continuation.
+  const remaining = await new Promise<number>((resolve) => {
+    setImmediate(() => resolve(countTcpPayloadBytes(drainAllQemuTx(stack))));
+  });
+  assert.ok(remaining > 0, `continuation should drain remaining data (got ${remaining})`);
+});

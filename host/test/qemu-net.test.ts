@@ -14,6 +14,7 @@ import { Request as UndiciRequest, Response as UndiciResponse } from "undici";
 import { QemuNetworkBackend } from "../src/qemu/net.ts";
 import { bridgeSshExecChannel, isSshFlowAllowed } from "../src/qemu/ssh.ts";
 import {
+  HttpReceiveBuffer,
   HttpRequestBlockedError,
   closeSharedDispatchers,
   createLookupGuard,
@@ -115,6 +116,14 @@ async function fetchHookAndRespond(
     httpVersion,
     write,
     waitForWritable,
+    httpSession: {
+      buffer: new HttpReceiveBuffer(),
+      processing: false,
+      closed: false,
+      upstreamTainted: false,
+      upstreamOriginKey: null,
+      sentContinue: false,
+    },
   });
 }
 
