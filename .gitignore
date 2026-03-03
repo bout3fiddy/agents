@@ -25,7 +25,7 @@ docs/
 venv*/
 skills-evals/specs/pi-eval/logs/
 skills-evals/specs/
-!skills-evals/generated/
+!output/
 skills-evals/fixtures/review/
 skills-evals/logs/
 skills-evals/gondolin/image/current/*

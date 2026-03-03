@@ -236,6 +236,15 @@ const setupCaseWorkspace = async (evalCase: EvalCase, agentDir: string): Promise
 	};
 };
 
+const stageFixtures = async (sandboxDir: string, mapping: Record<string, string>): Promise<void> => {
+	for (const [neutralPath, realPath] of Object.entries(mapping)) {
+		const source = path.join(sandboxDir, realPath);
+		const target = path.join(sandboxDir, neutralPath);
+		await mkdir(path.dirname(target), { recursive: true });
+		await copyFile(source, target);
+	}
+};
+
 export const hardenNoPayloadWorkspace = async (workspaceAgentDir: string): Promise<void> => {
 	const cleanupTargets = NO_PAYLOAD_WORKSPACE_BLOCKLIST.map((entry) =>
 		path.join(workspaceAgentDir, entry),
@@ -455,6 +464,9 @@ export const runCase = async (params: {
 	let homeDir: string | null = null;
 	try {
 		workspace = await setupCaseWorkspace(evalCase, agentDir);
+		if (evalCase.fixtureMapping) {
+			await stageFixtures(workspace.sandboxDir, evalCase.fixtureMapping);
+		}
 		if (bootstrapProfile === "no_payload") {
 			await hardenNoPayloadWorkspace(workspace.agentDir);
 		}

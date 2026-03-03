@@ -86,7 +86,7 @@ export const createSandbox = async (agentDir: string, caseId: string): Promise<s
 	for (const relativePath of WORKSPACE_INCLUDE_PATHS) {
 		await copyWorkspaceEntry({ agentDir, sandboxDir, relativePath });
 	}
-	await mkdir(path.join(sandboxDir, "skills-evals", "generated"), { recursive: true });
+	await mkdir(path.join(sandboxDir, "output"), { recursive: true });
 	return sandboxDir;
 };
 

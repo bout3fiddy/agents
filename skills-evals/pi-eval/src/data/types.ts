@@ -40,6 +40,7 @@ export type EvalCase = {
 	tokenBudget?: number | null;
 	assertions?: string[];
 	notes?: string;
+	fixtureMapping?: Record<string, string>;
 	persistArtifacts?: boolean;
 	variants?: EvalCaseVariant[];
 };

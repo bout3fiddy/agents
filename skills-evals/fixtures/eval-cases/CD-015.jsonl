@@ -2,12 +2,15 @@
   "id": "CD-015",
   "suite": "codequality",
   "prompt": [
-    "Build an HTTP middleware pipeline in {{artifactPath}}.",
-    "Import Request, Response, and Context from skills-evals/fixtures/codequality/cd015/http_types.py.",
-    "The pipeline should chain handlers for auth, validation, rate limiting, and error formatting.",
-    "Handlers must be able to short-circuit the chain and pass typed context between stages.",
-    "Include a sample usage block at the bottom that wires up at least 3 middleware handlers."
+    "I have an HTTP types module at lib/http_types.py.",
+    "Build a composable middleware pipeline in {{artifactPath}} that uses those types.",
+    "Chain handlers for auth, validation, rate limiting, and error formatting.",
+    "Handlers should be able to short-circuit and pass context between stages.",
+    "Wire up at least 3 middleware handlers in a sample usage block at the bottom."
   ],
+  "fixtureMapping": {
+    "lib/http_types.py": "skills-evals/fixtures/codequality/cd015/http_types.py"
+  },
   "expectedSkills": [],
   "disallowedSkills": [],
   "expectedRefs": [],
