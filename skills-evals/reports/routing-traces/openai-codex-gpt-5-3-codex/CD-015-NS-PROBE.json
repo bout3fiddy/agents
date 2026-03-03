@@ -1,0 +1,93 @@
+{
+  "caseId": "CD-015-NS-PROBE",
+  "mode": "single",
+  "status": "pass",
+  "runTimestamp": "2026-03-03T11:50:30.352Z",
+  "model": "openai-codex/gpt-5.3-codex",
+  "expectedSkills": [],
+  "expectedRefs": [],
+  "toolUsage": {
+    "allowedTools": [
+      "read"
+    ],
+    "writeCalls": 0,
+    "editCalls": 0,
+    "writeFailures": 0,
+    "editFailures": 0
+  },
+  "rpcDiagnostics": {
+    "rawLineCount": 90,
+    "parsedEventCount": 90,
+    "parseErrorCount": 0,
+    "eventCounts": {
+      "response": 1,
+      "agent_start": 1,
+      "turn_start": 2,
+      "message_start": 4,
+      "message_end": 4,
+      "message_update": 73,
+      "tool_execution_start": 1,
+      "tool_execution_end": 1,
+      "turn_end": 2,
+      "agent_end": 1
+    },
+    "autoRetryStartCount": 0,
+    "autoRetryEndCount": 0,
+    "terminalAgentErrorCount": 0,
+    "lastAgentStopReason": "stop",
+    "lastAgentErrorMessage": null,
+    "toolCalls": [
+      {
+        "id": "call_wzOk6zcD8NFjRCeXBjWFeE8r|fc_0f764a11de8d019b0169a6cad85ec081918d1b31cc8a1140dd",
+        "toolName": "read",
+        "startCount": 0,
+        "deltaCount": 11,
+        "endCount": 0,
+        "executionStartCount": 1,
+        "executionEndCount": 1,
+        "executionSuccessCount": 1,
+        "executionFailureCount": 0,
+        "maxPartialJsonLength": 33,
+        "seenInAgentEnd": true
+      }
+    ],
+    "anomalies": []
+  },
+  "outputTextPreview": "I couldn’t read that file because it doesn’t exist at the given path:\n\n`/workspace/skills/coding/SKILL.md` (ENOENT)\n\nIf you want, share the correct path and I’ll output its exact contents.",
+  "resultErrors": [
+    "forbidden read: /var/folders/w7/3c51j_5j2gq4n13mljt4rrb80000gn/T/pi-eval-sandbox/CD-015-NS-PROBE/1fc6dc34-0cbe-4064-9fad-232a19f940c8/skills/coding/SKILL.md"
+  ],
+  "routing": {
+    "readSkills": [
+      "coding"
+    ],
+    "readSkillFiles": [
+      "coding"
+    ],
+    "readRefs": [],
+    "attemptedSkills": [
+      "coding"
+    ],
+    "successfulSkills": [
+      "coding"
+    ],
+    "deniedSkills": [],
+    "attemptedSkillFiles": [
+      "coding"
+    ],
+    "successfulSkillFiles": [
+      "coding"
+    ],
+    "deniedSkillFiles": [],
+    "attemptedRefs": [],
+    "successfulRefs": [],
+    "deniedRefs": [],
+    "missingSkillFileReads": [],
+    "missingRefs": [],
+    "unexpectedRefs": []
+  },
+  "reasons": [],
+  "failureReasons": [],
+  "readBreakdown": [],
+  "bootstrapBreakdown": []
+}

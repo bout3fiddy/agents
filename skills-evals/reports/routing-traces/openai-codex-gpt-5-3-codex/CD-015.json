@@ -1,0 +1,367 @@
+{
+  "caseId": "CD-015",
+  "mode": "single",
+  "status": "pass",
+  "runTimestamp": "2026-03-03T12:22:11.542Z",
+  "model": "openai-codex/gpt-5.3-codex",
+  "expectedSkills": [
+    "coding"
+  ],
+  "expectedRefs": [
+    "skills/coding/references/code-smells/smells/ai-code-smell.md"
+  ],
+  "tokens": {
+    "input": 30379,
+    "output": 3376,
+    "cacheRead": 106496,
+    "cacheWrite": 0,
+    "totalTokens": 140251
+  },
+  "turnBreakdown": [
+    {
+      "turn": 1,
+      "input": 30379,
+      "output": 3376,
+      "cacheRead": 106496,
+      "cacheWrite": 0,
+      "totalTokens": 140251
+    }
+  ],
+  "toolUsage": {
+    "allowedTools": [
+      "edit",
+      "read",
+      "write"
+    ],
+    "writeCalls": 1,
+    "editCalls": 0,
+    "writeFailures": 0,
+    "editFailures": 0
+  },
+  "rpcDiagnostics": {
+    "rawLineCount": 1960,
+    "parsedEventCount": 1960,
+    "parseErrorCount": 0,
+    "eventCounts": {
+      "response": 1,
+      "agent_start": 1,
+      "turn_start": 10,
+      "message_start": 29,
+      "message_end": 29,
+      "message_update": 1843,
+      "tool_execution_start": 18,
+      "tool_execution_end": 18,
+      "turn_end": 10,
+      "agent_end": 1
+    },
+    "autoRetryStartCount": 0,
+    "autoRetryEndCount": 0,
+    "terminalAgentErrorCount": 0,
+    "lastAgentStopReason": "stop",
+    "lastAgentErrorMessage": null,
+    "toolCalls": [
+      {
+        "id": "call_7I6sayvGe654A6tFYVGPtLBV|fc_080f6aa3da7e18460169a6d24559b4819186ae31c28e09c696",
+        "toolName": "read",
+        "startCount": 0,
+        "deltaCount": 2,
+        "endCount": 0,
+        "executionStartCount": 1,
+        "executionEndCount": 1,
+        "executionSuccessCount": 1,
+        "executionFailureCount": 0,
+        "maxPartialJsonLength": 78,
+        "seenInAgentEnd": true
+      },
+      {
+        "id": "call_ARMfRMTT2v7pJ7e2kueLZYV0|fc_080f6aa3da7e18460169a6d24fb2a88191ad22adb381a27d83",
+        "toolName": "read",
+        "startCount": 0,
+        "deltaCount": 2,
+        "endCount": 0,
+        "executionStartCount": 1,
+        "executionEndCount": 1,
+        "executionSuccessCount": 1,
+        "executionFailureCount": 0,
+        "maxPartialJsonLength": 74,
+        "seenInAgentEnd": true
+      },
+      {
+        "id": "call_AzAoIuVvz6uBjROB8BwiLMym|fc_080f6aa3da7e18460169a6d253dbf48191a85f7224b40d2b99",
+        "toolName": "read",
+        "startCount": 0,
+        "deltaCount": 2,
+        "endCount": 0,
+        "executionStartCount": 1,
+        "executionEndCount": 1,
+        "executionSuccessCount": 1,
+        "executionFailureCount": 0,
+        "maxPartialJsonLength": 69,
+        "seenInAgentEnd": true
+      },
+      {
+        "id": "call_b7ssUVSanDKDpDRGtMl4mAZR|fc_080f6aa3da7e18460169a6d243362881919c9650413ceabb5d",
+        "toolName": "read",
+        "startCount": 0,
+        "deltaCount": 18,
+        "endCount": 0,
+        "executionStartCount": 1,
+        "executionEndCount": 1,
+        "executionSuccessCount": 1,
+        "executionFailureCount": 0,
+        "maxPartialJsonLength": 55,
+        "seenInAgentEnd": true
+      },
+      {
+        "id": "call_bW5KoVNvudAzPvnCfHBGlMWN|fc_080f6aa3da7e18460169a6d23e54388191b42d9b20a9a63a90",
+        "toolName": "read",
+        "startCount": 0,
+        "deltaCount": 1,
+        "endCount": 0,
+        "executionStartCount": 1,
+        "executionEndCount": 1,
+        "executionSuccessCount": 1,
+        "executionFailureCount": 0,
+        "maxPartialJsonLength": 55,
+        "seenInAgentEnd": true
+      },
+      {
+        "id": "call_cudhrkPvCrpwCVDPZ49xMlcf|fc_080f6aa3da7e18460169a6d24fb2988191a2b84ab36d2a5b01",
+        "toolName": "read",
+        "startCount": 0,
+        "deltaCount": 3,
+        "endCount": 0,
+        "executionStartCount": 1,
+        "executionEndCount": 1,
+        "executionSuccessCount": 1,
+        "executionFailureCount": 0,
+        "maxPartialJsonLength": 74,
+        "seenInAgentEnd": true
+      },
+      {
+        "id": "call_HKA5EL2WgeawcbA8EHAaYJke|fc_080f6aa3da7e18460169a6d24559c4819198d6c5072e664b96",
+        "toolName": "read",
+        "startCount": 0,
+        "deltaCount": 1,
+        "endCount": 0,
+        "executionStartCount": 1,
+        "executionEndCount": 1,
+        "executionSuccessCount": 1,
+        "executionFailureCount": 0,
+        "maxPartialJsonLength": 90,
+        "seenInAgentEnd": true
+      },
+      {
+        "id": "call_kzvokSyWbpDien0QhL7ZqHPb|fc_080f6aa3da7e18460169a6d23e5428819190c9fd9789f8aac9",
+        "toolName": "read",
+        "startCount": 0,
+        "deltaCount": 2,
+        "endCount": 0,
+        "executionStartCount": 1,
+        "executionEndCount": 1,
+        "executionSuccessCount": 1,
+        "executionFailureCount": 0,
+        "maxPartialJsonLength": 57,
+        "seenInAgentEnd": true
+      },
+      {
+        "id": "call_NGk2ZO56nRZXClB1JDGJfnUc|fc_080f6aa3da7e18460169a6d24fb2c8819180ac9cbda19d9e91",
+        "toolName": "read",
+        "startCount": 0,
+        "deltaCount": 1,
+        "endCount": 0,
+        "executionStartCount": 1,
+        "executionEndCount": 1,
+        "executionSuccessCount": 1,
+        "executionFailureCount": 0,
+        "maxPartialJsonLength": 74,
+        "seenInAgentEnd": true
+      },
+      {
+        "id": "call_NsQdYwfNdME2CrhmAba1DgNL|fc_080f6aa3da7e18460169a6d253dbec81919299faf7810b50e7",
+        "toolName": "read",
+        "startCount": 0,
+        "deltaCount": 3,
+        "endCount": 0,
+        "executionStartCount": 1,
+        "executionEndCount": 1,
+        "executionSuccessCount": 1,
+        "executionFailureCount": 0,
+        "maxPartialJsonLength": 72,
+        "seenInAgentEnd": true
+      },
+      {
+        "id": "call_pRWxX5jvTMkMxzsNm86e06fM|fc_080f6aa3da7e18460169a6d24acae48191af421cbe02a1166e",
+        "toolName": "read",
+        "startCount": 0,
+        "deltaCount": 1,
+        "endCount": 0,
+        "executionStartCount": 1,
+        "executionEndCount": 1,
+        "executionSuccessCount": 1,
+        "executionFailureCount": 0,
+        "maxPartialJsonLength": 74,
+        "seenInAgentEnd": true
+      },
+      {
+        "id": "call_PZGZQt7mDJNrWzExKjw6LEMn|fc_080f6aa3da7e18460169a6d2486dd481918fdd97ef3235339a",
+        "toolName": "read",
+        "startCount": 0,
+        "deltaCount": 2,
+        "endCount": 0,
+        "executionStartCount": 1,
+        "executionEndCount": 1,
+        "executionSuccessCount": 1,
+        "executionFailureCount": 0,
+        "maxPartialJsonLength": 93,
+        "seenInAgentEnd": true
+      },
+      {
+        "id": "call_R7o7Eact6uAlZb3LLFMZE2QR|fc_080f6aa3da7e18460169a6d253dbfc819191ed3d06a42dd216",
+        "toolName": "read",
+        "startCount": 0,
+        "deltaCount": 1,
+        "endCount": 0,
+        "executionStartCount": 1,
+        "executionEndCount": 1,
+        "executionSuccessCount": 1,
+        "executionFailureCount": 0,
+        "maxPartialJsonLength": 70,
+        "seenInAgentEnd": true
+      },
+      {
+        "id": "call_tcocCg26ElkFQ3q9r6EIAD0z|fc_080f6aa3da7e18460169a6d24acad881919b16e0a192e25023",
+        "toolName": "read",
+        "startCount": 0,
+        "deltaCount": 2,
+        "endCount": 0,
+        "executionStartCount": 1,
+        "executionEndCount": 1,
+        "executionSuccessCount": 1,
+        "executionFailureCount": 0,
+        "maxPartialJsonLength": 75,
+        "seenInAgentEnd": true
+      },
+      {
+        "id": "call_uaqcN77g9jMxPFv0lJZxJhtJ|fc_080f6aa3da7e18460169a6d2486de481918e4adb9f16551c85",
+        "toolName": "read",
+        "startCount": 0,
+        "deltaCount": 1,
+        "endCount": 0,
+        "executionStartCount": 1,
+        "executionEndCount": 1,
+        "executionSuccessCount": 1,
+        "executionFailureCount": 0,
+        "maxPartialJsonLength": 102,
+        "seenInAgentEnd": true
+      },
+      {
+        "id": "call_V4xN1SC9jH2d2urDQcm62HLO|fc_080f6aa3da7e18460169a6d26f176481918c3aef75332cf290",
+        "toolName": "read",
+        "startCount": 0,
+        "deltaCount": 19,
+        "endCount": 0,
+        "executionStartCount": 1,
+        "executionEndCount": 1,
+        "executionSuccessCount": 1,
+        "executionFailureCount": 0,
+        "maxPartialJsonLength": 74,
+        "seenInAgentEnd": true
+      },
+      {
+        "id": "call_vLt5L2YyL9XnyhEj3jrYYpeh|fc_080f6aa3da7e18460169a6d25df1c88191bb28fcc67fd24605",
+        "toolName": "write",
+        "startCount": 0,
+        "deltaCount": 1457,
+        "endCount": 0,
+        "executionStartCount": 1,
+        "executionEndCount": 1,
+        "executionSuccessCount": 1,
+        "executionFailureCount": 0,
+        "maxPartialJsonLength": 5731,
+        "seenInAgentEnd": true
+      },
+      {
+        "id": "call_yT66oTSHwpkilpq3fUE7BFpR|fc_080f6aa3da7e18460169a6d253dbdc8191bb6042dd5f804bb0",
+        "toolName": "read",
+        "startCount": 0,
+        "deltaCount": 4,
+        "endCount": 0,
+        "executionStartCount": 1,
+        "executionEndCount": 1,
+        "executionSuccessCount": 1,
+        "executionFailureCount": 0,
+        "maxPartialJsonLength": 71,
+        "seenInAgentEnd": true
+      }
+    ],
+    "anomalies": []
+  },
+  "outputTextPreview": "Implemented ✅ `skills-evals/generated/codequality/cd015/solution.py` with a composable HTTP middleware pipeline that includes:\n\n- **Auth middleware** (`TokenAuth`)\n- **Validation middleware** (`JsonBodyValidation`)\n- **Rate limiting middleware** (`InMemoryRateLimit`)\n- **Error formatting middleware** (`ErrorFormatting`)\n\n### What it supports\n- **Middleware chaining** via `build_pipeline(...)`\n- **Short-circuiting**: any middleware can return `Response` early without calling `nxt(...)`\n- **Typed context flow** between stages using `PipelineContext(Context)` (adds typed fields like `validated_body`)\n- Importing `Request`, `Response`, and `Context` from the fixture file at  \n  `skills-evals/fixtures/codequality/cd015/http_types.py` (loaded directly from that path)\n\n### Sample usage included\nAt the bottom (`if __name__ == \"__main__\":`) I wired **4 middleware handlers** (more than the requested minimum 3) and demonstrated a request execution through the pipeline.",
+  "resultErrors": [],
+  "routing": {
+    "readSkills": [
+      "coding"
+    ],
+    "readSkillFiles": [
+      "coding"
+    ],
+    "readRefs": [
+      "skills/coding/references/code-smells/detection-signals.md",
+      "skills/coding/references/code-smells/index.md",
+      "skills/coding/references/code-smells/smells/ai-code-smell.md",
+      "skills/coding/references/code-smells/smells/speculative-generality.md"
+    ],
+    "attemptedSkills": [
+      "coding"
+    ],
+    "successfulSkills": [
+      "coding"
+    ],
+    "deniedSkills": [],
+    "attemptedSkillFiles": [
+      "coding"
+    ],
+    "successfulSkillFiles": [
+      "coding"
+    ],
+    "deniedSkillFiles": [],
+    "attemptedRefs": [
+      "skills/coding/references/code-smells/detection-signals.md",
+      "skills/coding/references/code-smells/index.md",
+      "skills/coding/references/code-smells/smells/ai-code-smell.md",
+      "skills/coding/references/code-smells/smells/speculative-generality.md"
+    ],
+    "successfulRefs": [
+      "skills/coding/references/code-smells/detection-signals.md",
+      "skills/coding/references/code-smells/index.md",
+      "skills/coding/references/code-smells/smells/ai-code-smell.md",
+      "skills/coding/references/code-smells/smells/speculative-generality.md"
+    ],
+    "deniedRefs": [],
+    "missingSkillFileReads": [],
+    "missingRefs": [],
+    "unexpectedRefs": [
+      "skills/coding/references/code-smells/detection-signals.md",
+      "skills/coding/references/code-smells/index.md",
+      "skills/coding/references/code-smells/smells/speculative-generality.md"
+    ]
+  },
+  "reasons": [],
+  "failureReasons": [],
+  "readBreakdown": [],
+  "bootstrapBreakdown": [
+    {
+      "path": "/var/folders/w7/3c51j_5j2gq4n13mljt4rrb80000gn/T/pi-eval-sandbox/CD-015/3c86dd20-6056-4942-8baf-50d5a959896d/AGENTS.md",
+      "bytes": 12585
+    },
+    {
+      "path": "/var/folders/w7/3c51j_5j2gq4n13mljt4rrb80000gn/T/pi-eval-sandbox/CD-015/3c86dd20-6056-4942-8baf-50d5a959896d/instructions/skills.router.min.json",
+      "bytes": 3978
+    },
+    {
+      "path": "/var/folders/w7/3c51j_5j2gq4n13mljt4rrb80000gn/T/pi-eval-sandbox/CD-015/3c86dd20-6056-4942-8baf-50d5a959896d/skills",
+      "bytes": 187357
+    }
+  ]
+}
