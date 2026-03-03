@@ -113,7 +113,6 @@ export type RpcToolCallDiagnostics = {
 	executionSuccessCount: number;
 	executionFailureCount: number;
 	maxPartialJsonLength: number;
-	seenInAgentEnd: boolean;
 };
 
 export type RpcDiagnostics = {

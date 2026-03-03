@@ -1,6 +1,5 @@
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
-import path from "node:path";
 import type {
 	BootstrapProfile,
 	CaseEvaluation,
@@ -10,7 +9,7 @@ import type {
 	FailureReason,
 	RoutingScorecard,
 } from "../data/types.js";
-import { normalizePath, uniqueSorted } from "../data/utils.js";
+import { normalizePath, resolveInsideRoot, uniqueSorted } from "../data/utils.js";
 
 const formatList = (values: string[]): string => `[${values.join(", ")}]`;
 
@@ -256,7 +255,7 @@ export const evaluateCase = async (
 			pushFailure("TASK_FAILURE", "missing workspace for file assertions");
 		} else {
 			for (const assertion of fileAssertions) {
-				const targetPath = path.join(result.workspaceDir, assertion.path);
+				const targetPath = resolveInsideRoot(result.workspaceDir, assertion.path);
 				let content = "";
 				try {
 					content = await readFile(targetPath, "utf-8");

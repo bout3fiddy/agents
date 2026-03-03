@@ -17,9 +17,11 @@ export const withTimeout = async <T>(
 			timeoutMs,
 		);
 	});
-	const result = await Promise.race([promise, timeoutPromise]);
-	clearTimeout(timeoutId!);
-	return result;
+	try {
+		return await Promise.race([promise, timeoutPromise]);
+	} finally {
+		clearTimeout(timeoutId!);
+	}
 };
 
 export const parsePositiveInt = (
@@ -38,6 +40,14 @@ export const hasPathPrefix = (candidate: string, root: string): boolean =>
 export const isPathInsideRoot = (targetPath: string, rootPath: string): boolean => {
 	const relative = path.relative(rootPath, targetPath);
 	return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
+};
+
+export const resolveInsideRoot = (rootPath: string, relativePath: string): string => {
+	const resolved = path.resolve(rootPath, relativePath);
+	if (!isPathInsideRoot(resolved, rootPath)) {
+		throw new Error(`path escapes root: ${relativePath} (root=${rootPath})`);
+	}
+	return resolved;
 };
 
 export const uniqueSorted = (values: string[]): string[] =>

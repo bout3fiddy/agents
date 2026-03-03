@@ -115,11 +115,12 @@ export const runEvalSync = async (params: {
 	authSourcePath?: string | null;
 }): Promise<void> => {
 	const { sourceAgentDir, homeDir, authSourcePath } = params;
-	const syncSourceDir = await createSyncSource(sourceAgentDir);
-	const syncScript = path.join(syncSourceDir, "bin", "sync.sh");
 
 	await acquireSyncSlot();
+	let syncSourceDir: string | null = null;
 	try {
+		syncSourceDir = await createSyncSource(sourceAgentDir);
+		const syncScript = path.join(syncSourceDir, "bin", "sync.sh");
 		if (!(await fileExists(syncScript))) {
 			throw new Error(`Sync script not found: ${syncScript}`);
 		}
@@ -172,6 +173,6 @@ export const runEvalSync = async (params: {
 		}
 	} finally {
 		releaseSyncSlot();
-		await rm(syncSourceDir, { recursive: true, force: true });
+		if (syncSourceDir) await rm(syncSourceDir, { recursive: true, force: true });
 	}
 };

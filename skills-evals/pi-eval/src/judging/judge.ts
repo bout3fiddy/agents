@@ -1,6 +1,5 @@
 import { spawn } from "node:child_process";
 import { readFile } from "node:fs/promises";
-import path from "node:path";
 import { createInterface } from "node:readline";
 import type {
 	CaseEvaluation,
@@ -12,7 +11,7 @@ import type {
 	ResolvedEvalCase,
 	TokenUsage,
 } from "../data/types.js";
-import { errorMessage } from "../data/utils.js";
+import { errorMessage, resolveInsideRoot } from "../data/utils.js";
 import { collectAssistantText, sumUsageFromMessages } from "../runtime/rpc-messages.js";
 
 type JudgeVariantInput = {
@@ -64,7 +63,7 @@ const formatToolSummary = (evaluation: CaseEvaluation): string => {
 const readArtifact = async (evalCase: ResolvedEvalCase, agentDir: string): Promise<string> => {
 	const assertions = evalCase.fileAssertions ?? [];
 	if (assertions.length === 0) return "(no artifact)";
-	const artifactPath = path.join(agentDir, assertions[0].path);
+	const artifactPath = resolveInsideRoot(agentDir, assertions[0].path);
 	try {
 		return await readFile(artifactPath, "utf-8");
 	} catch (error) {

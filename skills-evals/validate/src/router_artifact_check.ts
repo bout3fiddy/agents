@@ -44,8 +44,12 @@ const validateSkillNode = (skill: unknown, index: number): { errors: string[]; s
 		}
 	}
 
-	if (Object.hasOwn(skill, "path") && typeof skill.path !== "string") {
-		errors.push(`skills[${index}].path must be a string`);
+	if (Object.hasOwn(skill, "path")) {
+		if (typeof skill.path !== "string") {
+			errors.push(`skills[${index}].path must be a string`);
+		} else if (skill.path.trim().length === 0) {
+			errors.push(`skills[${index}].path must be a non-empty string`);
+		}
 	}
 
 	if (Object.hasOwn(skill, "task_types") && !Array.isArray(skill.task_types)) {

@@ -14,7 +14,7 @@ import {
 	POLICY_DENY_ASSERTION_PREFIX,
 } from "./scoring.js";
 import type { BootstrapBreakdownEntry, BootstrapProfile, CaseEvaluation, EvalCase, ModelSpec } from "../data/types.js";
-import { fileExists } from "../data/utils.js";
+import { fileExists, resolveInsideRoot } from "../data/utils.js";
 import { DEFAULT_ALLOWED_TOOLS, mergeReadDenyPaths } from "./worker-contract.js";
 import { buildStubResult, runCaseProcess } from "./case-process.js";
 import { FORBIDDEN_READ_ERROR, assertReadablePath, createPathDenyPolicy } from "./read-policy.js";
@@ -405,9 +405,9 @@ const persistCaseArtifacts = async (params: {
 }): Promise<void> => {
 	const artifactPaths = resolvePersistArtifactPaths(params.evalCase);
 	for (const artifactPath of artifactPaths) {
-		const sourcePath = path.join(params.sandboxAgentDir, artifactPath);
-		const targetPath = path.join(params.hostAgentDir, artifactPath);
 		try {
+			const sourcePath = resolveInsideRoot(params.sandboxAgentDir, artifactPath);
+			const targetPath = resolveInsideRoot(params.hostAgentDir, artifactPath);
 			await mkdir(path.dirname(targetPath), { recursive: true });
 			await copyFile(sourcePath, targetPath);
 		} catch {

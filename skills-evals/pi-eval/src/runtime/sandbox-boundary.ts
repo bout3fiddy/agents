@@ -35,6 +35,22 @@ const registerSandboxViolation = (boundary: SandboxBoundary, targetPath: string)
 	throw new Error(`${FORBIDDEN_WORKSPACE_VIOLATION}: Attempted to access path outside sandbox: ${targetPath}`);
 };
 
+const canonicalizeNearestParent = async (targetPath: string): Promise<string | null> => {
+	let current = targetPath;
+	const trailingSegments: string[] = [];
+	while (true) {
+		try {
+			const real = await fsRealpath(current);
+			return path.join(real, ...trailingSegments);
+		} catch {
+			const parent = path.dirname(current);
+			if (parent === current) return null;
+			trailingSegments.unshift(path.basename(current));
+			current = parent;
+		}
+	}
+};
+
 export const assertWithinSandboxBoundary = async (
 	rawPath: string,
 	boundary: SandboxBoundary,
@@ -45,8 +61,15 @@ export const assertWithinSandboxBoundary = async (
 	}
 	if (!boundary.sandboxRootCanonical) return;
 	const canonicalPath = await fsRealpath(resolvedPath).catch(() => null);
-	if (canonicalPath && !hasPathPrefix(canonicalPath, boundary.sandboxRootCanonical)) {
-		registerSandboxViolation(boundary, canonicalPath);
+	if (canonicalPath) {
+		if (!hasPathPrefix(canonicalPath, boundary.sandboxRootCanonical)) {
+			registerSandboxViolation(boundary, canonicalPath);
+		}
+	} else {
+		const parentCanonical = await canonicalizeNearestParent(resolvedPath);
+		if (parentCanonical && !hasPathPrefix(parentCanonical, boundary.sandboxRootCanonical)) {
+			registerSandboxViolation(boundary, resolvedPath);
+		}
 	}
 };
 

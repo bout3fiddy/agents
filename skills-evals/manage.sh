@@ -25,6 +25,17 @@ slug_from_id() {
 	printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | tr -cd 'a-z0-9'
 }
 
+# Must match traceFileName in pi-eval/src/reporting/report-persistence.ts
+# (replace colons with --, then apply toSafePathSegment sanitization)
+trace_file_name() {
+	local name="$1"
+	# Replace colons with double-dash (matches traceFileName `:` -> `--`)
+	name="${name//:/--}"
+	# Apply toSafePathSegment: replace non-safe chars with -, collapse separators, trim edges
+	name="$(printf '%s' "$name" | sed -E 's/[^a-zA-Z0-9._-]+/-/g; s/[-._]{2,}/-/g; s/^-+//; s/-+$//')"
+	printf '%s' "${name:-case}"
+}
+
 cmd_list() {
 	bun run "$LIST_SCRIPT" --cases-dir "$CASES_DIR"
 }
@@ -49,7 +60,20 @@ cmd_remove() {
 		exit 1
 	fi
 
+	# Strict case-id validation: only allow alphanumeric, dash, underscore, dot, colon
+	if [[ ! "$case_id" =~ ^[a-zA-Z0-9._:-]+$ ]]; then
+		echo "Error: invalid case ID (must match [a-zA-Z0-9._:-]+): $case_id" >&2
+		exit 1
+	fi
+
 	local jsonl_path="$CASES_DIR/${case_id}.jsonl"
+	# Verify resolved path is inside CASES_DIR to prevent traversal
+	local resolved_jsonl
+	resolved_jsonl="$(cd "$CASES_DIR" 2>/dev/null && realpath -m "${case_id}.jsonl" 2>/dev/null || echo "")"
+	if [[ -z "$resolved_jsonl" || "$resolved_jsonl" != "$CASES_DIR"/* ]]; then
+		echo "Error: case ID resolves outside cases dir: $case_id" >&2
+		exit 1
+	fi
 	if [[ ! -f "$jsonl_path" ]]; then
 		echo "Error: Case file not found: $jsonl_path" >&2
 		exit 1
@@ -79,18 +103,24 @@ console.log([tags ? '1' : '0', d.suite || '', tags].join('\t'));
 	# 1. JSONL definition
 	files_to_delete+=("$jsonl_path")
 
-	# 2. Routing traces — add known paths unconditionally; rm -f handles missing
+	# 2. Routing traces — use trace_file_name to match report-persistence.ts naming
 	if [[ "$is_bundle" == "1" ]]; then
 		IFS=',' read -ra tags <<< "$variant_tags"
 		for model_dir in "$REPORTS_DIR/routing-traces"/*/; do
 			for tag in "${tags[@]}"; do
-				files_to_delete+=("${model_dir}${case_id}--${tag}.json")
+				local variant_trace
+				variant_trace="$(trace_file_name "${case_id}:${tag}")"
+				files_to_delete+=("${model_dir}${variant_trace}.json")
 			done
-			files_to_delete+=("${model_dir}${case_id}--verdict.json")
+			local verdict_trace
+			verdict_trace="$(trace_file_name "${case_id}")--verdict"
+			files_to_delete+=("${model_dir}${verdict_trace}.json")
 		done
 	else
 		for model_dir in "$REPORTS_DIR/routing-traces"/*/; do
-			files_to_delete+=("${model_dir}${case_id}.json")
+			local standalone_trace
+			standalone_trace="$(trace_file_name "${case_id}")"
+			files_to_delete+=("${model_dir}${standalone_trace}.json")
 		done
 	fi
 
@@ -135,13 +165,21 @@ console.log([tags ? '1' : '0', d.suite || '', tags].join('\t'));
 		fi
 	fi
 
-	# Execute deletions
+	# Execute deletions — verify each target is under an expected root
 	for f in "${files_to_delete[@]}"; do
+		case "$f" in
+			"$CASES_DIR"/*|"$REPORTS_DIR"/*) ;;
+			*) echo "Error: delete target outside managed dirs: $f" >&2; exit 1 ;;
+		esac
 		rm -f "$f"
 		echo "Deleted: $f"
 	done
 	if ((${#dirs_to_delete[@]})); then
 		for d in "${dirs_to_delete[@]}"; do
+			case "$d" in
+				"$GENERATED_DIR"/*) ;;
+				*) echo "Error: delete target outside managed dirs: $d" >&2; exit 1 ;;
+			esac
 			rm -rf "$d"
 			echo "Deleted: $d"
 		done

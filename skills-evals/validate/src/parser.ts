@@ -42,17 +42,27 @@ export const findSkillMd = async (skillDir: string): Promise<string | null> => {
 	return null;
 };
 
+const findClosingFrontmatterIndex = (content: string): number => {
+	const DELIMITER_LINE = /^\s*---\s*$/m;
+	const searchFrom = content.indexOf("\n");
+	if (searchFrom === -1) return -1;
+	const match = DELIMITER_LINE.exec(content.slice(searchFrom + 1));
+	if (!match) return -1;
+	return searchFrom + 1 + match.index;
+};
+
 export const parseFrontmatter = (content: string): Record<string, unknown> => {
 	if (!content.startsWith("---")) {
 		throw new ParseError("SKILL.md must start with YAML frontmatter (---)");
 	}
 
-	const closingMarkerIndex = content.indexOf("---", 3);
+	const closingMarkerIndex = findClosingFrontmatterIndex(content);
 	if (closingMarkerIndex === -1) {
 		throw new ParseError("SKILL.md frontmatter not properly closed with ---");
 	}
 
-	const frontmatterText = content.slice(3, closingMarkerIndex);
+	const firstNewline = content.indexOf("\n");
+	const frontmatterText = content.slice(firstNewline + 1, closingMarkerIndex);
 
 	let parsed: unknown;
 	try {

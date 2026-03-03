@@ -51,7 +51,6 @@ type RpcToolCallState = {
 	executionSuccessCount: number;
 	executionFailureCount: number;
 	maxPartialJsonLength: number;
-	seenInAgentEnd: boolean;
 };
 
 const parsePositiveIntEnv = (name: string, fallback: number): number =>
@@ -155,7 +154,6 @@ const createRpcDiagnosticsTracker = () => {
 			executionSuccessCount: 0,
 			executionFailureCount: 0,
 			maxPartialJsonLength: 0,
-			seenInAgentEnd: false,
 		};
 		toolCalls.set(params.id, created);
 		return created;
@@ -188,7 +186,6 @@ const createRpcDiagnosticsTracker = () => {
 				const toolName = toKnownToolName(blockRecord.name);
 				const toolId = toKnownToolId(blockRecord.id, toolName);
 				const state = resolveToolCall({ id: toolId, toolName });
-				state.seenInAgentEnd = true;
 				const argumentsRecord = blockRecord.arguments as Record<string, unknown> | undefined;
 				const contentValue = argumentsRecord?.content;
 				if (typeof contentValue === "string" && contentValue.length > state.maxPartialJsonLength) {
