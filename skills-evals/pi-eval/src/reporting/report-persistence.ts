@@ -1,7 +1,7 @@
 import { unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { buildReport, readReportRows, updateIndex, writeReport } from "./report.js";
-import type { CaseEvaluation, EvalCase, EvalRunOptions, ModelSpec } from "../data/types.js";
+import type { CaseEvaluation, EvalBundle, EvalRunOptions, JudgeBundleVerdict, ModelSpec, ResolvedEvalCase } from "../data/types.js";
 import { ensureDir, sleep } from "../data/utils.js";
 import { toSafePathSegment } from "../runtime/path-safety.js";
 
@@ -17,8 +17,12 @@ const routingTraceDirFor = (reportRoot: string, model: ModelSpec): string =>
 
 const getCommitSha = async (): Promise<string> => {
 	try {
-		const { execSync } = await import("node:child_process");
-		return execSync("git rev-parse --short HEAD", { encoding: "utf-8" }).trim();
+		const { execFile } = await import("node:child_process");
+		return new Promise((resolve) => {
+			execFile("git", ["rev-parse", "--short", "HEAD"], { encoding: "utf-8" }, (error, stdout) => {
+				resolve(error ? "unknown" : stdout.trim());
+			});
+		});
 	} catch {
 		return "unknown";
 	}
@@ -50,6 +54,13 @@ const withReportWriteLock = async <T>(lockPath: string, handler: () => Promise<T
 	}
 };
 
+/** Convert case IDs with colons to filesystem-safe names using -- separator */
+const traceFileName = (caseId: string): string => {
+	// Replace colon separator (bundle:tag) with double-dash for readability
+	const safeName = caseId.replace(/:/g, "--");
+	return toSafePathSegment(safeName, "case");
+};
+
 const writeRoutingTraceArtifacts = async (params: {
 	traceDir: string;
 	runTimestamp: string;
@@ -58,7 +69,7 @@ const writeRoutingTraceArtifacts = async (params: {
 }): Promise<void> => {
 	const { traceDir, runTimestamp, model, evaluations } = params;
 	await ensureDir(traceDir);
-	for (const evaluation of evaluations) {
+	await Promise.all(evaluations.map((evaluation) => {
 		const payload = {
 			caseId: evaluation.caseId,
 			mode: evaluation.mode,
@@ -80,18 +91,32 @@ const writeRoutingTraceArtifacts = async (params: {
 			bootstrapBreakdown: evaluation.result.bootstrapBreakdown ?? [],
 			judgeVerdict: evaluation.judgeVerdict ?? null,
 		};
-		const tracePath = path.join(traceDir, `${toSafePathSegment(evaluation.caseId, "case")}.json`);
-		await writeFile(tracePath, JSON.stringify(payload, null, 2));
-	}
+		const tracePath = path.join(traceDir, `${traceFileName(evaluation.caseId)}.json`);
+		return writeFile(tracePath, JSON.stringify(payload, null, 2));
+	}));
+};
+
+const writeBundleVerdictTraces = async (params: {
+	traceDir: string;
+	verdicts: Map<string, JudgeBundleVerdict>;
+}): Promise<void> => {
+	const { traceDir, verdicts } = params;
+	if (verdicts.size === 0) return;
+	await ensureDir(traceDir);
+	await Promise.all([...verdicts.entries()].map(([bundleId, verdict]) => {
+		const tracePath = path.join(traceDir, `${traceFileName(bundleId)}--verdict.json`);
+		return writeFile(tracePath, JSON.stringify(verdict, null, 2));
+	}));
 };
 
 export const persistRunReport = async (params: {
 	options: EvalRunOptions;
-	defaultCases: EvalCase[];
+	defaultCases: ResolvedEvalCase[];
 	evaluations: CaseEvaluation[];
+	bundles: Map<string, EvalBundle>;
 	durationMs: number;
 }): Promise<{ reportPath: string; indexPath: string }> => {
-	const { options, defaultCases, evaluations, durationMs } = params;
+	const { options, defaultCases, evaluations, bundles, durationMs } = params;
 	const commitSha = await getCommitSha();
 	const reportRoot = path.join(options.agentDir, "skills-evals", "reports");
 	const reportPath = reportPathFor(reportRoot, options.model);
@@ -99,6 +124,14 @@ export const persistRunReport = async (params: {
 	const routingTraceDir = routingTraceDirFor(reportRoot, options.model);
 	const reportLockPath = path.join(reportRoot, ".report-write.lock");
 	const runTimestamp = new Date().toISOString();
+
+	// Collect bundle verdicts from evaluations
+	const verdicts = new Map<string, JudgeBundleVerdict>();
+	for (const evaluation of evaluations) {
+		if (evaluation.judgeVerdict && !verdicts.has(evaluation.judgeVerdict.bundleId)) {
+			verdicts.set(evaluation.judgeVerdict.bundleId, evaluation.judgeVerdict);
+		}
+	}
 
 	await withReportWriteLock(reportLockPath, async () => {
 		const previousRows = await readReportRows(reportPath);
@@ -111,6 +144,7 @@ export const persistRunReport = async (params: {
 			allCases: defaultCases,
 			previousRows,
 			runScope: options.isFullRun ? "full" : "partial",
+			bundles,
 			filter: options.filter,
 			limit: options.limitOverride,
 			casesPathLabel: options.casesPathLabel,
@@ -124,6 +158,10 @@ export const persistRunReport = async (params: {
 			runTimestamp,
 			model: options.model,
 			evaluations,
+		});
+		await writeBundleVerdictTraces({
+			traceDir: routingTraceDir,
+			verdicts,
 		});
 	});
 

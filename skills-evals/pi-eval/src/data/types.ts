@@ -7,6 +7,19 @@ export type FileAssertion = {
 
 export type BootstrapProfile = "full_payload" | "no_payload";
 
+export type EvalCaseVariant = {
+	tag: string;
+	prompt?: string;
+	bootstrapProfile?: BootstrapProfile;
+	expectedSkills?: string[];
+	disallowedSkills?: string[];
+	expectedRefs?: string[];
+	skillSet?: string[];
+	requireSkillFileRead?: boolean;
+	fileAssertions?: FileAssertion[];
+	readDenyPaths?: string[];
+};
+
 export type EvalCase = {
 	id: string;
 	suite: string;
@@ -28,7 +41,23 @@ export type EvalCase = {
 	assertions?: string[];
 	notes?: string;
 	persistArtifacts?: boolean;
-	controlFor?: string;
+	variants?: EvalCaseVariant[];
+};
+
+export type ResolvedEvalCase = EvalCase & {
+	bundleId: string | null;
+	variantTag: string | null;
+};
+
+export type EvalBundle = {
+	id: string;
+	suite: string;
+	variantTags: string[];
+};
+
+export type LoadedCases = {
+	cases: ResolvedEvalCase[];
+	bundles: Map<string, EvalBundle>;
 };
 
 export type EvalConfig = {
@@ -170,17 +199,16 @@ export type RoutingScorecard = {
 	unexpectedRefs: string[];
 };
 
-export type JudgeDimension = {
+export type JudgeDimensionScore = {
 	name: string;
-	skillScore: number;
-	controlScore: number;
+	scores: Record<string, number>;
 	rationale: string;
 };
 
-export type JudgeVerdict = {
-	pairId: string;
-	controlId: string;
-	dimensions: JudgeDimension[];
+export type JudgeBundleVerdict = {
+	bundleId: string;
+	variantTags: string[];
+	dimensions: JudgeDimensionScore[];
 	costAnalysis: string;
 	recommendation: string;
 	rawResponse: string;
@@ -201,7 +229,7 @@ export type CaseEvaluation = {
 	routing: RoutingScorecard;
 	assertions: string[];
 	tokenBudget?: number | null;
-	judgeVerdict?: JudgeVerdict;
+	judgeVerdict?: JudgeBundleVerdict;
 };
 
 export type EvalRunOptions = {

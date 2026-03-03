@@ -1,156 +1,160 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from importlib.util import module_from_spec, spec_from_file_location
+import importlib.util
 from pathlib import Path
-from typing import Any, Callable
-import time
+from typing import Callable, Mapping, Sequence
 
 
-# Load Request/Response/Context from the fixture path requested in the prompt.
-_HTTP_TYPES_PATH = (
-    Path(__file__).resolve().parents[3]
-    / "fixtures"
-    / "codequality"
-    / "cd015"
-    / "http_types.py"
-)
-_spec = spec_from_file_location("cd015_http_types", _HTTP_TYPES_PATH)
-if _spec is None or _spec.loader is None:
-    raise RuntimeError(f"Failed to load HTTP types from {_HTTP_TYPES_PATH}")
-_http_types = module_from_spec(_spec)
-_spec.loader.exec_module(_http_types)
+def _load_http_types() -> tuple[type, type, type]:
+    """Load Request/Response/Context from fixtures by file path."""
+    module_path = (
+        Path(__file__).resolve().parents[3]
+        / "fixtures"
+        / "codequality"
+        / "cd015"
+        / "http_types.py"
+    )
+    spec = importlib.util.spec_from_file_location("cd015_http_types", module_path)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"Unable to load HTTP types from {module_path}")
 
-Request = _http_types.Request
-Response = _http_types.Response
-Context = _http_types.Context
-
-
-Handler = Callable[[Request, "PipelineContext"], Response]
-NextHandler = Callable[[Request, "PipelineContext"], Response]
-Middleware = Callable[[Request, "PipelineContext", NextHandler], Response]
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.Request, module.Response, module.Context
 
 
-@dataclass
-class PipelineContext(Context):
-    """Typed context shared across middleware stages."""
+Request, Response, Context = _load_http_types()
 
-    validated_body: dict[str, Any] | None = None
-    request_id: str | None = None
-    metadata: dict[str, Any] = field(default_factory=dict)
+Handler = Callable[[Context], Response]
+Middleware = Callable[[Context, Handler], Response]
 
 
-class TokenAuth:
-    def __init__(self, valid_tokens: dict[str, tuple[str, list[str]]]) -> None:
-        self._valid_tokens = valid_tokens
+def chain_middlewares(middlewares: Sequence[Middleware], endpoint: Handler) -> Handler:
+    """Compose middleware right-to-left into a single context handler."""
+    handler = endpoint
+    for middleware in reversed(middlewares):
+        next_handler = handler
 
-    def __call__(self, request: Request, ctx: PipelineContext, nxt: NextHandler) -> Response:
-        auth = request.headers.get("Authorization", "")
-        if not auth.startswith("Bearer "):
+        def wrapped(ctx: Context, mw: Middleware = middleware, nxt: Handler = next_handler) -> Response:
+            return mw(ctx, nxt)
+
+        handler = wrapped
+    return handler
+
+
+class MiddlewarePipeline:
+    def __init__(self, middlewares: Sequence[Middleware], endpoint: Handler) -> None:
+        self._handler = chain_middlewares(middlewares, endpoint)
+
+    def handle(self, request: Request) -> Response:
+        context = Context(request=request)
+        return self._handler(context)
+
+
+def auth_middleware(valid_tokens: Mapping[str, tuple[str, list[str]]]) -> Middleware:
+    def middleware(ctx: Context, next_handler: Handler) -> Response:
+        auth_header = ctx.request.headers.get("Authorization", "")
+        if not auth_header.startswith("Bearer "):
             return Response(status=401, body={"error": "missing bearer token"})
 
-        token = auth.removeprefix("Bearer ").strip()
-        user = self._valid_tokens.get(token)
-        if user is None:
+        token = auth_header[len("Bearer ") :].strip()
+        principal = valid_tokens.get(token)
+        if principal is None:
             return Response(status=403, body={"error": "invalid token"})
 
-        ctx.user_id = user[0]
-        ctx.roles = user[1]
-        return nxt(request, ctx)
+        ctx.user_id, roles = principal
+        ctx.roles = list(roles)
+        return next_handler(ctx)
+
+    return middleware
 
 
-class JsonBodyValidation:
-    def __call__(self, request: Request, ctx: PipelineContext, nxt: NextHandler) -> Response:
-        if request.body is None:
-            return Response(status=400, body={"error": "request body required"})
-        if not isinstance(request.body, dict):
-            return Response(status=422, body={"error": "body must be an object"})
-        if "name" not in request.body:
-            return Response(status=422, body={"error": "missing required field: name"})
+def validation_middleware(validator: Callable[[object], list[str]]) -> Middleware:
+    def middleware(ctx: Context, next_handler: Handler) -> Response:
+        errors = validator(ctx.request.body)
+        if errors:
+            ctx.errors.extend(errors)
+            return Response(status=422, body={"errors": errors})
+        return next_handler(ctx)
 
-        # Typed value available to downstream handlers.
-        ctx.validated_body = request.body
-        return nxt(request, ctx)
+    return middleware
 
 
-class InMemoryRateLimit:
-    def __init__(self, limit: int, window_seconds: float) -> None:
-        self._limit = limit
-        self._window = window_seconds
-        self._hits: dict[str, list[float]] = {}
+def rate_limit_middleware(limit_per_client: int = 5) -> Middleware:
+    requests_seen: dict[str, int] = {}
 
-    def __call__(self, request: Request, ctx: PipelineContext, nxt: NextHandler) -> Response:
-        now = time.monotonic()
-        key = request.client_ip
-        active = [ts for ts in self._hits.get(key, []) if now - ts < self._window]
-        self._hits[key] = active
+    def middleware(ctx: Context, next_handler: Handler) -> Response:
+        ip = ctx.request.client_ip
+        requests_seen[ip] = requests_seen.get(ip, 0) + 1
+        remaining = max(limit_per_client - requests_seen[ip], 0)
+        ctx.rate_limit_remaining = remaining
 
-        remaining = self._limit - len(active)
-        if remaining <= 0:
+        if requests_seen[ip] > limit_per_client:
             return Response(status=429, body={"error": "rate limit exceeded"}, headers={"X-RateLimit-Remaining": "0"})
 
-        active.append(now)
-        self._hits[key] = active
-        ctx.rate_limit_remaining = self._limit - len(active)
+        response = next_handler(ctx)
+        response.headers["X-RateLimit-Remaining"] = str(remaining)
+        return response
 
-        resp = nxt(request, ctx)
-        resp.headers["X-RateLimit-Remaining"] = str(ctx.rate_limit_remaining)
-        return resp
+    return middleware
 
 
-class ErrorFormatting:
-    def __call__(self, request: Request, ctx: PipelineContext, nxt: NextHandler) -> Response:
+def error_formatting_middleware() -> Middleware:
+    def middleware(ctx: Context, next_handler: Handler) -> Response:
         try:
-            return nxt(request, ctx)
-        except Exception as exc:  # noqa: BLE001
-            return Response(status=500, body={"error": "internal_server_error", "detail": str(exc)})
+            return next_handler(ctx)
+        except Exception as exc:  # noqa: BLE001 - middleware intentionally normalizes exceptions
+            return Response(
+                status=500,
+                body={
+                    "error": {
+                        "type": exc.__class__.__name__,
+                        "message": str(exc),
+                        "path": ctx.request.path,
+                    }
+                },
+            )
+
+    return middleware
 
 
-def build_pipeline(middlewares: list[Middleware], endpoint: Handler) -> Callable[[Request], Response]:
-    """Compose middleware into a single request handler.
-
-    Each middleware can short-circuit by returning a Response without calling `nxt`.
-    """
-
-    def run(request: Request) -> Response:
-        ctx = PipelineContext(request=request, start_time_ns=time.monotonic_ns())
-
-        def dispatch(index: int, req: Request, current_ctx: PipelineContext) -> Response:
-            if index >= len(middlewares):
-                return endpoint(req, current_ctx)
-            mw = middlewares[index]
-            return mw(req, current_ctx, lambda r, c: dispatch(index + 1, r, c))
-
-        return dispatch(0, request, ctx)
-
-    return run
-
-
-def app_endpoint(request: Request, ctx: PipelineContext) -> Response:
-    body = {
-        "message": f"hello {ctx.user_id}",
-        "name": ctx.validated_body["name"] if ctx.validated_body else None,
-        "roles": ctx.roles,
-    }
-    return Response(status=200, body=body)
+def _sample_endpoint(ctx: Context) -> Response:
+    return Response(
+        status=200,
+        body={
+            "ok": True,
+            "user_id": ctx.user_id,
+            "roles": ctx.roles,
+            "payload": ctx.request.body,
+        },
+    )
 
 
 if __name__ == "__main__":
-    pipeline = build_pipeline(
+    valid_tokens = {"token-123": ("user-1", ["member"])}
+
+    def validate_payload(body: object) -> list[str]:
+        if not isinstance(body, dict):
+            return ["JSON body must be an object"]
+        if "action" not in body:
+            return ["'action' is required"]
+        return []
+
+    pipeline = MiddlewarePipeline(
         middlewares=[
-            ErrorFormatting(),
-            InMemoryRateLimit(limit=5, window_seconds=60),
-            TokenAuth(valid_tokens={"good-token": ("u-123", ["admin"])}),
-            JsonBodyValidation(),
+            error_formatting_middleware(),
+            auth_middleware(valid_tokens),
+            validation_middleware(validate_payload),
+            rate_limit_middleware(limit_per_client=2),
         ],
-        endpoint=app_endpoint,
+        endpoint=_sample_endpoint,
     )
 
     request = Request(
         method="POST",
-        path="/hello",
-        headers={"Authorization": "Bearer good-token"},
-        body={"name": "Ada"},
+        path="/tasks",
+        headers={"Authorization": "Bearer token-123"},
+        body={"action": "run"},
         client_ip="10.0.0.8",
     )
-    print(pipeline(request))
+    print(pipeline.handle(request))

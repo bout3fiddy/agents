@@ -50,7 +50,7 @@ export const resolveCasesPath = async (
 	const rawValue = parseStringFlag("--cases", value) ?? defaultCasesPath;
 	const resolved = resolvePath(rawValue, agentDir);
 	if (!(await fileExists(resolved))) {
-		throw new Error(`Cases file not found: ${resolved}`);
+		throw new Error(`Cases path not found: ${resolved}`);
 	}
 	return resolved;
 };

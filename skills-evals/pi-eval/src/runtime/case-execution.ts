@@ -1,9 +1,9 @@
 import { runCase, buildErrorEvaluation } from "./case-lifecycle.js";
 import { runItemsInParallel } from "./parallel.js";
-import type { CaseEvaluation, EvalCase, EvalConfig, EvalRunOptions } from "../data/types.js";
+import type { CaseEvaluation, EvalConfig, EvalRunOptions, ResolvedEvalCase } from "../data/types.js";
 
 export const evaluateSelectedCases = async (params: {
-	cases: EvalCase[];
+	cases: ResolvedEvalCase[];
 	options: EvalRunOptions;
 	config: EvalConfig;
 	extensionEntry: string;

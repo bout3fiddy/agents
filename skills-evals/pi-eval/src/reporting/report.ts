@@ -1,6 +1,6 @@
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
-import type { CaseEvaluation, EvalCase, JudgeVerdict, ModelSpec } from "../data/types.js";
+import type { CaseEvaluation, EvalBundle, JudgeBundleVerdict, ModelSpec, ResolvedEvalCase } from "../data/types.js";
 import { ensureDir, fileExists, formatDuration, median, percentile } from "../data/utils.js";
 
 type ReportRow = {
@@ -107,7 +107,7 @@ export const readReportRows = async (filePath: string): Promise<Map<string, Repo
 
 const mergeReportRows = (params: {
 	evaluations: CaseEvaluation[];
-	allCases: EvalCase[];
+	allCases: ResolvedEvalCase[];
 	previousRows: Map<string, ReportRow>;
 	runTimestamp: string;
 }): ReportRow[] => {
@@ -185,37 +185,39 @@ const mergeReportRows = (params: {
 	return rows;
 };
 
-type PairedSection = {
-	baseId: string;
-	controlId: string;
-	skillRow: ReportRow;
-	controlRow: ReportRow;
-	verdict: JudgeVerdict;
+type BundleSection = {
+	bundleId: string;
+	variantRows: ReportRow[];
+	verdict: JudgeBundleVerdict;
+	notes: string;
 };
 
-const renderPairedVariantTable = (skillRow: ReportRow, controlRow: ReportRow): string => {
+const renderBundleVariantTable = (variantRows: ReportRow[]): string => {
 	const header = "| Variant | Status | Tokens | Turns | Skills Read | Refs Read |";
 	const separator = "| --- | --- | --- | --- | --- | --- |";
-	const skillLine = `| ${skillRow.caseId} (skill) | ${normalizeStatus(skillRow.status)} | ${skillRow.tokens} | ${skillRow.turns} | ${skillRow.skillsRead} | ${skillRow.refsRead} |`;
-	const controlLine = `| ${controlRow.caseId} (control) | ${normalizeStatus(controlRow.status)} | ${controlRow.tokens} | ${controlRow.turns} | ${controlRow.skillsRead} | ${controlRow.refsRead} |`;
-	return [header, separator, skillLine, controlLine].join("\n");
+	const lines = variantRows.map(
+		(row) => `| ${row.caseId} | ${normalizeStatus(row.status)} | ${row.tokens} | ${row.turns} | ${row.skillsRead} | ${row.refsRead} |`,
+	);
+	return [header, separator, ...lines].join("\n");
 };
 
-const renderDimensionsTable = (verdict: JudgeVerdict): string => {
-	const header = "| Dimension | Skill | Control | Rationale |";
-	const separator = "| --- | --- | --- | --- |";
-	const rows = verdict.dimensions.map(
-		(d) => `| ${d.name} | ${d.skillScore} | ${d.controlScore} | ${d.rationale} |`,
-	);
+const renderDimensionsTable = (verdict: JudgeBundleVerdict): string => {
+	const tags = verdict.variantTags;
+	const header = `| Dimension | ${tags.join(" | ")} | Rationale |`;
+	const separator = `| --- | ${tags.map(() => "---").join(" | ")} | --- |`;
+	const rows = verdict.dimensions.map((d) => {
+		const scores = tags.map((tag) => String(d.scores[tag] ?? 0));
+		return `| ${d.name} | ${scores.join(" | ")} | ${d.rationale} |`;
+	});
 	return [header, separator, ...rows].join("\n");
 };
 
-const renderPairedSections = (sections: PairedSection[]): string => {
+const renderBundleSections = (sections: BundleSection[]): string => {
 	if (sections.length === 0) return "";
-	const parts: string[] = ["## Paired Evaluations", ""];
+	const parts: string[] = ["## Bundle Evaluations", ""];
 	for (const section of sections) {
-		parts.push(`### ${section.baseId}: ${section.skillRow.notes || "paired comparison"}`);
-		parts.push(renderPairedVariantTable(section.skillRow, section.controlRow));
+		parts.push(`### ${section.bundleId}: ${section.notes || "bundle comparison"}`);
+		parts.push(renderBundleVariantTable(section.variantRows));
 		parts.push("");
 		parts.push(`**Judge Verdict** (token cost: ${section.verdict.judgeTokens.totalTokens})`);
 		parts.push("");
@@ -257,26 +259,36 @@ const renderFailures = (rows: ReportRow[]): string => {
 		.join("\n");
 };
 
-const collectPairedSections = (
+const collectBundleSections = (
 	evaluations: CaseEvaluation[],
 	allRows: ReportRow[],
-): { sections: PairedSection[]; pairedCaseIds: Set<string> } => {
-	const pairedCaseIds = new Set<string>();
-	const sections: PairedSection[] = [];
+	bundles: Map<string, EvalBundle>,
+): { sections: BundleSection[]; bundleCaseIds: Set<string> } => {
+	const bundleCaseIds = new Set<string>();
+	const sections: BundleSection[] = [];
+	const seenBundles = new Set<string>();
+	const rowByCaseId = new Map(allRows.map((r) => [r.caseId, r]));
 
 	for (const evaluation of evaluations) {
 		if (!evaluation.judgeVerdict) continue;
 		const verdict = evaluation.judgeVerdict;
-		const baseId = verdict.pairId;
-		const controlId = verdict.controlId;
-		const skillRow = allRows.find((r) => r.caseId === baseId);
-		const controlRow = allRows.find((r) => r.caseId === controlId);
-		if (!skillRow || !controlRow) continue;
-		sections.push({ baseId, controlId, skillRow, controlRow, verdict });
-		pairedCaseIds.add(baseId);
-		pairedCaseIds.add(controlId);
+		const bundleId = verdict.bundleId;
+		if (seenBundles.has(bundleId)) continue;
+		seenBundles.add(bundleId);
+
+		const bundle = bundles.get(bundleId);
+		if (!bundle) continue;
+
+		const variantCaseIds = bundle.variantTags.map((tag) => `${bundleId}:${tag}`);
+		const variantRows = variantCaseIds
+			.map((caseId) => rowByCaseId.get(caseId))
+			.filter((r): r is ReportRow => r !== undefined);
+		if (variantRows.length === 0) continue;
+
+		sections.push({ bundleId, variantRows, verdict, notes: variantRows[0]?.notes ?? "" });
+		for (const caseId of variantCaseIds) bundleCaseIds.add(caseId);
 	}
-	return { sections, pairedCaseIds };
+	return { sections, bundleCaseIds };
 };
 
 export const buildReport = (params: {
@@ -285,9 +297,10 @@ export const buildReport = (params: {
 	runTimestamp: string;
 	evaluations: CaseEvaluation[];
 	durationMs: number;
-	allCases: EvalCase[];
+	allCases: ResolvedEvalCase[];
 	previousRows: Map<string, ReportRow>;
 	runScope: "full" | "partial";
+	bundles: Map<string, EvalBundle>;
 	filter?: string | null;
 	limit?: number | null;
 	casesPathLabel?: string;
@@ -301,6 +314,7 @@ export const buildReport = (params: {
 		allCases,
 		previousRows,
 		runScope,
+		bundles,
 		filter,
 		limit,
 		casesPathLabel,
@@ -308,11 +322,17 @@ export const buildReport = (params: {
 	const tokens = evaluations.map((item) => item.result.tokens.totalTokens || 0);
 	const stats = formatTokenStats(tokens);
 	const rows = mergeReportRows({ evaluations, allCases, previousRows, runTimestamp });
-	const { sections, pairedCaseIds } = collectPairedSections(evaluations, rows);
-	const unpairedRows = rows.filter((row) => !pairedCaseIds.has(row.caseId));
-	const rowPass = rows.filter((item) => normalizeStatus(item.status) === "PASS").length;
-	const rowFail = rows.filter((item) => normalizeStatus(item.status) === "FAIL").length;
-	const rowSkip = rows.filter((item) => normalizeStatus(item.status) === "SKIP").length;
+	const { sections, bundleCaseIds } = collectBundleSections(evaluations, rows, bundles);
+	const standaloneRows = rows.filter((row) => !bundleCaseIds.has(row.caseId));
+	let rowPass = 0;
+	let rowFail = 0;
+	let rowSkip = 0;
+	for (const item of rows) {
+		const s = normalizeStatus(item.status);
+		if (s === "PASS") rowPass++;
+		else if (s === "FAIL") rowFail++;
+		else if (s === "SKIP") rowSkip++;
+	}
 	const executedCases = new Set(evaluations.map((item) => item.caseId)).size;
 	const executedRows = evaluations.length;
 	const totalCases = new Set(rows.map((row) => row.caseId)).size;
@@ -343,11 +363,11 @@ export const buildReport = (params: {
 
 	const reportParts = [...headerLines, ""];
 	if (sections.length > 0) {
-		reportParts.push(renderPairedSections(sections));
+		reportParts.push(renderBundleSections(sections));
 	}
-	reportParts.push("## Case Results");
+	reportParts.push("## Standalone Results");
 	reportParts.push(UNPAIRED_TABLE_SENTINEL);
-	reportParts.push(renderCaseTable(unpairedRows));
+	reportParts.push(renderCaseTable(standaloneRows));
 	reportParts.push("");
 	reportParts.push("## Failures");
 	reportParts.push(renderFailures(rows));

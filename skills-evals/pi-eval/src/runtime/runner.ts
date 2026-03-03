@@ -26,11 +26,12 @@ export const registerEvalCommand = (pi: ExtensionAPI) => {
 
 			const config = await loadEvalConfig();
 			const options = await resolveRunOptions(flags, ctx, config);
-			const defaultCases = await loadCases(options.defaultCasesPath);
-			const selectedCases = isSameResolvedPath(options.casesPath, options.defaultCasesPath)
-				? defaultCases
+			const defaultLoaded = await loadCases(options.defaultCasesPath);
+			const selectedLoaded = isSameResolvedPath(options.casesPath, options.defaultCasesPath)
+				? defaultLoaded
 				: await loadCases(options.casesPath);
-			const cases = filterCases(selectedCases, options.filter, options.limitOverride);
+			const filtered = filterCases(selectedLoaded, options.filter, options.limitOverride);
+			const { cases, bundles } = filtered;
 				if (cases.length === 0) return;
 
 				const runStart = Date.now();
@@ -43,12 +44,16 @@ export const registerEvalCommand = (pi: ExtensionAPI) => {
 			const verdicts = await runJudge({
 				evaluations,
 				cases,
+				bundles,
 				options,
 				agentDir: options.agentDir,
 			});
-			for (const [pairId, verdict] of verdicts) {
-				const evaluation = evaluations.find((e) => e.caseId === pairId);
-				if (evaluation) evaluation.judgeVerdict = verdict;
+			const caseById = new Map(cases.map((c) => [c.id, c]));
+			for (const evaluation of evaluations) {
+				const evalCase = caseById.get(evaluation.caseId);
+				if (evalCase?.bundleId && verdicts.has(evalCase.bundleId)) {
+					evaluation.judgeVerdict = verdicts.get(evalCase.bundleId)!;
+				}
 			}
 
 			const durationMs = Date.now() - runStart;
@@ -57,8 +62,9 @@ export const registerEvalCommand = (pi: ExtensionAPI) => {
 
 			const paths = await persistRunReport({
 				options,
-				defaultCases,
+				defaultCases: defaultLoaded.cases,
 				evaluations,
+				bundles,
 				durationMs,
 			});
 

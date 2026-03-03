@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
-import type { CaseEvaluation, EvalCase, EvalRunOptions, ModelSpec } from "../../src/data/types.js";
+import type { CaseEvaluation, EvalRunOptions, ModelSpec, ResolvedEvalCase } from "../../src/data/types.js";
 import { fileExists } from "../../src/data/utils.js";
 import { persistRunReport } from "../../src/reporting/report-persistence.js";
 
@@ -32,13 +32,15 @@ const buildOptions = (agentDir: string, isFullRun: boolean): EvalRunOptions => (
 	judgeDisabled: false,
 });
 
-const buildEvalCase = (id: string): EvalCase => ({
+const buildEvalCase = (id: string): ResolvedEvalCase => ({
 	id,
 	suite: "pi-eval",
 	prompt: "prompt",
 	expectedSkills: [],
 	disallowedSkills: [],
 	expectedRefs: [],
+	bundleId: null,
+	variantTag: null,
 });
 
 const buildEvaluation = (caseId: string, status: "pass" | "fail"): CaseEvaluation => ({
@@ -103,6 +105,7 @@ test("persistRunReport merges with previous report rows and updates index on ful
 			options,
 			defaultCases,
 			evaluations: [buildEvaluation("../../CD-TRACE", "pass")],
+			bundles: new Map(),
 			durationMs: 500,
 		});
 
@@ -137,6 +140,7 @@ test("persistRunReport skips index updates on partial runs", async () => {
 			options,
 			defaultCases,
 			evaluations: [buildEvaluation("CD-001", "pass")],
+			bundles: new Map(),
 			durationMs: 200,
 		});
 

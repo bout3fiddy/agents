@@ -2,7 +2,7 @@
   "caseId": "CD-015",
   "mode": "single",
   "status": "pass",
-  "runTimestamp": "2026-03-03T12:22:11.542Z",
+  "runTimestamp": "2026-03-03T17:41:54.830Z",
   "model": "openai-codex/gpt-5.3-codex",
   "expectedSkills": [
     "coding"
@@ -11,20 +11,20 @@
     "skills/coding/references/code-smells/smells/ai-code-smell.md"
   ],
   "tokens": {
-    "input": 30379,
-    "output": 3376,
-    "cacheRead": 106496,
+    "input": 21511,
+    "output": 4249,
+    "cacheRead": 132352,
     "cacheWrite": 0,
-    "totalTokens": 140251
+    "totalTokens": 158112
   },
   "turnBreakdown": [
     {
       "turn": 1,
-      "input": 30379,
-      "output": 3376,
-      "cacheRead": 106496,
+      "input": 21511,
+      "output": 4249,
+      "cacheRead": 132352,
       "cacheWrite": 0,
-      "totalTokens": 140251
+      "totalTokens": 158112
     }
   ],
   "toolUsage": {
@@ -39,18 +39,18 @@
     "editFailures": 0
   },
   "rpcDiagnostics": {
-    "rawLineCount": 1960,
-    "parsedEventCount": 1960,
+    "rawLineCount": 1910,
+    "parsedEventCount": 1910,
     "parseErrorCount": 0,
     "eventCounts": {
       "response": 1,
       "agent_start": 1,
       "turn_start": 10,
-      "message_start": 29,
-      "message_end": 29,
-      "message_update": 1843,
-      "tool_execution_start": 18,
-      "tool_execution_end": 18,
+      "message_start": 25,
+      "message_end": 25,
+      "message_update": 1809,
+      "tool_execution_start": 14,
+      "tool_execution_end": 14,
       "turn_end": 10,
       "agent_end": 1
     },
@@ -61,150 +61,7 @@
     "lastAgentErrorMessage": null,
     "toolCalls": [
       {
-        "id": "call_7I6sayvGe654A6tFYVGPtLBV|fc_080f6aa3da7e18460169a6d24559b4819186ae31c28e09c696",
-        "toolName": "read",
-        "startCount": 0,
-        "deltaCount": 2,
-        "endCount": 0,
-        "executionStartCount": 1,
-        "executionEndCount": 1,
-        "executionSuccessCount": 1,
-        "executionFailureCount": 0,
-        "maxPartialJsonLength": 78,
-        "seenInAgentEnd": true
-      },
-      {
-        "id": "call_ARMfRMTT2v7pJ7e2kueLZYV0|fc_080f6aa3da7e18460169a6d24fb2a88191ad22adb381a27d83",
-        "toolName": "read",
-        "startCount": 0,
-        "deltaCount": 2,
-        "endCount": 0,
-        "executionStartCount": 1,
-        "executionEndCount": 1,
-        "executionSuccessCount": 1,
-        "executionFailureCount": 0,
-        "maxPartialJsonLength": 74,
-        "seenInAgentEnd": true
-      },
-      {
-        "id": "call_AzAoIuVvz6uBjROB8BwiLMym|fc_080f6aa3da7e18460169a6d253dbf48191a85f7224b40d2b99",
-        "toolName": "read",
-        "startCount": 0,
-        "deltaCount": 2,
-        "endCount": 0,
-        "executionStartCount": 1,
-        "executionEndCount": 1,
-        "executionSuccessCount": 1,
-        "executionFailureCount": 0,
-        "maxPartialJsonLength": 69,
-        "seenInAgentEnd": true
-      },
-      {
-        "id": "call_b7ssUVSanDKDpDRGtMl4mAZR|fc_080f6aa3da7e18460169a6d243362881919c9650413ceabb5d",
-        "toolName": "read",
-        "startCount": 0,
-        "deltaCount": 18,
-        "endCount": 0,
-        "executionStartCount": 1,
-        "executionEndCount": 1,
-        "executionSuccessCount": 1,
-        "executionFailureCount": 0,
-        "maxPartialJsonLength": 55,
-        "seenInAgentEnd": true
-      },
-      {
-        "id": "call_bW5KoVNvudAzPvnCfHBGlMWN|fc_080f6aa3da7e18460169a6d23e54388191b42d9b20a9a63a90",
-        "toolName": "read",
-        "startCount": 0,
-        "deltaCount": 1,
-        "endCount": 0,
-        "executionStartCount": 1,
-        "executionEndCount": 1,
-        "executionSuccessCount": 1,
-        "executionFailureCount": 0,
-        "maxPartialJsonLength": 55,
-        "seenInAgentEnd": true
-      },
-      {
-        "id": "call_cudhrkPvCrpwCVDPZ49xMlcf|fc_080f6aa3da7e18460169a6d24fb2988191a2b84ab36d2a5b01",
-        "toolName": "read",
-        "startCount": 0,
-        "deltaCount": 3,
-        "endCount": 0,
-        "executionStartCount": 1,
-        "executionEndCount": 1,
-        "executionSuccessCount": 1,
-        "executionFailureCount": 0,
-        "maxPartialJsonLength": 74,
-        "seenInAgentEnd": true
-      },
-      {
-        "id": "call_HKA5EL2WgeawcbA8EHAaYJke|fc_080f6aa3da7e18460169a6d24559c4819198d6c5072e664b96",
-        "toolName": "read",
-        "startCount": 0,
-        "deltaCount": 1,
-        "endCount": 0,
-        "executionStartCount": 1,
-        "executionEndCount": 1,
-        "executionSuccessCount": 1,
-        "executionFailureCount": 0,
-        "maxPartialJsonLength": 90,
-        "seenInAgentEnd": true
-      },
-      {
-        "id": "call_kzvokSyWbpDien0QhL7ZqHPb|fc_080f6aa3da7e18460169a6d23e5428819190c9fd9789f8aac9",
-        "toolName": "read",
-        "startCount": 0,
-        "deltaCount": 2,
-        "endCount": 0,
-        "executionStartCount": 1,
-        "executionEndCount": 1,
-        "executionSuccessCount": 1,
-        "executionFailureCount": 0,
-        "maxPartialJsonLength": 57,
-        "seenInAgentEnd": true
-      },
-      {
-        "id": "call_NGk2ZO56nRZXClB1JDGJfnUc|fc_080f6aa3da7e18460169a6d24fb2c8819180ac9cbda19d9e91",
-        "toolName": "read",
-        "startCount": 0,
-        "deltaCount": 1,
-        "endCount": 0,
-        "executionStartCount": 1,
-        "executionEndCount": 1,
-        "executionSuccessCount": 1,
-        "executionFailureCount": 0,
-        "maxPartialJsonLength": 74,
-        "seenInAgentEnd": true
-      },
-      {
-        "id": "call_NsQdYwfNdME2CrhmAba1DgNL|fc_080f6aa3da7e18460169a6d253dbec81919299faf7810b50e7",
-        "toolName": "read",
-        "startCount": 0,
-        "deltaCount": 3,
-        "endCount": 0,
-        "executionStartCount": 1,
-        "executionEndCount": 1,
-        "executionSuccessCount": 1,
-        "executionFailureCount": 0,
-        "maxPartialJsonLength": 72,
-        "seenInAgentEnd": true
-      },
-      {
-        "id": "call_pRWxX5jvTMkMxzsNm86e06fM|fc_080f6aa3da7e18460169a6d24acae48191af421cbe02a1166e",
-        "toolName": "read",
-        "startCount": 0,
-        "deltaCount": 1,
-        "endCount": 0,
-        "executionStartCount": 1,
-        "executionEndCount": 1,
-        "executionSuccessCount": 1,
-        "executionFailureCount": 0,
-        "maxPartialJsonLength": 74,
-        "seenInAgentEnd": true
-      },
-      {
-        "id": "call_PZGZQt7mDJNrWzExKjw6LEMn|fc_080f6aa3da7e18460169a6d2486dd481918fdd97ef3235339a",
+        "id": "call_8veLT8dLnFVQJ3s3G2s5jydj|fc_01aa5da4842ad0620169a71d120174819199f8cda1978a0d15",
         "toolName": "read",
         "startCount": 0,
         "deltaCount": 2,
@@ -217,46 +74,7 @@
         "seenInAgentEnd": true
       },
       {
-        "id": "call_R7o7Eact6uAlZb3LLFMZE2QR|fc_080f6aa3da7e18460169a6d253dbfc819191ed3d06a42dd216",
-        "toolName": "read",
-        "startCount": 0,
-        "deltaCount": 1,
-        "endCount": 0,
-        "executionStartCount": 1,
-        "executionEndCount": 1,
-        "executionSuccessCount": 1,
-        "executionFailureCount": 0,
-        "maxPartialJsonLength": 70,
-        "seenInAgentEnd": true
-      },
-      {
-        "id": "call_tcocCg26ElkFQ3q9r6EIAD0z|fc_080f6aa3da7e18460169a6d24acad881919b16e0a192e25023",
-        "toolName": "read",
-        "startCount": 0,
-        "deltaCount": 2,
-        "endCount": 0,
-        "executionStartCount": 1,
-        "executionEndCount": 1,
-        "executionSuccessCount": 1,
-        "executionFailureCount": 0,
-        "maxPartialJsonLength": 75,
-        "seenInAgentEnd": true
-      },
-      {
-        "id": "call_uaqcN77g9jMxPFv0lJZxJhtJ|fc_080f6aa3da7e18460169a6d2486de481918e4adb9f16551c85",
-        "toolName": "read",
-        "startCount": 0,
-        "deltaCount": 1,
-        "endCount": 0,
-        "executionStartCount": 1,
-        "executionEndCount": 1,
-        "executionSuccessCount": 1,
-        "executionFailureCount": 0,
-        "maxPartialJsonLength": 102,
-        "seenInAgentEnd": true
-      },
-      {
-        "id": "call_V4xN1SC9jH2d2urDQcm62HLO|fc_080f6aa3da7e18460169a6d26f176481918c3aef75332cf290",
+        "id": "call_iesgAaxxg5nmbpkcisgbDAVN|fc_01aa5da4842ad0620169a71d5ab4748191bce568de282236b6",
         "toolName": "read",
         "startCount": 0,
         "deltaCount": 19,
@@ -269,35 +87,165 @@
         "seenInAgentEnd": true
       },
       {
-        "id": "call_vLt5L2YyL9XnyhEj3jrYYpeh|fc_080f6aa3da7e18460169a6d25df1c88191bb28fcc67fd24605",
-        "toolName": "write",
+        "id": "call_L6Ttd03zTw9hRvn8H5dQvmYm|fc_01aa5da4842ad0620169a71d216bcc8191aaa38e1be9c2f9cd",
+        "toolName": "read",
         "startCount": 0,
-        "deltaCount": 1457,
+        "deltaCount": 19,
         "endCount": 0,
         "executionStartCount": 1,
         "executionEndCount": 1,
         "executionSuccessCount": 1,
         "executionFailureCount": 0,
-        "maxPartialJsonLength": 5731,
+        "maxPartialJsonLength": 74,
         "seenInAgentEnd": true
       },
       {
-        "id": "call_yT66oTSHwpkilpq3fUE7BFpR|fc_080f6aa3da7e18460169a6d253dbdc8191bb6042dd5f804bb0",
+        "id": "call_mmjDdHOP3sTbGe0YQVC8hzeo|fc_01aa5da4842ad0620169a71d0c4c248191a2191cce79c363eb",
         "toolName": "read",
         "startCount": 0,
-        "deltaCount": 4,
+        "deltaCount": 18,
         "endCount": 0,
         "executionStartCount": 1,
         "executionEndCount": 1,
         "executionSuccessCount": 1,
         "executionFailureCount": 0,
-        "maxPartialJsonLength": 71,
+        "maxPartialJsonLength": 55,
+        "seenInAgentEnd": true
+      },
+      {
+        "id": "call_nDZoRuaYjG5GuPNqzVB9edCS|fc_01aa5da4842ad0620169a71d45e0e8819186ab0976552571b2",
+        "toolName": "write",
+        "startCount": 0,
+        "deltaCount": 1311,
+        "endCount": 0,
+        "executionStartCount": 1,
+        "executionEndCount": 1,
+        "executionSuccessCount": 1,
+        "executionFailureCount": 0,
+        "maxPartialJsonLength": 5490,
+        "seenInAgentEnd": true
+      },
+      {
+        "id": "call_ppPglbeeh4ShaqId9klBAw0j|fc_01aa5da4842ad0620169a71d141e388191b6af5bd174154cf0",
+        "toolName": "read",
+        "startCount": 0,
+        "deltaCount": 2,
+        "endCount": 0,
+        "executionStartCount": 1,
+        "executionEndCount": 1,
+        "executionSuccessCount": 1,
+        "executionFailureCount": 0,
+        "maxPartialJsonLength": 75,
+        "seenInAgentEnd": true
+      },
+      {
+        "id": "call_PRGhtu7QZzEI5w2pNQtFHHT8|fc_01aa5da4842ad0620169a71d0f79dc8191aaa3d853a293808f",
+        "toolName": "read",
+        "startCount": 0,
+        "deltaCount": 1,
+        "endCount": 0,
+        "executionStartCount": 1,
+        "executionEndCount": 1,
+        "executionSuccessCount": 1,
+        "executionFailureCount": 0,
+        "maxPartialJsonLength": 90,
+        "seenInAgentEnd": true
+      },
+      {
+        "id": "call_q5kcG4hUPbM3ZccFHN8DkSwG|fc_01aa5da4842ad0620169a71d09c0388191827a34dbd993de70",
+        "toolName": "read",
+        "startCount": 0,
+        "deltaCount": 2,
+        "endCount": 0,
+        "executionStartCount": 1,
+        "executionEndCount": 1,
+        "executionSuccessCount": 1,
+        "executionFailureCount": 0,
+        "maxPartialJsonLength": 31,
+        "seenInAgentEnd": true
+      },
+      {
+        "id": "call_rSIdXPlIeUB6z5R6LRgB22yY|fc_01aa5da4842ad0620169a71d325a0081918da8bccfc8822dde",
+        "toolName": "read",
+        "startCount": 0,
+        "deltaCount": 1,
+        "endCount": 0,
+        "executionStartCount": 1,
+        "executionEndCount": 1,
+        "executionSuccessCount": 1,
+        "executionFailureCount": 0,
+        "maxPartialJsonLength": 73,
+        "seenInAgentEnd": true
+      },
+      {
+        "id": "call_u0yBjaEryZOTheX2Ej0FmtF3|fc_01aa5da4842ad0620169a71d0f79c88191b8de6113c743f83f",
+        "toolName": "read",
+        "startCount": 0,
+        "deltaCount": 2,
+        "endCount": 0,
+        "executionStartCount": 1,
+        "executionEndCount": 1,
+        "executionSuccessCount": 1,
+        "executionFailureCount": 0,
+        "maxPartialJsonLength": 78,
+        "seenInAgentEnd": true
+      },
+      {
+        "id": "call_xNTT2XSPJyfvo9EAIYLkuaMF|fc_01aa5da4842ad0620169a71d09c0488191887fcb0064a0a90c",
+        "toolName": "read",
+        "startCount": 0,
+        "deltaCount": 1,
+        "endCount": 0,
+        "executionStartCount": 1,
+        "executionEndCount": 1,
+        "executionSuccessCount": 1,
+        "executionFailureCount": 0,
+        "maxPartialJsonLength": 55,
+        "seenInAgentEnd": true
+      },
+      {
+        "id": "call_yP1y3unW5AuOD6u0QcEA2Qse|fc_01aa5da4842ad0620169a71d1201808191b6b3bc2be8d65e5f",
+        "toolName": "read",
+        "startCount": 0,
+        "deltaCount": 1,
+        "endCount": 0,
+        "executionStartCount": 1,
+        "executionEndCount": 1,
+        "executionSuccessCount": 1,
+        "executionFailureCount": 0,
+        "maxPartialJsonLength": 102,
+        "seenInAgentEnd": true
+      },
+      {
+        "id": "call_zAbm8NBOQsHMyvtw38XJxW0d|fc_01aa5da4842ad0620169a71d141e4881918ab3ae7c508bae7d",
+        "toolName": "read",
+        "startCount": 0,
+        "deltaCount": 1,
+        "endCount": 0,
+        "executionStartCount": 1,
+        "executionEndCount": 1,
+        "executionSuccessCount": 1,
+        "executionFailureCount": 0,
+        "maxPartialJsonLength": 74,
+        "seenInAgentEnd": true
+      },
+      {
+        "id": "call_ZuM1rK405rZ7fCBH3HQMQVjW|fc_01aa5da4842ad0620169a71d3259e881918e55afef5136788a",
+        "toolName": "read",
+        "startCount": 0,
+        "deltaCount": 2,
+        "endCount": 0,
+        "executionStartCount": 1,
+        "executionEndCount": 1,
+        "executionSuccessCount": 1,
+        "executionFailureCount": 0,
+        "maxPartialJsonLength": 75,
         "seenInAgentEnd": true
       }
     ],
     "anomalies": []
   },
-  "outputTextPreview": "Implemented ✅ `skills-evals/generated/codequality/cd015/solution.py` with a composable HTTP middleware pipeline that includes:\n\n- **Auth middleware** (`TokenAuth`)\n- **Validation middleware** (`JsonBodyValidation`)\n- **Rate limiting middleware** (`InMemoryRateLimit`)\n- **Error formatting middleware** (`ErrorFormatting`)\n\n### What it supports\n- **Middleware chaining** via `build_pipeline(...)`\n- **Short-circuiting**: any middleware can return `Response` early without calling `nxt(...)`\n- **Typed context flow** between stages using `PipelineContext(Context)` (adds typed fields like `validated_body`)\n- Importing `Request`, `Response`, and `Context` from the fixture file at  \n  `skills-evals/fixtures/codequality/cd015/http_types.py` (loaded directly from that path)\n\n### Sample usage included\nAt the bottom (`if __name__ == \"__main__\":`) I wired **4 middleware handlers** (more than the requested minimum 3) and demonstrated a request execution through the pipeline.",
+  "outputTextPreview": "Implemented ✅ `skills-evals/generated/codequality/cd015/solution.py`\n\n### What I added\n- A composable middleware pipeline with:\n  - `chain_middlewares(...)`\n  - `MiddlewarePipeline.handle(request)`\n- Middleware handlers for:\n  - `auth_middleware(...)`\n  - `validation_middleware(...)`\n  - `rate_limit_middleware(...)`\n  - `error_formatting_middleware(...)`\n- Typed handler contracts:\n  - `Handler = Callable[[Context], Response]`\n  - `Middleware = Callable[[Context, Handler], Response]`\n- Short-circuit behavior in auth/validation/rate-limit handlers (they can return `Response` without calling `next_handler`).\n- Context propagation via shared typed `Context` (`user_id`, `roles`, `errors`, `rate_limit_remaining`).\n\n### Import behavior\n- `Request`, `Response`, and `Context` are loaded directly from:\n  - `skills-evals/fixtures/codequality/cd015/http_types.py`\n- Because `skills-evals` includes a hyphen (not a valid Python package name), this is done via `importlib` using the file path.\n\n### Sample usage\nAt the bottom (`if __name__ == \"__main__\":`) I wired **4 middleware handlers**:\n1. `error_formatting_middleware()`\n2. `auth_middleware(...)`\n3. `validation_middleware(...)`\n4. `rate_limit_mi",
   "resultErrors": [],
   "routing": {
     "readSkills": [
@@ -352,16 +300,17 @@
   "readBreakdown": [],
   "bootstrapBreakdown": [
     {
-      "path": "/var/folders/w7/3c51j_5j2gq4n13mljt4rrb80000gn/T/pi-eval-sandbox/CD-015/3c86dd20-6056-4942-8baf-50d5a959896d/AGENTS.md",
+      "path": "/var/folders/w7/3c51j_5j2gq4n13mljt4rrb80000gn/T/pi-eval-sandbox/CD-015/08f41b74-4aeb-411b-8f0c-bd84c4fb7216/AGENTS.md",
       "bytes": 12585
     },
     {
-      "path": "/var/folders/w7/3c51j_5j2gq4n13mljt4rrb80000gn/T/pi-eval-sandbox/CD-015/3c86dd20-6056-4942-8baf-50d5a959896d/instructions/skills.router.min.json",
+      "path": "/var/folders/w7/3c51j_5j2gq4n13mljt4rrb80000gn/T/pi-eval-sandbox/CD-015/08f41b74-4aeb-411b-8f0c-bd84c4fb7216/instructions/skills.router.min.json",
       "bytes": 3978
     },
     {
-      "path": "/var/folders/w7/3c51j_5j2gq4n13mljt4rrb80000gn/T/pi-eval-sandbox/CD-015/3c86dd20-6056-4942-8baf-50d5a959896d/skills",
+      "path": "/var/folders/w7/3c51j_5j2gq4n13mljt4rrb80000gn/T/pi-eval-sandbox/CD-015/08f41b74-4aeb-411b-8f0c-bd84c4fb7216/skills",
       "bytes": 187357
     }
-  ]
+  ],
+  "judgeVerdict": null
 }

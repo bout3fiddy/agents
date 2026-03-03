@@ -15,7 +15,7 @@ const WORKER_ENV_KEYS = {
 } as const;
 
 const DEFAULT_READ_DENY_PATHS = [
-	"skills-evals/fixtures/eval-cases.jsonl",
+	"skills-evals/fixtures/eval-cases",
 	"skills-evals/reports",
 	"docs/specs/pi-eval/reports",
 ];

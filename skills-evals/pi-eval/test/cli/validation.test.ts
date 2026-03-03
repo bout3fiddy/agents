@@ -36,7 +36,7 @@ test("resolveCasesPath checks for existing files", async () => {
 
 	await assert.rejects(
 		() => resolveCasesPath(dir, "missing.jsonl", "default.jsonl"),
-		/Cases file not found/,
+		/Cases path not found/,
 	);
 	await assert.rejects(
 		() => resolveCasesPath(dir, true, "default.jsonl"),

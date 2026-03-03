@@ -11,7 +11,7 @@ import {
 	resolveCasesPath,
 } from "./validation.js";
 
-const DEFAULT_CASES_PATH = "skills-evals/fixtures/eval-cases.jsonl";
+const DEFAULT_CASES_PATH = "skills-evals/fixtures/eval-cases";
 const DEFAULT_CASE_PARALLELISM = 10;
 
 type EvalFlags = Record<string, string | boolean>;
