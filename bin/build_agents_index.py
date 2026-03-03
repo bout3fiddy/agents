@@ -366,7 +366,7 @@ def print_results(
 
 
 def main() -> int:
-    root = Path(__file__).resolve().parents[3]
+    root = Path(__file__).resolve().parents[1]
 
     skills_count, trigger_count, ref_count, updated, errors, warnings = build_index(
         root=root,

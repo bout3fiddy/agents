@@ -9,8 +9,8 @@ TARGET_ROUTER_ARTIFACT_FILE="$TARGET_ROOT/skills.router.min.json"
 SOURCE_SKILLS_DIR="$SOURCE_DIR/skills"
 SOURCE_INSTRUCTIONS_FILE="$SOURCE_DIR/instructions/global.md"
 SOURCE_ROUTER_ARTIFACT_FILE="$SOURCE_DIR/instructions/skills.router.min.json"
-BUILD_ROUTER_SCRIPT="$SOURCE_DIR/skills/skill-creator/scripts/build_skills_router_artifact.py"
-BUILD_AGENT_INDEX_SCRIPT="$SOURCE_DIR/skills/skill-creator/scripts/build_agents_index.py"
+BUILD_ROUTER_SCRIPT="$SOURCE_DIR/bin/build_skills_router_artifact.py"
+BUILD_AGENT_INDEX_SCRIPT="$SOURCE_DIR/bin/build_agents_index.py"
 
 usage() {
     cat <<'USAGE'

@@ -9,7 +9,7 @@
 - `devc install` injects `node_modules` mounts by reading workspace globs from root `package.json` and/or `pnpm-workspace.yaml`; repos without workspaces won't get extra directories created.
 - Devcontainer bun installs now scan workspace globs (package.json workspaces / pnpm-workspace) instead of assuming `apps/` or `packages/`.
 - Devcontainer sets `UV_PROJECT_ENVIRONMENT` to `/home/node/.venv` and mounts the venv volume there to keep it out of the repo.
-- `python3 skills/skill-creator/scripts/build_agents_index.py` validates skills/reference routing metadata; use it before sync to catch schema or linkage issues.
+- `python3 bin/build_agents_index.py` validates skills/reference routing metadata; use it before sync to catch schema or linkage issues.
 - Skill validation in this repo uses the `agentskills` executable from `skills-ref` (`uvx --from skills-ref agentskills validate skills/<name>`).
 - In-house TypeScript port of `agentskills validate` lives at `skills-evals/validate/` (`bun run skills-evals/validate/index.ts validate skills/<name>`).
 - `bin/sync.sh` always hard-syncs this repo into `~/.agents` only.
@@ -35,10 +35,10 @@
 - `skills-evals/run.sh` supports optional `--case <CASE_ID>`, which maps to `/eval run --filter <CASE_ID> --limit 1` for targeted case runs.
 - `pi-eval` case timing controls: `PI_EVAL_CASE_TIMEOUT_MS` governs prompt/turn completion wait (default `300000`), and `PI_EVAL_CASE_SHUTDOWN_TIMEOUT_MS` governs post-run worker exit wait (default `30000`).
 - When `PI_EVAL_RPC_TRACE_DIR` is set, `runCaseProcess` now writes both `<case-id>.jsonl` raw RPC traces and `<case-id>.diagnostics.json` lifecycle summaries; timeout errors include a compact RPC diagnostics hint (`raw/parsed/last_stop/events`).
-- `pi-eval` tests currently live in `skills-evals/pi-eval/src/cli/validation.test.ts`, `skills-evals/pi-eval/src/runtime/path-safety.test.ts`, `skills-evals/pi-eval/src/runtime/sandbox.test.ts`, `skills-evals/pi-eval/src/runtime/worker.test.ts`, `skills-evals/pi-eval/src/runtime/case-lifecycle.test.ts`, `skills-evals/pi-eval/src/runtime/case-process.test.ts`, `skills-evals/pi-eval/src/runtime/scoring.test.ts`, and `skills-evals/pi-eval/src/reporting/report-persistence.test.ts`; run all with `bun test skills-evals/pi-eval/src/**/*.test.ts`.
+- `pi-eval` tests live in `skills-evals/pi-eval/test/`; run all with `bun test` from `skills-evals/pi-eval/`.
 - `DEVC_DISABLE_MCP_SERVERS` in `devcontainer/devcontainer.json` can disable MCP startup in containers (comma/space/semi-colon separated list); use it to skip auth-heavy servers (e.g. `sentry` and/or `linear`) on non-interactive session starts.
 - Third-party skill installers may land content in `~/.agents/skills/<name>`; to vendor into this repo, copy into `skills/<name>/`, ensure progressive disclosure (`SKILL.md` + `references/`), then run:
-  - `python3 skills/skill-creator/scripts/build_agents_index.py`
-  - `python3 skills/skill-creator/scripts/build_skills_router_artifact.py`
+  - `python3 bin/build_agents_index.py`
+  - `python3 bin/build_skills_router_artifact.py`
   - `./bin/sync.sh`
 - Global policy now requires AGENTS docs to be curated and progressive-disclosure based (concise root router + scoped/nested AGENTS + deep docs), and to migrate legacy monolithic AGENTS files instead of appending indefinitely.

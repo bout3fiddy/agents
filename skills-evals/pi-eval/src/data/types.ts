@@ -54,6 +54,15 @@ export type TokenUsage = {
 	totalTokens: number;
 };
 
+export type TurnTokenUsage = {
+	turn: number;
+	input: number;
+	output: number;
+	cacheRead: number;
+	cacheWrite: number;
+	totalTokens: number;
+};
+
 export type ToolUsageSummary = {
 	allowedTools: string[];
 	writeCalls: number;
@@ -100,7 +109,6 @@ export type ReadBreakdownEntry = {
 export type BootstrapBreakdownEntry = {
 	path: string;
 	bytes: number;
-	estTokens: number;
 };
 
 export type CaseRunResult = {
@@ -129,6 +137,7 @@ export type CaseRunResult = {
 	rpcDiagnostics?: RpcDiagnostics;
 	readBreakdown?: ReadBreakdownEntry[];
 	bootstrapBreakdown?: BootstrapBreakdownEntry[];
+	turnBreakdown?: TurnTokenUsage[];
 };
 
 export type FailureCategory =

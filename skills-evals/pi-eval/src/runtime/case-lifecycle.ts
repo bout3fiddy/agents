@@ -310,7 +310,6 @@ export const mirrorBootstrapPayloadToWorkspace = async (params: {
 		breakdown.push({
 			path: projection.target,
 			bytes,
-			estTokens: Math.ceil(bytes / 4),
 		});
 		await mkdir(path.dirname(projection.target), { recursive: true });
 		await cp(projection.source, projection.target, { recursive: true, force: true });

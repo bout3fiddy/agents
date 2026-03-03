@@ -8,6 +8,7 @@ type ReportRow = {
 	mode: string;
 	status: string;
 	tokens: number;
+	turns: number;
 	skillsRead: number;
 	skillFilesRead: number;
 	refsRead: number;
@@ -50,6 +51,7 @@ const parseReportRows = (content: string): Map<string, ReportRow> => {
 	const modeIdx = columnIndex("Mode");
 	const statusIdx = columnIndex("Status");
 	const tokensIdx = columnIndex("Tokens");
+	const turnsIdx = columnIndex("Turns");
 	const skillsReadIdx = columnIndex("Skills Read");
 	const skillFilesReadIdx = columnIndex("Skill Files Read");
 	const refsReadIdx = columnIndex("Refs Read");
@@ -70,6 +72,8 @@ const parseReportRows = (content: string): Map<string, ReportRow> => {
 		if (!caseId || !mode) continue;
 		const tokensValue = Number.parseInt(cells[tokensIdx] ?? "0", 10);
 		const tokens = Number.isFinite(tokensValue) ? tokensValue : 0;
+		const turnsValue = Number.parseInt(turnsIdx >= 0 ? (cells[turnsIdx] ?? "0") : "0", 10);
+		const turns = Number.isFinite(turnsValue) ? turnsValue : 0;
 		const skillsReadValue = Number.parseInt(skillsReadIdx >= 0 ? (cells[skillsReadIdx] ?? "0") : "0", 10);
 		const skillsRead = Number.isFinite(skillsReadValue) ? skillsReadValue : 0;
 		const skillFilesReadValue = Number.parseInt(
@@ -89,6 +93,7 @@ const parseReportRows = (content: string): Map<string, ReportRow> => {
 			mode,
 			status,
 			tokens,
+			turns,
 			skillsRead,
 			skillFilesRead,
 			refsRead,
@@ -134,6 +139,7 @@ const mergeReportRows = (params: {
 			mode: evaluation.mode,
 			status: evaluation.status === "pass" ? "PASS" : "FAIL",
 			tokens: evaluation.result.tokens.totalTokens || 0,
+			turns: evaluation.result.turnBreakdown?.length ?? 0,
 			skillsRead: evaluation.routing.readSkills.length,
 			skillFilesRead: evaluation.routing.readSkillFiles.length,
 			refsRead: evaluation.routing.readRefs.length,
@@ -188,6 +194,7 @@ const mergeReportRows = (params: {
 					mode,
 					status: "SKIP",
 					tokens: 0,
+					turns: 0,
 					skillsRead: 0,
 					skillFilesRead: 0,
 					refsRead: 0,
@@ -207,11 +214,12 @@ const renderCaseTable = (rows: ReportRow[]): string => {
 	const outputRows = rows.map((row) => {
 		const status = normalizeStatus(row.status) || "";
 		const tokenCount = row.tokens || 0;
-		return `| ${row.caseId} | ${row.mode} | ${status} | ${tokenCount} | ${row.skillsRead} | ${row.skillFilesRead} | ${row.refsRead} | ${row.missingRefs} | ${row.unexpectedRefs} | ${row.notes} | ${row.run} |`;
+		const turnCount = row.turns || 0;
+		return `| ${row.caseId} | ${row.mode} | ${status} | ${tokenCount} | ${turnCount} | ${row.skillsRead} | ${row.skillFilesRead} | ${row.refsRead} | ${row.missingRefs} | ${row.unexpectedRefs} | ${row.notes} | ${row.run} |`;
 	});
 	return [
-		"| Case | Mode | Status | Tokens | Skills Read | Skill Files Read | Refs Read | Missing Refs | Unexpected Refs | Notes | Run |",
-		"| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+		"| Case | Mode | Status | Tokens | Turns | Skills Read | Skill Files Read | Refs Read | Missing Refs | Unexpected Refs | Notes | Run |",
+		"| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
 		...outputRows,
 	].join("\n");
 };

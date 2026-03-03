@@ -69,6 +69,8 @@ const writeRoutingTraceArtifacts = async (params: {
 			model: model.label,
 			expectedSkills: evaluation.expectedSkills,
 			expectedRefs: evaluation.expectedRefs,
+			tokens: evaluation.result.tokens,
+			turnBreakdown: evaluation.result.turnBreakdown ?? [],
 			toolUsage: evaluation.result.toolUsage ?? null,
 			rpcDiagnostics: evaluation.result.rpcDiagnostics ?? null,
 			outputTextPreview: (evaluation.result.outputText ?? "").slice(0, 1200),

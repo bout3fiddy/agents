@@ -11,7 +11,7 @@ Repo-specific operating notes live in `AGENTS.md`.
 - Machine routing artifacts:
   - `instructions/skills.router.min.json` (primary runtime artifact)
 - Sync tooling in `bin/` (`sync.sh`)
-- Skills routing metadata tooling in `skills/skill-creator/scripts/build_agents_index.py`
+- Skills routing metadata tooling in `bin/build_agents_index.py`
 
 ## Repository layout
 
@@ -23,8 +23,8 @@ agents/
 │   ├── skills.router.min.json # Source copied to ~/.agents/skills.router.min.json
 ├── bin/
 │   ├── sync.sh                # Hard sync to ~/.agents
-├── skills/skill-creator/scripts/
-│   └── build_agents_index.py      # Validate skill/routing metadata (no marker updates)
+│   ├── build_agents_index.py      # Validate skill/routing metadata (no marker updates)
+│   └── build_skills_router_artifact.py  # Generate skills.router.min.json
 ├── skills-evals/
 │   ├── run.sh                 # Eval runner wrapper (supports --case CASE_ID)
 │   └── fixtures/
@@ -64,8 +64,8 @@ export AGENTS_DIR="/absolute/path/to/agents"
 ### Artifact regeneration
 
 Run these when you need to refresh routing metadata locally:
-- `python3 skills/skill-creator/scripts/build_agents_index.py` (source validation)
-- `python3 skills/skill-creator/scripts/build_skills_router_artifact.py` (artifact regeneration)
+- `python3 bin/build_agents_index.py` (source validation)
+- `python3 bin/build_skills_router_artifact.py` (artifact regeneration)
 
 ## Creating or updating a skill
 
@@ -89,8 +89,8 @@ bun run skills-evals/validate/index.ts validate skills/<name>
 
 ```bash
 # Rebuild routing artifact
-python3 skills/skill-creator/scripts/build_agents_index.py
-python3 skills/skill-creator/scripts/build_skills_router_artifact.py
+python3 bin/build_agents_index.py
+python3 bin/build_skills_router_artifact.py
 bun run skills-evals/validate/index.ts check-router-artifact
 
 # Run evals for all configured models/cases

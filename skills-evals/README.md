@@ -156,7 +156,7 @@ Mirrored reports:
 Usage:
 
 ```bash
-bun run skills-evals/validate/index.ts validate skills/skill-creator
+bun run skills-evals/validate/index.ts validate skills/coding
 ```
 
 Ported behavior:

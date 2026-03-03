@@ -21,7 +21,7 @@ import {
 	type ReadCapture,
 } from "./capture.js";
 import { modelSpecFromModel } from "./model-registry.js";
-import type { CaseRunResult, ReadBreakdownEntry, TokenUsage, ToolUsageSummary } from "../data/types.js";
+import type { CaseRunResult, ReadBreakdownEntry, TokenUsage, TurnTokenUsage, ToolUsageSummary } from "../data/types.js";
 import { assertReadablePath, createPathDenyPolicy, type PathDenyPolicy } from "./read-policy.js";
 import { ensureDir } from "../data/utils.js";
 import { parseWorkerRuntimeConfig } from "./worker-contract.js";
@@ -254,6 +254,7 @@ const registerReadCaptureHooks = (
 type WorkerAccumulator = {
 	outputChunks: string[];
 	tokenTotals: TokenUsage;
+	turnBreakdown: TurnTokenUsage[];
 	completedTurns: number;
 	finalized: boolean;
 };
@@ -269,6 +270,7 @@ const createAccumulator = (): WorkerAccumulator => ({
 		cacheWrite: 0,
 		totalTokens: 0,
 	},
+	turnBreakdown: [],
 	completedTurns: 0,
 	finalized: false,
 });
@@ -289,6 +291,16 @@ const appendAgentEnd = (
 	const outputText = collectAssistantText(messages);
 	if (outputText) acc.outputChunks.push(outputText);
 	const usage = sumUsage(messages);
+	if (countTurn) {
+		acc.turnBreakdown.push({
+			turn: acc.completedTurns + 1,
+			input: usage.input,
+			output: usage.output,
+			cacheRead: usage.cacheRead,
+			cacheWrite: usage.cacheWrite,
+			totalTokens: usage.totalTokens,
+		});
+	}
 	acc.tokenTotals.input += usage.input;
 	acc.tokenTotals.output += usage.output;
 	acc.tokenTotals.cacheRead += usage.cacheRead;
@@ -386,6 +398,7 @@ const buildResult = (params: {
 		errors,
 		toolUsage,
 		readBreakdown: buildReadBreakdown(readCapture),
+		turnBreakdown: acc.turnBreakdown,
 	};
 };
 

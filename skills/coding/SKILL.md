@@ -12,7 +12,6 @@ metadata:
     - code-review
     - technical-guidance
     - platform
-    - solidjs
   trigger_phrases:
     - implement
     - fix bug
@@ -20,7 +19,6 @@ metadata:
     - code review
     - code smell
     - quality review
-    - solidjs
     - infrastructure
     - platform engineering
     - deploy
@@ -87,10 +85,7 @@ Use this skill when the primary intent is implementation, bug fixing, refactorin
 
 ## Scope and routing
 - Use this skill for code edits, code-quality reviews, PR feedback loops, and infra/platform implementation tasks.
-- If the request is planning/spec/lifecycle management, hand off to `planning`.
 - If the request is AGENTS architecture housekeeping, hand off to `housekeeping`.
-- If the request is under `skills/` or edits `SKILL.md`, hand off to `skill-creator`.
-- For frontend framework guidance, use SolidJS references only (`skills/coding/references/solidjs/...`).
 
 ## Mandatory smell baseline (always for code changes)
 For implementation/bugfix/refactor/review operations, always open:
@@ -119,9 +114,6 @@ smell refs — it is cheaper to check and dismiss than to miss a smell.
   - `skills/coding/references/code-smells/smells/index.md`
 - Work-package refactoring execution:
   - `skills/coding/references/refactoring/index.md`
-- SolidJS implementation/performance:
-  - `skills/coding/references/solidjs/index.md`
-  - `skills/coding/references/solidjs/rules/index.md`
 - Infra / deploy / platform ops:
   - `skills/coding/references/platform-engineering/index.md`
 - Auth / credentials / secret handling:

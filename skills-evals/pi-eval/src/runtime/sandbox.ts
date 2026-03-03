@@ -14,7 +14,7 @@ const WORKSPACE_INCLUDE_PATHS = [
 	path.join("skills-evals", "pi-eval", "config"),
 ];
 const SYNC_SOURCE_INCLUDE_PATHS = [
-	path.join("bin", "sync.sh"),
+	"bin",
 	"skills",
 	"instructions",
 	path.join("skills-evals", "validate"),

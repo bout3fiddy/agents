@@ -22,8 +22,6 @@ TRIGGER_REF_RE = __import__("re").compile(r"-\s*.*?->\s*`([^`]+)`")
 DIRECT_REF_RE = __import__("re").compile(r"-\s*`([^`]+)`")
 
 FALLBACK_SKILL_PRIORITIES = {
-    "skill-creator": 90,
-    "planning": 85,
     "coding": 80,
     "design": 70,
     "housekeeping": 65,
@@ -33,24 +31,18 @@ FALLBACK_SKILL_TASK_TYPES = {
     "coding": ["implementation", "refactor", "bugfix", "technical-guidance", "coding"],
     "design": ["design", "ui-review", "animation", "dialkit"],
     "housekeeping": ["agents-architecture", "migration", "repo-housekeeping", "housekeeping"],
-    "planning": ["planning", "spec", "linear", "workpackage", "clarify"],
-    "skill-creator": ["skills", "skill-maintenance", "skill-installation", "skill-update", "skill-creation"],
 }
 
 FALLBACK_SKILL_WORKFLOW_TRIGGERS = {
     "coding": ["implementation_request_detected", "refactor_request_detected", "bugfix_request_detected"],
     "design": ["design_request_detected", "ui_critique_requested", "animation_request_detected", "dialkit_request_detected"],
     "housekeeping": ["agents_architecture_requested", "legacy_migration_requested", "docs_housekeeping_requested"],
-    "planning": ["linear_issue_context_detected", "workpackage_path_detected", "planning_request_detected"],
-    "skill-creator": ["skills_path_detected", "skill_update_requested", "skill_creation_requested", "skill_install_requested"],
 }
 
 FALLBACK_REF_WORKFLOW_TRIGGERS = {
-    "planning.ref.index": ["linear_issue_context_detected", "planning_request_detected", "workpackage_path_detected"],
     "coding.ref.index": ["implementation_request_detected", "refactor_request_detected", "bugfix_request_detected"],
     "design.ref.index": ["design_request_detected"],
     "housekeeping.ref.index": ["agents_architecture_requested", "docs_housekeeping_requested", "legacy_migration_requested"],
-    "skill-creator.ref.index": ["skills_path_detected", "skill_update_requested", "skill_creation_requested", "skill_install_requested"],
 }
 
 
@@ -513,7 +505,7 @@ def build_router_artifact(root: Path) -> tuple[dict[str, Any], int]:
 
 
 def main() -> int:
-    root = Path(__file__).resolve().parents[3]
+    root = Path(__file__).resolve().parents[1]
     output_router_path = root / "instructions" / "skills.router.min.json"
     artifact, routeable_refs_count = build_router_artifact(root)
     output_router_path.parent.mkdir(parents=True, exist_ok=True)
