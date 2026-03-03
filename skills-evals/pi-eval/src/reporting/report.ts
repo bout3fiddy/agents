@@ -28,15 +28,21 @@ const joinRoutingList = (values: string[] | undefined): string => {
 	return values.join(", ");
 };
 
-const formatTokenStats = (tokens: number[]) => {
-	return {
-		max: Math.max(0, ...tokens),
-		median: median(tokens),
-		p95: percentile(tokens, 95),
-	};
-};
+const formatTokenStats = (tokens: number[]) => ({
+	max: Math.max(0, ...tokens),
+	median: median(tokens),
+	p95: percentile(tokens, 95),
+});
 
 const UNPAIRED_TABLE_SENTINEL = "<!-- UNPAIRED_TABLE_START -->";
+
+const safeParseInt = (value: string): number => {
+	const n = Number.parseInt(value, 10);
+	return Number.isFinite(n) ? n : 0;
+};
+
+const cellStr = (cells: string[], idx: number, fallback: string): string =>
+	idx >= 0 ? (cells[idx] ?? fallback) : fallback;
 
 const parseReportRows = (content: string): Map<string, ReportRow> => {
 	const rows = new Map<string, ReportRow>();
@@ -49,20 +55,20 @@ const parseReportRows = (content: string): Map<string, ReportRow> => {
 		.split("|")
 		.slice(1, -1)
 		.map((cell) => cell.trim());
-	const columnIndex = (name: string): number =>
+	const col = (name: string): number =>
 		headerCells.findIndex((cell) => cell.toLowerCase() === name.toLowerCase());
-	const caseIdx = columnIndex("Case");
-	const modeIdx = columnIndex("Mode");
-	const statusIdx = columnIndex("Status");
-	const tokensIdx = columnIndex("Tokens");
-	const turnsIdx = columnIndex("Turns");
-	const skillsReadIdx = columnIndex("Skills Read");
-	const skillFilesReadIdx = columnIndex("Skill Files Read");
-	const refsReadIdx = columnIndex("Refs Read");
-	const missingRefsIdx = columnIndex("Missing Refs");
-	const unexpectedRefsIdx = columnIndex("Unexpected Refs");
-	const notesIdx = columnIndex("Notes");
-	const runIdx = columnIndex("Run");
+	const caseIdx = col("Case");
+	const modeIdx = col("Mode");
+	const statusIdx = col("Status");
+	const tokensIdx = col("Tokens");
+	const turnsIdx = col("Turns");
+	const skillsReadIdx = col("Skills Read");
+	const skillFilesReadIdx = col("Skill Files Read");
+	const refsReadIdx = col("Refs Read");
+	const missingRefsIdx = col("Missing Refs");
+	const unexpectedRefsIdx = col("Unexpected Refs");
+	const notesIdx = col("Notes");
+	const runIdx = col("Run");
 	if (caseIdx < 0 || modeIdx < 0) return rows;
 
 	for (let i = headerIndex + 2; i < lines.length; i += 1) {
@@ -74,37 +80,19 @@ const parseReportRows = (content: string): Map<string, ReportRow> => {
 		const caseId = cells[caseIdx] ?? "";
 		const mode = cells[modeIdx] ?? "";
 		if (!caseId || !mode) continue;
-		const tokensValue = Number.parseInt(cells[tokensIdx] ?? "0", 10);
-		const tokens = Number.isFinite(tokensValue) ? tokensValue : 0;
-		const turnsValue = Number.parseInt(turnsIdx >= 0 ? (cells[turnsIdx] ?? "0") : "0", 10);
-		const turns = Number.isFinite(turnsValue) ? turnsValue : 0;
-		const skillsReadValue = Number.parseInt(skillsReadIdx >= 0 ? (cells[skillsReadIdx] ?? "0") : "0", 10);
-		const skillsRead = Number.isFinite(skillsReadValue) ? skillsReadValue : 0;
-		const skillFilesReadValue = Number.parseInt(
-			skillFilesReadIdx >= 0 ? (cells[skillFilesReadIdx] ?? "0") : "0",
-			10,
-		);
-		const skillFilesRead = Number.isFinite(skillFilesReadValue) ? skillFilesReadValue : 0;
-		const refsReadValue = Number.parseInt(refsReadIdx >= 0 ? (cells[refsReadIdx] ?? "0") : "0", 10);
-		const refsRead = Number.isFinite(refsReadValue) ? refsReadValue : 0;
-		const missingRefs = missingRefsIdx >= 0 ? (cells[missingRefsIdx] ?? "-") : "-";
-		const unexpectedRefs = unexpectedRefsIdx >= 0 ? (cells[unexpectedRefsIdx] ?? "-") : "-";
-		const status = cells[statusIdx] ?? "";
-		const notes = cells[notesIdx] ?? "";
-		const run = runIdx >= 0 ? cells[runIdx] ?? "-" : "-";
 		rows.set(buildRowKey(caseId, mode), {
 			caseId,
 			mode,
-			status,
-			tokens,
-			turns,
-			skillsRead,
-			skillFilesRead,
-			refsRead,
-			missingRefs,
-			unexpectedRefs,
-			notes,
-			run,
+			status: cells[statusIdx] ?? "",
+			tokens: safeParseInt(cells[tokensIdx] ?? "0"),
+			turns: safeParseInt(cellStr(cells, turnsIdx, "0")),
+			skillsRead: safeParseInt(cellStr(cells, skillsReadIdx, "0")),
+			skillFilesRead: safeParseInt(cellStr(cells, skillFilesReadIdx, "0")),
+			refsRead: safeParseInt(cellStr(cells, refsReadIdx, "0")),
+			missingRefs: cellStr(cells, missingRefsIdx, "-"),
+			unexpectedRefs: cellStr(cells, unexpectedRefsIdx, "-"),
+			notes: cells[notesIdx] ?? "",
+			run: cellStr(cells, runIdx, "-"),
 		});
 	}
 
@@ -126,15 +114,15 @@ const mergeReportRows = (params: {
 	const { evaluations, allCases, previousRows, runTimestamp } = params;
 	const runDate = runDateFromTimestamp(runTimestamp);
 	const updatedRows = new Map<string, ReportRow>();
+	const addMode = (map: Map<string, Set<string>>, caseId: string, mode: string) => {
+		let set = map.get(caseId);
+		if (!set) { set = new Set(); map.set(caseId, set); }
+		set.add(mode);
+	};
 	const updatedModes = new Map<string, Set<string>>();
 	const previousModes = new Map<string, Set<string>>();
 
-	for (const row of previousRows.values()) {
-		if (!previousModes.has(row.caseId)) {
-			previousModes.set(row.caseId, new Set());
-		}
-		previousModes.get(row.caseId)?.add(row.mode);
-	}
+	for (const row of previousRows.values()) addMode(previousModes, row.caseId, row.mode);
 
 	for (const evaluation of evaluations) {
 		const key = buildRowKey(evaluation.caseId, evaluation.mode);
@@ -153,35 +141,18 @@ const mergeReportRows = (params: {
 			run: runDate,
 		};
 		updatedRows.set(key, row);
-		if (!updatedModes.has(row.caseId)) {
-			updatedModes.set(row.caseId, new Set());
-		}
-		updatedModes.get(row.caseId)?.add(row.mode);
+		addMode(updatedModes, row.caseId, row.mode);
 	}
 
-	const caseIds = new Set<string>();
-	for (const evalCase of allCases) {
-		caseIds.add(evalCase.id);
-	}
-	for (const caseId of updatedModes.keys()) {
-		caseIds.add(caseId);
-	}
+	const caseIds = new Set([...allCases.map((c) => c.id), ...updatedModes.keys()]);
 
 	const rows: ReportRow[] = [];
 	const modeOrder = new Map(["single", "baseline", "interference"].map((mode, index) => [mode, index]));
 	const sortedCaseIds = Array.from(caseIds).sort((a, b) => a.localeCompare(b));
 
 	for (const caseId of sortedCaseIds) {
-		const modes = new Set<string>();
-		for (const mode of previousModes.get(caseId) ?? []) {
-			modes.add(mode);
-		}
-		for (const mode of updatedModes.get(caseId) ?? []) {
-			modes.add(mode);
-		}
-		if (modes.size === 0) {
-			modes.add("single");
-		}
+		const modes = new Set([...(previousModes.get(caseId) ?? []), ...(updatedModes.get(caseId) ?? [])]);
+		if (modes.size === 0) modes.add("single");
 		const sortedModes = Array.from(modes).sort((a, b) => {
 			const aOrder = modeOrder.get(a) ?? Number.POSITIVE_INFINITY;
 			const bOrder = modeOrder.get(b) ?? Number.POSITIVE_INFINITY;

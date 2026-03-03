@@ -49,10 +49,7 @@ const PROVIDER_ALLOWED_HOSTS: Record<string, string[]> = {
 	xai: ["api.x.ai", "x.ai", "*.x.ai"],
 };
 
-const uniqueSorted = (values: string[]): string[] =>
-	Array.from(new Set(values.filter((value) => value.trim().length > 0))).sort((a, b) =>
-		a.localeCompare(b)
-	);
+import { uniqueSorted } from "../data/utils.js";
 
 export const resolveProviderAllowedHosts = (model: ModelSpec): string[] => {
 	const providerKey = model.provider.trim().toLowerCase();

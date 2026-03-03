@@ -11,6 +11,7 @@ import type {
 	ModelSpec,
 	TokenUsage,
 } from "../data/types.js";
+import { collectAssistantText, sumUsageFromMessages } from "../runtime/rpc-messages.js";
 
 type ResolvedPair = {
 	skill: CaseEvaluation;
@@ -177,43 +178,6 @@ Then analyze the cost-quality tradeoff:
 
 Respond in this exact JSON format (no markdown fences, just raw JSON):
 ${JUDGE_RESPONSE_SCHEMA}`;
-};
-
-const collectAssistantText = (messages: unknown[]): string => {
-	const chunks: string[] = [];
-	for (const message of messages) {
-		if (!message || typeof message !== "object") continue;
-		const record = message as Record<string, unknown>;
-		if (record.role !== "assistant") continue;
-		const content = Array.isArray(record.content) ? record.content : [];
-		for (const block of content) {
-			if (!block || typeof block !== "object") continue;
-			const blockRecord = block as Record<string, unknown>;
-			if (blockRecord.type === "text" && typeof blockRecord.text === "string") {
-				chunks.push(blockRecord.text);
-			}
-		}
-	}
-	return chunks.join("\n").trim();
-};
-
-const sumUsageFromMessages = (messages: unknown[]): TokenUsage => {
-	let input = 0;
-	let output = 0;
-	let cacheRead = 0;
-	let cacheWrite = 0;
-	for (const message of messages) {
-		if (!message || typeof message !== "object") continue;
-		const record = message as Record<string, unknown>;
-		if (record.role !== "assistant") continue;
-		const usage = record.usage as Record<string, number> | undefined;
-		if (!usage) continue;
-		input += usage.input ?? 0;
-		output += usage.output ?? 0;
-		cacheRead += usage.cacheRead ?? 0;
-		cacheWrite += usage.cacheWrite ?? 0;
-	}
-	return { input, output, cacheRead, cacheWrite, totalTokens: input + output + cacheRead + cacheWrite };
 };
 
 const runPiJudge = (params: {

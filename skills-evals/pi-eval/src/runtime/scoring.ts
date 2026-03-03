@@ -10,16 +10,7 @@ import type {
 	FailureReason,
 	RoutingScorecard,
 } from "../data/types.js";
-import { normalizePath } from "../data/utils.js";
-
-const uniqueSorted = (values: string[]): string[] =>
-	Array.from(
-		new Set(
-			values
-				.map((value) => value.trim())
-				.filter((value) => value.length > 0),
-		),
-	).sort((a, b) => a.localeCompare(b));
+import { normalizePath, uniqueSorted } from "../data/utils.js";
 
 const formatList = (values: string[]): string => `[${values.join(", ")}]`;
 
@@ -96,7 +87,7 @@ const POLICY_FAILURE_PATTERNS = [
 const isPolicyFailure = (message: string): boolean =>
 	POLICY_FAILURE_PATTERNS.some((pattern) => pattern.test(message));
 
-const buildManifestHash = (params: {
+export const buildManifestHash = (params: {
 	caseId: string;
 	profile: BootstrapProfile;
 	availableSkills: string[];
@@ -120,7 +111,7 @@ const isPathNeedleMatch = (message: string, needle: string): boolean => {
 	);
 };
 
-const POLICY_DENY_ASSERTION_PREFIX = "must_trigger_policy_deny:";
+export const POLICY_DENY_ASSERTION_PREFIX = "must_trigger_policy_deny:";
 const MUST_READ_REF_ASSERTION_PREFIX = "must_read_ref:";
 const MUST_NOT_READ_REF_ASSERTION_PREFIX = "must_not_read_ref:";
 const MUST_READ_REFS_COUNT_AT_LEAST_ASSERTION_PREFIX = "must_read_refs_count_at_least:";

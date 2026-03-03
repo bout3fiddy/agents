@@ -1,6 +1,6 @@
 import { realpath as fsRealpath } from "node:fs/promises";
 import path from "node:path";
-import { normalizePath } from "../data/utils.js";
+import { hasPathPrefix, normalizePath } from "../data/utils.js";
 
 export const FORBIDDEN_READ_ERROR = "ENOENT: no such file or directory";
 
@@ -28,10 +28,6 @@ export const createPathDenyPolicy = async (
 		canonicalCache: new Map<string, string | null>(),
 	};
 };
-
-const hasPathPrefix = (candidate: string, root: string): boolean =>
-	candidate === root ||
-	candidate.startsWith(root.endsWith(path.sep) ? root : `${root}${path.sep}`);
 
 const resolveCanonical = async (
 	absolutePath: string,

@@ -5,7 +5,7 @@ import type { EvalConfig } from "./types.js";
 
 const extensionRoot = () => path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 
-export const getConfigPath = (): string =>
+const getConfigPath = (): string =>
 	path.join(extensionRoot(), "config", "eval.config.json");
 
 export const loadEvalConfig = async (): Promise<EvalConfig> => readJson<EvalConfig>(getConfigPath());

@@ -1,6 +1,6 @@
 import type { BootstrapProfile } from "../data/types.js";
 
-export const WORKER_ENV_KEYS = {
+const WORKER_ENV_KEYS = {
 	mode: "PI_EVAL_WORKER",
 	outputPath: "PI_EVAL_OUTPUT",
 	caseId: "PI_EVAL_CASE_ID",
@@ -14,7 +14,7 @@ export const WORKER_ENV_KEYS = {
 	bootstrapManifestHash: "PI_EVAL_BOOTSTRAP_MANIFEST_HASH",
 } as const;
 
-export const DEFAULT_READ_DENY_PATHS = [
+const DEFAULT_READ_DENY_PATHS = [
 	"skills-evals/fixtures/eval-cases.jsonl",
 	"skills-evals/reports",
 	"docs/specs/pi-eval/reports",

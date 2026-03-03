@@ -68,19 +68,12 @@ if [[ -z "${NO_COLOR:-}" ]]; then
 fi
 
 if [[ -z "${PI_EVAL_TABLE_WIDTH:-}" ]]; then
-	if [[ -n "${COLUMNS:-}" ]]; then
-		export PI_EVAL_TABLE_WIDTH="$COLUMNS"
-	elif [[ -t 0 ]] && command -v stty >/dev/null 2>&1; then
-		TABLE_WIDTH="$(stty size </dev/tty 2>/dev/null | awk '{print $2}')"
-		if [[ -n "$TABLE_WIDTH" ]]; then
-			export PI_EVAL_TABLE_WIDTH="$TABLE_WIDTH"
-		fi
-	elif [[ -t 0 ]] && command -v tput >/dev/null 2>&1; then
-		TABLE_WIDTH="$(tput cols 2>/dev/null || true)"
-		if [[ -n "$TABLE_WIDTH" ]]; then
-			export PI_EVAL_TABLE_WIDTH="$TABLE_WIDTH"
-		fi
+	TABLE_WIDTH="${COLUMNS:-}"
+	if [[ -z "$TABLE_WIDTH" && -t 0 ]]; then
+		TABLE_WIDTH="$(stty size </dev/tty 2>/dev/null | awk '{print $2}')" ||
+			TABLE_WIDTH="$(tput cols 2>/dev/null || true)"
 	fi
+	[[ -n "$TABLE_WIDTH" ]] && export PI_EVAL_TABLE_WIDTH="$TABLE_WIDTH"
 fi
 
 MODEL_SPECS=()
@@ -206,12 +199,7 @@ fi
 failed=0
 PIDS=()
 for spec in "${MODEL_SPECS[@]}"; do
-	model="${spec%%|*}"
-	remainder="${spec#*|}"
-	thinking="${remainder%%|*}"
-	remainder="${remainder#*|}"
-	judge_model="${remainder%%|*}"
-	judge_thinking="${remainder#*|}"
+	IFS='|' read -r model thinking judge_model judge_thinking <<< "$spec"
 	echo "[$model] Starting (thinking=$thinking)"
 	run_for_model "$model" "$thinking" "$judge_model" "$judge_thinking" &
 	PIDS+=("$!")

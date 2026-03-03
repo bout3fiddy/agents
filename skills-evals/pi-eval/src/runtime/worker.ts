@@ -24,6 +24,7 @@ import { modelSpecFromModel } from "./model-registry.js";
 import type { CaseRunResult, ReadBreakdownEntry, TokenUsage, TurnTokenUsage, ToolUsageSummary } from "../data/types.js";
 import { assertReadablePath, createPathDenyPolicy, type PathDenyPolicy } from "./read-policy.js";
 import { ensureDir } from "../data/utils.js";
+import { collectAssistantText, sumUsageFromMessages } from "./rpc-messages.js";
 import { parseWorkerRuntimeConfig } from "./worker-contract.js";
 import {
 	FORBIDDEN_WORKSPACE_VIOLATION,
@@ -37,19 +38,6 @@ import {
 const DRY_RUN_SKILL_STUB = "Dry-run mode: file content unavailable.";
 const RETRYABLE_TERMINATION_SETTLE_MS = 3_000;
 
-const collectAssistantText = (messages: Array<AssistantMessage | ToolResultMessage>): string => {
-	const chunks: string[] = [];
-	for (const message of messages) {
-		if (message.role !== "assistant") continue;
-		for (const block of message.content ?? []) {
-			if (block && typeof block === "object" && "type" in block && block.type === "text") {
-				const text = "text" in block ? block.text : "";
-				if (typeof text === "string") chunks.push(text);
-			}
-		}
-	}
-	return chunks.join("\n").trim();
-};
 
 const getLastAssistantMessage = (
 	messages: Array<AssistantMessage | ToolResultMessage>,
@@ -79,26 +67,6 @@ const extractTerminalError = (messages: Array<AssistantMessage | ToolResultMessa
 	return trimmed.length > 0 ? trimmed : "terminated";
 };
 
-const sumUsage = (messages: Array<AssistantMessage | ToolResultMessage>): TokenUsage => {
-	let input = 0;
-	let output = 0;
-	let cacheRead = 0;
-	let cacheWrite = 0;
-	let totalTokens = 0;
-	for (const message of messages) {
-		if (message.role !== "assistant") continue;
-		input += message.usage?.input ?? 0;
-		output += message.usage?.output ?? 0;
-		cacheRead += message.usage?.cacheRead ?? 0;
-		cacheWrite += message.usage?.cacheWrite ?? 0;
-		totalTokens += message.usage?.totalTokens ??
-			(message.usage?.input ?? 0) +
-			(message.usage?.output ?? 0) +
-			(message.usage?.cacheRead ?? 0) +
-			(message.usage?.cacheWrite ?? 0);
-	}
-	return { input, output, cacheRead, cacheWrite, totalTokens };
-};
 
 const adaptToolExecute = <T extends ToolWithExecute>(tool: T): T => ({
 	...tool,
@@ -290,7 +258,7 @@ const appendAgentEnd = (
 ): void => {
 	const outputText = collectAssistantText(messages);
 	if (outputText) acc.outputChunks.push(outputText);
-	const usage = sumUsage(messages);
+	const usage = sumUsageFromMessages(messages);
 	if (countTurn) {
 		acc.turnBreakdown.push({
 			turn: acc.completedTurns + 1,

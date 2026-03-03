@@ -11,7 +11,13 @@ import type {
 	RpcDiagnostics,
 	RpcToolCallDiagnostics,
 } from "../data/types.js";
-import { fileExists } from "../data/utils.js";
+import {
+	fileExists,
+	isPathInsideRoot as isPathInside,
+	parsePositiveInt,
+	sleep,
+	withTimeout,
+} from "../data/utils.js";
 import { buildWorkerEnv } from "./worker-contract.js";
 import { toSafePathSegment } from "./path-safety.js";
 import {
@@ -22,8 +28,8 @@ import {
 const DEFAULT_CASE_TIMEOUT_MS = 300_000;
 const DEFAULT_SHUTDOWN_TIMEOUT_MS = 30_000;
 const RETRYABLE_AGENT_END_SETTLE_MS = 1_500;
-const GUEST_WORKSPACE_DIR = "/workspace";
-const GUEST_HOME_DIR = "/home/sandbox";
+export const GUEST_WORKSPACE_DIR = "/workspace";
+export const GUEST_HOME_DIR = "/home/sandbox";
 const GUEST_OUTPUT_DIR = "/tmp/pi-eval-out";
 
 type RpcState = {
@@ -48,27 +54,8 @@ type RpcToolCallState = {
 	seenInAgentEnd: boolean;
 };
 
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
-const parsePositiveIntEnv = (name: string, fallback: number): number => {
-	const raw = process.env[name];
-	if (!raw || raw.trim().length === 0) return fallback;
-	const parsed = Number.parseInt(raw, 10);
-	if (!Number.isFinite(parsed) || parsed < 1) {
-		throw new Error(`${name} must be a positive integer; got '${raw}'.`);
-	}
-	return parsed;
-};
-
-const withTimeout = async <T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> => {
-	let timeoutId: NodeJS.Timeout;
-	const timeoutPromise = new Promise<never>((_, reject) => {
-		timeoutId = setTimeout(() => reject(new Error(`${label} timed out after ${timeoutMs}ms`)), timeoutMs);
-	});
-	const result = await Promise.race([promise, timeoutPromise]);
-	clearTimeout(timeoutId);
-	return result;
-};
+const parsePositiveIntEnv = (name: string, fallback: number): number =>
+	parsePositiveInt(process.env[name], fallback);
 
 const waitForFile = async (filePath: string, timeoutMs = 10_000, intervalMs = 250): Promise<boolean> => {
 	const startedAt = Date.now();
@@ -81,11 +68,6 @@ const waitForFile = async (filePath: string, timeoutMs = 10_000, intervalMs = 25
 
 const normalizePosixRelative = (relativePath: string): string =>
 	relativePath.split(path.sep).join("/");
-
-const isPathInside = (targetPath: string, rootPath: string): boolean => {
-	const relative = path.relative(rootPath, targetPath);
-	return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
-};
 
 const hostPathToGuest = (
 	hostPath: string,

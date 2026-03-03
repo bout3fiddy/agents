@@ -19,9 +19,7 @@ import {
 	type SandboxedProcessHandle,
 	resolveProviderAllowedHosts,
 } from "./sandbox-engine.js";
-
-const GUEST_WORKSPACE_DIR = "/workspace";
-const GUEST_HOME_DIR = "/home/sandbox";
+import { GUEST_HOME_DIR, GUEST_WORKSPACE_DIR } from "./case-process.js";
 const CHECKPOINT_LOCK_TIMEOUT_MS = 30_000;
 const CHECKPOINT_LOCK_POLL_MS = 100;
 

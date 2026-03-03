@@ -1,6 +1,6 @@
 import { realpath as fsRealpath } from "node:fs/promises";
 import path from "node:path";
-import { normalizePath } from "../data/utils.js";
+import { hasPathPrefix, normalizePath } from "../data/utils.js";
 
 export const FORBIDDEN_WORKSPACE_VIOLATION = "FORBIDDEN_WORKSPACE_VIOLATION";
 
@@ -14,10 +14,6 @@ export type SandboxBoundary = {
 	sandboxRootCanonical: string | null;
 	violations: Set<string>;
 };
-
-const hasPathPrefix = (candidate: string, root: string): boolean =>
-	candidate === root ||
-	candidate.startsWith(root.endsWith(path.sep) ? root : `${root}${path.sep}`);
 
 export const createSandboxBoundary = async (
 	cwd: string,

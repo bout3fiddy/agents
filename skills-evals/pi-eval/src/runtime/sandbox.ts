@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { chmod, copyFile, cp, mkdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { fileExists } from "../data/utils.js";
+import { fileExists, parsePositiveInt, withTimeout } from "../data/utils.js";
 import { assertManagedTempPath, toSafePathSegment } from "./path-safety.js";
 
 const WORKSPACE_INCLUDE_PATHS = [
@@ -27,11 +27,8 @@ const SYNC_SOURCE_ROOT = path.join(tmpdir(), "pi-eval-sync-source");
 let activeSyncCount = 0;
 const syncWaitQueue: Array<() => void> = [];
 
-const parsePositiveIntEnv = (value: string | undefined, fallback: number): number => {
-	const parsed = Number.parseInt(value ?? `${fallback}`, 10);
-	if (!Number.isFinite(parsed) || parsed < 1) return fallback;
-	return parsed;
-};
+const parsePositiveIntEnv = (value: string | undefined, fallback: number): number =>
+	parsePositiveInt(value, fallback);
 
 const getSyncParallelismLimit = (): number =>
 	parsePositiveIntEnv(process.env.PI_EVAL_SYNC_PARALLELISM, 4);
@@ -110,18 +107,6 @@ export const cleanupSandboxHome = async (homeDir: string | null): Promise<void> 
 	if (!homeDir) return;
 	const safePath = assertManagedTempPath(homeDir, HOME_ROOT, "home cleanup");
 	await rm(safePath, { recursive: true, force: true });
-};
-
-const withTimeout = async <T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> => {
-	let timeoutId: NodeJS.Timeout;
-	const timeoutPromise = new Promise<never>((_, reject) => {
-		timeoutId = setTimeout(() => {
-			reject(new Error(`${label} timed out after ${timeoutMs}ms`));
-		}, timeoutMs);
-	});
-	const result = await Promise.race([promise, timeoutPromise]);
-	clearTimeout(timeoutId!);
-	return result;
 };
 
 export const runEvalSync = async (params: {

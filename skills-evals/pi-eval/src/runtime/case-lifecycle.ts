@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { chmod, copyFile, cp, mkdir, readdir, rm, stat } from "node:fs/promises";
 import path from "node:path";
 import {
@@ -8,7 +7,12 @@ import {
 	cleanupSandboxHome,
 	runEvalSync,
 } from "./sandbox.js";
-import { buildCaseResult, evaluateCase } from "./scoring.js";
+import {
+	buildCaseResult,
+	buildManifestHash,
+	evaluateCase,
+	POLICY_DENY_ASSERTION_PREFIX,
+} from "./scoring.js";
 import type { BootstrapBreakdownEntry, BootstrapProfile, CaseEvaluation, EvalCase, ModelSpec } from "../data/types.js";
 import { fileExists } from "../data/utils.js";
 import { DEFAULT_ALLOWED_TOOLS, mergeReadDenyPaths } from "./worker-contract.js";
@@ -76,19 +80,6 @@ const getNoPayloadDenyRoots = (params: {
 	);
 	const home = NO_PAYLOAD_HOME_BLOCKLIST.map((entry) => path.join(params.homeDir, entry));
 	return [...workspace, ...home];
-};
-
-const buildManifestHash = (params: {
-	caseId: string;
-	profile: BootstrapProfile;
-	availableSkills: string[];
-}): string => {
-	const payload = JSON.stringify({
-		caseId: params.caseId,
-		profile: params.profile,
-		availableSkills: params.availableSkills,
-	});
-	return createHash("sha256").update(payload).digest("hex");
 };
 
 const listSyncedSkills = async (homeDir: string): Promise<string[]> => {
@@ -415,8 +406,6 @@ const persistCaseArtifacts = async (params: {
 		}
 	}
 };
-
-const POLICY_DENY_ASSERTION_PREFIX = "must_trigger_policy_deny:";
 
 const extractPolicyProbePaths = (assertions: string[]): string[] =>
 	assertions

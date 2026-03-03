@@ -2,9 +2,55 @@ import { access, mkdir, readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
 
+export const sleep = (ms: number): Promise<void> =>
+	new Promise((resolve) => setTimeout(resolve, ms));
+
+export const withTimeout = async <T>(
+	promise: Promise<T>,
+	timeoutMs: number,
+	label: string,
+): Promise<T> => {
+	let timeoutId: NodeJS.Timeout;
+	const timeoutPromise = new Promise<never>((_, reject) => {
+		timeoutId = setTimeout(
+			() => reject(new Error(`${label} timed out after ${timeoutMs}ms`)),
+			timeoutMs,
+		);
+	});
+	const result = await Promise.race([promise, timeoutPromise]);
+	clearTimeout(timeoutId!);
+	return result;
+};
+
+export const parsePositiveInt = (
+	value: string | undefined,
+	fallback: number,
+): number => {
+	const parsed = Number.parseInt(value ?? `${fallback}`, 10);
+	if (!Number.isFinite(parsed) || parsed < 1) return fallback;
+	return parsed;
+};
+
+export const hasPathPrefix = (candidate: string, root: string): boolean =>
+	candidate === root ||
+	candidate.startsWith(root.endsWith(path.sep) ? root : `${root}${path.sep}`);
+
+export const isPathInsideRoot = (targetPath: string, rootPath: string): boolean => {
+	const relative = path.relative(rootPath, targetPath);
+	return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
+};
+
+export const uniqueSorted = (values: string[]): string[] =>
+	Array.from(
+		new Set(values.map((v) => v.trim()).filter((v) => v.length > 0)),
+	).sort((a, b) => a.localeCompare(b));
+
+export const errorMessage = (error: unknown): string =>
+	error instanceof Error ? error.message : String(error);
+
 export const normalizePath = (value: string): string => value.replace(/\\/g, "/");
 
-export const expandHome = (value: string): string => {
+const expandHome = (value: string): string => {
 	if (!value.startsWith("~")) {
 		return value;
 	}

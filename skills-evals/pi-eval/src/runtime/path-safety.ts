@@ -1,4 +1,5 @@
 import path from "node:path";
+import { isPathInsideRoot } from "../data/utils.js";
 
 const PATH_SEGMENT_SAFE_CHARS = /[^a-zA-Z0-9._-]+/g;
 const DUPLICATE_SEPARATORS = /[-._]{2,}/g;
@@ -11,11 +12,6 @@ export const toSafePathSegment = (value: string, fallback = "case"): string => {
 		.replace(/^-+/, "")
 		.replace(/-+$/, "");
 	return sanitized.length > 0 ? sanitized : fallback;
-};
-
-const isPathInsideRoot = (targetPath: string, rootPath: string): boolean => {
-	const relative = path.relative(rootPath, targetPath);
-	return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
 };
 
 export const assertManagedTempPath = (

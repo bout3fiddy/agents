@@ -3,7 +3,7 @@ import { homedir } from "node:os";
 import path from "node:path";
 import { ensureModelAuth, modelSpecFromKey, resolveModelSpec } from "../runtime/model-registry.js";
 import type { EvalConfig, EvalRunOptions } from "../data/types.js";
-import { fileExists, normalizePath, resolvePath } from "../data/utils.js";
+import { fileExists, normalizePath, parsePositiveInt, resolvePath } from "../data/utils.js";
 import {
 	assertAllowedFlags,
 	parseLimitFlag,
@@ -11,8 +11,8 @@ import {
 	resolveCasesPath,
 } from "./validation.js";
 
-export const DEFAULT_CASES_PATH = "skills-evals/fixtures/eval-cases.jsonl";
-export const DEFAULT_CASE_PARALLELISM = 10;
+const DEFAULT_CASES_PATH = "skills-evals/fixtures/eval-cases.jsonl";
+const DEFAULT_CASE_PARALLELISM = 10;
 
 type EvalFlags = Record<string, string | boolean>;
 
@@ -26,13 +26,8 @@ const ALLOWED_RUN_FLAGS = [
 	"--thinking",
 ] as const;
 
-const parsePositiveIntEnv = (value: string | undefined, defaultValue: number): number => {
-	const parsed = Number.parseInt(value ?? `${defaultValue}`, 10);
-	if (!Number.isFinite(parsed) || parsed < 1) {
-		throw new Error("PI_EVAL_CASE_PARALLELISM must be a positive integer.");
-	}
-	return parsed;
-};
+const parsePositiveIntEnv = (value: string | undefined, fallback: number): number =>
+	parsePositiveInt(value, fallback);
 
 export const isSameResolvedPath = (left: string, right: string): boolean =>
 	normalizePath(path.resolve(left)) === normalizePath(path.resolve(right));

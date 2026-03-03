@@ -2,7 +2,7 @@ import { unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { buildReport, readReportRows, updateIndex, writeReport } from "./report.js";
 import type { CaseEvaluation, EvalCase, EvalRunOptions, ModelSpec } from "../data/types.js";
-import { ensureDir } from "../data/utils.js";
+import { ensureDir, sleep } from "../data/utils.js";
 import { toSafePathSegment } from "../runtime/path-safety.js";
 
 const modelSafeKey = (model: ModelSpec): string =>
@@ -23,8 +23,6 @@ const getCommitSha = async (): Promise<string> => {
 		return "unknown";
 	}
 };
-
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const withReportWriteLock = async <T>(lockPath: string, handler: () => Promise<T>): Promise<T> => {
 	await ensureDir(path.dirname(lockPath));
