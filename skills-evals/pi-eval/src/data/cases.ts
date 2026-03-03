@@ -4,6 +4,23 @@ import type { EvalBundle, EvalCase, EvalCaseVariant, LoadedCases, ResolvedEvalCa
 
 const ARTIFACT_PATH_PLACEHOLDER = "{{artifactPath}}";
 
+/** Normalize a field that may be a string or string[] (joined with space) to a plain string. */
+const normalizeText = (value: unknown): string | undefined =>
+	Array.isArray(value) ? value.join(" ") : typeof value === "string" ? value : undefined;
+
+/** Coerce string-array shorthand fields on a raw JSON object before casting to EvalCase. */
+// biome-ignore lint/suspicious/noExplicitAny: raw JSON from disk
+const normalizeRawCase = (raw: any): EvalCase => {
+	if (raw.prompt != null) raw.prompt = normalizeText(raw.prompt);
+	if (raw.notes != null) raw.notes = normalizeText(raw.notes);
+	if (Array.isArray(raw.variants)) {
+		for (const v of raw.variants) {
+			if (v.prompt != null) v.prompt = normalizeText(v.prompt);
+		}
+	}
+	return raw as EvalCase;
+};
+
 const slugFromId = (id: string): string => id.toLowerCase().replace(/[^a-z0-9]+/g, "");
 
 const resolveArtifactPath = (suite: string, caseSlug: string, tag: string): string =>
@@ -96,7 +113,38 @@ const wrapStandalone = (raw: EvalCase): ResolvedEvalCase => ({
 	variantTag: null,
 });
 
-const parseCasesFromContent = (
+const addParsedCase = (
+	parsed: EvalCase,
+	cases: ResolvedEvalCase[],
+	bundles: Map<string, EvalBundle>,
+): void => {
+	if (parsed.variants && Array.isArray(parsed.variants) && parsed.variants.length > 0) {
+		const { cases: bundleCases, bundle } = flattenBundle(
+			parsed as EvalCase & { variants: EvalCaseVariant[] },
+		);
+		for (const c of bundleCases) cases.push(c);
+		bundles.set(bundle.id, bundle);
+	} else {
+		cases.push(wrapStandalone(parsed));
+	}
+};
+
+/** Parse a single pretty-printed JSON file (one case per file). */
+const parseSingleCase = (
+	raw: string,
+	sourceLabel: string,
+	cases: ResolvedEvalCase[],
+	bundles: Map<string, EvalBundle>,
+): void => {
+	try {
+		addParsedCase(normalizeRawCase(JSON.parse(raw)), cases, bundles);
+	} catch (error) {
+		throw new Error(`Failed to parse case in ${sourceLabel}: ${error}`);
+	}
+};
+
+/** Parse a legacy JSONL file (one JSON object per line). */
+const parseJsonlCases = (
 	raw: string,
 	sourceLabel: string,
 	cases: ResolvedEvalCase[],
@@ -107,16 +155,7 @@ const parseCasesFromContent = (
 		const trimmed = line.trim();
 		if (!trimmed.startsWith("{")) return;
 		try {
-			const parsed = JSON.parse(trimmed) as EvalCase;
-			if (parsed.variants && Array.isArray(parsed.variants) && parsed.variants.length > 0) {
-				const { cases: bundleCases, bundle } = flattenBundle(
-					parsed as EvalCase & { variants: EvalCaseVariant[] },
-				);
-				for (const c of bundleCases) cases.push(c);
-				bundles.set(bundle.id, bundle);
-			} else {
-				cases.push(wrapStandalone(parsed));
-			}
+			addParsedCase(normalizeRawCase(JSON.parse(trimmed)), cases, bundles);
 		} catch (error) {
 			throw new Error(`Failed to parse case in ${sourceLabel} on line ${index + 1}: ${error}`);
 		}
@@ -131,17 +170,17 @@ export const loadCases = async (casesPath: string): Promise<LoadedCases> => {
 	if (info.isDirectory()) {
 		const entries = await readdir(casesPath);
 		const jsonlFiles = entries
-			.filter((name) => name.endsWith(".jsonl"))
+			.filter((name: string) => name.endsWith(".jsonl"))
 			.sort();
 		const fileContents = await Promise.all(
-			jsonlFiles.map((fileName) => readFile(path.join(casesPath, fileName), "utf-8")),
+			jsonlFiles.map((fileName: string) => readFile(path.join(casesPath, fileName), "utf-8")),
 		);
 		for (let i = 0; i < jsonlFiles.length; i++) {
-			parseCasesFromContent(fileContents[i], jsonlFiles[i], cases, bundles);
+			parseSingleCase(fileContents[i], jsonlFiles[i], cases, bundles);
 		}
 	} else {
 		const raw = await readFile(casesPath, "utf-8");
-		parseCasesFromContent(raw, casesPath, cases, bundles);
+		parseJsonlCases(raw, casesPath, cases, bundles);
 	}
 
 	return { cases, bundles };

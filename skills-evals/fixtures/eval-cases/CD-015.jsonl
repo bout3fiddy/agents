@@ -1,7 +1,13 @@
 {
   "id": "CD-015",
   "suite": "codequality",
-  "prompt": "Build an HTTP middleware pipeline in {{artifactPath}}. Import Request, Response, and Context from skills-evals/fixtures/codequality/cd015/http_types.py. The pipeline should chain handlers for auth, validation, rate limiting, and error formatting. Handlers must be able to short-circuit the chain and pass typed context between stages. Include a sample usage block at the bottom that wires up at least 3 middleware handlers.",
+  "prompt": [
+    "Build an HTTP middleware pipeline in {{artifactPath}}.",
+    "Import Request, Response, and Context from skills-evals/fixtures/codequality/cd015/http_types.py.",
+    "The pipeline should chain handlers for auth, validation, rate limiting, and error formatting.",
+    "Handlers must be able to short-circuit the chain and pass typed context between stages.",
+    "Include a sample usage block at the bottom that wires up at least 3 middleware handlers."
+  ],
   "expectedSkills": [],
   "disallowedSkills": [],
   "expectedRefs": [],
@@ -17,7 +23,10 @@
   ],
   "dryRun": false,
   "tokenBudget": null,
-  "notes": "Architectural eval: build composable middleware from poisoned monolithic seed. Skill agent should avoid mimicking legacy patterns.",
+  "notes": [
+    "Architectural eval: build composable middleware from poisoned monolithic seed.",
+    "Skill agent should avoid mimicking legacy patterns."
+  ],
   "persistArtifacts": true,
   "readDenyPaths": [],
   "variants": [
