@@ -34,11 +34,6 @@ const parsePositiveIntEnv = (value: string | undefined, defaultValue: number): n
 	return parsed;
 };
 
-export const resolveSkillsPaths = (config: EvalConfig, agentDir: string): string[] => {
-	const defaults = config.defaults?.skillsPaths ?? ["skills"];
-	return defaults.map((item) => resolvePath(item, agentDir));
-};
-
 export const isSameResolvedPath = (left: string, right: string): boolean =>
 	normalizePath(path.resolve(left)) === normalizePath(path.resolve(right));
 

@@ -1,0 +1,430 @@
+# Gondolin Security Design
+
+This document describes Gondolin's security model: what the system is trying to
+protect, what it assumes, what it *guarantees*, and how to operate it so you
+remain inside the intended "safe envelope".
+
+Gondolin's core idea is that *"untrusted code runs in a real Linux VM, but the
+VM's *I/O surface area* (network + persistence) is mediated by host code you
+control."*
+
+## Scope and Goals
+
+Gondolin exists to provide a playground for an agent to work with.  Agents are
+tricky because they are great reverse engineers and given the right prompts, they
+can be quite inventive in trying to escape their sandboxes.
+
+### Primary Goal
+Run potentially untrusted / prompt-injected code (typically agent-generated) while:
+
+1. **Preventing credential theft** (secrets should not be readable from inside the guest)
+2. **Confining network egress** (only the intended remote services are reachable)
+3. **Confining persistence and host file access** (the guest's view of storage
+  is explicit and programmable)
+
+In particular *all* of the injected file system is controllable.  This means the host can
+fully change how folders behave, not just bind it to different folders on the real file system.
+
+### Non-Goals
+
+Gondolin is not trying to defend against:
+
+- **A malicious host**: the Node.js process and the machine it runs on are trusted.
+- **A malicious local user** on the same host account: they can usually access
+  the Unix sockets and cached files.
+- **VM escape / hypervisor bugs**: Gondolin uses QEMU; a QEMU escape is a host compromise.
+- **Side channels** (timing/cache/etc.) between host and guest.
+- **Denial of service**: the guest can still burn CPU, allocate memory inside
+  the VM, or cause large amounts of host work (there are some buffer caps, but no
+  complete DoS isolation).
+
+## Threat Model
+
+These are the primary threats this design attempts to protect against.
+
+### Attacker
+- Code executing inside the guest VM (shell scripts, binaries, interpreted code, etc.)
+- Remote servers the guest connects to (including malicious redirects)
+
+We generally assume that the users of Gondolin will try to give more trust to
+the actual end user and less trust to third-party files retrieved from the
+internet. For instance, because they want to implement something like the CaMeL
+approach.  However, we make little assumption in the system about how exactly
+the trust is divided.
+
+### Assets We Want to Protect
+- **Host secrets** (API keys, tokens) supplied to the host application
+- **Host network** (localhost services, cloud metadata endpoints, internal RFC1918 ranges)
+- **Host filesystem** (unless explicitly mounted)
+
+### Trust Assumptions
+- The host process (your Node runtime + Gondolin library) is trusted.
+- The guest image is trusted *to the extent you trust its supply chain*.
+- The VM boundary provided by QEMU is trusted.
+
+## System Architecture and Trust Boundaries
+
+This is a rough overview of the system today.
+
+### High-Level Components
+
+- **Host (TypeScript)**
+  - `SandboxController` spawns and manages QEMU
+  - `SandboxServer` implements the virtio-serial control plane, VFS RPC service, and network backend
+  - `QemuNetworkBackend` implements an Ethernet/IP/TCP stack, HTTP/TLS mediation, optional SSH egress proxying, and optional explicit mapped TCP egress
+  - VFS providers implement programmable filesystem behavior (based on NodeJS's upcoming VFS)
+
+- **Guest (Zig + init scripts)**
+  - `sandboxd` executes commands requested by the host over virtio-serial
+  - `sandboxfs` is a FUSE filesystem that proxies filesystem operations to the host over RPC
+  - `sandboxssh` is a dedicated virtio-serial TCP forwarder for *loopback-only* connections inside the guest
+  - `sandboxingress` is a dedicated virtio-serial TCP forwarder for *loopback-only* ingress connections (host-to-guest HTTP routing)
+  - `/init` sets up tmpfs mounts, networking, starts `sandboxfs`, `sandboxssh`, `sandboxingress`, then starts `sandboxd`
+
+### Trust Boundaries
+
+```
++----------------------------- Host machine ------------------------------+
+|                                                                         |
+|   Node.js process using gondolin's VM (trusted)                         |
+|   - policy (allowed hosts)                                              |
+|   - secrets (real values)                                               |
+|   - VFS providers (host/virtual FS access)                              |
+|                                                                         |
+|   +---------------------- QEMU process boundary ---------------------+  |
+|   |  Guest Linux VM (untrusted code)                                 |  |
+|   |  - sees eth0, but traffic is intercepted by host                 |  |
+|   |  - sees /data (FUSE), but ops are served by host providers       |  |
+|   |  - runs arbitrary processes via sandboxd                         |  |
+|   +------------------------------------------------------------------+  |
+|                                                                         |
++-------------------------------------------------------------------------+
+```
+
+The **guest is treated as adversarial**. The host is the policy enforcement point.
+
+## Security Guarantees
+
+This is what Gondolin actually enforces.
+
+### Compute Isolation
+
+> "guest code does not directly run on the host OS"
+
+- Guest code runs inside a QEMU VM.
+- The QEMU invocation is intentionally minimal (see `host/src/sandbox/controller.ts`):
+
+  - `-nodefaults` (avoid unexpected devices)
+  - `-no-reboot`, `-nographic`
+  - virtio devices only (virtio-serial, virtio-net, virtio-blk, virtio-rng)
+  - the root filesystem is attached as a copy-on-write disk (qcow2 overlay) so writes do not persist to the base image
+
+**Guarantee:** absent a QEMU escape, guest processes cannot directly access the
+*host kernel, host memory, or host filesystem.
+
+### Network Egress Confinement
+
+> "HTTP/TLS is mediated by default, with narrow explicit exceptions for SSH and host-mapped TCP"
+
+Gondolin does *not* provide the guest with a raw NAT to the host network.
+
+Instead, the host implements its own network stack (`host/src/qemu/network-stack.ts`)
+and a backend that attaches to QEMU's `-netdev stream` Unix socket
+(`host/src/qemu/net.ts`).
+
+Key enforcement points:
+
+1. **Protocol allowlist + explicit TCP mappings**
+
+    - For each outgoing TCP flow, the host first checks whether an explicit `tcp.hosts` mapping matches the synthetic hostname (+ optional port)
+        - this requires `dns.mode: "synthetic"` and `dns.syntheticHostMapping: "per-host"`
+        - if matched, the flow is marked as mapped `tcp` and forwarded to the configured upstream `HOST:PORT`
+    - Otherwise, the host sniffs first bytes and classifies as:
+        - `http` (HTTP/1.x request line)
+        - `tls` (TLS ClientHello record)
+        - `ssh` (SSH version banner on configured SSH ports, only when SSH egress is enabled)
+        - otherwise **denied** (`unknown-protocol`)
+    - HTTP `CONNECT` is explicitly denied (`connect-not-allowed`).
+
+    This prevents arbitrary guest-selected TCP tunneling while allowing narrow, explicit TCP exceptions.
+
+2. **UDP is blocked except for DNS**
+    - Only UDP destination port `53` is handled; other UDP is blocked.
+    - DNS handling is mode-dependent:
+      - `synthetic` (default): no upstream DNS; the host replies with synthetic `A`/`AAAA` answers (prevents using DNS as an egress channel)
+      - `trusted`: the host forwards *valid DNS queries* only to the host's trusted resolvers, and replies to the guest as if the response came from the originally targeted resolver IP
+
+        - Prevents using UDP/53 as arbitrary UDP transport to arbitrary destination IPs
+        - Does **not** prevent classic DNS tunneling to attacker-controlled domains (it still performs real DNS lookups)
+        - Upstream resolvers are currently **IPv4-only** and must be explicitly provided or discoverable on the host
+
+      - `open`: forwards UDP/53 to the destination IP the guest targeted; payloads are not validated as DNS (enables UDP/53 tunneling)
+
+3. **HTTP/HTTPS is bridged by the host**
+
+    - For `http` flows, the host parses the request and replays it using `fetch` (undici).
+    - For `tls` flows, the host performs a **TLS MITM** (see below) to recover the HTTP request, then replays via `fetch`.
+
+4. **Host allowlist and internal-range blocking**
+
+    - `createHttpHooks()` (see `host/src/http/hooks.ts`) produces separate policy hooks:
+        - `httpHooks.isRequestAllowed(request)` for request-content policy
+        - `httpHooks.isIpAllowed({ hostname, ip, family, port, protocol })` for destination IP policy
+    - By default, `isIpAllowed` blocks internal ranges (`blockInternalRanges: true`), including:
+        - IPv4: 127/8, 10/8, 172.16/12, 192.168/16, 169.254/16, 100.64/10, 0.0.0.0/8, broadcast
+        - IPv6: loopback, link-local, ULA, and IPv4-mapped variants
+    - It can also require that the request hostname matches a configured allowlist (with `*` wildcards).
+
+5. **DNS rebinding protection**
+    Gondolin checks policy in *two* places:
+
+    - Before each outbound request, Gondolin evaluates request policy (`isRequestAllowed`) and hostname->IP policy (`isIpAllowed`) after resolving the hostname.
+    - When using the default `fetch`, Gondolin installs a custom undici dispatcher with a guarded `lookup()` (`createLookupGuard()`), which re-checks `isIpAllowed()` against IPs selected during connection establishment.
+    - With pooled keep-alive connections, this connect-time IP check runs when a new upstream connection is opened, and reused connections do not trigger a fresh connect-time check.
+
+6. **Redirect policy is enforced by the host**
+
+    - The host follows redirects itself (`redirect: "manual"` + explicit handling).
+    - Each redirect target is revalidated against policy before fetching.
+
+#### Egress Capability Matrix
+
+| Path | Destination selection | Host mediation level | `httpHooks` / HTTP secret substitution |
+| --- | --- | --- | --- |
+| HTTP/TLS (default) | Hostname allowlists + DNS/IP checks | Full HTTP mediation (`fetch`, redirects, policy hooks) | Yes |
+| SSH egress (optional) | `ssh.allowedHosts` (`HOST[:PORT]`) | SSH proxy with host-key verification and exec restrictions | No |
+| Mapped TCP (optional) | `tcp.hosts` (`HOST[:PORT] -> HOST:PORT`) via synthetic per-host attribution | Raw TCP forwarding to explicit mapped target | No |
+
+**Guarantee:** the guest cannot open arbitrary raw TCP tunnels, cannot use UDP (except DNS), and cannot
+reach blocked networks (e.g. localhost/metadata) *through DNS tricks or redirects* in HTTP/TLS flows,
+as long as `httpHooks.isRequestAllowed` / `httpHooks.isIpAllowed` enforce those rules.
+
+Mapped TCP and SSH egress are explicit exception paths with their own policy controls.
+
+This does **not** change the core trust assumptions (host trusted, guest untrusted), but it
+changes what must be reasoned about in policy:
+
+- HTTP/TLS flows get content-aware mediation and HTTP-level policy enforcement
+- SSH/mapped TCP flows are transport-level controls (target allowlisting/mapping), not HTTP-level controls
+- Exfiltration risk for those exception paths is bounded by what targets you explicitly configure
+
+DNS within the system is supported because there is utility in it, but DNS resolutions are
+fully disregarded by the HTTP stack as the host will resolve it from scratch.
+
+ICMP ECHOs are synthetic in this model; any IP can be pinged.
+
+### Secret Non-Exposure
+
+> "real secret values never appear inside the guest"
+
+Gondolin's secret strategy is:
+
+- The guest receives **random placeholders** as environment variables (e.g.
+  `GONDOLIN_SECRET_<random>`).
+- When the guest makes an HTTP request, the host request hook
+  (`createHttpHooks().httpHooks.onRequest`) scans outbound headers and **replaces
+  placeholders with real secret values** *only* if the destination hostname
+  matches the secret's host allowlist.
+  - URL query parameter replacement is available only as an explicit opt-in
+    (`replaceSecretsInQuery: true`) because it increases reflection risk.
+
+  - This includes `Authorization: Basic …` / `Proxy-Authorization: Basic …`: the
+    base64 token is decoded as `username:password`, placeholders are substituted,
+    and the token is re-encoded.
+- If a placeholder is found but the destination host is not allowed, the request
+  is blocked.
+
+**Guarantee:** if you only pass secrets via this mechanism, the guest cannot
+read the real secret values from its process environment, disk, or memory
+because they never enter the VM.  However that does not fully protect the system
+if there are ways to utilize the target server to echo the secrets back!
+
+### Filesystem Confinement
+
+> "host filesystem access is explicit and programmable"
+
+By default the VM gets:
+
+- The base root filesystem from the image
+- A number of tmpfs mounts (`/tmp`, `/root`, `/var/log`, etc.) created by
+  `/init` (see `guest/image/init`)
+- An optional FUSE mount (default `/data`) backed by host-controlled providers
+
+The programmable filesystem path is:
+
+- Guest `sandboxfs` (FUSE) translates Linux VFS operations into RPC requests
+  (`fs_request`) over a virtio-serial port.
+- Host `FsRpcService` (`host/src/vfs/rpc-service.ts`) validates and dispatches
+  operations to a `VirtualProvider`.
+- Providers can be:
+
+  - in-memory (`MemoryProvider`)
+  - real host filesystem (`RealFSProvider`)
+  - wrappers (`ReadonlyProvider`, mount routers, custom policy providers)
+
+`FsRpcService` enforces basic protocol invariants:
+
+- File names are single components (no `/` or NUL)
+- Paths are normalized to absolute POSIX paths
+- Read/write payloads are capped (`MAX_RPC_DATA = 60 KiB`) to keep framing bounded
+
+**Guarantee:** the guest cannot access host files unless you mount them through
+a provider.
+
+### Controlled "Backchannels"
+
+`SandboxServer.openTcpStream()` opens a TCP stream to a service inside the guest
+using a dedicated virtio-serial port (`virtio-ssh`).
+
+On the guest, `sandboxssh` enforces:
+- **Only loopback targets are allowed** (`127.0.0.1` / `localhost`)
+
+This is intentionally outside the guest's network policy because it is a
+host <-> guest control feature.
+
+**Guarantee:** this API cannot be used to reach arbitrary guest network
+destinations; it only reaches services bound to guest loopback.
+
+## Why the Design Is Secure
+
+Secure here means secure within our design goals.
+
+### Minimize the Attack Surface
+
+Instead of trying to safely pass through a full network stack and hope that
+firewalling is correct, Gondolin narrows egress to a small set of patterns:
+
+- DNS queries (UDP/53)
+- HTTP/1.x requests
+- TLS handshakes that can be terminated locally
+- Optional allowlisted SSH sessions (proxied by the host, exec-only)
+- Optional explicit host-mapped TCP rules (`tcp.hosts`)
+
+Everything else is dropped before it becomes a real host socket.
+
+This means:
+- No arbitrary TCP tunnels/NAT
+- No generic SSH/SOCKS/VPN/proxy protocols (SSH egress is only allowed when explicitly enabled + allowlisted, and is proxied/limited)
+- No guest-selected custom binary protocols outside explicit mapped targets
+
+### Make the Host the Policy Enforcement Point
+For HTTP/TLS flows, the host replays requests via `fetch`, so the host can:
+
+- Enforce allowlists by hostname
+- Enforce IP-based rules after DNS resolution (including internal-range blocks)
+- Inspect/transform requests and responses
+- Insert secrets at the last possible moment
+
+For SSH/mapped TCP exception paths, enforcement is narrower and transport-oriented
+(target allowlisting/mapping, protocol constraints), not content-aware HTTP policy.
+
+The guest can ask for things, but it does not get to choose unconstrained packet emission.
+
+### Secrets Are Never Placed in the Guest's Possession
+
+From a secrets perspective, the strongest way to prevent exfiltration is: **do
+not deliver the secret to the untrusted environment**.
+
+Gondolin's placeholder substitution ensures the guest can *reference* a secret
+(to make legitimate calls) without being able to *read* it.
+
+## Operating Within the "Safe Envelope"
+
+These are rules to not compromise the security guarantees of the system:
+
+### Network Policy
+
+1. **Use an allowlist; avoid `*`**
+    - Prefer exact hosts (`api.github.com`) over wildcards (`*.github.com`).
+    - Treat redirects as part of the policy design (the host will follow them and enforce policy on each hop).
+
+2. **Keep `blockInternalRanges: true`**
+    - This is on by default in `createHttpHooks()`.
+    - Disabling it globally reintroduces localhost/metadata risks.
+    - If you need selected internal targets, prefer `allowedInternalHosts` for scoped exceptions
+
+3. **Assume allowed hosts can receive any data the guest can read**
+    - Gondolin prevents network egress to *other* hosts, but does not stop the guest from uploading arbitrary data to an allowed host.
+    - If you mount sensitive host data read-write/read-only, consider it exfiltratable to allowed hosts.
+
+4. **If you allow more than one host, add auditing**
+    - Use `httpHooks.onRequest` / `onResponse` to log and/or block unexpected paths or methods
+    - For body-aware checks, read from `request.clone()` in `onRequest`
+
+5. **Treat `tcp.hosts` as a reduced-security exception path**
+    - Keep mappings narrow (`HOST:PORT` when possible)
+    - Prefer local/dev-only upstream targets
+    - Use least-privilege, short-lived credentials on mapped services
+    - Remember mapped TCP does not use HTTP hooks or header secret substitution
+
+### Secrets
+
+1. **Only provide secrets via `createHttpHooks({ secrets: ... })`**
+    - Do not mount `~/.aws`, `~/.config`, `.env`, etc. into the guest.
+    - Do not pass real secrets in `VM.env`.
+
+2. **Secrets are substituted in HTTP headers by default**
+    - If you put placeholders in a request body, they will *not* be replaced.
+    - URL query parameter replacement is off by default; enable it explicitly with
+      `replaceSecretsInQuery: true` only when required.
+    - Design your client code to pass credentials in headers when possible.
+    - `Authorization: Basic …` is supported: placeholders inside the decoded
+      `username:password` are replaced before the header is sent.
+
+3. **Don't rely on placeholders being "unguessable"**
+    - Placeholders are random and not the secret, but the guest can still transmit them.
+    - Your security relies on the fact that placeholders are useless without host substitution.
+
+### Filesystem Mounts
+
+1. **Default to `MemoryProvider` for `/workspace`-style scratch space**
+2. **Use `ReadonlyProvider(RealFSProvider(...))` for host directories you must expose**
+3. **Avoid mounting your whole home directory**
+4. **Be careful with mounting `/`**
+    - If you mount a custom provider at `/`, you might hide distro CA bundles.
+    - Gondolin injects a read-only MITM cert at `/etc/gondolin/mitm/ca.crt`.
+
+### TLS MITM CA Handling
+
+- Gondolin generates a local CA under `~/.cache/gondolin/ssl` (or `XDG_CACHE_HOME`).
+- The CA cert is injected into the guest at `/etc/gondolin/mitm/ca.crt`.
+- Guest init scripts try to install it via `update-ca-certificates` when writable,
+  and always publish a merged runtime bundle at `/run/gondolin/ca-certificates.crt`.
+
+Operational guidance:
+- Treat the CA private key as sensitive (it can sign certs trusted by the guest).
+- If you want per-run isolation, point `mitmCertDir` at a temporary directory.
+
+### Guest Images and Supply Chain
+
+- Default assets are downloaded from GitHub releases over HTTPS
+(`host/src/assets.ts`).
+- Custom builds can emit a `manifest.json` with SHA-256 checksums, and the CLI
+  supports `gondolin build --verify`.
+
+Guidance:
+- For high assurance, build images yourself and verify checksums.
+- Keep QEMU up to date; the VM boundary is fundamental.
+
+## Known Limitations and Sharp Edges
+
+### "Mediated Networking" Is Not the Same as "Safe Networking"
+- If you allow `api.example.com`, malicious guest code can still send *any* data
+  it can read to that host.
+- Servers that can echo headers back (eg: httpbin) can be used to exfiltrate secrets.
+- Mapped TCP rules (`tcp.hosts`) are raw tunnels to explicit upstream targets and bypass HTTP hooks
+  (including header secret substitution)
+- Gondolin's network layer is meant to prevent **unexpected** exfiltration
+  destinations and limit protocol abuse, not to prevent exfiltration to an allowed
+  destination.
+
+### VM Escape Risk
+- The strongest guarantee depends on QEMU isolation.
+
+### Local Host Attacker
+- Virtio Unix sockets are created in a temp directory.  A local attacker with the
+  same user privileges can typically interfere.
+
+### DoS
+- There are explicit buffer caps (e.g. HTTP header/body limits, virtio pending
+  queues), but no full resource governance.

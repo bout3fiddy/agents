@@ -95,8 +95,11 @@ Use this skill when the primary intent is implementation, bug fixing, refactorin
 ## Mandatory smell baseline (always for code changes)
 For implementation/bugfix/refactor/review operations, always open:
 - `skills/coding/references/code-smells/index.md`
+- `skills/coding/references/code-smells/detection-signals.md`
 
-Then open only the smell files that match detected patterns (for example: `ai-code-smell`, `long-method`, `duplicate-code`, `shotgun-surgery`, `speculative-generality`).
+Then open specific smell files for detailed refactor guidance when detection signals
+match. When writing new code (not just editing), err on the side of reading more
+smell refs — it is cheaper to check and dismiss than to miss a smell.
 
 ## Core workflow
 1. Confirm scope, constraints, and acceptance criteria.
@@ -104,8 +107,11 @@ Then open only the smell files that match detected patterns (for example: `ai-co
 3. Load domain refs relevant to the task.
 4. Read only necessary code paths.
 5. Implement minimal focused changes.
-6. Validate with targeted checks/tests.
-7. Summarize changes, validations, and remaining risks.
+6. Self-review: check your own output against detection signals. Fix violations
+   before presenting — especially Duplicate Code, Speculative Generality, and
+   Long Method, which are easy to introduce organically.
+7. Validate with targeted checks/tests.
+8. Summarize changes, validations, and remaining risks.
 
 ## Domain reference triggers (open when clearly relevant)
 - Code smell / maintainability / quality diagnostics:

@@ -69,9 +69,15 @@ const writeRoutingTraceArtifacts = async (params: {
 			model: model.label,
 			expectedSkills: evaluation.expectedSkills,
 			expectedRefs: evaluation.expectedRefs,
+			toolUsage: evaluation.result.toolUsage ?? null,
+			rpcDiagnostics: evaluation.result.rpcDiagnostics ?? null,
+			outputTextPreview: (evaluation.result.outputText ?? "").slice(0, 1200),
+			resultErrors: evaluation.result.errors ?? [],
 			routing: evaluation.routing,
 			reasons: evaluation.reasons,
 			failureReasons: evaluation.failureReasons,
+			readBreakdown: evaluation.result.readBreakdown ?? [],
+			bootstrapBreakdown: evaluation.result.bootstrapBreakdown ?? [],
 		};
 		const tracePath = path.join(traceDir, `${toSafePathSegment(evaluation.caseId, "case")}.json`);
 		await writeFile(tracePath, JSON.stringify(payload, null, 2));

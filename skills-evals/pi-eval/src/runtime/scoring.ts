@@ -41,9 +41,18 @@ export const buildCaseResult = (
 	disallowedSkills: evalCase.disallowedSkills,
 	expectedRefs: evalCase.expectedRefs,
 	routing: routing ?? {
-		readSkills: uniqueSorted(result.skillInvocations ?? result.skillAttempts ?? []),
-		readSkillFiles: uniqueSorted(result.skillFileInvocations ?? result.skillFileAttempts ?? []),
-		readRefs: uniqueSorted((result.refInvocations ?? result.refAttempts ?? []).map(normalizeRefPath)),
+		readSkills: uniqueSorted(result.skillInvocations ?? []),
+		readSkillFiles: uniqueSorted(result.skillFileInvocations ?? []),
+		readRefs: uniqueSorted((result.refInvocations ?? []).map(normalizeRefPath)),
+		attemptedSkills: uniqueSorted(result.skillAttempts ?? []),
+		successfulSkills: uniqueSorted(result.skillInvocations ?? []),
+		deniedSkills: uniqueSorted(result.skillDenied ?? []),
+		attemptedSkillFiles: uniqueSorted(result.skillFileAttempts ?? []),
+		successfulSkillFiles: uniqueSorted(result.skillFileInvocations ?? []),
+		deniedSkillFiles: uniqueSorted(result.skillFileDenied ?? []),
+		attemptedRefs: uniqueSorted((result.refAttempts ?? []).map(normalizeRefPath)),
+		successfulRefs: uniqueSorted((result.refInvocations ?? []).map(normalizeRefPath)),
+		deniedRefs: uniqueSorted((result.refDenied ?? []).map(normalizeRefPath)),
 		missingSkillFileReads: [],
 		missingRefs: [],
 		unexpectedRefs: [],
@@ -81,7 +90,7 @@ type EvaluateCaseOptions = {
 const POLICY_FAILURE_PATTERNS = [
 	/forbidden read/i,
 	/FORBIDDEN_WORKSPACE_VIOLATION/i,
-	/policy deny/i,
+	/policy deny triggered in no_payload profile/i,
 ];
 
 const isPolicyFailure = (message: string): boolean =>
@@ -143,12 +152,18 @@ export const evaluateCase = async (
 	const useAttempts = result.dryRun;
 	const expectedPolicyDenyNeedles = getExpectedPolicyDenyNeedles(evalCase.assertions ?? []);
 	const availableSkills = result.availableSkills ?? [];
-	const invokedSkills = uniqueSorted(useAttempts ? result.skillAttempts : result.skillInvocations);
-	const invokedSkillFiles = uniqueSorted(useAttempts
-		? (result.skillFileAttempts ?? [])
-		: (result.skillFileInvocations ?? []));
-	const invokedRefs = uniqueSorted((useAttempts ? result.refAttempts : result.refInvocations).map(normalizeRefPath));
-	const normalizedInvokedRefs = invokedRefs;
+	const attemptedSkills = uniqueSorted(result.skillAttempts ?? []);
+	const successfulSkills = uniqueSorted(result.skillInvocations ?? []);
+	const deniedSkills = uniqueSorted(result.skillDenied ?? []);
+	const attemptedSkillFiles = uniqueSorted(result.skillFileAttempts ?? []);
+	const successfulSkillFiles = uniqueSorted(result.skillFileInvocations ?? []);
+	const deniedSkillFiles = uniqueSorted(result.skillFileDenied ?? []);
+	const attemptedRefs = uniqueSorted((result.refAttempts ?? []).map(normalizeRefPath));
+	const successfulRefs = uniqueSorted((result.refInvocations ?? []).map(normalizeRefPath));
+	const deniedRefs = uniqueSorted((result.refDenied ?? []).map(normalizeRefPath));
+	const invokedSkills = useAttempts ? attemptedSkills : successfulSkills;
+	const invokedSkillFiles = useAttempts ? attemptedSkillFiles : successfulSkillFiles;
+	const normalizedInvokedRefs = useAttempts ? attemptedRefs : successfulRefs;
 	const expectedRefs = uniqueSorted((evalCase.expectedRefs ?? []).map(normalizeRefPath));
 
 	const expectedProfile = evalCase.bootstrapProfile ?? (evalCase.disableHarness ? "no_payload" : "full_payload");
@@ -395,6 +410,15 @@ export const evaluateCase = async (
 		readSkills: invokedSkills,
 		readSkillFiles: invokedSkillFiles,
 		readRefs: normalizedInvokedRefs,
+		attemptedSkills,
+		successfulSkills,
+		deniedSkills,
+		attemptedSkillFiles,
+		successfulSkillFiles,
+		deniedSkillFiles,
+		attemptedRefs,
+		successfulRefs,
+		deniedRefs,
 		missingSkillFileReads,
 		missingRefs,
 		unexpectedRefs: uniqueSorted(unexpectedRefs),

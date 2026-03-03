@@ -9,6 +9,7 @@
 - `fixtures/`: deterministic fixture files used by eval prompts and file assertions.
 - `fixtures/eval-cases.jsonl`: source-of-truth eval case registry.
 - `fixtures/models.jsonl`: models matrix consumed by `run.sh` when `--model` is omitted.
+- `gondolin/`: repo-local custom image recipe, build scripts, and lock metadata.
 - `reports/`: primary model-specific eval reports and `index.json`.
 - `reports/routing-traces/`: per-case routing telemetry artifacts by model.
 - `validate/`: TypeScript port of `agentskills validate`.
@@ -18,7 +19,8 @@
 Location:
 
 - `skills-evals/pi-eval/`
-- Entrypoint: `skills-evals/pi-eval/index.ts`
+- Command entrypoint: `skills-evals/pi-eval/index.ts`
+- Worker entrypoint (sandbox case process): `skills-evals/pi-eval/worker.ts`
 - Config: `skills-evals/pi-eval/config/eval.config.json`
 
 Wrapper commands (from repo root):
@@ -27,13 +29,41 @@ Wrapper commands (from repo root):
 ./skills-evals/run.sh
 ```
 
+Host requirements for Gondolin sandbox runtime:
+
+- QEMU binaries must be installed and on `PATH`.
+- Required binaries:
+  - `qemu-system-aarch64` (VM launch)
+  - `qemu-img` (rootfs `cow` mode + checkpoint flow)
+- macOS install:
+  - `brew install qemu`
+- Debian/Ubuntu install:
+  - `sudo apt install qemu-system-arm qemu-utils`
+- Docker daemon must be running to build the repo-local image via `skills-evals/gondolin/scripts/build-image.sh`.
+- Quick verification:
+  - `qemu-system-aarch64 --version`
+  - `qemu-img --version`
+  - `./skills-evals/gondolin/scripts/build-image.sh`
+
+Custom Gondolin image expectations:
+
+- Must include `pi` on guest `PATH` (runtime preflight hard-fails if `pi` is missing).
+- Should include stable runtime dependencies required by `pi` and provider API calls.
+- Should not bake mutable eval fixtures or skill payload; those are mounted/synced per run.
+- Repo-local image recipe and lock metadata live under `skills-evals/gondolin/`.
+- Default runtime image path is `skills-evals/gondolin/image/current`.
+- Override image path only when needed via `PI_EVAL_GONDOLIN_IMAGE_PATH=/abs/path`.
+
 `run.sh` behavior:
 
 - Takes no CLI args/flags.
 - Always executes `/eval run` for every model listed in `skills-evals/fixtures/models.jsonl` (or `PI_EVAL_MODELS_FILE`).
 - `models.jsonl` entry shape is `{"model":"provider/model","thinking":"low"}`.
+- Uses `PI_EVAL_GONDOLIN_IMAGE_PATH` when set, otherwise defaults to `skills-evals/gondolin/image/current`.
 - Runs models in parallel; parallelism defaults to number of models and can be capped with `PI_EVAL_MAX_PARALLEL`.
 - Thinking mode is read per model from `models.jsonl`; if omitted, fallback is `PI_EVAL_THINKING` (default `low`).
+- Per-case prompt timeout is configurable via `PI_EVAL_CASE_TIMEOUT_MS` (default `300000`).
+- Worker shutdown wait timeout is configurable via `PI_EVAL_CASE_SHUTDOWN_TIMEOUT_MS` (default `30000`).
 - Within each model run, eval cases execute in a case worker pool by default with `PI_EVAL_CASE_PARALLELISM=10` (can be overridden via env).
 - Shared case sandbox mode (default on):
   - Shared sandboxing is enabled by default; set `PI_EVAL_SHARED_CASE_SANDBOX=0` to disable it.

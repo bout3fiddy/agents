@@ -26,7 +26,7 @@ agents/
 ├── skills/skill-creator/scripts/
 │   └── build_agents_index.py      # Validate skill/routing metadata (no marker updates)
 ├── skills-evals/
-│   ├── run.sh                 # Eval runner wrapper (no flags)
+│   ├── run.sh                 # Eval runner wrapper (supports --case CASE_ID)
 │   └── fixtures/
 │       ├── eval-cases.jsonl   # Source-of-truth eval cases
 │       └── models.jsonl       # Models + thinking config
@@ -92,6 +92,12 @@ bun run skills-evals/validate/index.ts validate skills/<name>
 python3 skills/skill-creator/scripts/build_agents_index.py
 python3 skills/skill-creator/scripts/build_skills_router_artifact.py
 bun run skills-evals/validate/index.ts check-router-artifact
+
+# Run evals for all configured models/cases
+./skills-evals/run.sh
+
+# Run a single eval case id across configured models
+./skills-evals/run.sh --case CD-015
 ```
 
 ## Devcontainer rollout note

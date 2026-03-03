@@ -1,0 +1,44 @@
+{
+  "arch": "aarch64",
+  "distro": "alpine",
+  "container": {
+    "force": true,
+    "runtime": "docker",
+    "image": "alpine:3.23"
+  },
+  "alpine": {
+    "version": "3.23.0",
+    "kernelPackage": "linux-virt",
+    "kernelImage": "vmlinuz-virt",
+    "rootfsPackages": [
+      "linux-virt",
+      "rng-tools",
+      "bash",
+      "ca-certificates",
+      "curl",
+      "git",
+      "jq",
+      "nodejs",
+      "npm",
+      "yarn",
+      "uv",
+      "python3",
+      "openssh"
+    ],
+    "initramfsPackages": []
+  },
+  "rootfs": {
+    "label": "pi-eval-gondolin-root",
+    "sizeMb": 4096
+  },
+  "postBuild": {
+    "commands": [
+      "yarn global add @mariozechner/pi-coding-agent@0.52.6",
+      "command -v pi",
+      "pi --help >/dev/null 2>&1 || true"
+    ]
+  },
+  "runtimeDefaults": {
+    "rootfsMode": "cow"
+  }
+}

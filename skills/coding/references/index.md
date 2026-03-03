@@ -24,6 +24,7 @@ metadata:
 
 ## References
 - `skills/coding/references/bun.md` - Bun is the preferred JavaScript/TypeScript toolkit when the repo supports it. If a repo is locked to npm/yarn/pnpm, follow its established toolchain and lockfile.
+- `skills/coding/references/code-smells/detection-signals.md` - Condensed detection heuristics for all 24 code smells. Read first for broad pattern matching.
 - `skills/coding/references/code-smells/index.md` - Operational smell entrypoint with triage workflow and full catalog links.
 - `skills/coding/references/code-smells/smells/ai-code-smell.md` - AI coding rule: no fallback-first implementations; default to hard cutovers.
 - `skills/coding/references/gh-pr-review-fix.md` - Follow this workflow to find the latest PR, gather reviewer feedback + CI failures, organize them, and fix them one by one.

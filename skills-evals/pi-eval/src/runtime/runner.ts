@@ -14,7 +14,7 @@ import {
 } from "../cli/run-options.js";
 
 const extensionRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
-const extensionEntry = path.join(extensionRoot, "index.ts");
+const workerExtensionEntry = path.join(extensionRoot, "worker.ts");
 
 export const registerEvalCommand = (pi: ExtensionAPI) => {
 	pi.registerCommand("eval", {
@@ -30,15 +30,15 @@ export const registerEvalCommand = (pi: ExtensionAPI) => {
 				? defaultCases
 				: await loadCases(options.casesPath);
 			const cases = filterCases(selectedCases, options.filter, options.limitOverride);
-			if (cases.length === 0) return;
+				if (cases.length === 0) return;
 
-			const runStart = Date.now();
-			const evaluations = await evaluateSelectedCases({
-				cases,
-				options,
-				config,
-				extensionEntry,
-			});
+				const runStart = Date.now();
+				const evaluations = await evaluateSelectedCases({
+					cases,
+					options,
+					config,
+					extensionEntry: workerExtensionEntry,
+				});
 			const durationMs = Date.now() - runStart;
 			const passed = evaluations.filter((item) => item.status === "pass").length;
 			const failed = evaluations.length - passed;

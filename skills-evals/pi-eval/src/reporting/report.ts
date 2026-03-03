@@ -1,6 +1,5 @@
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { color } from "./logger.js";
 import type { CaseEvaluation, EvalCase, ModelSpec } from "../data/types.js";
 import { ensureDir, fileExists, formatDuration, median, percentile } from "../data/utils.js";
 
@@ -302,9 +301,7 @@ const writeTextFile = async (filePath: string, content: string): Promise<void> =
 	await writeFile(filePath, content);
 };
 
-export const writeReport = async (filePath: string, content: string): Promise<void> => {
-	await writeTextFile(filePath, content);
-};
+export const writeReport = writeTextFile;
 
 export const updateIndex = async (indexPath: string, modelKey: string, payload: { sha: string; timestamp: string }) => {
 	const indexData: Record<string, { sha: string; timestamp: string }> = {};
@@ -316,17 +313,4 @@ export const updateIndex = async (indexPath: string, modelKey: string, payload: 
 	}
 	indexData[modelKey] = payload;
 	await writeTextFile(indexPath, JSON.stringify(indexData, null, 2));
-};
-
-export const renderReportNotice = (
-	filePath: string,
-	indexPath: string,
-	options: { indexUpdated?: boolean } = {},
-) => {
-	console.log(color.success(`Report written: ${filePath}`));
-	if (options.indexUpdated) {
-		console.log(color.muted(`Index updated: ${indexPath}`));
-	} else {
-		console.log(color.warning(`Index not updated (partial run): ${indexPath}`));
-	}
 };

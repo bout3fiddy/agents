@@ -1,0 +1,37 @@
+{
+  "name": "pi-eval-gondolin-image",
+  "version": "2026.03.02.001133",
+  "generatedAt": "2026-03-02T00:11:37.997Z",
+  "buildId": "67a45f06-3281-586c-ba98-99d22aa43286",
+  "arch": "aarch64",
+  "imageDir": "skills-evals/gondolin/image/current",
+  "piPackage": {
+    "name": "@mariozechner/pi-coding-agent",
+    "version": "0.52.6"
+  },
+  "buildConfig": {
+    "path": "skills-evals/gondolin/pi-eval-image.json",
+    "sha256": "5c5edb51b1355ae3575ff35f73e3da82db267666924851dc7d5a42b749116c0f"
+  },
+  "artifacts": {
+    "manifest": {
+      "path": "skills-evals/gondolin/image/current/manifest.json",
+      "sha256": "dedbeff43bf5aa5a0d72daa9fcefb21cb2a28fe724ea4a4e19aedf37c30a859c"
+    },
+    "kernel": {
+      "path": "skills-evals/gondolin/image/current/vmlinuz-virt",
+      "sizeBytes": 10248704,
+      "sha256": "00e9cf71ce09eff06f6e958df034396d99ad0fd13d89a63abb7a2c269d172ccb"
+    },
+    "initramfs": {
+      "path": "skills-evals/gondolin/image/current/initramfs.cpio.lz4",
+      "sizeBytes": 6331506,
+      "sha256": "daa43b94c3fb5c19c67094fa9b0733caa203fc42cbdf8b6d22b55f53a319f6b6"
+    },
+    "rootfs": {
+      "path": "skills-evals/gondolin/image/current/rootfs.ext4",
+      "sizeBytes": 4294967296,
+      "sha256": "358515a865325b6aa69dd9aff1fed0bf8ea04594cd444e7f7b5cc5e0c325fdbe"
+    }
+  }
+}

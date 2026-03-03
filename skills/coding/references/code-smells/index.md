@@ -29,13 +29,22 @@ metadata:
 Use this file as the first stop for smell-focused coding work.
 
 ## Workflow
-1. Classify likely smell families from the request and code evidence.
-2. Open only matching smell references from the catalog below.
-3. Report findings with canonical smell labels, severity, concrete evidence, and mitigation options.
-4. Do not auto-refactor unless explicitly requested.
+1. Always read `detection-signals.md` first for broad pattern matching across all smells.
+2. Always open every file listed under "Always-check policy" below — these are mandatory
+   regardless of what detection signals suggest. The cheat sheet summaries are not sufficient
+   substitutes for always-check files.
+3. Classify likely smell families from the request, code evidence, and detection signals.
+4. Open matching smell files from the catalog below for detailed refactor guidance.
+5. For new-code tasks, default to broader coverage — check at least the always-check
+   policy files plus any category where the task touches related structures.
+6. Report findings with canonical smell labels, severity, concrete evidence, and mitigation options.
+7. Do not auto-refactor unless explicitly requested.
 
 ## Always-check policy
 - `skills/coding/references/code-smells/smells/ai-code-smell.md` (fallback-first/compatibility-branch guardrail)
+
+## Detection cheat sheet
+- `skills/coding/references/code-smells/detection-signals.md` (condensed heuristics for all 24 smells)
 
 ## Full catalog
 

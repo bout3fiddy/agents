@@ -20,7 +20,10 @@ Scope: applies to all files under `skills-evals/`.
 - Keep command surface minimal (`audit`, `run`).
 - Keep process isolation per case; do not reintroduce reuse/matrix/jobs modes unless explicitly requested.
 - Worker behavior must only activate when `PI_EVAL_WORKER=1`.
+- Keep split entrypoints intact: `skills-evals/pi-eval/index.ts` registers eval commands, while `skills-evals/pi-eval/worker.ts` is the sandbox worker extension entry.
 - Keep report index behavior unchanged: full runs update index, partial runs do not.
+- Repo-local Gondolin image contract lives under `skills-evals/gondolin/`; keep `pi-eval-image.json`, `guest-source.lock.json`, `scripts/build-image.sh`, and `image.lock.json` aligned when changing sandbox runtime/image expectations.
+- Default runtime image location is `skills-evals/gondolin/image/current` unless `PI_EVAL_GONDOLIN_IMAGE_PATH` overrides it.
 
 ## Path/Structure Guardrails
 
