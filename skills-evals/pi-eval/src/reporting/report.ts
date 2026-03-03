@@ -1,6 +1,6 @@
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
-import type { CaseEvaluation, EvalCase, ModelSpec } from "../data/types.js";
+import type { CaseEvaluation, EvalCase, JudgeVerdict, ModelSpec } from "../data/types.js";
 import { ensureDir, fileExists, formatDuration, median, percentile } from "../data/utils.js";
 
 type ReportRow = {
@@ -36,10 +36,14 @@ const formatTokenStats = (tokens: number[]) => {
 	};
 };
 
+const UNPAIRED_TABLE_SENTINEL = "<!-- UNPAIRED_TABLE_START -->";
+
 const parseReportRows = (content: string): Map<string, ReportRow> => {
 	const rows = new Map<string, ReportRow>();
 	const lines = content.split("\n");
-	const headerIndex = lines.findIndex((line) => line.trimStart().startsWith("| Case "));
+	const sentinelIndex = lines.findIndex((line) => line.trim() === UNPAIRED_TABLE_SENTINEL);
+	const searchStart = sentinelIndex >= 0 ? sentinelIndex : 0;
+	const headerIndex = lines.findIndex((line, idx) => idx >= searchStart && line.trimStart().startsWith("| Case "));
 	if (headerIndex === -1) return rows;
 	const headerCells = lines[headerIndex]
 		.split("|")
@@ -210,6 +214,56 @@ const mergeReportRows = (params: {
 	return rows;
 };
 
+type PairedSection = {
+	baseId: string;
+	controlId: string;
+	skillRow: ReportRow;
+	controlRow: ReportRow;
+	verdict: JudgeVerdict;
+};
+
+const renderPairedVariantTable = (skillRow: ReportRow, controlRow: ReportRow): string => {
+	const header = "| Variant | Status | Tokens | Turns | Skills Read | Refs Read |";
+	const separator = "| --- | --- | --- | --- | --- | --- |";
+	const skillLine = `| ${skillRow.caseId} (skill) | ${normalizeStatus(skillRow.status)} | ${skillRow.tokens} | ${skillRow.turns} | ${skillRow.skillsRead} | ${skillRow.refsRead} |`;
+	const controlLine = `| ${controlRow.caseId} (control) | ${normalizeStatus(controlRow.status)} | ${controlRow.tokens} | ${controlRow.turns} | ${controlRow.skillsRead} | ${controlRow.refsRead} |`;
+	return [header, separator, skillLine, controlLine].join("\n");
+};
+
+const renderDimensionsTable = (verdict: JudgeVerdict): string => {
+	const header = "| Dimension | Skill | Control | Rationale |";
+	const separator = "| --- | --- | --- | --- |";
+	const rows = verdict.dimensions.map(
+		(d) => `| ${d.name} | ${d.skillScore} | ${d.controlScore} | ${d.rationale} |`,
+	);
+	return [header, separator, ...rows].join("\n");
+};
+
+const renderPairedSections = (sections: PairedSection[]): string => {
+	if (sections.length === 0) return "";
+	const parts: string[] = ["## Paired Evaluations", ""];
+	for (const section of sections) {
+		parts.push(`### ${section.baseId}: ${section.skillRow.notes || "paired comparison"}`);
+		parts.push(renderPairedVariantTable(section.skillRow, section.controlRow));
+		parts.push("");
+		parts.push(`**Judge Verdict** (token cost: ${section.verdict.judgeTokens.totalTokens})`);
+		parts.push("");
+		parts.push(renderDimensionsTable(section.verdict));
+		parts.push("");
+		if (section.verdict.costAnalysis) {
+			parts.push(`> **Cost Analysis**: ${section.verdict.costAnalysis}`);
+			parts.push("");
+		}
+		if (section.verdict.recommendation) {
+			parts.push(`> **Recommendation**: ${section.verdict.recommendation}`);
+			parts.push("");
+		}
+		parts.push("---");
+		parts.push("");
+	}
+	return parts.join("\n");
+};
+
 const renderCaseTable = (rows: ReportRow[]): string => {
 	const outputRows = rows.map((row) => {
 		const status = normalizeStatus(row.status) || "";
@@ -230,6 +284,28 @@ const renderFailures = (rows: ReportRow[]): string => {
 	return failures
 		.map((item) => `- **${item.caseId}** (${item.mode}): ${item.notes || "failed"}`)
 		.join("\n");
+};
+
+const collectPairedSections = (
+	evaluations: CaseEvaluation[],
+	allRows: ReportRow[],
+): { sections: PairedSection[]; pairedCaseIds: Set<string> } => {
+	const pairedCaseIds = new Set<string>();
+	const sections: PairedSection[] = [];
+
+	for (const evaluation of evaluations) {
+		if (!evaluation.judgeVerdict) continue;
+		const verdict = evaluation.judgeVerdict;
+		const baseId = verdict.pairId;
+		const controlId = verdict.controlId;
+		const skillRow = allRows.find((r) => r.caseId === baseId);
+		const controlRow = allRows.find((r) => r.caseId === controlId);
+		if (!skillRow || !controlRow) continue;
+		sections.push({ baseId, controlId, skillRow, controlRow, verdict });
+		pairedCaseIds.add(baseId);
+		pairedCaseIds.add(controlId);
+	}
+	return { sections, pairedCaseIds };
 };
 
 export const buildReport = (params: {
@@ -261,6 +337,8 @@ export const buildReport = (params: {
 	const tokens = evaluations.map((item) => item.result.tokens.totalTokens || 0);
 	const stats = formatTokenStats(tokens);
 	const rows = mergeReportRows({ evaluations, allCases, previousRows, runTimestamp });
+	const { sections, pairedCaseIds } = collectPairedSections(evaluations, rows);
+	const unpairedRows = rows.filter((row) => !pairedCaseIds.has(row.caseId));
 	const rowPass = rows.filter((item) => normalizeStatus(item.status) === "PASS").length;
 	const rowFail = rows.filter((item) => normalizeStatus(item.status) === "FAIL").length;
 	const rowSkip = rows.filter((item) => normalizeStatus(item.status) === "SKIP").length;
@@ -292,16 +370,19 @@ export const buildReport = (params: {
 		headerLines.splice(6, 0, `- Cases path: ${casesPathLabel}`);
 	}
 
-	return [
-		...headerLines,
-		"",
-		"## Case Results",
-		renderCaseTable(rows),
-		"",
-		"## Failures",
-		renderFailures(rows),
-		"",
-	].join("\n");
+	const reportParts = [...headerLines, ""];
+	if (sections.length > 0) {
+		reportParts.push(renderPairedSections(sections));
+	}
+	reportParts.push("## Case Results");
+	reportParts.push(UNPAIRED_TABLE_SENTINEL);
+	reportParts.push(renderCaseTable(unpairedRows));
+	reportParts.push("");
+	reportParts.push("## Failures");
+	reportParts.push(renderFailures(rows));
+	reportParts.push("");
+
+	return reportParts.join("\n");
 };
 
 const writeTextFile = async (filePath: string, content: string): Promise<void> => {

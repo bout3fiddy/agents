@@ -28,6 +28,7 @@ export type EvalCase = {
 	assertions?: string[];
 	notes?: string;
 	persistArtifacts?: boolean;
+	controlFor?: string;
 };
 
 export type EvalConfig = {
@@ -169,6 +170,23 @@ export type RoutingScorecard = {
 	unexpectedRefs: string[];
 };
 
+export type JudgeDimension = {
+	name: string;
+	skillScore: number;
+	controlScore: number;
+	rationale: string;
+};
+
+export type JudgeVerdict = {
+	pairId: string;
+	controlId: string;
+	dimensions: JudgeDimension[];
+	costAnalysis: string;
+	recommendation: string;
+	rawResponse: string;
+	judgeTokens: TokenUsage;
+};
+
 export type CaseEvaluation = {
 	caseId: string;
 	suite: string;
@@ -183,6 +201,7 @@ export type CaseEvaluation = {
 	routing: RoutingScorecard;
 	assertions: string[];
 	tokenBudget?: number | null;
+	judgeVerdict?: JudgeVerdict;
 };
 
 export type EvalRunOptions = {
@@ -198,4 +217,7 @@ export type EvalRunOptions = {
 	evalAuthSource: string | null;
 	isFullRun: boolean;
 	casesPathLabel: string;
+	judgeModel: ModelSpec | null;
+	judgeThinking: string;
+	judgeDisabled: boolean;
 };

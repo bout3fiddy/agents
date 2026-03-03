@@ -9,7 +9,7 @@ export const modelSpecFromModel = (model: Model<any>): ModelSpec => ({
 	label: `${model.provider}/${model.id}`,
 });
 
-const modelSpecFromKey = (modelKey: string): ModelSpec | null => {
+export const modelSpecFromKey = (modelKey: string): ModelSpec | null => {
 	const [provider, ...idParts] = modelKey.split("/");
 	const id = idParts.join("/");
 	if (!provider || !id) return null;

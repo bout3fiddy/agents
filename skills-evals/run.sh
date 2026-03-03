@@ -107,22 +107,36 @@ load_models() {
 
 	MODEL_SPECS=()
 	local line_no=0
-	local line model thinking
+	local line model thinking judge_model judge_thinking
 	while IFS= read -r line || [[ -n "$line" ]]; do
 		line_no=$((line_no + 1))
 		if [[ -z "${line//[[:space:]]/}" ]]; then
 			continue
 		fi
-		model="$(printf "%s\n" "$line" | sed -nE 's/.*"model"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/p')"
+		local parsed
+		parsed="$(printf "%s\n" "$line" | python3 -c "
+import sys, json
+d = json.load(sys.stdin)
+e = d.get('eval')
+j = d.get('judge', {})
+model = (e.get('model','') if isinstance(e,dict) else '') or d.get('model','')
+thinking = (e.get('thinking','') if isinstance(e,dict) else '') or d.get('thinking','')
+jm = j.get('model','') if isinstance(j,dict) else ('false' if j is False else '')
+jt = j.get('thinking','') if isinstance(j,dict) else ''
+print(f'{model}\t{thinking}\t{jm}\t{jt}')
+" 2>/dev/null || echo "")"
+		model="$(printf "%s" "$parsed" | cut -f1)"
+		thinking="$(printf "%s" "$parsed" | cut -f2)"
+		judge_model="$(printf "%s" "$parsed" | cut -f3)"
+		judge_thinking="$(printf "%s" "$parsed" | cut -f4)"
 		if [[ -z "$model" ]]; then
-			echo "Invalid model entry in $MODELS_FILE:$line_no (expected {\"model\":\"provider/model\"})." >&2
+			echo "Invalid model entry in $MODELS_FILE:$line_no (expected {\"eval\":{\"model\":\"provider/model\"}})." >&2
 			exit 1
 		fi
-		thinking="$(printf "%s\n" "$line" | sed -nE 's/.*"thinking"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/p')"
 		if [[ -z "$thinking" ]]; then
 			thinking="$THINKING_DEFAULT"
 		fi
-		MODEL_SPECS+=("${model}|${thinking}")
+		MODEL_SPECS+=("${model}|${thinking}|${judge_model}|${judge_thinking}")
 	done <"$MODELS_FILE"
 
 	if [[ "${#MODEL_SPECS[@]}" -eq 0 ]]; then
@@ -134,9 +148,19 @@ load_models() {
 run_for_model() {
 	local model="$1"
 	local thinking="$2"
+	local judge_model="${3:-}"
+	local judge_thinking="${4:-}"
 	local prompt="/eval run --thinking $thinking --model $model"
 	if [[ -n "$CASE_FILTER" ]]; then
 		prompt="$prompt --filter $CASE_FILTER --limit 1"
+	fi
+
+	local -a env_prefix=()
+	if [[ -n "$judge_model" ]]; then
+		env_prefix+=(PI_EVAL_JUDGE_MODEL="$judge_model")
+	fi
+	if [[ -n "$judge_thinking" ]]; then
+		env_prefix+=(PI_EVAL_JUDGE_THINKING="$judge_thinking")
 	fi
 
 	if ((LOG_OFF == 0)); then
@@ -148,11 +172,11 @@ run_for_model() {
 		fi
 		mkdir -p "$(dirname "$run_log")"
 		echo "[$model] Logging to $run_log"
-		pi --no-session --no-extensions -e "$EXT_PATH" -p "$prompt" 2>&1 | tee "$run_log"
+		env "${env_prefix[@]}" pi --no-session --no-extensions -e "$EXT_PATH" -p "$prompt" 2>&1 | tee "$run_log"
 		return
 	fi
 
-	pi --no-session --no-extensions -e "$EXT_PATH" -p "$prompt"
+	env "${env_prefix[@]}" pi --no-session --no-extensions -e "$EXT_PATH" -p "$prompt"
 }
 
 wait_for_pids() {
@@ -183,9 +207,13 @@ failed=0
 PIDS=()
 for spec in "${MODEL_SPECS[@]}"; do
 	model="${spec%%|*}"
-	thinking="${spec#*|}"
+	remainder="${spec#*|}"
+	thinking="${remainder%%|*}"
+	remainder="${remainder#*|}"
+	judge_model="${remainder%%|*}"
+	judge_thinking="${remainder#*|}"
 	echo "[$model] Starting (thinking=$thinking)"
-	run_for_model "$model" "$thinking" &
+	run_for_model "$model" "$thinking" "$judge_model" "$judge_thinking" &
 	PIDS+=("$!")
 	if ((${#PIDS[@]} >= MAX_PARALLEL)); then
 		if ! wait_for_pids "${PIDS[@]}"; then

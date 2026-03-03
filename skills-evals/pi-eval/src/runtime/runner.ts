@@ -12,6 +12,7 @@ import {
 	resolveRunOptions,
 	validateRunMode,
 } from "../cli/run-options.js";
+import { runJudge } from "../judging/judge.js";
 
 const extensionRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const workerExtensionEntry = path.join(extensionRoot, "worker.ts");
@@ -39,6 +40,17 @@ export const registerEvalCommand = (pi: ExtensionAPI) => {
 					config,
 					extensionEntry: workerExtensionEntry,
 				});
+			const verdicts = await runJudge({
+				evaluations,
+				cases,
+				options,
+				agentDir: options.agentDir,
+			});
+			for (const [pairId, verdict] of verdicts) {
+				const evaluation = evaluations.find((e) => e.caseId === pairId);
+				if (evaluation) evaluation.judgeVerdict = verdict;
+			}
+
 			const durationMs = Date.now() - runStart;
 			const passed = evaluations.filter((item) => item.status === "pass").length;
 			const failed = evaluations.length - passed;

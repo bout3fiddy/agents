@@ -27,6 +27,9 @@ const buildOptions = (agentDir: string, isFullRun: boolean): EvalRunOptions => (
 	evalAuthSource: null,
 	isFullRun,
 	casesPathLabel: "skills-evals/fixtures/cases.jsonl",
+	judgeModel: null,
+	judgeThinking: "medium",
+	judgeDisabled: false,
 });
 
 const buildEvalCase = (id: string): EvalCase => ({

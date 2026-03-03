@@ -1,7 +1,7 @@
 import type { ExtensionCommandContext } from "@mariozechner/pi-coding-agent";
 import { homedir } from "node:os";
 import path from "node:path";
-import { ensureModelAuth, resolveModelSpec } from "../runtime/model-registry.js";
+import { ensureModelAuth, modelSpecFromKey, resolveModelSpec } from "../runtime/model-registry.js";
 import type { EvalConfig, EvalRunOptions } from "../data/types.js";
 import { fileExists, normalizePath, resolvePath } from "../data/utils.js";
 import {
@@ -76,6 +76,13 @@ export const resolveRunOptions = async (
 	const isFullRun = !filter && !limitOverride && isDefaultCasesPath;
 	const casesPathLabel = normalizePath(path.relative(agentDir, casesPath));
 
+	const judgeModelEnv = process.env.PI_EVAL_JUDGE_MODEL?.trim() ?? "";
+	const judgeThinkingEnv = process.env.PI_EVAL_JUDGE_THINKING?.trim() ?? "";
+	const judgeDisabled = judgeModelEnv === "false";
+	const judgeModel =
+		!judgeDisabled && judgeModelEnv.includes("/") ? modelSpecFromKey(judgeModelEnv) : null;
+	const judgeThinking = judgeThinkingEnv.length > 0 ? judgeThinkingEnv : thinkingLevel;
+
 	return {
 		agentDir,
 		model,
@@ -89,5 +96,8 @@ export const resolveRunOptions = async (
 		evalAuthSource,
 		isFullRun,
 		casesPathLabel,
+		judgeModel,
+		judgeThinking,
+		judgeDisabled,
 	};
 };
