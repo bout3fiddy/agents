@@ -20,7 +20,7 @@ type ReportRow = {
 
 const buildRowKey = (caseId: string, mode: string): string => `${caseId}::${mode}`;
 
-const normalizeStatus = (value: string): string => value.trim().toUpperCase();
+export const normalizeStatus = (value: string): string => value.trim().toUpperCase();
 
 const runDateFromTimestamp = (timestamp: string): string => timestamp.split("T")[0] ?? timestamp;
 const joinRoutingList = (values: string[] | undefined): string => {
@@ -34,7 +34,7 @@ const formatTokenStats = (tokens: number[]) => ({
 	p95: percentile(tokens, 95),
 });
 
-const UNPAIRED_TABLE_SENTINEL = "<!-- UNPAIRED_TABLE_START -->";
+export const UNPAIRED_TABLE_SENTINEL = "<!-- UNPAIRED_TABLE_START -->";
 
 const safeParseInt = (value: string): number => {
 	const n = Number.parseInt(value, 10);

@@ -12,10 +12,14 @@ SOURCE_ROUTER_ARTIFACT_FILE="$SOURCE_DIR/instructions/skills.router.min.json"
 BUILD_ROUTER_SCRIPT="$SOURCE_DIR/bin/build_skills_router_artifact.py"
 BUILD_AGENT_INDEX_SCRIPT="$SOURCE_DIR/bin/build_agents_index.py"
 
+CLAUDE_DIR="$HOME/.claude"
+CLAUDE_MD_FILE="$CLAUDE_DIR/CLAUDE.md"
+
 usage() {
     cat <<'USAGE'
 Usage: bin/sync.sh
-Performs a hard one-way sync from this repo to ~/.agents only.
+Performs a hard one-way sync from this repo to ~/.agents and writes a
+thin CLAUDE.md pointer into ~/.claude.
 USAGE
 }
 
@@ -96,5 +100,18 @@ echo "Hard syncing from $SOURCE_DIR to $TARGET_ROOT..."
 mirror_dir "$SOURCE_SKILLS_DIR" "$TARGET_SKILLS_DIR"
 mirror_file "$SOURCE_INSTRUCTIONS_FILE" "$TARGET_INSTRUCTIONS_FILE"
 mirror_file "$SOURCE_ROUTER_ARTIFACT_FILE" "$TARGET_ROUTER_ARTIFACT_FILE"
+
+# --- Claude Code integration ---
+# Write a thin CLAUDE.md that references ~/.agents/AGENTS.md so Claude Code
+# picks up the global instructions without duplicating content.
+mkdir -p "$CLAUDE_DIR"
+printf '@../.agents/AGENTS.md\n' > "$CLAUDE_MD_FILE"
+echo "Wrote $CLAUDE_MD_FILE (-> ~/.agents/AGENTS.md)"
+
+# Remove legacy ~/.claude/skills (skills now live in ~/.agents/skills).
+if [[ -d "$CLAUDE_DIR/skills" ]]; then
+    rm -rf "$CLAUDE_DIR/skills"
+    echo "Removed legacy $CLAUDE_DIR/skills"
+fi
 
 echo "Done."

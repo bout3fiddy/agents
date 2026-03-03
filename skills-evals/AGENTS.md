@@ -17,7 +17,7 @@ Scope: applies to all files under `skills-evals/`.
 
 ## pi-eval Guardrails
 
-- Keep command surface minimal (`audit`, `run`).
+- Keep command surface minimal (`run`, `manage`).
 - Keep process isolation per case; do not reintroduce reuse/matrix/jobs modes unless explicitly requested.
 - Worker behavior must only activate when `PI_EVAL_WORKER=1`.
 - Keep split entrypoints intact: `skills-evals/pi-eval/index.ts` registers eval commands, while `skills-evals/pi-eval/worker.ts` is the sandbox worker extension entry.
@@ -32,7 +32,7 @@ When moving files or changing paths, update all affected scripts, specs, and doc
 
 ## Cases and Fixtures
 
-- Source of truth for cases: `skills-evals/fixtures/eval-cases.jsonl`.
+- Source of truth for cases: `skills-evals/fixtures/eval-cases/` (one JSONL per case).
 - `skills-evals/fixtures/` is referenced by eval cases; do not remove fixture files without updating all case references.
 - Keep case IDs stable to preserve report history.
 

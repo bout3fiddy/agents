@@ -2,7 +2,7 @@
 
 - This repo is the global workflow/template source; prefer changes here over per-repo tweaks.
 - Rollout flow: update `devcontainer/`, run `./devcontainer/install.sh self-install`, then in the target repo remove `.devcontainer`, run `devc install .`, and finally `devc rebuild .`.
-- `./bin/sync.sh` hard-syncs skills, `instructions/global.md`, and `instructions/skills.router.min.json` into `~/.agents`. It does not update devcontainer templates. Use `./devcontainer/install.sh self-install` + `devc install .` to propagate template changes.
+- `./bin/sync.sh` hard-syncs skills, `instructions/global.md`, and `instructions/skills.router.min.json` into `~/.agents`, and writes a thin `~/.claude/CLAUDE.md` (`@../.agents/AGENTS.md`) so Claude Code picks up the global instructions via file reference. It does not update devcontainer templates. Use `./devcontainer/install.sh self-install` + `devc install .` to propagate template changes.
 - Devcontainer post-install ensures `ruff`, `pytest`, `mypy`, `prek`, and `takopi` are installed via `uv tool install` using Python 3.14 (takopi uses `-U`).
 - Devcontainer bind-mounts host config dirs (currently `~/.claude`, `~/.codex`, `~/.takopi`) into `/home/node`.
 - Only run `uv run prek run --all-files` when changes include code (source/tests) or executable build/lint/tooling config. Skip `prek` for docs/planning-only edits (for example `docs/specs/**`, prose docs, or AGENTS/CLAUDE instruction updates) unless explicitly requested.
@@ -12,13 +12,13 @@
 - `python3 bin/build_agents_index.py` validates skills/reference routing metadata; use it before sync to catch schema or linkage issues.
 - Skill validation in this repo uses the `agentskills` executable from `skills-ref` (`uvx --from skills-ref agentskills validate skills/<name>`).
 - In-house TypeScript port of `agentskills validate` lives at `skills-evals/validate/` (`bun run skills-evals/validate/index.ts validate skills/<name>`).
-- `bin/sync.sh` always hard-syncs this repo into `~/.agents` only.
+- `bin/sync.sh` hard-syncs this repo into `~/.agents` and writes a Claude Code pointer at `~/.claude/CLAUDE.md`; it also removes legacy `~/.claude/skills` if present (skills live in `~/.agents/skills` only).
 - To make pi load only `~/.agents` skills, point `~/.pi/agent/skills` at `~/.agents/skills` (symlink works; keep a timestamped backup for rollback).
 - `instructions/skills.router.min.json` is hard-synced to `~/.agents/skills.router.min.json`.
 - Runtime routing contract: `instructions/skills.router.min.json` is primary and sufficient for agent routing.
 - `bin/sync.sh` does not run sync-time gates; it only syncs files.
-- Eval cases source of truth is `skills-evals/fixtures/eval-cases.jsonl`; reports mirror to `docs/specs/pi-eval/reports/`.
-- Eval fixture convention: skill-driven baseline cases in `skills-evals/fixtures/eval-cases.jsonl` should declare targeted `expectedRefs`; only explicit no-skill/no-payload controls and pure assertion probes should keep `expectedRefs` empty.
+- Eval cases source of truth is `skills-evals/fixtures/eval-cases/` (one JSONL per case); reports mirror to `docs/specs/pi-eval/reports/`.
+- Eval fixture convention: skill-driven baseline cases in `skills-evals/fixtures/eval-cases/` should declare targeted `expectedRefs`; only explicit no-skill/no-payload controls and pure assertion probes should keep `expectedRefs` empty.
 - Per-case routing/read telemetry traces are written to `skills-evals/reports/routing-traces/<provider-model>/<case-id>.json` on each eval run.
 - `pi-eval` runtime now treats case IDs as data only: filesystem path segments are sanitized, and sandbox/home recursive cleanup is restricted to managed tmp roots (`/tmp/pi-eval-sandbox`, `/tmp/pi-eval-home`) with depth checks.
 - `pi-eval` case worker launches are mandatory-sandboxed via Gondolin VM runtime; there is no runtime toggle to disable sandboxing, and launch failures fail closed (no plain host `spawn` fallback).
