@@ -13,6 +13,7 @@
 - Skill validation in this repo uses the `agentskills` executable from `skills-ref` (`uvx --from skills-ref agentskills validate skills/<name>`).
 - In-house TypeScript port of `agentskills validate` lives at `skills-evals/validate/` (`bun run skills-evals/validate/index.ts validate skills/<name>`).
 - `bin/sync.sh` always hard-syncs this repo into `~/.agents` only.
+- To make pi load only `~/.agents` skills, point `~/.pi/agent/skills` at `~/.agents/skills` (symlink works; keep a timestamped backup for rollback).
 - `instructions/skills.router.min.json` is hard-synced to `~/.agents/skills.router.min.json`.
 - Runtime routing contract: `instructions/skills.router.min.json` is primary and sufficient for agent routing.
 - `bin/sync.sh` does not run sync-time gates; it only syncs files.
