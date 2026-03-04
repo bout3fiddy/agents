@@ -7,7 +7,7 @@
 - `pi-eval/`: Pi extension that runs eval audits and eval cases.
 - `run.sh`: wrapper to run `pi eval` against one or many models.
 - `fixtures/`: deterministic fixture files used by eval prompts and file assertions.
-- `fixtures/eval-cases.jsonl`: source-of-truth eval case registry.
+- `fixtures/eval-cases/`: source-of-truth eval case directory (one JSONL per case).
 - `fixtures/models.jsonl`: models matrix consumed by `run.sh` when `--model` is omitted.
 - `gondolin/`: repo-local custom image recipe, build scripts, and lock metadata.
 - `reports/`: primary model-specific eval reports and `index.json`.
@@ -127,7 +127,7 @@ Routing assertions (optional per case):
 
 Cases source of truth:
 
-- `skills-evals/fixtures/eval-cases.jsonl`
+- `skills-evals/fixtures/eval-cases/` (one JSONL per case)
 
 Primary reports:
 
@@ -176,4 +176,4 @@ Ported behavior:
 
 ## Maintenance Notes
 
-- Keep case-path references aligned to `skills-evals/fixtures/eval-cases.jsonl`.
+- Keep case-path references aligned to `skills-evals/fixtures/eval-cases/`.

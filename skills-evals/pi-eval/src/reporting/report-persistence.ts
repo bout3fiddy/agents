@@ -3,7 +3,7 @@ import path from "node:path";
 import { buildReport, readReportRows, updateIndex, writeReport } from "./report.js";
 import type { CaseEvaluation, EvalBundle, EvalRunOptions, JudgeBundleVerdict, ModelSpec, ResolvedEvalCase } from "../data/types.js";
 import { ensureDir, sleep } from "../data/utils.js";
-import { toSafePathSegment } from "../runtime/path-policy.js";
+import { toSafePathSegment } from "../runtime/policy/path-policy.js";
 
 const modelSafeKey = (model: ModelSpec): string =>
 	`${model.provider}-${model.id}`.replace(/[^a-zA-Z0-9-_]+/g, "-");

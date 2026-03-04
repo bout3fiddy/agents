@@ -1,5 +1,5 @@
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
-import { registerEvalWorker } from "./src/runtime/worker.js";
+import { registerEvalWorker } from "./src/runtime/entry/worker.js";
 
 export default function (pi: ExtensionAPI) {
 	void registerEvalWorker(pi).catch((error) => {

@@ -28,7 +28,8 @@ Scope: applies to all files under `skills-evals/`.
 ## Path/Structure Guardrails
 
 When moving files or changing paths, update all affected scripts, specs, and docs in the same change.
-- `skills-evals/pi-eval/src` is organized by domain folders: `cli/`, `runtime/`, `data/`, `reporting/` (each includes a local `AGENTS.md` explainer).
+- `skills-evals/pi-eval/src` is organized by domain folders: `cli/`, `runtime/`, `data/`, `reporting/`, `judging/` (each includes a local `AGENTS.md` explainer).
+- Judge directives and sandbox config live under `config/judge/` (includes local `AGENTS.md`).
 
 ## Shared Schema
 

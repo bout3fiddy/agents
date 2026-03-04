@@ -25,9 +25,11 @@ docs/
 venv*/
 skills-evals/specs/pi-eval/logs/
 skills-evals/specs/
-!output/
+output/
 skills-evals/fixtures/review/
 skills-evals/logs/
+skills-evals/reports/
+skills-evals/generated/
 skills-evals/gondolin/image/current/*
 !skills-evals/gondolin/image/current/.gitkeep
 traces/

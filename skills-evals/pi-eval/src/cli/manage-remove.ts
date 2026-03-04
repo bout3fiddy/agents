@@ -7,7 +7,7 @@
 import { readFile, readdir, rm } from "node:fs/promises";
 import path from "node:path";
 import { slugFromId } from "../data/cases.js";
-import { hasPathPrefix } from "../runtime/path-policy.js";
+import { hasPathPrefix } from "../runtime/policy/path-policy.js";
 import { traceFileName } from "../reporting/report-persistence.js";
 
 // ── Types ───────────────────────────────────────────────────────────────

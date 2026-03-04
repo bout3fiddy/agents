@@ -1,9 +1,11 @@
 import type { ExtensionCommandContext } from "@mariozechner/pi-coding-agent";
 import { homedir } from "node:os";
 import path from "node:path";
-import { ensureModelAuth, modelSpecFromKey, resolveModelSpec } from "../runtime/model-registry.js";
+import { ensureModelAuth, modelSpecFromKey, resolveModelSpec } from "../runtime/model/model-registry.js";
 import type { EvalConfig, EvalRunOptions } from "../data/types.js";
-import { fileExists, normalizePath, parsePositiveInt, resolvePath } from "../data/utils.js";
+import { fileExists, parsePositiveInt, resolvePath } from "../data/utils.js";
+import { normalizePath } from "../runtime/policy/path-policy.js";
+import { fileURLToPath } from "node:url";
 import {
 	assertAllowedFlags,
 	parseLimitFlag,
@@ -78,6 +80,18 @@ export const resolveRunOptions = async (
 		!judgeDisabled && judgeModelEnv.includes("/") ? modelSpecFromKey(judgeModelEnv) : null;
 	const judgeThinking = judgeThinkingEnv.length > 0 ? judgeThinkingEnv : thinkingLevel;
 
+	const judgeAgentsPath = path.resolve(
+		path.dirname(fileURLToPath(import.meta.url)),
+		"..",
+		"..",
+		"config",
+		"judge",
+		"AGENTS.md",
+	);
+	if (!judgeDisabled && !(await fileExists(judgeAgentsPath))) {
+		throw new Error(`Judge AGENTS.md not found: ${judgeAgentsPath}`);
+	}
+
 	return {
 		agentDir,
 		model,
@@ -94,5 +108,6 @@ export const resolveRunOptions = async (
 		judgeModel,
 		judgeThinking,
 		judgeDisabled,
+		judgeAgentsPath,
 	};
 };

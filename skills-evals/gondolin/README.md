@@ -29,7 +29,7 @@ Then rebuild and reinstall:
 
 ```bash
 cd skills-evals/gondolin/vendor/gondolin && pnpm install && pnpm --filter @earendil-works/gondolin run build
-cd skills-evals/pi-eval && npm install
+cd skills-evals/pi-eval && bun install
 ```
 
 ### Notes

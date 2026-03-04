@@ -2,10 +2,6 @@ import { access, mkdir, readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
 
-// Re-export path predicates from their canonical home so existing consumers
-// that import from data/utils.js continue to work unchanged.
-export { hasPathPrefix, isPathInsideRoot, normalizePath, resolveInsideRoot } from "../runtime/path-policy.js";
-
 export const sleep = (ms: number): Promise<void> =>
 	new Promise((resolve) => setTimeout(resolve, ms));
 

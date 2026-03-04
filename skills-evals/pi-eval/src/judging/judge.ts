@@ -1,5 +1,5 @@
-import { spawn } from "node:child_process";
 import { readFile } from "node:fs/promises";
+import path from "node:path";
 import { createInterface } from "node:readline";
 import type {
 	CaseEvaluation,
@@ -11,8 +11,11 @@ import type {
 	ResolvedEvalCase,
 	TokenUsage,
 } from "../data/types.js";
-import { errorMessage, resolveInsideRoot } from "../data/utils.js";
-import { collectAssistantText, sumUsageFromMessages } from "../runtime/rpc-messages.js";
+import { errorMessage } from "../data/utils.js";
+import { resolveInsideRoot } from "../runtime/policy/path-policy.js";
+import { collectAssistantText, sumUsageFromMessages } from "../runtime/rpc/rpc-messages.js";
+import { createMandatorySandboxEngine } from "../runtime/engine/sandbox-engine.js";
+import { createJudgeSandbox, cleanupJudgeSandbox, type JudgeSandboxLayout } from "./judge-sandbox.js";
 
 type JudgeVariantInput = {
 	tag: string;
@@ -181,12 +184,23 @@ Respond in this exact JSON format (no markdown fences, just raw JSON):
 ${responseSchema}`;
 };
 
-const runPiJudge = (params: {
+const runPiJudge = async (params: {
 	model: ModelSpec;
 	thinking: string;
 	prompt: string;
+	judgeAgentsPath: string;
+	authSourcePath: string | null;
 }): Promise<{ content: string; tokens: TokenUsage }> => {
-	return new Promise((resolve, reject) => {
+	let layout: JudgeSandboxLayout | null = null;
+
+	try {
+		layout = await createJudgeSandbox({
+			judgeAgentsPath: params.judgeAgentsPath,
+			authSourcePath: params.authSourcePath,
+		});
+
+		const outputPath = path.join(layout.outputDir, "judge-output.json");
+		const engine = createMandatorySandboxEngine();
 		const args = [
 			"--mode", "rpc",
 			"--no-session",
@@ -195,35 +209,27 @@ const runPiJudge = (params: {
 			"--model", params.model.id,
 			"--thinking", params.thinking,
 		];
-		const child = spawn("pi", args, {
-			stdio: ["pipe", "pipe", "pipe"],
-			env: process.env,
+
+		const launch = await engine.launchWorker({
+			command: "pi",
+			args,
+			env: process.env as NodeJS.ProcessEnv,
+			policy: {
+				model: params.model,
+				sandboxWorkspaceDir: layout.workspaceDir,
+				workerOutputPath: outputPath,
+				sandboxHomeDir: layout.homeDir,
+			},
 		});
 
 		let content = "";
 		let tokens: TokenUsage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0 };
-		let settled = false;
 		const stderrChunks: string[] = [];
 
-		const timeout = setTimeout(() => {
-			if (settled) return;
-			settled = true;
-			child.kill();
-			reject(new Error("judge pi process timed out"));
-		}, JUDGE_TIMEOUT_MS);
+		launch.stderr.on("data", (chunk: Buffer | string) => stderrChunks.push(String(chunk)));
 
-		const settle = (error?: Error) => {
-			if (settled) return;
-			settled = true;
-			clearTimeout(timeout);
-			if (error) reject(error);
-			else resolve({ content, tokens });
-		};
-
-		child.stderr.on("data", (chunk) => stderrChunks.push(String(chunk)));
-
-		const rl = createInterface({ input: child.stdout });
-		rl.on("line", (line) => {
+		const rl = createInterface({ input: launch.stdout as NodeJS.ReadableStream & AsyncIterable<string> });
+		rl.on("line", (line: string) => {
 			let event: Record<string, unknown>;
 			try {
 				event = JSON.parse(line) as Record<string, unknown>;
@@ -234,22 +240,28 @@ const runPiJudge = (params: {
 			const messages = Array.isArray(event.messages) ? event.messages : [];
 			content = collectAssistantText(messages);
 			tokens = sumUsageFromMessages(messages);
-			child.stdin.end();
+			launch.stdin.end();
 		});
 
-		child.on("close", (code) => {
+		const timeoutPromise = new Promise<never>((_, reject) => {
+			setTimeout(() => reject(new Error("judge pi process timed out")), JUDGE_TIMEOUT_MS);
+		});
+
+		const exitPromise = (async () => {
+			const exitCode = await launch.waitForExit();
 			rl.close();
-			if (!content && code !== 0) {
-				settle(new Error(`pi judge exited with code ${code}: ${stderrChunks.join("")}`));
-				return;
+			if (!content && exitCode !== 0) {
+				throw new Error(`pi judge exited with code ${exitCode}: ${stderrChunks.join("")}`);
 			}
-			settle();
-		});
+			return { content, tokens };
+		})();
 
-		child.on("error", (err) => settle(err));
+		launch.stdin.write(`${JSON.stringify({ type: "prompt", message: params.prompt })}\n`);
 
-		child.stdin.write(`${JSON.stringify({ type: "prompt", message: params.prompt })}\n`);
-	});
+		return await Promise.race([exitPromise, timeoutPromise]);
+	} finally {
+		await cleanupJudgeSandbox(layout);
+	}
 };
 
 const extractJson = (raw: string): string => {
@@ -316,6 +328,8 @@ export const runJudge = async (params: {
 				model: judgeModelSpec,
 				thinking: options.judgeThinking,
 				prompt,
+				judgeAgentsPath: options.judgeAgentsPath,
+				authSourcePath: options.evalAuthSource,
 			});
 			const verdict = parseJudgeResponse(content, bundleId, bundle.variantTags, tokens);
 			verdicts.set(bundleId, verdict);

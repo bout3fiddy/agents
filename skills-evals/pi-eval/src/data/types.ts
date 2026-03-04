@@ -248,4 +248,5 @@ export type EvalRunOptions = {
 	judgeModel: ModelSpec | null;
 	judgeThinking: string;
 	judgeDisabled: boolean;
+	judgeAgentsPath: string;
 };
