@@ -1,15 +1,16 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { createInterface } from "node:readline";
-import type {
-	CaseEvaluation,
-	EvalBundle,
-	EvalRunOptions,
-	JudgeBundleVerdict,
-	JudgeDimensionScore,
-	ModelSpec,
-	ResolvedEvalCase,
-	TokenUsage,
+import {
+	apiCostFromTokens,
+	type CaseEvaluation,
+	type EvalBundle,
+	type EvalRunOptions,
+	type JudgeBundleVerdict,
+	type JudgeDimensionScore,
+	type ModelSpec,
+	type ResolvedEvalCase,
+	type TokenUsage,
 } from "../data/types.js";
 import { errorMessage } from "../data/utils.js";
 import { resolveInsideRoot } from "../runtime/policy/path-policy.js";
@@ -143,7 +144,8 @@ const buildJudgeResponseSchema = (variantTags: string[]): string => {
 
 const buildJudgePrompt = (input: JudgeBundleInput): string => {
 	const variantSections = input.variants.map((v) => {
-		const tokenLine = `Token cost: ${v.tokens.totalTokens} (input: ${v.tokens.input}, output: ${v.tokens.output}, cached: ${v.tokens.cacheRead})`;
+		const cost = apiCostFromTokens(v.tokens);
+		const tokenLine = `API cost: ${cost} (input: ${v.tokens.input}, output: ${v.tokens.output}, cached: ${v.tokens.cacheRead})`;
 		return `## Implementation: ${v.tag}
 ### Code
 \`\`\`
@@ -156,7 +158,7 @@ ${v.output}
 	});
 
 	const tokenCosts = input.variants
-		.map((v) => `${v.tag}=${v.tokens.totalTokens}`)
+		.map((v) => `${v.tag}=${apiCostFromTokens(v.tokens)}`)
 		.join(", ");
 
 	const tags = input.variants.map((v) => v.tag);
@@ -176,8 +178,9 @@ If any implementation is worse or the same, say so.
 Dimensions: ${JUDGE_DIMENSIONS.join(", ")}
 
 Then analyze the cost-quality tradeoff:
-- Token costs: ${tokenCosts}
-- Is the quality delta worth the token cost?
+- API costs (input + output): ${tokenCosts}
+- Cached tokens are ~90% cheaper than input tokens and excluded from API cost above.
+- Is the quality delta worth the API cost?
 - Give a concrete recommendation.
 
 Respond in this exact JSON format (no markdown fences, just raw JSON):

@@ -71,7 +71,8 @@ export type ReportRow = {
 	caseId: string;
 	mode: string;
 	status: string;
-	tokens: number;
+	apiCost: number;
+	cached: number;
 	turns: number;
 	skillsRead: number;
 	skillFilesRead: number;
@@ -102,7 +103,9 @@ export const parseStandaloneTable = (lines: string[]): Map<string, ReportRow> =>
 	const caseIdx = col("Case");
 	const modeIdx = col("Mode");
 	const statusIdx = col("Status");
-	const tokensIdx = col("Tokens");
+	const costIdx = col("Cost");
+	const cachedIdx = col("Cached");
+	const tokensIdx = col("Tokens"); // backward compat: old reports use "Tokens"
 	const turnsIdx = col("Turns");
 	const skillsReadIdx = col("Skills Read");
 	const skillFilesReadIdx = col("Skill Files Read");
@@ -112,7 +115,8 @@ export const parseStandaloneTable = (lines: string[]): Map<string, ReportRow> =>
 	const notesIdx = col("Notes");
 	const runIdx = col("Run");
 	if (caseIdx < 0 || modeIdx < 0) return rows;
-	const requiredMax = Math.max(caseIdx, modeIdx, statusIdx, tokensIdx, notesIdx, runIdx);
+	const primaryCostIdx = costIdx >= 0 ? costIdx : tokensIdx;
+	const requiredMax = Math.max(caseIdx, modeIdx, statusIdx, primaryCostIdx, notesIdx, runIdx);
 
 	for (let i = dataStart; i < lines.length; i += 1) {
 		const line = lines[i] ?? "";
@@ -122,11 +126,13 @@ export const parseStandaloneTable = (lines: string[]): Map<string, ReportRow> =>
 		const caseId = cells[caseIdx] ?? "";
 		const mode = cells[modeIdx] ?? "";
 		if (!caseId || !mode) continue;
+		const parsedCost = safeParseInt(cellStr(cells, primaryCostIdx, "0"));
 		rows.set(buildRowKey(caseId, mode), {
 			caseId,
 			mode,
 			status: cells[statusIdx] ?? "",
-			tokens: safeParseInt(cells[tokensIdx] ?? "0"),
+			apiCost: parsedCost,
+			cached: safeParseInt(cellStr(cells, cachedIdx, "0")),
 			turns: safeParseInt(cellStr(cells, turnsIdx, "0")),
 			skillsRead: safeParseInt(cellStr(cells, skillsReadIdx, "0")),
 			skillFilesRead: safeParseInt(cellStr(cells, skillFilesReadIdx, "0")),

@@ -14,7 +14,7 @@ import {
 } from "../../cli/run-options.js";
 import { runJudge } from "../../judging/judge.js";
 
-const extensionRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
+const extensionRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const workerExtensionEntry = path.join(extensionRoot, "worker.ts");
 
 export const registerEvalCommand = (pi: ExtensionAPI) => {

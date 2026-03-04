@@ -1,6 +1,6 @@
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
-import type { CaseEvaluation, EvalBundle, JudgeBundleVerdict, ModelSpec, ResolvedEvalCase } from "../data/types.js";
+import { apiCostFromTokens, type CaseEvaluation, type EvalBundle, type JudgeBundleVerdict, type ModelSpec, type ResolvedEvalCase } from "../data/types.js";
 import { ensureDir, fileExists, formatDuration, median, percentile } from "../data/utils.js";
 import {
 	UNPAIRED_TABLE_SENTINEL,
@@ -16,10 +16,10 @@ const joinRoutingList = (values: string[] | undefined): string => {
 	return values.join(", ");
 };
 
-const formatTokenStats = (tokens: number[]) => ({
-	max: Math.max(0, ...tokens),
-	median: median(tokens),
-	p95: percentile(tokens, 95),
+const formatCostStats = (costs: number[]) => ({
+	max: Math.max(0, ...costs),
+	median: median(costs),
+	p95: percentile(costs, 95),
 });
 
 export const readReportRows = async (filePath: string): Promise<Map<string, ReportRow>> => {
@@ -49,11 +49,13 @@ const mergeReportRows = (params: {
 
 	for (const evaluation of evaluations) {
 		const key = buildRowKey(evaluation.caseId, evaluation.mode);
+		const tok = evaluation.result.tokens;
 		const row: ReportRow = {
 			caseId: evaluation.caseId,
 			mode: evaluation.mode,
 			status: evaluation.status === "pass" ? "PASS" : "FAIL",
-			tokens: evaluation.result.tokens.totalTokens || 0,
+			apiCost: apiCostFromTokens(tok),
+			cached: tok.cacheRead,
 			turns: evaluation.result.turnBreakdown?.length ?? 0,
 			skillsRead: evaluation.routing.readSkills.length,
 			skillFilesRead: evaluation.routing.readSkillFiles.length,
@@ -91,7 +93,8 @@ const mergeReportRows = (params: {
 					caseId,
 					mode,
 					status: "SKIP",
-					tokens: 0,
+					apiCost: 0,
+					cached: 0,
 					turns: 0,
 					skillsRead: 0,
 					skillFilesRead: 0,
@@ -116,10 +119,10 @@ type BundleSection = {
 };
 
 const renderBundleVariantTable = (variantRows: ReportRow[]): string => {
-	const header = "| Variant | Status | Tokens | Turns | Skills Read | Refs Read |";
-	const separator = "| --- | --- | --- | --- | --- | --- |";
+	const header = "| Variant | Status | Cost | Cached | Turns | Skills Read | Refs Read |";
+	const separator = "| --- | --- | --- | --- | --- | --- | --- |";
 	const lines = variantRows.map(
-		(row) => `| ${row.caseId} | ${normalizeStatus(row.status)} | ${row.tokens} | ${row.turns} | ${row.skillsRead} | ${row.refsRead} |`,
+		(row) => `| ${row.caseId} | ${normalizeStatus(row.status)} | ${row.apiCost} | ${row.cached} | ${row.turns} | ${row.skillsRead} | ${row.refsRead} |`,
 	);
 	return [header, separator, ...lines].join("\n");
 };
@@ -163,13 +166,14 @@ const renderBundleSections = (sections: BundleSection[]): string => {
 const renderCaseTable = (rows: ReportRow[]): string => {
 	const outputRows = rows.map((row) => {
 		const status = normalizeStatus(row.status) || "";
-		const tokenCount = row.tokens || 0;
+		const cost = row.apiCost || 0;
+		const cached = row.cached || 0;
 		const turnCount = row.turns || 0;
-		return `| ${row.caseId} | ${row.mode} | ${status} | ${tokenCount} | ${turnCount} | ${row.skillsRead} | ${row.skillFilesRead} | ${row.refsRead} | ${row.missingRefs} | ${row.unexpectedRefs} | ${row.notes} | ${row.run} |`;
+		return `| ${row.caseId} | ${row.mode} | ${status} | ${cost} | ${cached} | ${turnCount} | ${row.skillsRead} | ${row.skillFilesRead} | ${row.refsRead} | ${row.missingRefs} | ${row.unexpectedRefs} | ${row.notes} | ${row.run} |`;
 	});
 	return [
-		"| Case | Mode | Status | Tokens | Turns | Skills Read | Skill Files Read | Refs Read | Missing Refs | Unexpected Refs | Notes | Run |",
-		"| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+		"| Case | Mode | Status | Cost | Cached | Turns | Skills Read | Skill Files Read | Refs Read | Missing Refs | Unexpected Refs | Notes | Run |",
+		"| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
 		...outputRows,
 	].join("\n");
 };
@@ -242,8 +246,8 @@ export const buildReport = (params: {
 		limit,
 		casesPathLabel,
 	} = params;
-	const tokens = evaluations.map((item) => item.result.tokens.totalTokens || 0);
-	const stats = formatTokenStats(tokens);
+	const costs = evaluations.map((item) => apiCostFromTokens(item.result.tokens));
+	const stats = formatCostStats(costs);
 	const rows = mergeReportRows({ evaluations, allCases, previousRows, runTimestamp });
 	const { sections, bundleCaseIds } = collectBundleSections(evaluations, rows, bundles);
 	const standaloneRows = rows.filter((row) => !bundleCaseIds.has(row.caseId));
@@ -278,7 +282,7 @@ export const buildReport = (params: {
 		`- Case rows: ${totalRows} (pass ${rowPass}, fail ${rowFail}, skip ${rowSkip})`,
 		`- Cases in spec: ${totalCases}`,
 		`- Duration: ${formatDuration(durationMs)}`,
-		`- Token stats (this run): max ${stats.max}, median ${stats.median}, p95 ${stats.p95}`,
+		`- Token stats (this run): cost max ${stats.max}, cost median ${stats.median}, cost p95 ${stats.p95}`,
 	];
 	if (casesPathLabel) {
 		headerLines.splice(6, 0, `- Cases path: ${casesPathLabel}`);

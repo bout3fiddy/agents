@@ -85,6 +85,9 @@ export type TokenUsage = {
 	totalTokens: number;
 };
 
+/** Billable API cost: input + output tokens (excludes cached reads). */
+export const apiCostFromTokens = (t: TokenUsage): number => t.input + t.output;
+
 export type TurnTokenUsage = {
 	turn: number;
 	input: number;
