@@ -33,9 +33,8 @@ When moving files or changing paths, update all affected scripts, specs, and doc
 
 ## Shared Schema
 
-- `skills-evals/schemas/skill-metadata.schema.json` is the single source of truth for skill metadata constants (activation policies, metadata keys, frontmatter fields, router artifact structure, limits, defaults).
-- Consumed by: `skills-evals/validate/src/validator.ts`, `skills-evals/validate/src/router_artifact_check.ts`, and `bin/build_skills_router_artifact.py`.
-- When adding/changing skill metadata fields or constraints, update the schema first, then update consumers.
+- `skills-evals/schemas/skill-metadata.schema.json` defines skill directory naming constraints (used by the validate tool).
+- Skill files no longer carry YAML frontmatter metadata; routing uses the inline table in `instructions/global.md`.
 
 ## Cases and Fixtures
 

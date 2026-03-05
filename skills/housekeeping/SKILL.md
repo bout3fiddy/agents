@@ -1,66 +1,70 @@
----
+# Housekeeping
 
-name: housekeeping
-description: Repository housekeeping workflows for AGENTS/CLAUDE architecture, progressive disclosure, and migration of legacy monolithic instruction files.
-metadata:
-  id: housekeeping.core
-  version: "1"
-  task_types:
-    - agents-architecture
-    - migration
-    - claude-architecture
-    - repo-housekeeping
-    - housekeeping
-  trigger_phrases:
-    - AGENTS.md
-    - CLAUDE.md
-    - progressive disclosure
-    - legacy AGENTS migration
-    - instruction cleanup
-    - context-memory organization
-    - housekeeping
-  priority: 65
-  load_strategy: progressive
-  activation_policy: both
-  workflow_triggers:
-    - agents_architecture_requested
-    - legacy_migration_requested
-    - docs_housekeeping_requested
+Use when work is about organizing or modernizing `AGENTS.md`/`CLAUDE.md` context systems.
 
----
+## Key rules
 
-
-
-# Housekeeping (AGENTS/CLAUDE Architecture)
-
-Use this skill when work is about organizing or modernizing `AGENTS.md`/`CLAUDE.md` context systems.
-
-## Operating rules
-- Keep root `AGENTS.md` concise: critical guardrails, task router, canonical commands, and links.
-- Prefer scoped instruction files in dense areas (`apps/frontend`, `infra`, `apps/agent`, etc.).
-- Move deep or volatile details into `.agents/repo-context/*`, not root `AGENTS.md`.
-- Curate continuously: deduplicate, resolve contradictions, and remove stale guidance.
+- Root `AGENTS.md` stays concise: critical guardrails, task router, canonical commands, and links.
+- Domain-heavy guidance lives in nearest scope (`apps/frontend/AGENTS.md`, `infra/AGENTS.md`, etc.).
+- Deep or volatile details go in `.agents/repo-context/*`, not root `AGENTS.md`.
+- Curate continuously: deduplicate, resolve contradictions, remove stale guidance.
 - Preserve behavior intent during migrations; change structure first, then tighten wording.
+- Keep `AGENTS.md` and `CLAUDE.md` aligned when both exist.
 
 ## Workflow
-1) Assess current state (concise router vs mixed/legacy monolith).
-2) Select target architecture from references.
-3) Migrate content into scoped `AGENTS.md` files and deep docs.
-4) Rewrite root `AGENTS.md` as a short router.
-5) Add freshness metadata for volatile facts where feasible.
-6) Verify links/routes and remove conflicting duplicate rules.
-7) If work includes both AGENTS.md and CLAUDE.md, apply parity checks in the same pass.
 
-## Canonical ownership
-- `instructions/global.md`: trigger registration, precedence, escalation, and lifecycle policy.
-- `skills/housekeeping/SKILL.md`: workflow sequence and reference selection for housekeeping execution.
-- `skills/housekeeping/references/*`: deep guidance and operating patterns; AGENTS and CLAUDE are references.
+1. Assess current state (concise router vs mixed/legacy monolith).
+2. Migrate content into scoped `AGENTS.md` files and deep docs.
+3. Rewrite root `AGENTS.md` as a short router.
+4. Add freshness metadata for volatile facts where feasible.
+5. Verify links/routes and remove conflicting duplicate rules.
 
-## Reference triggers (open when clearly relevant)
-- AGENTS/CLAUDE architecture, progressive disclosure, or context-memory organization -> `skills/housekeeping/references/agents-architecture.md`
-- Legacy monolithic AGENTS cleanup, contradiction pruning, or migration planning -> `skills/housekeeping/references/migration-playbook.md`
+## Target file tree
 
-## References
-- `skills/housekeeping/references/index.md` - References index for this skill
-- `skills/housekeeping/references/agents-architecture.md` - Target architecture, file tree, and root template
-- `skills/housekeeping/references/migration-playbook.md` - Legacy-to-modern migration workflow and checklist
+```text
+repo/
+  AGENTS.md                     # concise router + critical guardrails only
+  .agents/
+    repo-context/
+      index.md                  # map of deep guidance
+      frontend.md               # detailed frontend runbooks
+      infra.md                  # deploy/terraform/release details
+      backend.md                # service/runtime/data details
+      volatile/
+        YYYY-MM-DD-<topic>.md   # time-bounded operational notes
+  apps/
+    frontend/
+      AGENTS.md                 # path-scoped frontend instructions
+    agent/
+      AGENTS.md                 # path-scoped agent runtime instructions
+  infra/
+    AGENTS.md                   # path-scoped infra/deploy instructions
+```
+
+## Root AGENTS template
+
+```text
+# Repo Notes
+- What this repo is and major boundaries.
+- 5-10 critical guardrails only.
+- Task router: where to look for frontend/infra/agent/backend work.
+- Canonical commands (build/test/deploy).
+- Links to `.agents/repo-context/index.md` and scoped AGENTS files.
+```
+
+## Design rules
+
+- Root file stays short and high-signal.
+- Domain-heavy guidance lives in nearest scope.
+- Volatile operations notes live in `.agents/repo-context`, not root.
+- Prefer links over repeated copy.
+- Resolve contradictions immediately when touched.
+
+## Freshness metadata (for volatile notes)
+
+When feasible, add metadata so stale facts are easy to prune:
+
+```yaml
+owner: <team-or-person>
+last_verified: YYYY-MM-DD
+```

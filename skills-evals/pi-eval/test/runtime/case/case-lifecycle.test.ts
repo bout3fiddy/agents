@@ -117,9 +117,10 @@ test("mirrorBootstrapPayloadToWorkspace projects synced bootstrap files into wor
 	const homeDir = await mkdtemp(path.join(tmpdir(), "pi-eval-home-bootstrap-"));
 	try {
 		await mkdir(path.join(homeDir, ".agents", "skills", "coding"), { recursive: true });
+		await mkdir(path.join(homeDir, ".agents", "workflows"), { recursive: true });
 		await writeFile(path.join(homeDir, ".agents", "AGENTS.md"), "# sandbox instructions\n", "utf-8");
-		await writeFile(path.join(homeDir, ".agents", "skills.router.min.json"), "{\"schema_version\":\"1\"}\n", "utf-8");
 		await writeFile(path.join(homeDir, ".agents", "skills", "coding", "SKILL.md"), "# coding skill\n", "utf-8");
+		await writeFile(path.join(homeDir, ".agents", "workflows", "linear.md"), "# linear\n", "utf-8");
 
 		await mirrorBootstrapPayloadToWorkspace({
 			workspaceAgentDir,
@@ -128,11 +129,11 @@ test("mirrorBootstrapPayloadToWorkspace projects synced bootstrap files into wor
 
 		assert.equal(await fileExists(path.join(workspaceAgentDir, "AGENTS.md")), true);
 		assert.equal(
-			await fileExists(path.join(workspaceAgentDir, "instructions", "skills.router.min.json")),
+			await fileExists(path.join(workspaceAgentDir, "skills", "coding", "SKILL.md")),
 			true,
 		);
 		assert.equal(
-			await fileExists(path.join(workspaceAgentDir, "skills", "coding", "SKILL.md")),
+			await fileExists(path.join(workspaceAgentDir, "workflows", "linear.md")),
 			true,
 		);
 	} finally {

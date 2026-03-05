@@ -150,12 +150,12 @@ export const mirrorBootstrapPayloadToWorkspace = async (params: {
 			target: path.join(params.workspaceAgentDir, "AGENTS.md"),
 		},
 		{
-			source: path.join(params.homeDir, ".agents", "skills.router.min.json"),
-			target: path.join(params.workspaceAgentDir, "instructions", "skills.router.min.json"),
-		},
-		{
 			source: path.join(params.homeDir, ".agents", "skills"),
 			target: path.join(params.workspaceAgentDir, "skills"),
+		},
+		{
+			source: path.join(params.homeDir, ".agents", "workflows"),
+			target: path.join(params.workspaceAgentDir, "workflows"),
 		},
 	];
 
@@ -193,23 +193,19 @@ export const collectBootstrapPreflightIssues = async (params: {
 	const issues: string[] = [];
 	const homeAgentsPaths = [
 		path.join(params.homeDir, ".agents", "AGENTS.md"),
-		path.join(params.homeDir, ".agents", "skills.router.min.json"),
 	];
 	const homeAgentsChecks = await Promise.all(homeAgentsPaths.map((targetPath) => fileExists(targetPath)));
 	if (!homeAgentsChecks[0]) issues.push("missing bootstrap home AGENTS.md");
-	if (!homeAgentsChecks[1]) issues.push("missing bootstrap home skills router artifact");
 
 	const workspaceBootstrapPaths = [
 		path.join(params.workspaceAgentDir, "AGENTS.md"),
-		path.join(params.workspaceAgentDir, "instructions", "skills.router.min.json"),
 		path.join(params.workspaceAgentDir, "skills"),
 	];
 	const workspaceChecks = await Promise.all(
 		workspaceBootstrapPaths.map((targetPath) => fileExists(targetPath)),
 	);
 	if (!workspaceChecks[0]) issues.push("missing workspace AGENTS.md");
-	if (!workspaceChecks[1]) issues.push("missing workspace instructions/skills.router.min.json");
-	if (!workspaceChecks[2]) issues.push("missing workspace skills directory");
+	if (!workspaceChecks[1]) issues.push("missing workspace skills directory");
 
 	const [missingSkillFiles, missingExpectedRefs] = await Promise.all([
 		collectMissingSkillFiles({

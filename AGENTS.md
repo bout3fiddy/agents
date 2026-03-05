@@ -2,7 +2,7 @@
 
 - This repo is the global workflow/template source; prefer changes here over per-repo tweaks.
 - Rollout flow: update `devcontainer/`, run `./devcontainer/install.sh self-install`, then in the target repo remove `.devcontainer`, run `devc install .`, and finally `devc rebuild .`.
-- `./bin/sync.sh` hard-syncs skills, `instructions/global.md`, and `instructions/skills.router.min.json` into `~/.agents`, and writes a thin `~/.claude/CLAUDE.md` (`@../.agents/AGENTS.md`) so Claude Code picks up the global instructions via file reference. It does not update devcontainer templates. Use `./devcontainer/install.sh self-install` + `devc install .` to propagate template changes.
+- `./bin/sync.sh` hard-syncs skills, workflows, and `instructions/global.md` into `~/.agents`, and writes a thin `~/.claude/CLAUDE.md` (`@../.agents/AGENTS.md`) so Claude Code picks up the global instructions via file reference. It does not update devcontainer templates. Use `./devcontainer/install.sh self-install` + `devc install .` to propagate template changes.
 - Devcontainer post-install ensures `ruff`, `pytest`, `mypy`, `prek`, and `takopi` are installed via `uv tool install` using Python 3.14 (takopi uses `-U`).
 - Devcontainer bind-mounts host config dirs (currently `~/.claude`, `~/.codex`, `~/.takopi`) into `/home/node`.
 - Only run `uv run prek run --all-files` when changes include code (source/tests) or executable build/lint/tooling config. Skip `prek` for docs/planning-only edits (for example `docs/specs/**`, prose docs, or AGENTS/CLAUDE instruction updates) unless explicitly requested.
@@ -14,8 +14,7 @@
 - In-house TypeScript port of `agentskills validate` lives at `skills-evals/validate/` (`bun run skills-evals/validate/index.ts validate skills/<name>`).
 - `bin/sync.sh` hard-syncs this repo into `~/.agents` and writes a Claude Code pointer at `~/.claude/CLAUDE.md`; it also removes legacy `~/.claude/skills` if present (skills live in `~/.agents/skills` only).
 - To make pi load only `~/.agents` skills, point `~/.pi/agent/skills` at `~/.agents/skills` (symlink works; keep a timestamped backup for rollback).
-- `instructions/skills.router.min.json` is hard-synced to `~/.agents/skills.router.min.json`.
-- Runtime routing contract: `instructions/skills.router.min.json` is primary and sufficient for agent routing.
+- Runtime routing is handled by the inline routing table in `instructions/global.md` — no separate router artifact.
 - `bin/sync.sh` does not run sync-time gates; it only syncs files.
 - Eval cases source of truth is `skills-evals/fixtures/eval-cases/` (one JSONL per case); reports mirror to `docs/specs/pi-eval/reports/`.
 - Eval fixture convention: skill-driven baseline cases in `skills-evals/fixtures/eval-cases/` should declare targeted `expectedRefs`; only explicit no-skill/no-payload controls and pure assertion probes should keep `expectedRefs` empty.
@@ -34,13 +33,15 @@
 - Canonical eval wrapper is `skills-evals/run.sh`.
 - `skills-evals/run.sh` supports optional `--case <CASE_ID>`, which maps to `/eval run --filter <CASE_ID> --limit 1` for targeted case runs.
 - `skills-evals/manage.sh` delegates target resolution for `remove` to `skills-evals/pi-eval/src/cli/manage-remove.ts` (canonical `slugFromId` and `traceFileName` from TS data layer); shell retains argument parsing, confirmation prompt, and deletion execution.
-- `skills-evals/schemas/skill-metadata.schema.json` is the single source of truth for skill metadata constants shared across `skills-evals/validate/` (TS) and `bin/build_skills_router_artifact.py` (Python); update the schema first when changing metadata fields or constraints.
+- Skill files no longer carry YAML frontmatter metadata; routing uses the inline table in `instructions/global.md`.
 - `pi-eval` case timing controls: `PI_EVAL_CASE_TIMEOUT_MS` governs prompt/turn completion wait (default `300000`), and `PI_EVAL_CASE_SHUTDOWN_TIMEOUT_MS` governs post-run worker exit wait (default `30000`).
 - When `PI_EVAL_RPC_TRACE_DIR` is set, `runCaseProcess` now writes both `<case-id>.jsonl` raw RPC traces and `<case-id>.diagnostics.json` lifecycle summaries; timeout errors include a compact RPC diagnostics hint (`raw/parsed/last_stop/events`).
 - `pi-eval` tests live in `skills-evals/pi-eval/test/`; run all with `bun test` from `skills-evals/pi-eval/`.
 - `DEVC_DISABLE_MCP_SERVERS` in `devcontainer/devcontainer.json` can disable MCP startup in containers (comma/space/semi-colon separated list); use it to skip auth-heavy servers (e.g. `sentry` and/or `linear`) on non-interactive session starts.
 - Third-party skill installers may land content in `~/.agents/skills/<name>`; to vendor into this repo, copy into `skills/<name>/`, ensure progressive disclosure (`SKILL.md` + `references/`), then run:
   - `python3 bin/build_agents_index.py`
-  - `python3 bin/build_skills_router_artifact.py`
   - `./bin/sync.sh`
 - Global policy now requires AGENTS docs to be curated and progressive-disclosure based (concise root router + scoped/nested AGENTS + deep docs), and to migrate legacy monolithic AGENTS files instead of appending indefinitely.
+- Domain workflows (Linear, work packages, PR review) live in `workflows/` and are loaded on trigger, not always in context. The global directive (`instructions/global.md`) is kept short (~40 lines) with an inline routing table — routing uses the inline table, not a generated artifact.
+- Skills are flat peers (10 skills total): coding, code-smell-detection, design, design-critique, design-guidelines, storyboard-animation, dialkit, housekeeping, supabase, gcp-operations. Each has a self-contained `SKILL.md`; only `code-smell-detection` has `references/` (24 individual smell remediation files).
+- Coding SKILL.md inlines the smell baseline (hard rules + top detection signals). `code-smell-detection` is a separate skill with its own SKILL.md as the detection catalog, loaded only for explicit smell reviews.

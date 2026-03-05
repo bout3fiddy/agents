@@ -159,12 +159,10 @@ Usage:
 bun run skills-evals/validate/index.ts validate skills/coding
 ```
 
-Ported behavior:
+Validated behavior:
 
 - `SKILL.md` discovery (`SKILL.md` preferred, `skill.md` accepted)
-- YAML frontmatter parsing contract
-- metadata allowlist and required fields
-- name/description/compatibility validation limits
+- Directory name conventions (lowercase, no consecutive hyphens, valid chars)
 - Unicode-aware name validation with NFKC normalization
 - CLI output contract:
   - `Valid skill: <path>`

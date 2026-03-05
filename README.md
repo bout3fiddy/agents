@@ -7,24 +7,22 @@ Repo-specific operating notes live in `AGENTS.md`.
 ## What this repo manages
 
 - Skills under `skills/<name>/` (`SKILL.md` plus optional `references/`)
+- Domain workflows under `workflows/` (loaded on trigger, not always in context)
 - Global instruction source at `instructions/global.md`
-- Machine routing artifacts:
-  - `instructions/skills.router.min.json` (primary runtime artifact)
 - Sync tooling in `bin/` (`sync.sh`)
-- Skills routing metadata tooling in `bin/build_agents_index.py`
+- Skills metadata validation in `bin/build_agents_index.py`
 
 ## Repository layout
 
 ```text
 agents/
 ├── skills/                    # Skill packages: <name>/SKILL.md (+ references/)
+├── workflows/                 # Domain workflows (linear, work-packages, pr-review)
 ├── instructions/
-│   ├── global.md              # Source copied to ~/.agents/AGENTS.md
-│   ├── skills.router.min.json # Source copied to ~/.agents/skills.router.min.json
+│   └── global.md              # Source copied to ~/.agents/AGENTS.md
 ├── bin/
 │   ├── sync.sh                # Hard sync to ~/.agents
-│   ├── build_agents_index.py      # Validate skill/routing metadata (no marker updates)
-│   └── build_skills_router_artifact.py  # Generate skills.router.min.json
+│   └── build_agents_index.py  # Validate skill/routing metadata
 ├── skills-evals/
 │   ├── run.sh                 # Eval runner wrapper (supports --case CASE_ID)
 │   └── fixtures/
@@ -42,7 +40,7 @@ cd ~
 git clone https://github.com/bout3fiddy/agents.git .agents
 cd ~/.agents
 
-# Hard sync skills + instructions + routing artifact to ~/.agents
+# Hard sync skills + workflows + instructions to ~/.agents
 ./bin/sync.sh
 ```
 
@@ -57,15 +55,14 @@ export AGENTS_DIR="/absolute/path/to/agents"
 `bin/sync.sh` performs hard sync from this repo to:
 
 - `~/.agents/skills/`
+- `~/.agents/workflows/`
 - `~/.agents/AGENTS.md` (from `instructions/global.md`)
-- `~/.agents/skills.router.min.json` (from `instructions/skills.router.min.json`)
-- `sync` runs metadata validation + `check-router-artifact` before copy.
+- Sync runs `build_agents_index.py` metadata validation before copy.
 
-### Artifact regeneration
+### Metadata validation
 
-Run these when you need to refresh routing metadata locally:
+Run when you need to check skill metadata locally:
 - `python3 bin/build_agents_index.py` (source validation)
-- `python3 bin/build_skills_router_artifact.py` (artifact regeneration)
 
 ## Creating or updating a skill
 
@@ -88,10 +85,8 @@ bun run skills-evals/validate/index.ts validate skills/<name>
 ## Useful commands
 
 ```bash
-# Rebuild routing artifact
+# Validate skill metadata
 python3 bin/build_agents_index.py
-python3 bin/build_skills_router_artifact.py
-bun run skills-evals/validate/index.ts check-router-artifact
 
 # Run evals for all configured models/cases
 ./skills-evals/run.sh
@@ -102,7 +97,7 @@ bun run skills-evals/validate/index.ts check-router-artifact
 
 ## Devcontainer rollout note
 
-`./bin/sync.sh` only syncs skills, global instructions, and the machine routing artifact. It does not roll out devcontainer template changes.
+`./bin/sync.sh` only syncs skills, workflows, and global instructions. It does not roll out devcontainer template changes.
 
 For devcontainer template rollout:
 

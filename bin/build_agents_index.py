@@ -5,10 +5,16 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-from frontmatter_parser import parse_frontmatter_text, parse_frontmatter_metadata, normalize_path
-
 INDEX_AUDIT_LABEL = "Skills routing metadata audit"
-DESCRIPTION_KEYS = ("description", "summary", "impactDescription")
+
+
+def normalize_path(skill_name: str, ref_path: str) -> str:
+    ref_path = ref_path.strip().strip("`")
+    if ref_path.startswith("skills/"):
+        return ref_path
+    if ref_path.startswith("./"):
+        ref_path = ref_path[2:]
+    return f"skills/{skill_name}/{ref_path}"
 
 
 @dataclass
@@ -23,14 +29,6 @@ def add_result(target: list[Result], kind: str, path: str, detail: str, fix: str
     target.append(Result(kind=kind, path=path, detail=detail, fix=fix))
 
 
-def strip_frontmatter(text: str) -> str:
-    fm = parse_frontmatter_text(text)
-    if not fm:
-        return text
-    marker_len = text.find("---", 3)
-    return text[marker_len + 3 :] if marker_len != -1 else text
-
-
 def first_heading(text: str) -> str:
     for line in text.splitlines():
         line = line.strip()
@@ -40,7 +38,6 @@ def first_heading(text: str) -> str:
 
 
 def first_paragraph(text: str) -> str:
-    text = strip_frontmatter(text)
     in_code = False
     paragraph: list[str] = []
 
@@ -145,45 +142,12 @@ def scan_skills(
             continue
 
         text = skill_file.read_text(encoding="utf-8")
-        fm = parse_frontmatter_text(text)
-        metadata = parse_frontmatter_metadata(text)
-        name = fm.get("name") or skill_path.name
-        desc = fm.get("description", "")
-
-        if not fm.get("name"):
-            add_result(
-                errors,
-                "skill",
-                f"skills/{skill_path.name}/SKILL.md",
-                "Missing frontmatter name.",
-                "Add name: <skill-name> to frontmatter.",
-            )
-        if not desc:
-            add_result(
-                errors,
-                "skill",
-                f"skills/{skill_path.name}/SKILL.md",
-                "Missing frontmatter description.",
-                "Add description: ... to frontmatter.",
-            )
-
-        if metadata.get("route_exclude") is True:
-            continue
+        name = skill_path.name
+        desc = normalize_text(first_paragraph(text))
 
         skill_entries.append(
-            f"skill|{sanitize(str(name))}|{sanitize(str(desc))}|skills/{skill_path.name}/SKILL.md"
+            f"skill|{sanitize(name)}|{sanitize(desc)}|skills/{skill_path.name}/SKILL.md"
         )
-
-        if metadata.get("id"):
-            id_meta = str(metadata["id"])
-            if not id_meta:
-                add_result(
-                    warnings,
-                    "skill",
-                    f"skills/{skill_path.name}/SKILL.md",
-                    "metadata.id is empty; derived id will be used.",
-                    "Set metadata.id explicitly.",
-                )
 
         for trigger, ref in parse_triggers(text):
             trigger_count += 1
@@ -197,7 +161,7 @@ def scan_skills(
                     "Fix trigger path or add the referenced file.",
                 )
             trigger_entries.append(
-                f"trigger|{sanitize(str(name))}|{sanitize(trigger)}|{norm_path}"
+                f"trigger|{sanitize(name)}|{sanitize(trigger)}|{norm_path}"
             )
 
         refs_dir = skill_path / "references"
@@ -238,8 +202,7 @@ def scan_skills(
             ref_count += 1
             rel = ref_file.relative_to(root).as_posix()
             ref_text = ref_file.read_text(encoding="utf-8", errors="ignore")
-            ref_fm = parse_frontmatter_text(ref_text)
-            title = ref_fm.get("title") if isinstance(ref_fm.get("title"), str) else first_heading(ref_text)
+            title = first_heading(ref_text)
 
             if not title:
                 title = ref_file.stem.replace("-", " ")
@@ -248,7 +211,7 @@ def scan_skills(
                     "ref",
                     rel,
                     "Missing title heading; using filename as title.",
-                    "Add a # Heading or frontmatter title.",
+                    "Add a # Heading.",
                 )
 
             if ref_file.name != "index.md" and rel not in index_listed_paths:
@@ -271,37 +234,22 @@ def scan_skills(
 
             desc = index_desc_by_path.get(rel)
             if not desc:
-                for key in DESCRIPTION_KEYS:
-                    field = ref_fm.get(key)
-                    if isinstance(field, str) and field.strip():
-                        desc = normalize_text(field)
-                        break
-
-            if not desc:
                 paragraph = normalize_text(first_paragraph(ref_text))
                 if paragraph:
                     desc = paragraph
-                    if ref_file.name != "index.md":
-                        add_result(
-                            warnings,
-                            "ref",
-                            rel,
-                            "Missing curated description; using first paragraph.",
-                            "Add description/summary frontmatter or index description.",
-                        )
 
-            if not desc:
+            if not desc and ref_file.name != "index.md":
                 add_result(
                     errors,
                     "ref",
                     rel,
                     "Missing description.",
-                    "Add description/summary frontmatter or index description.",
+                    "Add index description or a first paragraph.",
                 )
-                desc = ""
+                desc = desc or ""
 
             ref_entries.append(
-                f"ref|{sanitize(str(name))}|{rel}|{sanitize(str(title))}|{sanitize(desc)}"
+                f"ref|{sanitize(name)}|{rel}|{sanitize(title)}|{sanitize(desc)}"
             )
 
     return (
@@ -315,7 +263,7 @@ def scan_skills(
     )
 
 
-def build_index(root: Path) -> tuple[int, int, int, bool, list[Result], list[Result]]:
+def build_index(root: Path) -> tuple[int, int, int, list[Result], list[Result]]:
     (
         skill_entries,
         _trigger_entries,
@@ -326,14 +274,13 @@ def build_index(root: Path) -> tuple[int, int, int, bool, list[Result], list[Res
         warnings,
     ) = scan_skills(root)
 
-    return len(skill_entries), trigger_count, ref_count, False, errors, warnings
+    return len(skill_entries), trigger_count, ref_count, errors, warnings
 
 
 def print_results(
     skills_count: int,
     trigger_count: int,
     ref_count: int,
-    updated: bool,
     errors: list[Result],
     warnings: list[Result],
 ) -> None:
@@ -359,24 +306,16 @@ def print_results(
         for row in warnings:
             print(f" - [{row.kind}] {row.path} :: {row.detail} | Fix: {row.fix}")
 
-    if updated:
-        print("Index block updates are disabled under router-first (no global marker contract).")
-    else:
-        print("No in-source index mutation is performed in this hard-cutover model.")
-
 
 def main() -> int:
     root = Path(__file__).resolve().parents[1]
 
-    skills_count, trigger_count, ref_count, updated, errors, warnings = build_index(
-        root=root,
-    )
+    skills_count, trigger_count, ref_count, errors, warnings = build_index(root=root)
 
     print_results(
         skills_count=skills_count,
         trigger_count=trigger_count,
         ref_count=ref_count,
-        updated=updated,
         errors=errors,
         warnings=warnings,
     )

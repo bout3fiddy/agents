@@ -4,12 +4,11 @@ set -euo pipefail
 SOURCE_DIR="${AGENTS_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 TARGET_ROOT="$HOME/.agents"
 TARGET_SKILLS_DIR="$TARGET_ROOT/skills"
+TARGET_WORKFLOWS_DIR="$TARGET_ROOT/workflows"
 TARGET_INSTRUCTIONS_FILE="$TARGET_ROOT/AGENTS.md"
-TARGET_ROUTER_ARTIFACT_FILE="$TARGET_ROOT/skills.router.min.json"
 SOURCE_SKILLS_DIR="$SOURCE_DIR/skills"
+SOURCE_WORKFLOWS_DIR="$SOURCE_DIR/workflows"
 SOURCE_INSTRUCTIONS_FILE="$SOURCE_DIR/instructions/global.md"
-SOURCE_ROUTER_ARTIFACT_FILE="$SOURCE_DIR/instructions/skills.router.min.json"
-BUILD_ROUTER_SCRIPT="$SOURCE_DIR/bin/build_skills_router_artifact.py"
 BUILD_AGENT_INDEX_SCRIPT="$SOURCE_DIR/bin/build_agents_index.py"
 
 CLAUDE_DIR="$HOME/.claude"
@@ -44,27 +43,12 @@ if [[ ! -f "$SOURCE_INSTRUCTIONS_FILE" ]]; then
     exit 1
 fi
 
-run_router_builds() {
-    echo "Generating skills routing artifacts..."
+run_validation() {
+    echo "Validating skills metadata..."
     python3 "$BUILD_AGENT_INDEX_SCRIPT"
-    python3 "$BUILD_ROUTER_SCRIPT"
 }
 
-validate_router_artifacts() {
-    if ! (cd "$SOURCE_DIR" && bun run skills-evals/validate/index.ts check-router-artifact "$SOURCE_ROUTER_ARTIFACT_FILE"); then
-        echo "sync: generated router artifact validation failed." >&2
-        return 1
-    fi
-}
-
-run_router_builds
-validate_router_artifacts
-
-if [[ ! -f "$SOURCE_ROUTER_ARTIFACT_FILE" ]]; then
-    echo "sync: missing source router artifact file: $SOURCE_ROUTER_ARTIFACT_FILE" >&2
-    echo "  Router artifact generation failed." >&2
-    exit 1
-fi
+run_validation
 
 mirror_dir() {
     local src="$1"
@@ -98,8 +82,15 @@ mirror_file() {
 echo "Hard syncing from $SOURCE_DIR to $TARGET_ROOT..."
 
 mirror_dir "$SOURCE_SKILLS_DIR" "$TARGET_SKILLS_DIR"
+mirror_dir "$SOURCE_WORKFLOWS_DIR" "$TARGET_WORKFLOWS_DIR"
 mirror_file "$SOURCE_INSTRUCTIONS_FILE" "$TARGET_INSTRUCTIONS_FILE"
-mirror_file "$SOURCE_ROUTER_ARTIFACT_FILE" "$TARGET_ROUTER_ARTIFACT_FILE"
+
+# --- Clean up legacy artifacts ---
+# Remove router artifact if present (no longer used at runtime).
+if [[ -f "$TARGET_ROOT/skills.router.min.json" ]]; then
+    rm "$TARGET_ROOT/skills.router.min.json"
+    echo "Removed legacy $TARGET_ROOT/skills.router.min.json"
+fi
 
 # --- Claude Code integration ---
 # Write a thin CLAUDE.md that references ~/.agents/AGENTS.md so Claude Code

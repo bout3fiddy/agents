@@ -16,6 +16,7 @@ const WORKSPACE_INCLUDE_PATHS = [
 const SYNC_SOURCE_INCLUDE_PATHS = [
 	"bin",
 	"skills",
+	"workflows",
 	"instructions",
 	path.join("skills-evals", "validate"),
 	path.join("skills-evals", "schemas"),
