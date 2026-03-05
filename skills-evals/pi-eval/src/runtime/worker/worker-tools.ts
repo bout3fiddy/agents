@@ -21,7 +21,7 @@ import {
 	captureReadSize,
 	isSkillPath,
 	type ReadCapture,
-} from "../scoring/capture.js";
+} from "./capture.js";
 import { assertReadablePath, createPathDenyPolicy, type PathDenyPolicy } from "../policy/read-policy.js";
 import {
 	assertWithinSandboxBoundary,

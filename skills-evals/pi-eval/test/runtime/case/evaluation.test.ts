@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { CaseRunResult, EvalCase } from "../../../src/data/types.js";
-import { assembleEvaluation, buildCaseResult } from "../../../src/runtime/scoring/scoring.js";
+import { assembleEvaluation, buildCaseResult } from "../../../src/runtime/case/evaluation.js";
 
 const buildEvalCase = (overrides: Partial<EvalCase> = {}): EvalCase => ({
 	id: "CD-SCORE-001",

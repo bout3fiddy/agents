@@ -18,8 +18,24 @@ import {
 	createSandboxHome,
 	runEvalSync,
 } from "../sandbox/sandbox.js";
-import { buildCaseResult, buildManifestHash } from "../scoring/scoring.js";
+import { createHash } from "node:crypto";
+import { buildCaseResult } from "./evaluation.js";
 import { DEFAULT_ALLOWED_TOOLS } from "../worker/worker-contract.js";
+
+// ── Bootstrap manifest hash ─────────────────────────────────────────────
+
+const buildManifestHash = (params: {
+	caseId: string;
+	profile: string;
+	availableSkills: string[];
+}): string => {
+	const payload = JSON.stringify({
+		caseId: params.caseId,
+		profile: params.profile,
+		availableSkills: [...params.availableSkills].sort(),
+	});
+	return createHash("sha256").update(payload).digest("hex");
+};
 
 // ── Types ───────────────────────────────────────────────────────────────
 

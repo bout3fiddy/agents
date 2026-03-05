@@ -10,7 +10,7 @@ import {
 	isSkillPath,
 	serializeReadCapture,
 	type ReadCapture,
-} from "../scoring/capture.js";
+} from "./capture.js";
 import { modelSpecFromModel } from "../model/model-registry.js";
 import type { CaseRunResult, ReadBreakdownEntry, TokenUsage, TurnTokenUsage, ToolUsageSummary } from "../../data/types.js";
 import type { PathDenyPolicy } from "../policy/read-policy.js";

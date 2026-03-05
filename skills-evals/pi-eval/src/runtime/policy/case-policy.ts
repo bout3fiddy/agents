@@ -9,7 +9,7 @@ import { rm } from "node:fs/promises";
 import type { BootstrapProfile, EvalCase } from "../../data/types.js";
 import { errorMessage as formatError } from "../../data/utils.js";
 import { FORBIDDEN_READ_ERROR, assertReadablePath, createPathDenyPolicy } from "./read-policy.js";
-import { POLICY_DENY_ASSERTION_PREFIX } from "../scoring/scoring.js";
+const POLICY_DENY_ASSERTION_PREFIX = "must_trigger_policy_deny:";
 import { mergeReadDenyPaths } from "../worker/worker-contract.js";
 
 // ── Blocklists ──────────────────────────────────────────────────────────

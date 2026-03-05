@@ -7,7 +7,7 @@ import {
 	captureReadInvocation,
 	serializeReadCapture,
 	type ReadCapture,
-} from "../../../src/runtime/scoring/capture.js";
+} from "../../../src/runtime/worker/capture.js";
 
 const createReadCapture = (): ReadCapture => ({
 	skillAttempts: new Set<string>(),

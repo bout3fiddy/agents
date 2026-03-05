@@ -13,6 +13,7 @@ Organized by subdomain. Each subfolder groups related modules.
 - `case-lifecycle.ts`: sandbox/home lifecycle and per-case execution flow orchestrator. Delegates bootstrap to `bootstrap.ts` and policy to `policy/case-policy.ts`.
 - `case-process.ts`: worker process/RPC lifecycle orchestrator. Delegates guest path mapping to `sandbox/guest-paths.ts`, RPC diagnostics to `rpc/rpc-diagnostics.ts`, and retry state to `rpc/rpc-state.ts`.
 - `bootstrap.ts`: bootstrap profile resolution, home setup, auth copying, skill discovery, workspace mirroring, and preflight validation.
+- `evaluation.ts`: assembles `CaseEvaluation` and routing scorecards from run results. No pass/fail logic — judge decides.
 
 ## `engine/` — Sandbox Engine
 
@@ -37,16 +38,12 @@ Organized by subdomain. Each subfolder groups related modules.
 - `rpc-diagnostics.ts`: RPC event stream tracking, timeout diagnostics, and trace persistence.
 - `rpc-state.ts`: RPC retry settle timer, agent_end resolution, and prompt error tracking.
 
-## `worker/` — Worker Tools & Contract
+## `worker/` — Worker Tools & Capture
 
 - `worker-tools.ts`: tool creation (read/edit/write) with sandbox boundary and deny policy enforcement, read capture event hooks.
 - `worker-accumulator.ts`: token usage accumulation, turn breakdown tracking, read breakdown categorization, and final `CaseRunResult` assembly.
 - `worker-contract.ts`: shared runner↔worker env/runtime contract.
-
-## `scoring/` — Scoring & Capture
-
-- `scoring.ts`: assembles routing scorecards from case results. No pass/fail logic — judge decides via `judging/judge.ts`.
-- `capture.ts`: tracks skill/reference read attempts/invocations.
+- `capture.ts`: tracks skill/reference read attempts/invocations during worker execution.
 
 ## `model/` — Model Registry
 

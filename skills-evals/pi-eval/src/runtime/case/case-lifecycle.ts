@@ -5,7 +5,7 @@ import {
 	cleanupSandbox,
 	cleanupSandboxHome,
 } from "../sandbox/sandbox.js";
-import { assembleEvaluation, buildCaseResult } from "../scoring/scoring.js";
+import { assembleEvaluation, buildCaseResult } from "./evaluation.js";
 import type { CaseEvaluation, EvalCase, ModelSpec } from "../../data/types.js";
 import { resolveInsideRoot } from "../policy/path-policy.js";
 import { buildStubResult, runCaseProcess } from "./case-process.js";

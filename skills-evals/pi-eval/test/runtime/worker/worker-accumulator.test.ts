@@ -7,7 +7,7 @@ import {
 	shouldFinalize,
 	buildReadBreakdown,
 } from "../../../src/runtime/worker/worker-accumulator.js";
-import type { ReadCapture } from "../../../src/runtime/scoring/capture.js";
+import type { ReadCapture } from "../../../src/runtime/worker/capture.js";
 
 // ── Helpers ──────────────────────────────────────────────────────────────
 
