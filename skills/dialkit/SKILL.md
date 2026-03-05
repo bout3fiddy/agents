@@ -1,3 +1,8 @@
+---
+name: dialkit
+description: Generate DialKit configurations for live tuning panels with sliders, toggles, and controls for animation and style values. Use when the user mentions DialKit, dials, sliders, controls, or tuning parameters.
+---
+
 # DialKit
 
 **When**: Live tuning panels, sliders, controls for animation/style values.

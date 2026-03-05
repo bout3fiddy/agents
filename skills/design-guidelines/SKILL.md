@@ -1,3 +1,8 @@
+---
+name: design-guidelines
+description: Frontend design guidelines for UI layout, styling, and design direction. Use when the user needs guidance on spacing, typography, depth, color hierarchy, or responsive layout decisions.
+---
+
 # Frontend Design Guidelines
 
 **When**: UI/layout/styling decisions or establishing design direction.

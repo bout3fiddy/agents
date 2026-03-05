@@ -1,3 +1,8 @@
+---
+name: coding
+description: Use for code implementation, bug fixes, refactors, code reviews, and technical guidance. Trigger when the user asks to write, fix, review, or refactor code.
+---
+
 # Coding
 
 Use for implementation, bug fixes, refactors, code reviews, and technical guidance.

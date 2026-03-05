@@ -1,3 +1,8 @@
+---
+name: gcp-operations
+description: GCP operations for Cloud Run deployments, logs, Secret Manager, Cloud Storage, and IAM tasks. Use when the user works with Google Cloud Platform services or needs to manage cloud infrastructure.
+---
+
 # GCP Operations
 
 **When**: Cloud Run ops, logs, deployments, Secret Manager, storage/IAM tasks.

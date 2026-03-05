@@ -1,3 +1,8 @@
+---
+name: supabase
+description: Supabase CLI reference for database migrations, local development, RLS policies, storage buckets, and schema management. Use when the user works with Supabase, database operations, or row-level security.
+---
+
 # Supabase CLI Reference
 
 **When**: Database migrations, local dev, RLS policies, storage buckets, or schema management.

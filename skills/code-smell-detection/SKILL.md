@@ -1,3 +1,8 @@
+---
+name: code-smell-detection
+description: Use for deep code smell reviews, code audits, and refactoring analysis. Trigger when the user asks for a smell review, deep audit, or detailed refactoring analysis beyond routine code changes.
+---
+
 # Code Smell Detection
 
 Use for deep smell reviews, code audits, or when the coding skill's baseline signals aren't specific enough. For routine code changes, the smell baseline in `skills/coding/SKILL.md` is sufficient.

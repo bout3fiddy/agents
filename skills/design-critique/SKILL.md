@@ -1,3 +1,8 @@
+---
+name: design-critique
+description: Systematic UI critique and review framework. Use when the user asks for UI critique, review, feedback, audit, polish, refine, or redesign analysis on screenshots, components, or live URLs.
+---
+
 # Design Critique
 
 **When**: UI critique, review, feedback, audit, polish, refine, or redesign requests.

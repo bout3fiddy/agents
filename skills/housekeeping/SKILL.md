@@ -1,3 +1,8 @@
+---
+name: housekeeping
+description: Organize and modernize AGENTS.md and CLAUDE.md context systems. Use when the user works on structuring, migrating, or curating agent instruction files and repo context architecture.
+---
+
 # Housekeeping
 
 Use when work is about organizing or modernizing `AGENTS.md`/`CLAUDE.md` context systems.

@@ -1,3 +1,8 @@
+---
+name: storyboard-animation
+description: Animation authoring and storyboard specification for React motion components. Use when the user asks to animate, create transitions, write storyboard specs, or refactor inline animation values into structured constants.
+---
+
 # Storyboard Animation
 
 **When**: Animation authoring, refactoring inline motion values, or storyboard specs.

@@ -1,3 +1,8 @@
+---
+name: design
+description: Use for general design-focused frontend tasks and UI work. Routes to specialized design sub-skills (critique, guidelines, animation, dialkit) as needed. Trigger when the user asks about design, UI, or visual direction.
+---
+
 # Design
 
 Use for design-focused frontend tasks. If implementation intent is present (implement, fix, refactor, patch, edit, run tests), hand off to coding.
