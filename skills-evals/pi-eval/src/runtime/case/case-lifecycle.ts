@@ -1,4 +1,4 @@
-import { copyFile, mkdir } from "node:fs/promises";
+import { copyFile, mkdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import {
 	createSandbox,
@@ -84,12 +84,32 @@ const validateCaseSkillExpectations = (evalCase: EvalCase, availableSkills: stri
 	return expected.filter((name) => !availableSkills.includes(name));
 };
 
-const resolvePersistArtifactPaths = (evalCase: EvalCase): string[] => {
-	if (!evalCase.persistArtifacts) return [];
+const resolveAssertionPaths = (evalCase: EvalCase): string[] => {
 	const paths = (evalCase.fileAssertions ?? [])
 		.map((assertion) => assertion.path)
 		.filter((artifactPath) => typeof artifactPath === "string" && artifactPath.trim().length > 0);
 	return Array.from(new Set(paths));
+};
+
+const resolvePersistArtifactPaths = (evalCase: EvalCase): string[] => {
+	if (!evalCase.persistArtifacts) return [];
+	return resolveAssertionPaths(evalCase);
+};
+
+const captureArtifacts = async (
+	evalCase: EvalCase,
+	sandboxAgentDir: string,
+): Promise<Record<string, string>> => {
+	const captured: Record<string, string> = {};
+	for (const artifactPath of resolveAssertionPaths(evalCase)) {
+		try {
+			const fullPath = resolveInsideRoot(sandboxAgentDir, artifactPath);
+			captured[artifactPath] = await readFile(fullPath, "utf-8");
+		} catch {
+			// file may not exist if agent didn't create/modify it
+		}
+	}
+	return captured;
 };
 
 const persistCaseArtifacts = async (params: {
@@ -200,6 +220,7 @@ export const runCase = async (params: {
 			hostAgentDir: agentDir,
 			sandboxAgentDir: workspace.agentDir,
 		});
+		result.capturedArtifacts = await captureArtifacts(evalCase, workspace.agentDir);
 		result.workspaceDir = workspace.agentDir;
 		result.bootstrapBreakdown = homeSetup.bootstrapBreakdown;
 		return evaluateCase(evalCase, result, {

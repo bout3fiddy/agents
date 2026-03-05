@@ -21,6 +21,7 @@ import { createJudgeSandbox, cleanupJudgeSandbox, type JudgeSandboxLayout } from
 type JudgeVariantInput = {
 	tag: string;
 	code: string;
+	artifacts: Record<string, string>;
 	output: string;
 	tokens: TokenUsage;
 	toolSummary: string;
@@ -104,23 +105,53 @@ const resolveBundles = (
 	return result;
 };
 
+const collectArtifacts = async (
+	evalCase: ResolvedEvalCase,
+	evaluation: CaseEvaluation,
+	agentDir: string,
+): Promise<Record<string, string>> => {
+	const captured = evaluation.result.capturedArtifacts;
+	if (captured && Object.keys(captured).length > 0) return captured;
+	// Fallback: read from disk (persistArtifacts: true cases)
+	const artifacts: Record<string, string> = {};
+	for (const assertion of evalCase.fileAssertions ?? []) {
+		const content = await readArtifact(
+			{ ...evalCase, fileAssertions: [assertion] } as ResolvedEvalCase,
+			agentDir,
+		);
+		if (content !== "(artifact not found)" && content !== "(no artifact)") {
+			artifacts[assertion.path] = content;
+		}
+	}
+	return artifacts;
+};
+
 const assembleJudgeBundleInput = async (
 	bundleId: string,
 	variants: Array<{ evaluation: CaseEvaluation; evalCase: ResolvedEvalCase }>,
 	agentDir: string,
 ): Promise<JudgeBundleInput> => {
-	const codes = await Promise.all(variants.map((v) => readArtifact(v.evalCase, agentDir)));
+	const allArtifacts = await Promise.all(
+		variants.map((v) => collectArtifacts(v.evalCase, v.evaluation, agentDir)),
+	);
 	const prompt = variants[0].evalCase.prompt;
 	return {
 		bundleId,
 		prompt,
-		variants: variants.map((v, i) => ({
-			tag: v.evalCase.variantTag ?? v.evalCase.id,
-			code: codes[i],
-			output: v.evaluation.result.outputText,
-			tokens: v.evaluation.result.tokens,
-			toolSummary: formatToolSummary(v.evaluation),
-		})),
+		variants: variants.map((v, i) => {
+			const artifacts = allArtifacts[i];
+			const entries = Object.entries(artifacts);
+			// Primary code: first artifact for backward compat
+			const code = entries.length > 0 ? entries[0][1] : "(no artifact)";
+			return {
+				tag: v.evalCase.variantTag ?? v.evalCase.id,
+				code,
+				artifacts,
+				output: v.evaluation.result.outputText,
+				tokens: v.evaluation.result.tokens,
+				toolSummary: formatToolSummary(v.evaluation),
+			};
+		}),
 	};
 };
 
@@ -142,15 +173,22 @@ const buildJudgeResponseSchema = (variantTags: string[]): string => {
 	);
 };
 
+const formatArtifactSections = (artifacts: Record<string, string>): string => {
+	const entries = Object.entries(artifacts);
+	if (entries.length === 0) return "```\n(no artifact)\n```";
+	if (entries.length === 1) return `\`\`\`\n${entries[0][1]}\n\`\`\``;
+	return entries
+		.map(([filePath, content]) => `**${filePath}**\n\`\`\`\n${content}\n\`\`\``)
+		.join("\n\n");
+};
+
 const buildJudgePrompt = (input: JudgeBundleInput): string => {
 	const variantSections = input.variants.map((v) => {
 		const cost = apiCostFromTokens(v.tokens);
 		const tokenLine = `API cost: ${cost} (input: ${v.tokens.input}, output: ${v.tokens.output}, cached: ${v.tokens.cacheRead})`;
 		return `## Implementation: ${v.tag}
 ### Code
-\`\`\`
-${v.code}
-\`\`\`
+${formatArtifactSections(v.artifacts)}
 ### Agent reasoning
 ${v.output}
 ### ${tokenLine}

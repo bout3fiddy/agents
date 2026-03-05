@@ -1,0 +1,57 @@
+{
+  "id": "CD-303",
+  "suite": "importer",
+  "prompt": [
+    "I have a batch import pipeline with a CSV reader in importer/reader.py, row validation/transform in importer/transform.py, a DB loader in importer/loader.py, data models in importer/models.py, and the orchestrator in importer/pipeline.py.",
+    "The import pipeline silently skips rows that fail validation or DB load, and we've been losing data.",
+    "Update it to fail fast — if any row fails, the import should stop and report which row failed and why."
+  ],
+  "fixtureMapping": {
+    "importer/reader.py": "skills-evals/fixtures/importer/cd303/importer/reader.py",
+    "importer/transform.py": "skills-evals/fixtures/importer/cd303/importer/transform.py",
+    "importer/loader.py": "skills-evals/fixtures/importer/cd303/importer/loader.py",
+    "importer/models.py": "skills-evals/fixtures/importer/cd303/importer/models.py",
+    "importer/pipeline.py": "skills-evals/fixtures/importer/cd303/importer/pipeline.py"
+  },
+  "expectedSkills": [],
+  "disallowedSkills": [],
+  "expectedRefs": [],
+  "tools": ["read", "edit", "write"],
+  "sandbox": true,
+  "fileAssertions": [
+    {
+      "path": "importer/pipeline.py",
+      "mustNotContain": ["PLACEHOLDER"]
+    }
+  ],
+  "persistArtifacts": false,
+  "notes": "Bug-fix eval: remove broad catch-and-continue. Skill agent should eliminate except Exception + continue and let errors propagate, not just tweak the catch block.",
+  "readDenyPaths": [],
+  "variants": [
+    {
+      "tag": "skill",
+      "bootstrapProfile": "full_payload",
+      "expectedSkills": ["coding"],
+      "expectedRefs": ["skills/coding/references/code-smells/smells/ai-code-smell.md"],
+      "skillSet": ["coding"],
+      "requireSkillFileRead": true,
+      "fileAssertions": [
+        {
+          "path": "importer/pipeline.py",
+          "mustNotContain": [
+            "except Exception",
+            "except BaseException",
+            "except:",
+            "continue"
+          ],
+          "mustContain": ["raise"]
+        }
+      ]
+    },
+    {
+      "tag": "noskill",
+      "bootstrapProfile": "no_payload",
+      "disallowedSkills": ["coding", "design", "housekeeping"]
+    }
+  ]
+}

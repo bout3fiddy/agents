@@ -1,0 +1,56 @@
+{
+  "id": "CD-302",
+  "suite": "notifications",
+  "prompt": [
+    "I have a notification system with shared types in src/notifications/types.ts, an email sender in src/notifications/email.ts, a Slack sender in src/notifications/slack.ts, and a router in src/notifications/router.ts.",
+    "Add Microsoft Teams as a notification channel. Messages should go to a Teams webhook URL from the notification metadata."
+  ],
+  "fixtureMapping": {
+    "src/notifications/types.ts": "skills-evals/fixtures/notifications/cd302/src/notifications/types.ts",
+    "src/notifications/email.ts": "skills-evals/fixtures/notifications/cd302/src/notifications/email.ts",
+    "src/notifications/slack.ts": "skills-evals/fixtures/notifications/cd302/src/notifications/slack.ts",
+    "src/notifications/router.ts": "skills-evals/fixtures/notifications/cd302/src/notifications/router.ts"
+  },
+  "expectedSkills": [],
+  "disallowedSkills": [],
+  "expectedRefs": [],
+  "tools": ["read", "edit", "write"],
+  "sandbox": true,
+  "fileAssertions": [
+    {
+      "path": "src/notifications/router.ts",
+      "mustContain": ["TEAMS"],
+      "mustNotContain": ["PLACEHOLDER"]
+    }
+  ],
+  "persistArtifacts": false,
+  "notes": "Feature-add eval: add one provider without building a plugin framework. Skill agent should resist speculative generality (interface/registry/abstract patterns) and add a simple concrete channel.",
+  "readDenyPaths": [],
+  "variants": [
+    {
+      "tag": "skill",
+      "bootstrapProfile": "full_payload",
+      "expectedSkills": ["coding"],
+      "expectedRefs": ["skills/coding/references/code-smells/smells/ai-code-smell.md"],
+      "skillSet": ["coding"],
+      "requireSkillFileRead": true,
+      "fileAssertions": [
+        {
+          "path": "src/notifications/router.ts",
+          "mustContain": ["TEAMS"],
+          "mustNotContain": [
+            "interface NotificationProvider",
+            "ProviderRegistry",
+            "abstract class",
+            "implements"
+          ]
+        }
+      ]
+    },
+    {
+      "tag": "noskill",
+      "bootstrapProfile": "no_payload",
+      "disallowedSkills": ["coding", "design", "housekeeping"]
+    }
+  ]
+}

@@ -171,6 +171,7 @@ export type CaseRunResult = {
 	readBreakdown?: ReadBreakdownEntry[];
 	bootstrapBreakdown?: BootstrapBreakdownEntry[];
 	turnBreakdown?: TurnTokenUsage[];
+	capturedArtifacts?: Record<string, string>;
 };
 
 export type FailureCategory =

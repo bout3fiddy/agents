@@ -23,8 +23,8 @@ const normalizeRawCase = (raw: any): EvalCase => {
 
 export const slugFromId = (id: string): string => id.toLowerCase().replace(/[^a-z0-9]+/g, "");
 
-const resolveArtifactPath = (_suite: string, caseSlug: string, tag: string): string =>
-	`output/${caseSlug}/${tag}/solution.py`;
+const resolveArtifactPath = (suite: string, caseSlug: string, tag: string): string =>
+	`skills-evals/generated/${suite}/${caseSlug}/${tag}/solution.py`;
 
 const interpolateArtifactPath = (value: string, artifactPath: string): string =>
 	value.split(ARTIFACT_PATH_PLACEHOLDER).join(artifactPath);
