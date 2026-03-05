@@ -8,8 +8,10 @@ import {
 	type EvalRunOptions,
 	type JudgeBundleVerdict,
 	type JudgeDimensionScore,
+	type JudgeVariantVerdict,
 	type ModelSpec,
 	type ResolvedEvalCase,
+	type RoutingScorecard,
 	type TokenUsage,
 } from "../data/types.js";
 import { errorMessage } from "../data/utils.js";
@@ -25,18 +27,28 @@ type JudgeVariantInput = {
 	output: string;
 	tokens: TokenUsage;
 	toolSummary: string;
+	routingTrace: string;
+	errors: string[];
 };
 
 type JudgeBundleInput = {
 	bundleId: string;
 	prompt: string;
+	notes: string;
 	variants: JudgeVariantInput[];
 };
 
 type JudgeResponseSchema = {
+	pass: boolean;
+	verdict: string;
 	dimensions: Array<{
 		name: string;
 		scores: Record<string, number>;
+		rationale: string;
+	}>;
+	variantVerdicts: Array<{
+		tag: string;
+		pass: boolean;
 		rationale: string;
 	}>;
 	costAnalysis: string;
@@ -52,6 +64,30 @@ const JUDGE_DIMENSIONS = [
 ];
 
 const JUDGE_TIMEOUT_MS = 120_000;
+
+const formatRoutingTrace = (evaluation: CaseEvaluation): string => {
+	const r = evaluation.routing;
+	const profile = evaluation.result.bootstrapProfile ?? "unknown";
+	const available = evaluation.result.availableSkills ?? [];
+	const lines = [
+		`Bootstrap profile: ${profile}`,
+		`Available skills: ${available.length > 0 ? available.join(", ") : "(none)"}`,
+		`Skills read: ${r.readSkills.length > 0 ? r.readSkills.join(", ") : "(none)"}`,
+		`Skill files read: ${r.readSkillFiles.length > 0 ? r.readSkillFiles.join(", ") : "(none)"}`,
+		`Refs read: ${r.readRefs.length > 0 ? r.readRefs.join(", ") : "(none)"}`,
+		`Refs attempted: ${(r.attemptedRefs ?? []).length > 0 ? (r.attemptedRefs ?? []).join(", ") : "(none)"}`,
+	];
+	if (evaluation.expectedSkills.length > 0) {
+		lines.push(`Expected skills: ${evaluation.expectedSkills.join(", ")}`);
+	}
+	if (evaluation.expectedRefs.length > 0) {
+		lines.push(`Expected refs: ${evaluation.expectedRefs.join(", ")}`);
+	}
+	if (evaluation.result.errors.length > 0) {
+		lines.push(`Errors: ${evaluation.result.errors.join("; ")}`);
+	}
+	return lines.join("\n");
+};
 
 const formatToolSummary = (evaluation: CaseEvaluation): string => {
 	const turns = evaluation.result.turnBreakdown?.length ?? 0;
@@ -112,7 +148,6 @@ const collectArtifacts = async (
 ): Promise<Record<string, string>> => {
 	const captured = evaluation.result.capturedArtifacts;
 	if (captured && Object.keys(captured).length > 0) return captured;
-	// Fallback: read from disk (persistArtifacts: true cases)
 	const artifacts: Record<string, string> = {};
 	for (const assertion of evalCase.fileAssertions ?? []) {
 		const content = await readArtifact(
@@ -135,13 +170,14 @@ const assembleJudgeBundleInput = async (
 		variants.map((v) => collectArtifacts(v.evalCase, v.evaluation, agentDir)),
 	);
 	const prompt = variants[0].evalCase.prompt;
+	const notes = variants[0].evalCase.notes ?? "";
 	return {
 		bundleId,
 		prompt,
+		notes,
 		variants: variants.map((v, i) => {
 			const artifacts = allArtifacts[i];
 			const entries = Object.entries(artifacts);
-			// Primary code: first artifact for backward compat
 			const code = entries.length > 0 ? entries[0][1] : "(no artifact)";
 			return {
 				tag: v.evalCase.variantTag ?? v.evalCase.id,
@@ -150,6 +186,8 @@ const assembleJudgeBundleInput = async (
 				output: v.evaluation.result.outputText,
 				tokens: v.evaluation.result.tokens,
 				toolSummary: formatToolSummary(v.evaluation),
+				routingTrace: formatRoutingTrace(v.evaluation),
+				errors: v.evaluation.result.errors,
 			};
 		}),
 	};
@@ -160,10 +198,17 @@ const buildJudgeResponseSchema = (variantTags: string[]): string => {
 	for (const tag of variantTags) scoreShape[tag] = "<1-10>";
 	return JSON.stringify(
 		{
+			pass: "<true if skill variant demonstrates clear benefit over baseline, false otherwise>",
+			verdict: "<one-line summary of whether skills helped>",
 			dimensions: JUDGE_DIMENSIONS.map((name) => ({
 				name,
 				scores: scoreShape,
 				rationale: "<one-line explanation>",
+			})),
+			variantVerdicts: variantTags.map((tag) => ({
+				tag,
+				pass: "<true/false>",
+				rationale: "<one-line explanation for this variant's verdict>",
 			})),
 			costAnalysis: "<free-text cost-quality tradeoff analysis>",
 			recommendation: "<concrete recommendation>",
@@ -186,13 +231,18 @@ const buildJudgePrompt = (input: JudgeBundleInput): string => {
 	const variantSections = input.variants.map((v) => {
 		const cost = apiCostFromTokens(v.tokens);
 		const tokenLine = `API cost: ${cost} (input: ${v.tokens.input}, output: ${v.tokens.output}, cached: ${v.tokens.cacheRead})`;
+		const errorSection = v.errors.length > 0
+			? `### Errors\n${v.errors.join("\n")}`
+			: "";
 		return `## Implementation: ${v.tag}
 ### Code
 ${formatArtifactSections(v.artifacts)}
 ### Agent reasoning
 ${v.output}
+### Routing Trace
+${v.routingTrace}
 ### ${tokenLine}
-### Tool calls: ${v.toolSummary}`;
+### Tool calls: ${v.toolSummary}${errorSection ? `\n${errorSection}` : ""}`;
 	});
 
 	const tokenCosts = input.variants
@@ -202,24 +252,37 @@ ${v.output}
 	const tags = input.variants.map((v) => v.tag);
 	const responseSchema = buildJudgeResponseSchema(tags);
 
-	return `You are an expert code reviewer judging ${input.variants.length} implementations of the same task.
+	const notesSection = input.notes
+		? `\n## Case Notes\n${input.notes}\n`
+		: "";
+
+	return `You are an expert code reviewer and eval judge. You evaluate two implementations of the same task and decide whether skill knowledge helped.
 
 ## Task Prompt
 ${input.prompt}
-
+${notesSection}
 ${variantSections.join("\n\n")}
 
 ## Instructions
-Rate each implementation 1-10 on these dimensions. Be brutally honest.
-If any implementation is worse or the same, say so.
 
-Dimensions: ${JUDGE_DIMENSIONS.join(", ")}
+You are the sole evaluator. Your verdict determines pass/fail for this eval case.
 
-Then analyze the cost-quality tradeoff:
+### What to evaluate
+1. **Code quality**: Rate each implementation 1-10 on: ${JUDGE_DIMENSIONS.join(", ")}
+2. **Skill effectiveness**: Did the skill variant's routing (skills read, refs read) translate into measurably better code?
+3. **Pass/fail verdict**: For each variant and overall.
+
+### Verdict criteria
+- The **skill variant PASSES** if it demonstrates clear quality improvement over baseline that can be attributed to the skill knowledge it received. Look at the routing trace — did it read the expected skills/refs, and did that knowledge improve the code?
+- The **skill variant FAILS** if: it produced equivalent or worse code than baseline, it didn't read expected skills/refs, or infrastructure errors prevented execution.
+- The **noskill/baseline variant PASSES** if it produced reasonable working code for the task.
+- The **noskill/baseline variant FAILS** if it failed to produce working code or had errors that prevented execution.
+- The **bundle PASSES** if the skill variant demonstrates clear benefit over baseline.
+
+### Cost analysis
 - API costs (input + output): ${tokenCosts}
-- Cached tokens are ~90% cheaper than input tokens and excluded from API cost above.
-- Is the quality delta worth the API cost?
-- Give a concrete recommendation.
+- Cached tokens are ~90% cheaper and excluded from API cost above.
+- Is the quality delta worth the extra cost?
 
 Respond in this exact JSON format (no markdown fences, just raw JSON):
 ${responseSchema}`;
@@ -333,15 +396,60 @@ const parseJudgeResponse = (
 			rationale: String(d.rationale ?? ""),
 		};
 	});
+	const variantVerdicts: JudgeVariantVerdict[] = (parsed.variantVerdicts ?? []).map((v) => ({
+		tag: String(v.tag ?? ""),
+		pass: Boolean(v.pass),
+		rationale: String(v.rationale ?? ""),
+	}));
+	// Ensure every variant tag has a verdict (default to fail if missing)
+	for (const tag of variantTags) {
+		if (!variantVerdicts.some((v) => v.tag === tag)) {
+			variantVerdicts.push({ tag, pass: false, rationale: "no verdict returned by judge" });
+		}
+	}
 	return {
 		bundleId,
 		variantTags,
+		pass: Boolean(parsed.pass),
+		verdict: String(parsed.verdict ?? ""),
 		dimensions,
+		variantVerdicts,
 		costAnalysis: String(parsed.costAnalysis ?? ""),
 		recommendation: String(parsed.recommendation ?? ""),
 		rawResponse: raw,
 		judgeTokens: tokens,
 	};
+};
+
+/** Apply judge verdicts to evaluations, setting pass/fail status. */
+export const applyJudgeVerdicts = (
+	evaluations: CaseEvaluation[],
+	verdicts: Map<string, JudgeBundleVerdict>,
+	cases: ResolvedEvalCase[],
+): void => {
+	const caseById = new Map(cases.map((c) => [c.id, c]));
+	for (const evaluation of evaluations) {
+		const evalCase = caseById.get(evaluation.caseId);
+		if (!evalCase?.bundleId) continue;
+		const verdict = verdicts.get(evalCase.bundleId);
+		if (!verdict) continue;
+
+		evaluation.judgeVerdict = verdict;
+
+		const variantVerdict = verdict.variantVerdicts.find(
+			(v) => v.tag === evalCase.variantTag,
+		);
+		if (variantVerdict) {
+			evaluation.status = variantVerdict.pass ? "pass" : "fail";
+			if (!variantVerdict.pass) {
+				evaluation.reasons = [`JUDGE: ${variantVerdict.rationale}`];
+				evaluation.failureReasons = [{
+					category: "TASK_FAILURE",
+					message: variantVerdict.rationale,
+				}];
+			}
+		}
+	}
 };
 
 export const runJudge = async (params: {

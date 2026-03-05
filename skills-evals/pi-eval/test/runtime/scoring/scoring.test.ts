@@ -1,24 +1,7 @@
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import path from "node:path";
 import test from "node:test";
-import type { BootstrapProfile, CaseRunResult, EvalCase } from "../../../src/data/types.js";
-import { evaluateCase } from "../../../src/runtime/scoring/scoring.js";
-
-const buildManifestHash = (
-	caseId: string,
-	profile: BootstrapProfile,
-	availableSkills: string[],
-): string => {
-	const payload = JSON.stringify({
-		caseId,
-		profile,
-		availableSkills: [...availableSkills].sort(),
-	});
-	return createHash("sha256").update(payload).digest("hex");
-};
+import type { CaseRunResult, EvalCase } from "../../../src/data/types.js";
+import { assembleEvaluation, buildCaseResult } from "../../../src/runtime/scoring/scoring.js";
 
 const buildEvalCase = (overrides: Partial<EvalCase> = {}): EvalCase => ({
 	id: "CD-SCORE-001",
@@ -33,50 +16,49 @@ const buildEvalCase = (overrides: Partial<EvalCase> = {}): EvalCase => ({
 	...overrides,
 });
 
-const buildResult = (evalCase: EvalCase, overrides: Partial<CaseRunResult> = {}): CaseRunResult => {
-	const availableSkills = overrides.availableSkills ?? ["coding"];
-	const bootstrapProfile = overrides.bootstrapProfile ?? "full_payload";
-	return {
-		caseId: evalCase.id,
-		dryRun: false,
-		model: null,
-		skillInvocations: ["coding"],
-		skillAttempts: ["coding"],
-		skillFileInvocations: ["coding"],
-		skillFileAttempts: ["coding"],
-		refInvocations: ["skills/coding/references/index.md"],
-		refAttempts: ["skills/coding/references/index.md"],
-		outputText: "done",
-		tokens: { input: 1, output: 2, cacheRead: 0, cacheWrite: 0, totalTokens: 3 },
-		durationMs: 100,
-		errors: [],
-		availableSkills,
-		bootstrapProfile,
-		bootstrapManifestHash: buildManifestHash(evalCase.id, bootstrapProfile, availableSkills),
-		workspaceDir: null,
-		...overrides,
-	};
-};
+const buildResult = (evalCase: EvalCase, overrides: Partial<CaseRunResult> = {}): CaseRunResult => ({
+	caseId: evalCase.id,
+	dryRun: false,
+	model: null,
+	skillInvocations: ["coding"],
+	skillAttempts: ["coding"],
+	skillFileInvocations: ["coding"],
+	skillFileAttempts: ["coding"],
+	refInvocations: ["skills/coding/references/index.md"],
+	refAttempts: ["skills/coding/references/index.md"],
+	outputText: "done",
+	tokens: { input: 1, output: 2, cacheRead: 0, cacheWrite: 0, totalTokens: 3 },
+	durationMs: 100,
+	errors: [],
+	availableSkills: ["coding"],
+	bootstrapProfile: "full_payload",
+	workspaceDir: null,
+	...overrides,
+});
 
-test("evaluateCase passes when routing and bootstrap signals match", async () => {
+test("assembleEvaluation returns pass status (judge decides)", () => {
 	const evalCase = buildEvalCase();
 	const result = buildResult(evalCase);
-	const evaluation = await evaluateCase(
-		evalCase,
-		result,
-		{ expectedBootstrapManifestHash: result.bootstrapManifestHash },
-	);
+	const evaluation = assembleEvaluation(evalCase, result);
 
 	assert.equal(evaluation.status, "pass");
 	assert.deepEqual(evaluation.failureReasons, []);
-	assert.deepEqual(evaluation.routing.missingRefs, []);
-	assert.deepEqual(evaluation.routing.missingSkillFileReads, []);
+});
+
+test("assembleEvaluation populates routing scorecard from result", () => {
+	const evalCase = buildEvalCase();
+	const result = buildResult(evalCase);
+	const evaluation = assembleEvaluation(evalCase, result);
+
+	assert.deepEqual(evaluation.routing.readSkills, ["coding"]);
+	assert.deepEqual(evaluation.routing.readSkillFiles, ["coding"]);
+	assert.deepEqual(evaluation.routing.readRefs, ["skills/coding/references/index.md"]);
 	assert.deepEqual(evaluation.routing.attemptedRefs, ["skills/coding/references/index.md"]);
 	assert.deepEqual(evaluation.routing.successfulRefs, ["skills/coding/references/index.md"]);
 	assert.deepEqual(evaluation.routing.deniedRefs, []);
 });
 
-test("evaluateCase uses attempts in dry-run mode", async () => {
+test("assembleEvaluation uses attempts in dry-run mode", () => {
 	const evalCase = buildEvalCase();
 	const result = buildResult(evalCase, {
 		dryRun: true,
@@ -88,11 +70,7 @@ test("evaluateCase uses attempts in dry-run mode", async () => {
 		refAttempts: ["skills/coding/references/index.md"],
 	});
 
-	const evaluation = await evaluateCase(
-		evalCase,
-		result,
-		{ expectedBootstrapManifestHash: result.bootstrapManifestHash },
-	);
+	const evaluation = assembleEvaluation(evalCase, result);
 
 	assert.equal(evaluation.status, "pass");
 	assert.deepEqual(evaluation.routing.readSkills, ["coding"]);
@@ -102,125 +80,68 @@ test("evaluateCase uses attempts in dry-run mode", async () => {
 	assert.deepEqual(evaluation.routing.successfulRefs, []);
 });
 
-test("evaluateCase categorizes policy, bootstrap, and task errors", async () => {
-	const evalCase = buildEvalCase({
-		assertions: ["must_trigger_policy_deny:skills/private/SKILL.md"],
-		expectedRefs: [],
-		requireSkillFileRead: false,
-	});
+test("assembleEvaluation preserves errors without failing", () => {
+	const evalCase = buildEvalCase();
 	const result = buildResult(evalCase, {
-		refInvocations: [],
-		refAttempts: [],
 		errors: [
 			"forbidden read: /tmp/work/skills/private/SKILL.md",
-			"FORBIDDEN_WORKSPACE_VIOLATION: /tmp/work/../escape",
-			"bootstrap setup failed",
 			"non-policy error",
 		],
 	});
 
-	const evaluation = await evaluateCase(evalCase, result, {
-		expectedBootstrapManifestHash: result.bootstrapManifestHash,
-	});
-	const categories = new Set(evaluation.failureReasons.map((item) => item.category));
+	const evaluation = assembleEvaluation(evalCase, result);
 
-	assert.equal(evaluation.status, "fail");
-	assert.equal(categories.has("POLICY_FAILURE"), true);
-	assert.equal(categories.has("BOOTSTRAP_FAILURE"), true);
-	assert.equal(categories.has("TASK_FAILURE"), true);
-	assert.equal(
-		evaluation.failureReasons.some((item) =>
-			item.message.includes("assertion failed: must_trigger_policy_deny:")
-		),
-		false,
-	);
+	// Errors preserved in result but do not cause failure
+	assert.equal(evaluation.status, "pass");
+	assert.deepEqual(evaluation.failureReasons, []);
+	assert.equal(evaluation.result.errors.length, 2);
 });
 
-test("evaluateCase fails must_trigger_policy_deny when deny signal is missing", async () => {
+test("assembleEvaluation preserves case metadata", () => {
 	const evalCase = buildEvalCase({
-		assertions: ["must_trigger_policy_deny:skills/private/SKILL.md"],
-		expectedRefs: [],
-		requireSkillFileRead: false,
+		expectedSkills: ["coding"],
+		expectedRefs: ["skills/coding/references/index.md"],
+		disallowedSkills: ["design"],
 	});
+	const result = buildResult(evalCase);
+	const evaluation = assembleEvaluation(evalCase, result);
+
+	assert.deepEqual(evaluation.expectedSkills, ["coding"]);
+	assert.deepEqual(evaluation.expectedRefs, ["skills/coding/references/index.md"]);
+	assert.deepEqual(evaluation.disallowedSkills, ["design"]);
+	assert.equal(evaluation.suite, "pi-eval");
+	assert.equal(evaluation.caseId, "CD-SCORE-001");
+});
+
+test("buildCaseResult with failures produces fail status", () => {
+	const evalCase = buildEvalCase();
+	const result = buildResult(evalCase);
+	const evaluation = buildCaseResult(
+		evalCase.id,
+		result,
+		evalCase,
+		[{ category: "TASK_FAILURE", message: "something broke" }],
+	);
+
+	assert.equal(evaluation.status, "fail");
+	assert.equal(evaluation.failureReasons.length, 1);
+	assert.equal(evaluation.failureReasons[0].message, "something broke");
+});
+
+test("assembleEvaluation handles empty routing data", () => {
+	const evalCase = buildEvalCase({ expectedSkills: [], expectedRefs: [] });
 	const result = buildResult(evalCase, {
+		skillInvocations: [],
+		skillAttempts: [],
+		skillFileInvocations: [],
+		skillFileAttempts: [],
 		refInvocations: [],
 		refAttempts: [],
-		errors: ["policy deny missing: /tmp/work/skills/private/SKILL.md"],
 	});
 
-	const evaluation = await evaluateCase(evalCase, result, {
-		expectedBootstrapManifestHash: result.bootstrapManifestHash,
-	});
+	const evaluation = assembleEvaluation(evalCase, result);
 
-	assert.equal(evaluation.status, "fail");
-	assert.equal(
-		evaluation.failureReasons.some((item) =>
-			item.message.includes("assertion failed: must_trigger_policy_deny:skills/private/SKILL.md")
-		),
-		true,
-	);
-});
-
-test("evaluateCase enforces file assertions and token budgets", async () => {
-	const workspaceDir = await mkdtemp(path.join(tmpdir(), "pi-eval-scoring-"));
-	try {
-		const targetFile = path.join(workspaceDir, "artifact.txt");
-		await writeFile(targetFile, "line-1\nline-2\nline-3\n", "utf-8");
-		const evalCase = buildEvalCase({
-			expectedRefs: [],
-			requireSkillFileRead: false,
-			fileAssertions: [
-				{
-					path: "artifact.txt",
-					mustContain: ["line-1", "missing-line"],
-					mustNotContain: ["line-2"],
-					maxNonEmptyLines: 2,
-				},
-			],
-			tokenBudget: 1,
-		});
-		const result = buildResult(evalCase, {
-			refInvocations: [],
-			refAttempts: [],
-			workspaceDir,
-			tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 5 },
-		});
-
-		const evaluation = await evaluateCase(evalCase, result, {
-			expectedBootstrapManifestHash: result.bootstrapManifestHash,
-		});
-		const messages = evaluation.failureReasons.map((item) => item.message);
-
-		assert.equal(evaluation.status, "fail");
-		assert.equal(messages.some((message) => message.includes("artifact.txt missing missing-line")), true);
-		assert.equal(messages.some((message) => message.includes("artifact.txt contains line-2")), true);
-		assert.equal(messages.some((message) => message.includes("has 3 non-empty lines")), true);
-		assert.equal(messages.some((message) => message.includes("token budget exceeded")), true);
-	} finally {
-		await rm(workspaceDir, { recursive: true, force: true });
-	}
-});
-
-test("evaluateCase enforces exact-ref assertions", async () => {
-	const evalCase = buildEvalCase({
-		expectedRefs: [],
-		requireSkillFileRead: false,
-		assertions: ["must_read_exact_refs:skills/a.md,skills/b.md"],
-	});
-	const result = buildResult(evalCase, {
-		refInvocations: ["skills/a.md", "skills/c.md"],
-		refAttempts: ["skills/a.md", "skills/c.md"],
-	});
-
-	const evaluation = await evaluateCase(evalCase, result, {
-		expectedBootstrapManifestHash: result.bootstrapManifestHash,
-	});
-
-	assert.equal(evaluation.status, "fail");
-	assert.equal(
-		evaluation.failureReasons.some((item) =>
-			item.message.includes("must_read_exact_refs:skills/a.md,skills/b.md")
-		),
-		true,
-	);
+	assert.equal(evaluation.status, "pass");
+	assert.deepEqual(evaluation.routing.readSkills, []);
+	assert.deepEqual(evaluation.routing.readRefs, []);
 });

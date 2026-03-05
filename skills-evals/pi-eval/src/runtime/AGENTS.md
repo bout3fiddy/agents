@@ -45,7 +45,7 @@ Organized by subdomain. Each subfolder groups related modules.
 
 ## `scoring/` — Scoring & Capture
 
-- `scoring.ts`: evaluates case outputs against expectations.
+- `scoring.ts`: assembles routing scorecards from case results. No pass/fail logic — judge decides via `judging/judge.ts`.
 - `capture.ts`: tracks skill/reference read attempts/invocations.
 
 ## `model/` — Model Registry

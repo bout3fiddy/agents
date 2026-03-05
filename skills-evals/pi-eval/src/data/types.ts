@@ -209,10 +209,19 @@ export type JudgeDimensionScore = {
 	rationale: string;
 };
 
+export type JudgeVariantVerdict = {
+	tag: string;
+	pass: boolean;
+	rationale: string;
+};
+
 export type JudgeBundleVerdict = {
 	bundleId: string;
 	variantTags: string[];
+	pass: boolean;
+	verdict: string;
 	dimensions: JudgeDimensionScore[];
+	variantVerdicts: JudgeVariantVerdict[];
 	costAnalysis: string;
 	recommendation: string;
 	rawResponse: string;

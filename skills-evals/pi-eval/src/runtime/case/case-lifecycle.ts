@@ -5,10 +5,7 @@ import {
 	cleanupSandbox,
 	cleanupSandboxHome,
 } from "../sandbox/sandbox.js";
-import {
-	evaluateCase,
-} from "../scoring/scoring.js";
-import { buildCaseResult } from "../scoring/scoring.js";
+import { assembleEvaluation, buildCaseResult } from "../scoring/scoring.js";
 import type { CaseEvaluation, EvalCase, ModelSpec } from "../../data/types.js";
 import { resolveInsideRoot } from "../policy/path-policy.js";
 import { buildStubResult, runCaseProcess } from "./case-process.js";
@@ -223,9 +220,7 @@ export const runCase = async (params: {
 		result.capturedArtifacts = await captureArtifacts(evalCase, workspace.agentDir);
 		result.workspaceDir = workspace.agentDir;
 		result.bootstrapBreakdown = homeSetup.bootstrapBreakdown;
-		return evaluateCase(evalCase, result, {
-			expectedBootstrapManifestHash: homeSetup.bootstrapManifestHash,
-		});
+		return assembleEvaluation(evalCase, result);
 	} finally {
 		await cleanupSandbox(workspace?.sandboxDir ?? null);
 		await cleanupSandboxHome(homeDir);

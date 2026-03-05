@@ -138,14 +138,25 @@ const renderDimensionsTable = (verdict: JudgeBundleVerdict): string => {
 	return [header, separator, ...rows].join("\n");
 };
 
+const renderVariantVerdicts = (verdict: JudgeBundleVerdict): string => {
+	const lines = verdict.variantVerdicts.map((v) => {
+		const status = v.pass ? "PASS" : "FAIL";
+		return `- **${v.tag}**: ${status} — ${v.rationale}`;
+	});
+	return lines.join("\n");
+};
+
 const renderBundleSections = (sections: BundleSection[]): string => {
 	if (sections.length === 0) return "";
 	const parts: string[] = ["## Bundle Evaluations", ""];
 	for (const section of sections) {
-		parts.push(`### ${section.bundleId}: ${section.notes || "bundle comparison"}`);
+		const bundleStatus = section.verdict.pass ? "PASS" : "FAIL";
+		parts.push(`### ${section.bundleId}: ${bundleStatus} — ${section.verdict.verdict || "bundle comparison"}`);
 		parts.push(renderBundleVariantTable(section.variantRows));
 		parts.push("");
 		parts.push(`**Judge Verdict** (token cost: ${section.verdict.judgeTokens.totalTokens})`);
+		parts.push("");
+		parts.push(renderVariantVerdicts(section.verdict));
 		parts.push("");
 		parts.push(renderDimensionsTable(section.verdict));
 		parts.push("");
@@ -212,7 +223,8 @@ const collectBundleSections = (
 			.filter((r): r is ReportRow => r !== undefined);
 		if (variantRows.length === 0) continue;
 
-		sections.push({ bundleId, variantRows, verdict, notes: variantRows[0]?.notes ?? "" });
+		const verdictLabel = verdict.pass ? "PASS" : "FAIL";
+		sections.push({ bundleId, variantRows, verdict, notes: `${verdictLabel}: ${verdict.verdict}` });
 		for (const caseId of variantCaseIds) bundleCaseIds.add(caseId);
 	}
 	return { sections, bundleCaseIds };
