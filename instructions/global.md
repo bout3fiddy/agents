@@ -36,6 +36,6 @@ intent to a skill and read its SKILL.md. Skills contain domain guardrails
 
 ## Workflow triggers (load when relevant, not before)
 
-- Linear ticket work -> `workflows/linear.md`
-- Work package execution -> `workflows/work-packages.md`
-- PR review remediation loop -> `workflows/pr-review.md`
+- Linear ticket work -> `~/.agents/workflows/linear.md`
+- Work package execution -> `~/.agents/workflows/work-packages.md`
+- PR review remediation loop -> `~/.agents/workflows/pr-review.md`

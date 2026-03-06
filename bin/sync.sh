@@ -45,7 +45,7 @@ fi
 
 run_validation() {
     echo "Validating skills metadata..."
-    python3 "$BUILD_AGENT_INDEX_SCRIPT"
+    python3 "$BUILD_AGENT_INDEX_SCRIPT" --no-warnings
 }
 
 run_validation

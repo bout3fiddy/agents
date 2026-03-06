@@ -1,0 +1,56 @@
+{
+  "id": "CD-020",
+  "suite": "codequality",
+  "prompt": [
+    "I have an inventory allocation system in a single file at warehouse.py.",
+    "It works but it's a mess — global state, everything in one file, no types, no tests.",
+    "Break it into clean modules that another developer (or agent) could pick up, understand, and replace any single piece without touching the rest.",
+    "Requirements:",
+    "1. Separate concerns into distinct modules: types/models, stock operations, reservation logic, and reporting. Each module should have a clear interface — someone reading only the function signatures and types should understand what it does.",
+    "2. Replace the raw dict returns with proper types (dataclasses or similar). Errors should be expressed in the type system, not as magic 'error' keys in dicts.",
+    "3. Remove the global mutable state. Stock and reservation state should be held in an explicit store object that gets passed or injected, not hidden in module globals.",
+    "4. Write tests for the core allocation logic: reserve, confirm, cancel, and the expiration flow. Tests should be runnable and demonstrate the contracts between modules."
+  ],
+  "fixtureMapping": {
+    "warehouse.py": "skills-evals/fixtures/inventory/cd020/warehouse.py"
+  },
+  "expectedSkills": [],
+  "disallowedSkills": [],
+  "expectedRefs": [],
+  "tools": ["read", "edit", "write"],
+  "sandbox": true,
+  "fileAssertions": [
+    {
+      "path": "warehouse.py",
+      "exists": false
+    }
+  ],
+  "persistArtifacts": true,
+  "notes": [
+    "Three-principle eval: legibility (decompose monolith), replaceability (clean interfaces, no global state), verifiability (tests + typed returns).",
+    "The fixture is a deliberately tangled monolith with global dicts, stringly-typed returns, mixed concerns (allocate_and_report), and bare except blocks.",
+    "A strong result decomposes into 4+ files with typed interfaces, eliminates global state, and includes working tests."
+  ],
+  "readDenyPaths": [],
+  "variants": [
+    {
+      "tag": "skill",
+      "bootstrapProfile": "full_payload",
+      "expectedSkills": ["coding"],
+      "expectedRefs": ["skills/code-smell-detection/references/ai-code-smell.md"],
+      "skillSet": ["coding"],
+      "requireSkillFileRead": true,
+      "fileAssertions": [
+        {
+          "path": "warehouse.py",
+          "exists": false
+        }
+      ]
+    },
+    {
+      "tag": "noskill",
+      "bootstrapProfile": "no_payload",
+      "disallowedSkills": ["coding", "design", "housekeeping"]
+    }
+  ]
+}

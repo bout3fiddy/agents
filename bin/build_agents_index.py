@@ -308,6 +308,7 @@ def print_results(
 
 
 def main() -> int:
+    show_warnings = "--no-warnings" not in sys.argv
     root = Path(__file__).resolve().parents[1]
 
     skills_count, trigger_count, ref_count, errors, warnings = build_index(root=root)
@@ -317,7 +318,7 @@ def main() -> int:
         trigger_count=trigger_count,
         ref_count=ref_count,
         errors=errors,
-        warnings=warnings,
+        warnings=warnings if show_warnings else [],
     )
 
     return 1 if errors else 0
