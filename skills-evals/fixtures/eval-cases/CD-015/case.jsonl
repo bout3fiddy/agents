@@ -37,7 +37,7 @@
       "tag": "skill",
       "bootstrapProfile": "full_payload",
       "expectedSkills": ["coding"],
-      "expectedRefs": ["skills/code-smell-detection/references/ai-code-smell.md"],
+      "expectedRefs": ["skills/coding/references/ai-code-smell.md"],
       "skillSet": ["coding"],
       "requireSkillFileRead": true,
       "fileAssertions": [

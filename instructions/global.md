@@ -7,8 +7,7 @@ intent to a skill and read its SKILL.md. Skills contain domain guardrails
 
 | Intent | Skill | Read |
 |--------|-------|------|
-| code, implement, bugfix, refactor, review | `coding` | `skills/coding/SKILL.md` |
-| code smell review, deep audit, refactoring analysis | `code-smell-detection` | `skills/code-smell-detection/SKILL.md` |
+| code, implement, bugfix, refactor, review, smell audit | `coding` | `skills/coding/SKILL.md` |
 | design, UI (general) | `design` | `skills/design/SKILL.md` |
 | UI critique, review, feedback, audit | `design-critique` | `skills/design-critique/SKILL.md` |
 | UI/layout/styling, design direction | `design-guidelines` | `skills/design-guidelines/SKILL.md` |
