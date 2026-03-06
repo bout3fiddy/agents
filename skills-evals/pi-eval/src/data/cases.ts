@@ -168,15 +168,30 @@ export const loadCases = async (casesPath: string): Promise<LoadedCases> => {
 
 	const info = await stat(casesPath);
 	if (info.isDirectory()) {
-		const entries = await readdir(casesPath);
-		const jsonlFiles = entries
-			.filter((name: string) => name.endsWith(".jsonl"))
-			.sort();
+		const entries = await readdir(casesPath, { withFileTypes: true });
+
+		// Collect case files: subdirectories containing case.jsonl, or top-level .jsonl files
+		const caseFiles: { label: string; filePath: string }[] = [];
+		for (const entry of entries) {
+			if (entry.isDirectory()) {
+				const caseJsonl = path.join(casesPath, entry.name, "case.jsonl");
+				try {
+					await stat(caseJsonl);
+					caseFiles.push({ label: `${entry.name}/case.jsonl`, filePath: caseJsonl });
+				} catch {
+					// subdirectory without case.jsonl — skip
+				}
+			} else if (entry.name.endsWith(".jsonl")) {
+				caseFiles.push({ label: entry.name, filePath: path.join(casesPath, entry.name) });
+			}
+		}
+		caseFiles.sort((a, b) => a.label.localeCompare(b.label));
+
 		const fileContents = await Promise.all(
-			jsonlFiles.map((fileName: string) => readFile(path.join(casesPath, fileName), "utf-8")),
+			caseFiles.map((f) => readFile(f.filePath, "utf-8")),
 		);
-		for (let i = 0; i < jsonlFiles.length; i++) {
-			parseSingleCase(fileContents[i], jsonlFiles[i], cases, bundles);
+		for (let i = 0; i < caseFiles.length; i++) {
+			parseSingleCase(fileContents[i], caseFiles[i].label, cases, bundles);
 		}
 	} else {
 		const raw = await readFile(casesPath, "utf-8");

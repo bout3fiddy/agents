@@ -33,7 +33,7 @@
 - Canonical eval wrapper is `skills-evals/run.sh`.
 - `skills-evals/run.sh` supports optional `--case <CASE_ID>`, which maps to `/eval run --filter <CASE_ID> --limit 1` for targeted case runs.
 - `skills-evals/manage.sh` delegates target resolution for `remove` to `skills-evals/pi-eval/src/cli/manage-remove.ts` (canonical `slugFromId` and `traceFileName` from TS data layer); shell retains argument parsing, confirmation prompt, and deletion execution.
-- Skill files no longer carry YAML frontmatter metadata; routing uses the inline table in `instructions/global.md`.
+- Skill files carry YAML frontmatter with `name` and `description` per the Agent Skills spec; routing uses the inline table in `instructions/global.md`.
 - `pi-eval` case timing controls: `PI_EVAL_CASE_TIMEOUT_MS` governs prompt/turn completion wait (default `300000`), and `PI_EVAL_CASE_SHUTDOWN_TIMEOUT_MS` governs post-run worker exit wait (default `30000`).
 - When `PI_EVAL_RPC_TRACE_DIR` is set, `runCaseProcess` now writes both `<case-id>.jsonl` raw RPC traces and `<case-id>.diagnostics.json` lifecycle summaries; timeout errors include a compact RPC diagnostics hint (`raw/parsed/last_stop/events`).
 - `pi-eval` tests live in `skills-evals/pi-eval/test/`; run all with `bun test` from `skills-evals/pi-eval/`.
@@ -43,5 +43,5 @@
   - `./bin/sync.sh`
 - Global policy now requires AGENTS docs to be curated and progressive-disclosure based (concise root router + scoped/nested AGENTS + deep docs), and to migrate legacy monolithic AGENTS files instead of appending indefinitely.
 - Domain workflows (Linear, work packages, PR review) live in `workflows/` and are loaded on trigger, not always in context. The global directive (`instructions/global.md`) is kept short (~40 lines) with an inline routing table — routing uses the inline table, not a generated artifact.
-- Skills are flat peers (10 skills total): coding, code-smell-detection, design, design-critique, design-guidelines, storyboard-animation, dialkit, housekeeping, supabase, gcp-operations. Each has a self-contained `SKILL.md`; only `code-smell-detection` has `references/` (24 individual smell remediation files).
+- Skills are flat peers (11 skills total): coding, code-smell-detection, design, design-critique, design-guidelines, storyboard-animation, dialkit, housekeeping, supabase, gcp-operations, railway-operations. Each has a self-contained `SKILL.md`; `code-smell-detection` has `references/` (24 smell remediation files) and `railway-operations` has `references/` (5 operational reference files) plus `scripts/railway-api.sh`.
 - Coding SKILL.md inlines the smell baseline (hard rules + top detection signals). `code-smell-detection` is a separate skill with its own SKILL.md as the detection catalog, loaded only for explicit smell reviews.

@@ -17,6 +17,7 @@ intent to a skill and read its SKILL.md. Skills contain domain guardrails
 | AGENTS/CLAUDE architecture, housekeeping | `housekeeping` | `skills/housekeeping/SKILL.md` |
 | Supabase, database, migrations, RLS | `supabase` | `skills/supabase/SKILL.md` |
 | GCP, Cloud Run, infra ops | `gcp-operations` | `skills/gcp-operations/SKILL.md` |
+| Railway, deployments, services, environments, build failures | `railway-operations` | `skills/railway-operations/SKILL.md` |
 
 - Match by intent, not exact keywords. Load multiple skills if ambiguous.
 - If no clear match, ask one clarifying question and retry.

@@ -4,7 +4,7 @@
  * Consolidates the slug/trace-name derivations that were duplicated
  * between manage.sh and the TS data/reporting modules.
  */
-import { readFile, readdir, rm } from "node:fs/promises";
+import { readFile, readdir, rm, stat } from "node:fs/promises";
 import path from "node:path";
 import { slugFromId } from "../data/cases.js";
 import { hasPathPrefix } from "../runtime/policy/path-policy.js";
@@ -63,19 +63,35 @@ const discoverTraceDirs = async (reportsDir: string): Promise<string[]> => {
  * Uses the canonical `slugFromId` and `traceFileName` from the TS data layer
  * instead of reimplementing them in shell.
  */
+/** Resolve case JSONL path: subdirectory layout (CASE_ID/case.jsonl) or legacy flat (CASE_ID.jsonl). */
+const resolveCaseJsonlPath = async (caseId: string, casesDir: string): Promise<string> => {
+	const subdirPath = path.join(casesDir, caseId, "case.jsonl");
+	try {
+		await stat(subdirPath);
+		return subdirPath;
+	} catch {
+		return path.join(casesDir, `${caseId}.jsonl`);
+	}
+};
+
 export const resolveRemoveTargets = async (
 	caseId: string,
 	dirs: RemoveDirs,
 ): Promise<RemoveTargets> => {
-	const jsonlPath = path.join(dirs.casesDir, `${caseId}.jsonl`);
+	const jsonlPath = await resolveCaseJsonlPath(caseId, dirs.casesDir);
+	const isSubdir = jsonlPath.endsWith("/case.jsonl");
 	const { isBundle, suite, variantTags } = await parseJsonlMetadata(jsonlPath);
 	const slug = slugFromId(caseId);
 
 	const filesToDelete: string[] = [];
 	const dirsToDelete: string[] = [];
 
-	// 1. JSONL definition
-	filesToDelete.push(jsonlPath);
+	// 1. Case definition — delete entire subdirectory or single JSONL
+	if (isSubdir) {
+		dirsToDelete.push(path.dirname(jsonlPath));
+	} else {
+		filesToDelete.push(jsonlPath);
+	}
 
 	// 2. Routing traces
 	const modelDirs = await discoverTraceDirs(dirs.reportsDir);
@@ -116,7 +132,7 @@ export const executeRemove = async (
 ): Promise<string[]> => {
 	const deleted: string[] = [];
 	const allowedFileRoots = [dirs.casesDir, dirs.reportsDir];
-	const allowedDirRoots = [dirs.generatedDir];
+	const allowedDirRoots = [dirs.generatedDir, dirs.casesDir];
 
 	for (const f of targets.filesToDelete) {
 		const resolved = path.resolve(f);

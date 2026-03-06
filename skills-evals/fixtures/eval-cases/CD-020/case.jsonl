@@ -12,7 +12,7 @@
     "4. Write tests for the core allocation logic: reserve, confirm, cancel, and the expiration flow. Tests should be runnable and demonstrate the contracts between modules."
   ],
   "fixtureMapping": {
-    "warehouse.py": "skills-evals/fixtures/inventory/cd020/warehouse.py"
+    "warehouse.py": "skills-evals/fixtures/eval-cases/CD-020/warehouse.py"
   },
   "expectedSkills": [],
   "disallowedSkills": [],

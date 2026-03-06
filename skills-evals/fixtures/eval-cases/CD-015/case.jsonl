@@ -9,7 +9,7 @@
     "Wire up at least 3 middleware handlers in a sample usage block at the bottom."
   ],
   "fixtureMapping": {
-    "lib/http_types.py": "skills-evals/fixtures/codequality/cd015/http_types.py"
+    "lib/http_types.py": "skills-evals/fixtures/eval-cases/CD-015/http_types.py"
   },
   "expectedSkills": [],
   "disallowedSkills": [],

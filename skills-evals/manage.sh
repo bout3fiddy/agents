@@ -54,16 +54,22 @@ cmd_remove() {
 		exit 1
 	fi
 
-	local jsonl_path="$CASES_DIR/${case_id}.jsonl"
-	# Verify resolved path is inside CASES_DIR to prevent traversal
-	local resolved_jsonl
-	resolved_jsonl="$(cd "$CASES_DIR" 2>/dev/null && realpath -m "${case_id}.jsonl" 2>/dev/null || echo "")"
-	if [[ -z "$resolved_jsonl" || "$resolved_jsonl" != "$CASES_DIR"/* ]]; then
-		echo "Error: case ID resolves outside cases dir: $case_id" >&2
+	# Support both subdirectory layout (CASE_ID/case.jsonl) and legacy flat layout (CASE_ID.jsonl)
+	local jsonl_path=""
+	local case_dir="$CASES_DIR/${case_id}"
+	if [[ -f "$case_dir/case.jsonl" ]]; then
+		jsonl_path="$case_dir/case.jsonl"
+	elif [[ -f "$CASES_DIR/${case_id}.jsonl" ]]; then
+		jsonl_path="$CASES_DIR/${case_id}.jsonl"
+	else
+		echo "Error: Case file not found: $case_dir/case.jsonl (or $CASES_DIR/${case_id}.jsonl)" >&2
 		exit 1
 	fi
-	if [[ ! -f "$jsonl_path" ]]; then
-		echo "Error: Case file not found: $jsonl_path" >&2
+	# Verify resolved path is inside CASES_DIR to prevent traversal
+	local resolved_jsonl
+	resolved_jsonl="$(cd "$(dirname "$jsonl_path")" && pwd)/$(basename "$jsonl_path")"
+	if [[ "$resolved_jsonl" != "$CASES_DIR"/* ]]; then
+		echo "Error: case ID resolves outside cases dir: $case_id" >&2
 		exit 1
 	fi
 
@@ -135,7 +141,7 @@ console.log(JSON.stringify(targets));
 	if ((${#dirs_to_delete[@]})); then
 		for d in "${dirs_to_delete[@]}"; do
 			case "$d" in
-				"$GENERATED_DIR"/*) ;;
+				"$GENERATED_DIR"/*|"$CASES_DIR"/*) ;;
 				*) echo "Error: delete target outside managed dirs: $d" >&2; exit 1 ;;
 			esac
 			rm -rf "$d"
