@@ -40,6 +40,8 @@ intent to a skill and read its SKILL.md. Skills contain domain guardrails
 
 ## Workflow triggers (load when relevant, not before)
 
+When the user's intent matches a trigger below, **read the linked file first** — it contains the template and procedure.
+
 - Linear ticket work -> `~/.agents/workflows/linear.md`
-- Work package execution -> `~/.agents/workflows/work-packages.md`
+- Create or execute work packages, workpackage template -> `~/.agents/workflows/work-packages.md`
 - PR review remediation loop -> `~/.agents/workflows/pr-review.md`
