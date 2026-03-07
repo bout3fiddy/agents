@@ -22,18 +22,10 @@ intent to a skill and read its SKILL.md. Skills contain domain guardrails
 | Web performance, Core Web Vitals, Lighthouse audit | `cloudflare-web-perf` | `skills/cloudflare-web-perf/SKILL.md` |
 | Cloudflare Workers best practices, anti-patterns | `cloudflare-workers-best-practices` | `skills/cloudflare-workers-best-practices/SKILL.md` |
 | AST structural code search, ast-grep rules | `ast-grep` | `skills/ast-grep/SKILL.md` |
+| PR review, Linear tickets, work packages | `workflows` | `skills/workflows/SKILL.md` |
 
 - Match by intent, not exact keywords. Load multiple skills if ambiguous.
 - If no clear match, ask one clarifying question and retry.
-
-**Workflows** take precedence over skills when matched. Read the linked file
-first — it contains the template and full procedure:
-
-| Intent | Read |
-|--------|------|
-| Linear ticket work | `~/.agents/workflows/linear.md` |
-| Create or execute work packages, workpackage template | `~/.agents/workflows/work-packages.md` |
-| PR review, gh pr review, fix review comments, remediation loop | `~/.agents/workflows/pr-review.md` |
 </routing-gate>
 
 ## Cross-cutting rules

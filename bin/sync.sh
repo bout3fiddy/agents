@@ -99,6 +99,15 @@ mkdir -p "$CLAUDE_DIR"
 printf '@../.agents/AGENTS.md\n' > "$CLAUDE_MD_FILE"
 echo "Wrote $CLAUDE_MD_FILE (-> ~/.agents/AGENTS.md)"
 
+# --- Codex integration ---
+# Write a thin AGENTS.md that references ~/.agents/AGENTS.md so Codex
+# picks up the global instructions without duplicating content.
+CODEX_DIR="$HOME/.codex"
+CODEX_AGENTS_FILE="$CODEX_DIR/AGENTS.md"
+mkdir -p "$CODEX_DIR"
+printf '@../.agents/AGENTS.md\n' > "$CODEX_AGENTS_FILE"
+echo "Wrote $CODEX_AGENTS_FILE (-> ~/.agents/AGENTS.md)"
+
 # Remove legacy ~/.claude/skills (skills now live in ~/.agents/skills).
 if [[ -d "$CLAUDE_DIR/skills" ]]; then
     rm -rf "$CLAUDE_DIR/skills"
