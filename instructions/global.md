@@ -21,6 +21,7 @@ intent to a skill and read its SKILL.md. Skills contain domain guardrails
 | Build MCP server on Cloudflare | `building-mcp-server-on-cloudflare` | `skills/building-mcp-server-on-cloudflare/SKILL.md` |
 | Web performance, Core Web Vitals, Lighthouse audit | `cloudflare-web-perf` | `skills/cloudflare-web-perf/SKILL.md` |
 | Cloudflare Workers best practices, anti-patterns | `cloudflare-workers-best-practices` | `skills/cloudflare-workers-best-practices/SKILL.md` |
+| AST structural code search, ast-grep rules | `ast-grep` | `skills/ast-grep/SKILL.md` |
 
 - Match by intent, not exact keywords. Load multiple skills if ambiguous.
 - If no clear match, ask one clarifying question and retry.
