@@ -14,7 +14,7 @@ Write code that is:
 
 ## Workflow
 
-1. **Reuse first.** Before writing anything, scan for existing modules, types, or utilities you can import. Never write a redundant copy.
+1. **Reuse first.** Before creating a new file, type, or utility: search for existing ones by name (`Glob` for filenames, `Grep` for type/function names). Read only signatures, not full implementations. If a match exists, import it.
 2. **Scope.** Confirm scope, constraints, and acceptance criteria.
 3. **Read.** Read only necessary code paths.
 4. **Write modular code.** Small functions, typed interfaces, explicit state. No god files, no global mutable state, no stringly-typed returns.

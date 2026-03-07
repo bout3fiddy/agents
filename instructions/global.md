@@ -17,6 +17,10 @@ intent to a skill and read its SKILL.md. Skills contain domain guardrails
 | Supabase, database, migrations, RLS | `supabase` | `skills/supabase/SKILL.md` |
 | GCP, Cloud Run, infra ops | `gcp-operations` | `skills/gcp-operations/SKILL.md` |
 | Railway, deployments, services, environments, build failures | `railway-operations` | `skills/railway-operations/SKILL.md` |
+| Cloudflare Workers, R2, web analytics, observability | `cloudflare` | `skills/cloudflare/SKILL.md` |
+| Build MCP server on Cloudflare | `building-mcp-server-on-cloudflare` | `skills/building-mcp-server-on-cloudflare/SKILL.md` |
+| Web performance, Core Web Vitals, Lighthouse audit | `cloudflare-web-perf` | `skills/cloudflare-web-perf/SKILL.md` |
+| Cloudflare Workers best practices, anti-patterns | `cloudflare-workers-best-practices` | `skills/cloudflare-workers-best-practices/SKILL.md` |
 
 - Match by intent, not exact keywords. Load multiple skills if ambiguous.
 - If no clear match, ask one clarifying question and retry.
