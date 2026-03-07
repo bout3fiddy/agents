@@ -7,7 +7,7 @@ intent to a skill and read its SKILL.md. Skills contain domain guardrails
 
 | Intent | Skill | Read |
 |--------|-------|------|
-| code, implement, bugfix, refactor, review, smell audit | `coding` | `skills/coding/SKILL.md` |
+| code, implement, bugfix, refactor, code review, smell audit | `coding` | `skills/coding/SKILL.md` |
 | design, UI (general) | `design` | `skills/design/SKILL.md` |
 | UI critique, review, feedback, audit | `design-critique` | `skills/design-critique/SKILL.md` |
 | UI/layout/styling, design direction | `design-guidelines` | `skills/design-guidelines/SKILL.md` |
@@ -26,14 +26,14 @@ intent to a skill and read its SKILL.md. Skills contain domain guardrails
 - Match by intent, not exact keywords. Load multiple skills if ambiguous.
 - If no clear match, ask one clarifying question and retry.
 
-**Workflows** — when intent matches, **read the linked file first** (it contains
-the template and full procedure):
+**Workflows** take precedence over skills when matched. Read the linked file
+first — it contains the template and full procedure:
 
 | Intent | Read |
 |--------|------|
 | Linear ticket work | `~/.agents/workflows/linear.md` |
 | Create or execute work packages, workpackage template | `~/.agents/workflows/work-packages.md` |
-| PR review remediation loop | `~/.agents/workflows/pr-review.md` |
+| PR review, gh pr review, fix review comments, remediation loop | `~/.agents/workflows/pr-review.md` |
 </routing-gate>
 
 ## Cross-cutting rules
