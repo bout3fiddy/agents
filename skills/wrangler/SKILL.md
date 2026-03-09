@@ -20,7 +20,7 @@ Fetch the **latest** information before writing or reviewing Wrangler commands a
 ## FIRST: Verify Wrangler Installation
 
 ```bash
-wrangler --version  # Requires v4.x+
+npx wrangler --version  # Requires v4.x+
 ```
 
 If not installed:
@@ -32,9 +32,9 @@ npm install -D wrangler@latest
 
 - **Use `wrangler.jsonc`**: Prefer JSON config over TOML. Newer features are JSON-only.
 - **Set `compatibility_date`**: Use a recent date (within 30 days). Check https://developers.cloudflare.com/workers/configuration/compatibility-dates/
-- **Generate types after config changes**: Run `wrangler types` to update TypeScript bindings.
+- **Generate types after config changes**: Run `npx wrangler types` to update TypeScript bindings.
 - **Local dev defaults to local storage**: Bindings use local simulation unless `remote: true`.
-- **Validate config before deploy**: Run `wrangler check` to catch errors early.
+- **Validate config before deploy**: Run `npx wrangler check` to catch errors early.
 - **Use environments for staging/prod**: Define `env.staging` and `env.production` in config.
 
 ## Quick Start: New Worker
@@ -51,14 +51,14 @@ npx create-cloudflare@latest my-app
 
 | Task | Command |
 |------|---------|
-| Start local dev server | `wrangler dev` |
-| Deploy to Cloudflare | `wrangler deploy` |
-| Deploy dry run | `wrangler deploy --dry-run` |
-| Generate TypeScript types | `wrangler types` |
-| Validate configuration | `wrangler check` |
-| View live logs | `wrangler tail` |
-| Delete Worker | `wrangler delete` |
-| Auth status | `wrangler whoami` |
+| Start local dev server | `npx wrangler dev` |
+| Deploy to Cloudflare | `npx wrangler deploy` |
+| Deploy dry run | `npx wrangler deploy --dry-run` |
+| Generate TypeScript types | `npx wrangler types` |
+| Validate configuration | `npx wrangler check` |
+| View live logs | `npx wrangler tail` |
+| Delete Worker | `npx wrangler delete` |
+| Auth status | `npx wrangler whoami` |
 
 ---
 
@@ -144,13 +144,13 @@ npx create-cloudflare@latest my-app
 
 ```bash
 # Generate worker-configuration.d.ts
-wrangler types
+npx wrangler types
 
 # Custom output path
-wrangler types ./src/env.d.ts
+npx wrangler types ./src/env.d.ts
 
 # Check types are up to date (CI)
-wrangler types --check
+npx wrangler types --check
 ```
 
 ---
@@ -161,25 +161,25 @@ wrangler types --check
 
 ```bash
 # Local mode (default) - uses local storage simulation
-wrangler dev
+npx wrangler dev
 
 # With specific environment
-wrangler dev --env staging
+npx wrangler dev --env staging
 
 # Force local-only (disable remote bindings)
-wrangler dev --local
+npx wrangler dev --local
 
 # Remote mode - runs on Cloudflare edge (legacy)
-wrangler dev --remote
+npx wrangler dev --remote
 
 # Custom port
-wrangler dev --port 8787
+npx wrangler dev --port 8787
 
 # Live reload for HTML changes
-wrangler dev --live-reload
+npx wrangler dev --live-reload
 
 # Test scheduled/cron handlers
-wrangler dev --test-scheduled
+npx wrangler dev --test-scheduled
 # Then visit: http://localhost:8787/__scheduled
 ```
 
@@ -218,54 +218,54 @@ DATABASE_URL=postgres://localhost:5432/dev
 
 ```bash
 # Deploy to production
-wrangler deploy
+npx wrangler deploy
 
 # Deploy specific environment
-wrangler deploy --env staging
+npx wrangler deploy --env staging
 
 # Dry run (validate without deploying)
-wrangler deploy --dry-run
+npx wrangler deploy --dry-run
 
 # Keep dashboard-set variables
-wrangler deploy --keep-vars
+npx wrangler deploy --keep-vars
 
 # Minify code
-wrangler deploy --minify
+npx wrangler deploy --minify
 ```
 
 ### Manage Secrets
 
 ```bash
 # Set secret interactively
-wrangler secret put API_KEY
+npx wrangler secret put API_KEY
 
 # Set from stdin
-echo "secret-value" | wrangler secret put API_KEY
+echo "secret-value" | npx wrangler secret put API_KEY
 
 # List secrets
-wrangler secret list
+npx wrangler secret list
 
 # Delete secret
-wrangler secret delete API_KEY
+npx wrangler secret delete API_KEY
 
 # Bulk secrets from JSON file
-wrangler secret bulk secrets.json
+npx wrangler secret bulk secrets.json
 ```
 
 ### Versions and Rollback
 
 ```bash
 # List recent versions
-wrangler versions list
+npx wrangler versions list
 
 # View specific version
-wrangler versions view <VERSION_ID>
+npx wrangler versions view <VERSION_ID>
 
 # Rollback to previous version
-wrangler rollback
+npx wrangler rollback
 
 # Rollback to specific version
-wrangler rollback <VERSION_ID>
+npx wrangler rollback <VERSION_ID>
 ```
 
 ---
@@ -276,35 +276,35 @@ wrangler rollback <VERSION_ID>
 
 ```bash
 # Create namespace
-wrangler kv namespace create MY_KV
+npx wrangler kv namespace create MY_KV
 
 # List namespaces
-wrangler kv namespace list
+npx wrangler kv namespace list
 
 # Delete namespace
-wrangler kv namespace delete --namespace-id <ID>
+npx wrangler kv namespace delete --namespace-id <ID>
 ```
 
 ### Manage Keys
 
 ```bash
 # Put value
-wrangler kv key put --namespace-id <ID> "key" "value"
+npx wrangler kv key put --namespace-id <ID> "key" "value"
 
 # Put with expiration (seconds)
-wrangler kv key put --namespace-id <ID> "key" "value" --expiration-ttl 3600
+npx wrangler kv key put --namespace-id <ID> "key" "value" --expiration-ttl 3600
 
 # Get value
-wrangler kv key get --namespace-id <ID> "key"
+npx wrangler kv key get --namespace-id <ID> "key"
 
 # List keys
-wrangler kv key list --namespace-id <ID>
+npx wrangler kv key list --namespace-id <ID>
 
 # Delete key
-wrangler kv key delete --namespace-id <ID> "key"
+npx wrangler kv key delete --namespace-id <ID> "key"
 
 # Bulk put from JSON
-wrangler kv bulk put --namespace-id <ID> data.json
+npx wrangler kv bulk put --namespace-id <ID> data.json
 ```
 
 ### Config Binding
@@ -325,32 +325,32 @@ wrangler kv bulk put --namespace-id <ID> data.json
 
 ```bash
 # Create bucket
-wrangler r2 bucket create my-bucket
+npx wrangler r2 bucket create my-bucket
 
 # Create with location hint
-wrangler r2 bucket create my-bucket --location wnam
+npx wrangler r2 bucket create my-bucket --location wnam
 
 # List buckets
-wrangler r2 bucket list
+npx wrangler r2 bucket list
 
 # Get bucket info
-wrangler r2 bucket info my-bucket
+npx wrangler r2 bucket info my-bucket
 
 # Delete bucket
-wrangler r2 bucket delete my-bucket
+npx wrangler r2 bucket delete my-bucket
 ```
 
 ### Manage Objects
 
 ```bash
 # Upload object
-wrangler r2 object put my-bucket/path/file.txt --file ./local-file.txt
+npx wrangler r2 object put my-bucket/path/file.txt --file ./local-file.txt
 
 # Download object
-wrangler r2 object get my-bucket/path/file.txt
+npx wrangler r2 object get my-bucket/path/file.txt
 
 # Delete object
-wrangler r2 object delete my-bucket/path/file.txt
+npx wrangler r2 object delete my-bucket/path/file.txt
 ```
 
 ### Config Binding
@@ -371,58 +371,58 @@ wrangler r2 object delete my-bucket/path/file.txt
 
 ```bash
 # Create database
-wrangler d1 create my-database
+npx wrangler d1 create my-database
 
 # Create with location
-wrangler d1 create my-database --location wnam
+npx wrangler d1 create my-database --location wnam
 
 # List databases
-wrangler d1 list
+npx wrangler d1 list
 
 # Get database info
-wrangler d1 info my-database
+npx wrangler d1 info my-database
 
 # Delete database
-wrangler d1 delete my-database
+npx wrangler d1 delete my-database
 ```
 
 ### Execute SQL
 
 ```bash
 # Execute SQL command (remote)
-wrangler d1 execute my-database --remote --command "SELECT * FROM users"
+npx wrangler d1 execute my-database --remote --command "SELECT * FROM users"
 
 # Execute SQL file (remote)
-wrangler d1 execute my-database --remote --file ./schema.sql
+npx wrangler d1 execute my-database --remote --file ./schema.sql
 
 # Execute locally
-wrangler d1 execute my-database --local --command "SELECT * FROM users"
+npx wrangler d1 execute my-database --local --command "SELECT * FROM users"
 ```
 
 ### Migrations
 
 ```bash
 # Create migration
-wrangler d1 migrations create my-database create_users_table
+npx wrangler d1 migrations create my-database create_users_table
 
 # List pending migrations
-wrangler d1 migrations list my-database --local
+npx wrangler d1 migrations list my-database --local
 
 # Apply migrations locally
-wrangler d1 migrations apply my-database --local
+npx wrangler d1 migrations apply my-database --local
 
 # Apply migrations to remote
-wrangler d1 migrations apply my-database --remote
+npx wrangler d1 migrations apply my-database --remote
 ```
 
 ### Export/Backup
 
 ```bash
 # Export schema and data
-wrangler d1 export my-database --remote --output backup.sql
+npx wrangler d1 export my-database --remote --output backup.sql
 
 # Export schema only
-wrangler d1 export my-database --remote --output schema.sql --no-data
+npx wrangler d1 export my-database --remote --output schema.sql --no-data
 ```
 
 ### Config Binding
@@ -448,29 +448,29 @@ wrangler d1 export my-database --remote --output schema.sql --no-data
 
 ```bash
 # Create index with dimensions
-wrangler vectorize create my-index --dimensions 768 --metric cosine
+npx wrangler vectorize create my-index --dimensions 768 --metric cosine
 
 # Create with preset (auto-configures dimensions/metric)
-wrangler vectorize create my-index --preset @cf/baai/bge-base-en-v1.5
+npx wrangler vectorize create my-index --preset @cf/baai/bge-base-en-v1.5
 
 # List indexes
-wrangler vectorize list
+npx wrangler vectorize list
 
 # Get index info
-wrangler vectorize get my-index
+npx wrangler vectorize get my-index
 
 # Delete index
-wrangler vectorize delete my-index
+npx wrangler vectorize delete my-index
 ```
 
 ### Manage Vectors
 
 ```bash
 # Insert vectors from NDJSON file
-wrangler vectorize insert my-index --file vectors.ndjson
+npx wrangler vectorize insert my-index --file vectors.ndjson
 
 # Query vectors
-wrangler vectorize query my-index --vector "[0.1, 0.2, ...]" --top-k 10
+npx wrangler vectorize query my-index --vector "[0.1, 0.2, ...]" --top-k 10
 ```
 
 ### Config Binding
@@ -491,20 +491,20 @@ wrangler vectorize query my-index --vector "[0.1, 0.2, ...]" --top-k 10
 
 ```bash
 # Create config
-wrangler hyperdrive create my-hyperdrive \
+npx wrangler hyperdrive create my-hyperdrive \
   --connection-string "postgres://user:pass@host:5432/database"
 
 # List configs
-wrangler hyperdrive list
+npx wrangler hyperdrive list
 
 # Get config details
-wrangler hyperdrive get <HYPERDRIVE_ID>
+npx wrangler hyperdrive get <HYPERDRIVE_ID>
 
 # Update config
-wrangler hyperdrive update <HYPERDRIVE_ID> --origin-password "new-password"
+npx wrangler hyperdrive update <HYPERDRIVE_ID> --origin-password "new-password"
 
 # Delete config
-wrangler hyperdrive delete <HYPERDRIVE_ID>
+npx wrangler hyperdrive delete <HYPERDRIVE_ID>
 ```
 
 ### Config Binding
@@ -526,10 +526,10 @@ wrangler hyperdrive delete <HYPERDRIVE_ID>
 
 ```bash
 # List available models
-wrangler ai models
+npx wrangler ai models
 
 # List finetunes
-wrangler ai finetune list
+npx wrangler ai finetune list
 ```
 
 ### Config Binding
@@ -550,19 +550,19 @@ wrangler ai finetune list
 
 ```bash
 # Create queue
-wrangler queues create my-queue
+npx wrangler queues create my-queue
 
 # List queues
-wrangler queues list
+npx wrangler queues list
 
 # Delete queue
-wrangler queues delete my-queue
+npx wrangler queues delete my-queue
 
 # Add consumer to queue
-wrangler queues consumer add my-queue my-worker
+npx wrangler queues consumer add my-queue my-worker
 
 # Remove consumer
-wrangler queues consumer remove my-queue my-worker
+npx wrangler queues consumer remove my-queue my-worker
 ```
 
 ### Config Binding
@@ -592,50 +592,50 @@ wrangler queues consumer remove my-queue my-worker
 
 ```bash
 # Build container image
-wrangler containers build -t my-app:latest .
+npx wrangler containers build -t my-app:latest .
 
 # Build and push in one command
-wrangler containers build -t my-app:latest . --push
+npx wrangler containers build -t my-app:latest . --push
 
 # Push existing image to Cloudflare registry
-wrangler containers push my-app:latest
+npx wrangler containers push my-app:latest
 ```
 
 ### Manage Containers
 
 ```bash
 # List containers
-wrangler containers list
+npx wrangler containers list
 
 # Get container info
-wrangler containers info <CONTAINER_ID>
+npx wrangler containers info <CONTAINER_ID>
 
 # Delete container
-wrangler containers delete <CONTAINER_ID>
+npx wrangler containers delete <CONTAINER_ID>
 ```
 
 ### Manage Images
 
 ```bash
 # List images in registry
-wrangler containers images list
+npx wrangler containers images list
 
 # Delete image
-wrangler containers images delete my-app:latest
+npx wrangler containers images delete my-app:latest
 ```
 
 ### Manage External Registries
 
 ```bash
 # List configured registries
-wrangler containers registries list
+npx wrangler containers registries list
 
 # Configure external registry (e.g., ECR)
-wrangler containers registries configure <DOMAIN> \
+npx wrangler containers registries configure <DOMAIN> \
   --public-credential <AWS_ACCESS_KEY_ID>
 
 # Delete registry configuration
-wrangler containers registries delete <DOMAIN>
+npx wrangler containers registries delete <DOMAIN>
 ```
 
 ---
@@ -646,32 +646,32 @@ wrangler containers registries delete <DOMAIN>
 
 ```bash
 # List workflows
-wrangler workflows list
+npx wrangler workflows list
 
 # Describe workflow
-wrangler workflows describe my-workflow
+npx wrangler workflows describe my-workflow
 
 # Trigger workflow instance
-wrangler workflows trigger my-workflow
+npx wrangler workflows trigger my-workflow
 
 # Trigger with parameters
-wrangler workflows trigger my-workflow --params '{"key": "value"}'
+npx wrangler workflows trigger my-workflow --params '{"key": "value"}'
 
 # Delete workflow
-wrangler workflows delete my-workflow
+npx wrangler workflows delete my-workflow
 ```
 
 ### Manage Workflow Instances
 
 ```bash
 # List instances
-wrangler workflows instances list my-workflow
+npx wrangler workflows instances list my-workflow
 
 # Describe instance
-wrangler workflows instances describe my-workflow <INSTANCE_ID>
+npx wrangler workflows instances describe my-workflow <INSTANCE_ID>
 
 # Terminate instance
-wrangler workflows instances terminate my-workflow <INSTANCE_ID>
+npx wrangler workflows instances terminate my-workflow <INSTANCE_ID>
 ```
 
 ### Config Binding
@@ -696,19 +696,19 @@ wrangler workflows instances terminate my-workflow <INSTANCE_ID>
 
 ```bash
 # Create pipeline
-wrangler pipelines create my-pipeline --r2 my-bucket
+npx wrangler pipelines create my-pipeline --r2 my-bucket
 
 # List pipelines
-wrangler pipelines list
+npx wrangler pipelines list
 
 # Show pipeline details
-wrangler pipelines show my-pipeline
+npx wrangler pipelines show my-pipeline
 
 # Update pipeline
-wrangler pipelines update my-pipeline --batch-max-mb 100
+npx wrangler pipelines update my-pipeline --batch-max-mb 100
 
 # Delete pipeline
-wrangler pipelines delete my-pipeline
+npx wrangler pipelines delete my-pipeline
 ```
 
 ### Config Binding
@@ -729,29 +729,29 @@ wrangler pipelines delete my-pipeline
 
 ```bash
 # Create store
-wrangler secrets-store store create my-store
+npx wrangler secrets-store store create my-store
 
 # List stores
-wrangler secrets-store store list
+npx wrangler secrets-store store list
 
 # Delete store
-wrangler secrets-store store delete <STORE_ID>
+npx wrangler secrets-store store delete <STORE_ID>
 ```
 
 ### Manage Secrets in Store
 
 ```bash
 # Add secret to store
-wrangler secrets-store secret put <STORE_ID> my-secret
+npx wrangler secrets-store secret put <STORE_ID> my-secret
 
 # List secrets in store
-wrangler secrets-store secret list <STORE_ID>
+npx wrangler secrets-store secret list <STORE_ID>
 
 # Get secret
-wrangler secrets-store secret get <STORE_ID> my-secret
+npx wrangler secrets-store secret get <STORE_ID> my-secret
 
 # Delete secret from store
-wrangler secrets-store secret delete <STORE_ID> my-secret
+npx wrangler secrets-store secret delete <STORE_ID> my-secret
 ```
 
 ### Config Binding
@@ -774,16 +774,16 @@ wrangler secrets-store secret delete <STORE_ID> my-secret
 
 ```bash
 # Create Pages project
-wrangler pages project create my-site
+npx wrangler pages project create my-site
 
 # Deploy directory to Pages
-wrangler pages deploy ./dist
+npx wrangler pages deploy ./dist
 
 # Deploy with specific branch
-wrangler pages deploy ./dist --branch main
+npx wrangler pages deploy ./dist --branch main
 
 # List deployments
-wrangler pages deployment list --project-name my-site
+npx wrangler pages deployment list --project-name my-site
 ```
 
 ---
@@ -794,19 +794,19 @@ wrangler pages deployment list --project-name my-site
 
 ```bash
 # Stream live logs
-wrangler tail
+npx wrangler tail
 
 # Tail specific Worker
-wrangler tail my-worker
+npx wrangler tail my-worker
 
 # Filter by status
-wrangler tail --status error
+npx wrangler tail --status error
 
 # Filter by search term
-wrangler tail --search "error"
+npx wrangler tail --search "error"
 
 # JSON output
-wrangler tail --format json
+npx wrangler tail --format json
 ```
 
 ### Config Logging
@@ -849,7 +849,7 @@ export default defineWorkersConfig({
 
 ```bash
 # Enable in dev
-wrangler dev --test-scheduled
+npx wrangler dev --test-scheduled
 
 # Trigger via HTTP
 curl http://localhost:8787/__scheduled
@@ -864,9 +864,9 @@ curl http://localhost:8787/__scheduled
 | Issue | Solution |
 |-------|----------|
 | `command not found: wrangler` | Install: `npm install -D wrangler` |
-| Auth errors | Run `wrangler login` |
-| Config validation errors | Run `wrangler check` |
-| Type errors after config change | Run `wrangler types` |
+| Auth errors | Run `npx wrangler login` |
+| Config validation errors | Run `npx wrangler check` |
+| Type errors after config change | Run `npx wrangler types` |
 | Local storage not persisting | Check `.wrangler/state` directory |
 | Binding undefined in Worker | Verify binding name matches config exactly |
 
@@ -874,13 +874,13 @@ curl http://localhost:8787/__scheduled
 
 ```bash
 # Check auth status
-wrangler whoami
+npx wrangler whoami
 
 # Validate config
-wrangler check
+npx wrangler check
 
 # View config schema
-wrangler docs configuration
+npx wrangler docs configuration
 ```
 
 ---
@@ -889,9 +889,9 @@ wrangler docs configuration
 
 1. **Version control `wrangler.jsonc`**: Treat as source of truth for Worker config.
 2. **Use automatic provisioning**: Omit resource IDs for auto-creation on deploy.
-3. **Run `wrangler types` in CI**: Add to build step to catch binding mismatches.
+3. **Run `npx wrangler types` in CI**: Add to build step to catch binding mismatches.
 4. **Use environments**: Separate staging/production with `env.staging`, `env.production`.
 5. **Set `compatibility_date`**: Update quarterly to get new runtime features.
 6. **Use `.dev.vars` for local secrets**: Never commit secrets to config.
-7. **Test locally first**: `wrangler dev` with local bindings before deploying.
+7. **Test locally first**: `npx wrangler dev` with local bindings before deploying.
 8. **Use `--dry-run` before major deploys**: Validate changes without deployment.
