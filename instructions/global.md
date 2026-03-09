@@ -24,6 +24,7 @@ intent to a skill and read its SKILL.md. Skills contain domain guardrails
 | Wrangler CLI, wrangler commands, Workers config | `wrangler` | `skills/wrangler/SKILL.md` |
 | AST structural code search, ast-grep rules | `ast-grep` | `skills/ast-grep/SKILL.md` |
 | PR review, Linear tickets, work packages | `workflows` | `skills/workflows/SKILL.md` |
+| WorkOS, AuthKit, SSO, directory sync, admin portal | `workos` | `skills/workos/SKILL.md` |
 
 - Match by intent, not exact keywords. Load multiple skills if ambiguous.
 - If no clear match, ask one clarifying question and retry.
