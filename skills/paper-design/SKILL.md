@@ -11,6 +11,18 @@ description: Use Paper MCP to create, explore, and iterate on UI designs directl
 
 ---
 
+## Cost awareness
+
+MCP calls are metered weekly: Free = 100/week, Pro = 1M/week. Every tool invocation counts as one call. Minimize calls:
+
+- **Batch everything.** `get_computed_styles`, `set_text_content`, `update_styles`, `rename_nodes` all accept arrays — one call for N nodes, not N calls.
+- **`get_tree_summary` over repeated `get_children`.** One call with `depth: 5` replaces a cascade of `get_children` calls down the tree.
+- **`duplicate_nodes` + `descendantIdMap` over rebuilding.** Cloning and tweaking a variant is 3-4 calls. Building from scratch is 10+.
+- **Screenshot strategically.** Each screenshot is a call. On free tier, screenshot every 4-5 writes instead of every 2-3. On Pro, follow the standard 2-3 cadence.
+- **Skip `start_working_on_nodes`** when working solo — it's a visual indicator for collaborators, not a functional requirement.
+- **Combine reads.** If you need styles and structure, `get_computed_styles` + `get_tree_summary` in one round is 2 calls. Don't also call `get_node_info` + `get_children` for the same data.
+- **Don't re-read after writing.** Trust the write succeeded unless you need visual verification. Use screenshots for verification, not redundant reads.
+
 ## Core workflow
 
 1. **`get_basic_info`** first — understand the file, pages, existing artboards, and loaded fonts.
@@ -142,6 +154,26 @@ Use pages to separate concerns:
 - **Components** — isolated component states and variants
 - **Screens** — full page layouts
 - **Explorations** — throwaway design experiments
+
+## In-app only features (not available via MCP)
+
+These Paper features exist but are **not accessible through MCP tools** — the user must use them directly in the Paper UI:
+
+- **Image generation** — Flux 2, Gemini 3 (Nano Banana Pro), OpenAI Image Edit 1.5, Seedream 4.5. Multi-reference generation supported.
+- **Shaders** — 26+ GPU shaders (Mesh Gradient, Liquid Metal, Fluted Glass, Halftone CMYK, Perlin Noise, etc.). Available as React components via `@paper-design/shaders-react`.
+- **CSS filters** — blur, saturation, grayscale, brightness, sepia, invert, hue rotation.
+- **Video export** — MP4 with duration/resolution/quality controls (Pro only).
+- **Image export formats** — WebP, AVIF, PNG beyond standard export.
+
+When a user needs these, guide them to use Paper's UI directly and then continue MCP work on the resulting nodes.
+
+## Cross-MCP workflows
+
+Paper works alongside other MCP servers for richer workflows:
+
+- **Figma MCP** — sync design tokens (colors, typography, spacing) from Figma into Paper. Use `get_guide({ topic: "figma-import" })` for the full workflow.
+- **Notion MCP** — pull real content (copy, data) from Notion into Paper designs instead of placeholder text.
+- **Code project MCP** — build a design in Paper, export via `get_jsx`, then write code to the project.
 
 ## Limitations
 
