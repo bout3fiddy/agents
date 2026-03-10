@@ -17,8 +17,8 @@ CLAUDE_MD_FILE="$CLAUDE_DIR/CLAUDE.md"
 usage() {
     cat <<'USAGE'
 Usage: bin/sync.sh
-Performs a hard one-way sync from this repo to ~/.agents and writes a
-thin CLAUDE.md pointer into ~/.claude.
+Performs a hard one-way sync from this repo to ~/.agents and mirrors
+skills and instructions into ~/.claude for native Claude Code discovery.
 USAGE
 }
 
@@ -93,11 +93,13 @@ if [[ -f "$TARGET_ROOT/skills.router.min.json" ]]; then
 fi
 
 # --- Claude Code integration ---
-# Write a thin CLAUDE.md that references ~/.agents/AGENTS.md so Claude Code
-# picks up the global instructions without duplicating content.
+# Full mirror into ~/.claude so Claude Code can natively discover skills,
+# workflows, and instructions without relying on @ pointers or ~/.agents.
 mkdir -p "$CLAUDE_DIR"
-printf '@../.agents/AGENTS.md\n' > "$CLAUDE_MD_FILE"
-echo "Wrote $CLAUDE_MD_FILE (-> ~/.agents/AGENTS.md)"
+mirror_file "$SOURCE_INSTRUCTIONS_FILE" "$CLAUDE_MD_FILE"
+mirror_dir "$SOURCE_SKILLS_DIR" "$CLAUDE_DIR/skills"
+mirror_dir "$SOURCE_WORKFLOWS_DIR" "$CLAUDE_DIR/workflows"
+echo "Mirrored instructions, skills, and workflows to $CLAUDE_DIR"
 
 # --- Codex integration ---
 # Write a thin AGENTS.md that references ~/.agents/AGENTS.md so Codex
@@ -107,11 +109,5 @@ CODEX_AGENTS_FILE="$CODEX_DIR/AGENTS.md"
 mkdir -p "$CODEX_DIR"
 printf '@../.agents/AGENTS.md\n' > "$CODEX_AGENTS_FILE"
 echo "Wrote $CODEX_AGENTS_FILE (-> ~/.agents/AGENTS.md)"
-
-# Remove legacy ~/.claude/skills (skills now live in ~/.agents/skills).
-if [[ -d "$CLAUDE_DIR/skills" ]]; then
-    rm -rf "$CLAUDE_DIR/skills"
-    echo "Removed legacy $CLAUDE_DIR/skills"
-fi
 
 echo "Done."

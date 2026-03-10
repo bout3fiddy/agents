@@ -12,7 +12,7 @@
 - `python3 bin/build_agents_index.py` validates skills/reference routing metadata; use it before sync to catch schema or linkage issues.
 - Skill validation in this repo uses the `agentskills` executable from `skills-ref` (`uvx --from skills-ref agentskills validate skills/<name>`).
 - In-house TypeScript port of `agentskills validate` lives at `skills-evals/validate/` (`bun run skills-evals/validate/index.ts validate skills/<name>`).
-- `bin/sync.sh` hard-syncs this repo into `~/.agents` and writes a Claude Code pointer at `~/.claude/CLAUDE.md`; it also removes legacy `~/.claude/skills` if present (skills live in `~/.agents/skills` only).
+- `bin/sync.sh` hard-syncs this repo into `~/.agents` and fully mirrors skills, workflows, and instructions into `~/.claude/` so Claude Code can natively discover everything without depending on `~/.agents`.
 - To make pi load only `~/.agents` skills, point `~/.pi/agent/skills` at `~/.agents/skills` (symlink works; keep a timestamped backup for rollback).
 - Runtime routing is handled by the inline routing table in `instructions/global.md` — no separate router artifact.
 - `bin/sync.sh` does not run sync-time gates; it only syncs files.
