@@ -13,6 +13,7 @@ For specific design tasks, load the matching skill:
 - UI/layout/styling and design direction -> `skills/design-guidelines/SKILL.md`
 - Animation / storyboard / motion -> `skills/storyboard-animation/SKILL.md`
 - DialKit / sliders / controls / tuning -> `skills/dialkit/SKILL.md`
+- Paper MCP / design canvas / mockups / design directions -> `skills/paper-design/SKILL.md`
 
 ## Key rules
 
