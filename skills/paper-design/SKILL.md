@@ -130,6 +130,20 @@ User selects a frame in Paper → `get_selection` to read it → `update_styles`
 2. `get_jsx` with `format: "tailwind"` (or `"inline-styles"`) to export.
 3. Adapt the output into the project's component framework.
 
+### Design-to-code: SolidJS
+`get_jsx` outputs React JSX. For SolidJS projects, apply these transforms after export:
+
+1. `get_jsx` with `format: "inline-styles"` (SolidJS style objects are identical to React's).
+2. Replace React-isms:
+   - `className` → `class`
+   - `htmlFor` → `for`
+   - Remove `key` props (SolidJS doesn't use them)
+3. Add SolidJS reactivity:
+   - Static lists → `<For each={items}>{(item) => ...}</For>`
+   - Conditionals → `<Show when={condition}>...</Show>` or `<Switch>`/`<Match>`
+   - Dynamic values → `createSignal` / `createStore`
+4. If using Tailwind format instead, the only JSX attribute change is `className` → `class`.
+
 ### Figma import
 Call `get_guide({ topic: "figma-import" })` for the full step-by-step workflow. The guide walks through importing Figma designs into Paper.
 
