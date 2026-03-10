@@ -30,7 +30,8 @@ MCP calls are metered weekly: Free = 100/week, Pro = 1M/week. Every tool invocat
 3. **`create_artboard`** with a clear name and explicit pixel dimensions. Use `find_placement` or `relatedNodeId` to avoid overlap.
 4. **`write_html`** incrementally — one visual group per call (header, then body, then footer). Never batch an entire component into one call.
 5. **`get_screenshot`** after every 2-3 write calls to verify. Fix issues before continuing.
-6. **`finish_working_on_nodes`** when done.
+6. **Fit artboards to content** — after all content is written, `update_styles` with `width: "fit-content"` and `height: "fit-content"` on the artboard. Screenshot to confirm no empty space or clipping.
+7. **`finish_working_on_nodes`** when done.
 
 For deeper tool parameter details, see `references/tool-parameters.md`.
 
@@ -45,6 +46,8 @@ For deeper tool parameter details, see `references/tool-parameters.md`.
 - **Style objects use camelCase** — `update_styles` and `create_artboard` styles use `{ fontSize: "16px", backgroundColor: "#fff" }`, not kebab-case.
 - **No emojis as icons** — use inline SVG or omit.
 - **Assume `border-box` sizing** on all elements.
+- **Artboards must fit their content** — after populating an artboard, always `update_styles` to set both `width: "fit-content"` and `height: "fit-content"` so the artboard shrinks to wrap its content. Never leave artboards at arbitrary fixed dimensions that create empty space or clip content. Verify with a screenshot.
+- **Artboards must be tightly spaced** — use `relatedNodeId` or `find_placement` on every `create_artboard` call so artboards sit close together (40–80px gap) without overlapping. Never scatter artboards across the canvas with large gaps between them.
 
 ## HTML rules
 
@@ -124,6 +127,17 @@ Clone a base component for each state: empty, filled, error, loading, disabled. 
 
 ### Selection-driven iteration
 User selects a frame in Paper → `get_selection` to read it → `update_styles` or `write_html` with `mode: "replace"` to modify. Fastest feedback loop.
+
+### Recreating components from the codebase
+When the user asks to visualize or recreate an existing codebase component in Paper, **read the full rendering context first** — not just the target component file in isolation:
+
+1. **Read the page/screen that renders the component** — find the route or parent that composes the component to understand its real layout context, sibling elements, data flow, and props.
+2. **Read the component file itself** — understand its internal structure, variants, and conditional rendering.
+3. **Read shared design tokens** — theme files, CSS variables, Tailwind config, or style constants that the component inherits.
+4. **Read sibling/child components** that are composed together — a card in a list, a form in a modal, a nav alongside content.
+5. **Only then design in Paper** — with full knowledge of the actual structure, data shape, colors, typography, and spacing the component uses in production.
+
+Do not guess or hallucinate design details. If the codebase uses `gap-4` and `text-gray-700`, the Paper design must reflect those exact values. If a component renders a list of 3 items in production, show 3 items — not 5. The goal is a faithful representation, not an idealized version.
 
 ### Design-to-code
 1. Build the design in Paper.
