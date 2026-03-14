@@ -26,6 +26,8 @@ intent to a skill and read its SKILL.md. Skills contain domain guardrails
 | PR review, Linear tickets, work packages | `workflows` | `skills/workflows/SKILL.md` |
 | WorkOS, AuthKit, SSO, directory sync, admin portal | `workos` | `skills/workos/SKILL.md` |
 | Paper MCP, design canvas, UI mockups, design directions | `paper-design` | `skills/paper-design/SKILL.md` |
+| Agentation toolbar setup, install agentation | `agentation` | `skills/agentation/SKILL.md` |
+| autonomous design critique, self-driving annotations, auto-annotate UI | `agentation-self-driving` | `skills/agentation-self-driving/SKILL.md` |
 
 - Match by intent, not exact keywords. Load multiple skills if ambiguous.
 - If no clear match, ask one clarifying question and retry.
