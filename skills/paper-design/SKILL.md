@@ -26,16 +26,39 @@ MCP calls are metered weekly: Free = 100/week, Pro = 1M/week. Every tool invocat
 ## Core workflow
 
 1. **`get_basic_info`** first — understand the file, pages, existing artboards, and loaded fonts.
-2. **`get_font_family_info`** before writing any text — confirm the font and available weights. Use the project's actual font (check CSS tokens), not a guess.
-3. **`create_artboard`** with a clear name and explicit pixel dimensions. Use `find_placement` or `relatedNodeId` to avoid overlap.
-4. **`write_html`** incrementally — one visual group per call (header, then body, then footer). Never batch an entire component into one call.
-5. **`get_screenshot`** after every 2-3 write calls to verify. Fix issues before continuing.
-6. **Fit artboards to content** — after all content is written, `update_styles` with `width: "fit-content"` and `height: "fit-content"` on the artboard. Screenshot to confirm no empty space or clipping.
-7. **`finish_working_on_nodes`** when done.
+2. **Survey existing work** — `get_tree_summary` on the current page to see what's already on the canvas. Note the visual language: colors, fonts, spacing, component patterns. If artboards exist, `get_screenshot` one or two to absorb the established style.
+3. **`get_font_family_info`** before writing any text — confirm the font and available weights. Prefer fonts already used in neighboring artboards or the project's CSS tokens, not a guess.
+4. **Reuse before creating** — if the canvas already has a component close to what you need, `duplicate_nodes` and modify it. Only `create_artboard` from scratch when nothing reusable exists.
+5. **`create_artboard`** (when needed) with a clear name and explicit pixel dimensions. Use `find_placement` or `relatedNodeId` to avoid overlap.
+6. **`write_html`** incrementally — one visual group per call (header, then body, then footer). Never batch an entire component into one call.
+7. **`get_screenshot`** after every 2-3 write calls to verify. Fix issues before continuing.
+8. **Fit artboards to content** — after all content is written, `update_styles` with `width: "fit-content"` and `height: "fit-content"` on the artboard. Screenshot to confirm no empty space or clipping.
+9. **`finish_working_on_nodes`** when done.
 
 For deeper tool parameter details, see `references/tool-parameters.md`.
 
 ## Hard rules
+
+### Scope discipline
+
+- **Only build what was asked for.** Do not add features, sections, states, or embellishments the user did not request. If the user says "add a search bar", add a search bar — do not also add filters, sorting, a results count, and an empty-state illustration.
+- **Prefer the simplest viable approach.** If a design goal can be achieved with basic layout and typography, do not introduce complex patterns (nested modals, animated carousels, multi-step wizards) unless explicitly requested. When in doubt, do less — the user can always ask for more.
+- **No speculative variants.** Do not create "bonus" artboards showing alternative ideas unless the user asks for options. One artboard that nails the request beats three that dilute it.
+
+### Never start from scratch
+
+- **Do not delete or replace artboards to redo work.** If a design needs changes, modify it in place with `update_styles`, `set_text_content`, or targeted `write_html` with `mode: "replace"` on specific child nodes. Destroying and rebuilding wastes calls, loses iteration history, and frustrates the user.
+- **Do not wipe an artboard's children and re-populate.** If the structure is wrong, fix the wrong parts. If the structure is fundamentally unsalvageable (rare), explicitly ask the user before deleting anything.
+- **`delete_nodes` is a last resort** — only for removing specific nodes the user asked to remove or nodes you just created that are clearly wrong. Never delete nodes you didn't create without confirmation.
+
+### Use existing context
+
+- **Read the neighborhood first.** Before creating or modifying anything, `get_tree_summary` on the current page (or at minimum the surrounding artboards) to understand what already exists — styles, patterns, spacing conventions, color palette, typography choices.
+- **Match the visual language of sibling artboards.** If adjacent artboards use a specific font, color palette, spacing rhythm, or component pattern, adopt those same values. Do not introduce a new visual direction unless the user explicitly asks for one.
+- **Clone before creating.** When the page already contains a component similar to what you need, `duplicate_nodes` and modify the clone rather than building from scratch. This inherits the established visual language automatically.
+- **Reference existing nodes by ID.** When the user points at something on the canvas or mentions an existing element, `get_selection` or `get_node_info` to read it — do not assume its structure or styles.
+
+### Technical constraints
 
 - **Inline styles only** — no class names, no `<style>` blocks, no external CSS.
 - **Flex layout only** — no `display: grid`, no `display: inline`, no margins, no HTML `<table>`. Use flexbox, padding, and gap for all layout.

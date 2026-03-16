@@ -36,14 +36,17 @@ the app is locally hosted at <APP_URL>, started via <APP_START_COMMAND>.
 use playwright/browser tooling to validate runtime behavior and impact.
 
 when each work package item is implemented:
+- complete every checkbox in that WP's `## Completion Checklist` — each box must be checked (`- [x]`) individually; do not bulk-mark
 - update that WP section with:
   - updated Recommendation rationale
   - Implementation status (YYYY-MM-DD)
   - Why this works
   - Proof / validation
   - How to test
-- mark the WP title status line as [Status: Done YYYY-MM-DD]
+- mark the WP title status line as [Status: Done YYYY-MM-DD] only AFTER all checklist boxes are checked
 - update `overview.md` rollup row for that `WP-*` with status, last-updated date, proof pointer, and next action
+
+a WP item is NOT done until every checklist box is checked. do not advance to the next WP until the current one's checklist is fully complete.
 
 commit and push periodically as coherent checkpoints.
 
@@ -93,6 +96,21 @@ Each item must include:
 - Non-destructive tests
 - Files by type (when useful for traceability)
 
+#### Completion Checklist (required)
+
+Every WP item MUST end with a `## Completion Checklist` containing at minimum these checkboxes:
+
+```markdown
+## Completion Checklist
+- [ ] Implementation matches the described approach
+- [ ] Non-destructive tests pass
+- [ ] Proof / validation section filled with exact commands and outcomes
+- [ ] How to test section is reproducible
+- [ ] `overview.md` rollup row updated
+```
+
+Authors may add task-specific checkboxes (e.g. `- [ ] Migration tested against staging DB`). Agents MUST check each box individually as they complete the corresponding step — not in bulk at the end. A WP item cannot be marked `[Status: Done]` while any box remains unchecked.
+
 ### Accountability sections (required after implementation)
 
 For each completed `WP-XX`, append:
@@ -102,6 +120,10 @@ For each completed `WP-XX`, append:
 - `How to test`: reproducible verification steps
 
 After updating the detailed `WP-XX` content, update `overview.md` in the same change.
+
+### Hard rule: checklist gates "done"
+
+An agent MUST NOT mark a WP item as `[Status: Done]` or advance to the next item unless every checkbox in that item's Completion Checklist is `[x]`. If an agent cannot complete a checklist item, it must leave the box unchecked and note the blocker — the WP stays `[Status: In Progress]`.
 
 ### Resume semantics
 
