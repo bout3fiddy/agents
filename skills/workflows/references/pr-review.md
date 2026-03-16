@@ -64,11 +64,28 @@ Reply to each addressed comment confirming the fix. For false positives or defer
 
 ### f) Wait for code review agents
 
-Code review agents take approximately 13 minutes to analyze the push and post new findings.
+Code review agents typically take ~13 minutes but may finish sooner or later. Do NOT blindly sleep — poll GitHub Actions to know when they're actually done.
+
+#### Polling procedure
+
+1. **Initial wait** — sleep 60 seconds after pushing to let workflows trigger.
+
+2. **Check action status** — query pending/in-progress runs on the PR's head branch:
 
 ```bash
-sleep 780
+gh run list --branch <HEAD_BRANCH> --limit 10 --json status,name,conclusion,createdAt
 ```
+
+3. **Assess state**:
+   - If any run has `status: "in_progress"` or `status: "queued"` — code review agents are still working. Sleep 60 seconds and check again.
+   - If all runs have `status: "completed"` — agents are done. Proceed immediately to step **(g)**.
+   - If no runs appear after 2 minutes — the push may not have triggered workflows. Fall back to `gh pr checks <PR>` to verify, then sleep 60 seconds and retry once. If still nothing after 4 minutes total, proceed to **(g)** and rely on comment-based detection.
+
+4. **Repeat polling** at 60-second intervals until all runs complete or a 15-minute ceiling is hit. If the ceiling is reached with runs still in progress, proceed anyway and note the incomplete runs.
+
+#### Why not blind sleep
+
+A 13-minute sleep misses two cases: (a) agents finish in 5 minutes and you waste 8 minutes waiting, (b) agents take 18 minutes and you proceed too early, missing their findings. Action-aware polling handles both.
 
 ### g) Fetch new comments and repeat
 
@@ -78,7 +95,8 @@ Go back to step **(a)**. Fetch comments again and check for new findings from re
 
 The loop ends when:
 
-- No new actionable review comments after the wait
+- All GitHub Actions runs on the head branch have completed
+- No new actionable review comments after agents finish
 - CI checks are passing
 
 Summarize the final state to the user: what was fixed, what was deferred (if any), and current CI status.
