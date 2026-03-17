@@ -12,6 +12,7 @@ Structured procedures for recurring multi-step tasks. Each workflow is a referen
 - PR review, fix review comments, remediation loop → read `references/pr-review.md`
 - Linear tickets, create/refine/transition issues → read `references/linear.md`
 - Work packages, structured execution plans → read `references/work-packages.md`
+- Work package execution, autonomous WP run, "do not stop" → read `references/workpackage-execution.md`
 
 ## How to execute
 
