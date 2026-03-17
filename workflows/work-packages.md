@@ -45,7 +45,13 @@ when each work package item is implemented:
 - mark the WP title status line as [Status: Done YYYY-MM-DD]
 - update `overview.md` rollup row for that `WP-*` with status, last-updated date, proof pointer, and next action
 
-commit and push periodically as coherent checkpoints.
+before every commit:
+- stage only intended shipping files with explicit paths; never use `git add .`, `git add -A`, or `git add -f`
+- inspect ignored state before staging (`git status --short --ignored` and `git check-ignore <path>` when unsure)
+- do not stage `overview.md`, `wp-*.md`, scratch notes, or other workpackage tracking files unless the user explicitly asked to version them, repo instructions explicitly require them to ship, or this task is itself modifying workflow/workpackage docs
+- confirm the staged set with `git diff --cached --name-only`
+
+commit and push periodically as coherent checkpoints for shipping files only.
 
 when all work packages are done:
 - run the PR review remediation loop until:
@@ -102,6 +108,15 @@ For each completed `WP-XX`, append:
 - `How to test`: reproducible verification steps
 
 After updating the detailed `WP-XX` content, update `overview.md` in the same change.
+
+### Version-control guardrails
+
+During execution, `overview.md`, `wp-*.md`, and similar tracking docs are operational state by default. Keep them accurate locally, but do not include them in commits or PRs unless:
+- the user explicitly asks for those files to be versioned
+- repo instructions explicitly require those files to ship
+- the task itself is updating the workflow/work-package docs/templates
+
+Ignored files stay ignored. Never use `git add .`, `git add -A`, or `git add -f`; stage exact paths and verify the staged set before every commit.
 
 ### Resume semantics
 

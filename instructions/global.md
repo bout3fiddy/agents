@@ -36,6 +36,7 @@ intent to a skill and read its SKILL.md. Skills contain domain guardrails
 
 - Toolchain: `uv` for Python (if `uv.lock`/`pyproject.toml` exists), `bun` for JS/TS when repo supports it.
 - Quality: if `.pre-commit-config.yaml` exists and you changed code, run `uv run prek run --all-files`.
+- Git hygiene: stage exact paths only; never `git add .`, `git add -A`, or `git add -f`. Respect `.gitignore`, inspect ignored state before committing (`git status --short --ignored`, `git check-ignore <path>` when unsure), and verify the staged set with `git diff --cached --name-only`. Treat work-package docs, scratch notes, and generated artifacts as non-shipping unless the user explicitly asks to version them or repo instructions explicitly require that exact content to ship.
 - Commands: don't run shell for discussion-only requests. Run safe, routine commands by default; ask only when destructive or touching secrets.
 - Bugfix testing: every bugfix must include a regression test that fails without the fix and passes with it. Add boundary probes if the bug is an edge case; add an integration test if the bug crosses module boundaries.
 

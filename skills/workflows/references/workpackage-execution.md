@@ -50,10 +50,21 @@ If **any** verifier returns **fail**: fix the gaps and re-verify with the failin
 
 If **all** verifiers return **pass**: check off all Completion Checklist boxes, mark `[Status: Done]`, update `overview.md`.
 
-#### 3. Commit, push, and open PR early
+#### 3. Selectively stage, then commit/push early
+
+Treat work-package tracking docs (`overview.md`, `wp-*.md`, scratch notes) as execution artifacts by default. Keep them current for local resume state, but do not stage or push them unless the user explicitly asked to version those updates, repo instructions explicitly require them to ship, or this task is modifying the workflow/work-package docs themselves.
+
+Before every commit:
+
+1. Build an explicit list of shipping files for this WP.
+2. Check that list against ignored state with `git status --short --ignored` and `git check-ignore <path>` when unsure.
+3. Stage only those exact paths. Never use `git add .`, `git add -A`, or `git add -f`.
+4. Review `git diff --cached --name-only` and confirm no WP tracking docs, generated artifacts, or other out-of-scope files slipped in.
 
 ```bash
-git add <changed-files>
+git status --short --ignored
+git add <intentional-shipping-files>
+git diff --cached --name-only
 git commit -m "<WP-XX summary>"
 git push origin <REMOTE_BRANCH>
 ```
@@ -102,6 +113,8 @@ Once all WPs are verified and validation passes (if applicable):
 - **Verification is mandatory and independent.** Never self-certify a WP as done. Always use verification subagents.
 - **Scale verification to complexity.** 1 verifier for trivial changes, 2–3 for substantial WPs spanning multiple concerns. Run them in parallel.
 - **Subagents must load domain skills.** A verifier without the right skill context will miss domain-specific issues.
+- **Ignored files stay ignored.** Never force-add ignored files. `.gitignore` and repo-local ignore rules win unless the user explicitly overrides them.
+- **WP tracking docs do not auto-ship.** `overview.md`, `wp-*.md`, scratch notes, and similar execution-state files stay out of commits/PRs unless the user explicitly requests them or repo instructions explicitly require them.
 - **No shortcuts in failure analysis.** When validation fails, systematic root-cause investigation only. No "try this and see" loops.
 - **Early PR, always.** Open the PR after the first push. The earlier review bots start, the less rework at the end.
-- **Commit per WP.** Each WP gets its own commit (or small commit group). Do not batch all WPs into one commit.
+- **Commit per WP.** Each WP gets its own shipping commit (or small commit group). Do not batch all WPs into one commit, and do not let tracker-file churn hitch a ride.

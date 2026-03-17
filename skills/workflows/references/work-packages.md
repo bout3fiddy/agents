@@ -48,7 +48,13 @@ when each work package item is implemented:
 
 a WP item is NOT done until every checklist box is checked. do not advance to the next WP until the current one's checklist is fully complete.
 
-commit and push periodically as coherent checkpoints.
+before every commit:
+- stage only intended shipping files with explicit paths; never use `git add .`, `git add -A`, or `git add -f`
+- inspect ignored state before staging (`git status --short --ignored` and `git check-ignore <path>` when unsure)
+- do not stage `overview.md`, `wp-*.md`, scratch notes, or other workpackage tracking files unless the user explicitly asked to version them, repo instructions explicitly require them to ship, or this task is itself modifying workflow/workpackage docs
+- confirm the staged set with `git diff --cached --name-only`
+
+commit and push periodically as coherent checkpoints for shipping files only.
 
 when all work packages are done:
 - run the PR review remediation loop until:
@@ -124,6 +130,15 @@ After updating the detailed `WP-XX` content, update `overview.md` in the same ch
 ### Hard rule: checklist gates "done"
 
 An agent MUST NOT mark a WP item as `[Status: Done]` or advance to the next item unless every checkbox in that item's Completion Checklist is `[x]`. If an agent cannot complete a checklist item, it must leave the box unchecked and note the blocker — the WP stays `[Status: In Progress]`.
+
+### Version-control guardrails
+
+During execution, `overview.md`, `wp-*.md`, and similar tracking docs are operational state by default. Keep them accurate locally, but do not include them in commits or PRs unless:
+- the user explicitly asks for those files to be versioned
+- repo instructions explicitly require those files to ship
+- the task itself is updating the workflow/work-package docs/templates
+
+Ignored files stay ignored. Never use `git add .`, `git add -A`, or `git add -f`; stage exact paths and verify the staged set before every commit.
 
 ### Resume semantics
 
