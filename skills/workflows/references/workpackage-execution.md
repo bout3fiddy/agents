@@ -26,19 +26,29 @@ Read `overview.md`, the WP item's demands, and any audit/context docs. Implement
 
 #### 2. Verify with an independent subagent
 
-After implementation, spawn a verification subagent. The verifier is an independent auditor — it must NOT trust self-reported status.
+After implementation, spawn one or more verification subagents. Verifiers are independent auditors — they must NOT trust self-reported status.
 
-The verification subagent must:
+Use multiple verifiers when the WP spans different concerns. Examples:
 
-1. Load the relevant domain skills (`<DOMAIN_SKILLS>`).
+- **Correctness verifier** — loads domain skills (`<DOMAIN_SKILLS>`), reads WP demands, reviews code changes, confirms the implementation actually does what the WP requires.
+- **Context verifier** — reads vendored/reference code, upstream docs, or adjacent modules to confirm the changes are consistent with the broader codebase.
+- **Test/build verifier** — runs tests, checks compilation, confirms nothing regressed.
+
+At minimum, always spawn a correctness verifier. Add context and test verifiers when the WP touches unfamiliar code, vendored dependencies, or cross-module boundaries. Use your judgment — 1 verifier for a trivial change, 2–3 for anything substantial.
+
+Each verification subagent must:
+
+1. Load the relevant domain skills.
 2. Read `overview.md`, the WP item's requirements, and any audit docs.
 3. Read the actual code changes (`git diff` of the WP's commits).
 4. Confirm each Completion Checklist item against the code, not just the checkbox state.
 5. Return a verdict: **pass** (work matches demands) or **fail** (with specific gaps).
 
-If the verifier returns **fail**: fix the gaps and re-verify. Do not advance.
+Run verifiers in parallel when they are independent of each other.
 
-If the verifier returns **pass**: check off all Completion Checklist boxes, mark `[Status: Done]`, update `overview.md`.
+If **any** verifier returns **fail**: fix the gaps and re-verify with the failing verifier. Do not advance.
+
+If **all** verifiers return **pass**: check off all Completion Checklist boxes, mark `[Status: Done]`, update `overview.md`.
 
 #### 3. Commit, push, and open PR early
 
@@ -89,7 +99,8 @@ Once all WPs are verified and validation passes (if applicable):
 ## Hard rules
 
 - **Do not stop mid-execution.** If you hit a blocker on one WP, note it and attempt the next. Return to blocked items after.
-- **Verification is mandatory and independent.** Never self-certify a WP as done. Always use a verification subagent.
+- **Verification is mandatory and independent.** Never self-certify a WP as done. Always use verification subagents.
+- **Scale verification to complexity.** 1 verifier for trivial changes, 2–3 for substantial WPs spanning multiple concerns. Run them in parallel.
 - **Subagents must load domain skills.** A verifier without the right skill context will miss domain-specific issues.
 - **No shortcuts in failure analysis.** When validation fails, systematic root-cause investigation only. No "try this and see" loops.
 - **Early PR, always.** Open the PR after the first push. The earlier review bots start, the less rework at the end.
