@@ -9,10 +9,10 @@ intent to a skill and read its SKILL.md. Skills contain domain guardrails
 |--------|-------|------|
 | code, implement, bugfix, refactor, code review, smell audit | `coding` | `skills/coding/SKILL.md` |
 | design, UI (general) | `design` | `skills/design/SKILL.md` |
+| design engineering, UI polish, component feel | `design-emilkowalski` | `skills/design-emilkowalski/SKILL.md` |
 | UI critique, review, feedback, audit | `design-critique` | `skills/design-critique/SKILL.md` |
 | UI/layout/styling, design direction | `design-guidelines` | `skills/design-guidelines/SKILL.md` |
 | animation, storyboard, motion | `storyboard-animation` | `skills/storyboard-animation/SKILL.md` |
-| DialKit, sliders, controls, tuning | `dialkit` | `skills/dialkit/SKILL.md` |
 | AGENTS/CLAUDE architecture, housekeeping | `housekeeping` | `skills/housekeeping/SKILL.md` |
 | Supabase, database, migrations, RLS | `supabase` | `skills/supabase/SKILL.md` |
 | GCP, Cloud Run, infra ops | `gcp-operations` | `skills/gcp-operations/SKILL.md` |
@@ -37,6 +37,7 @@ intent to a skill and read its SKILL.md. Skills contain domain guardrails
 - Toolchain: `uv` for Python (if `uv.lock`/`pyproject.toml` exists), `bun` for JS/TS when repo supports it.
 - Quality: if `.pre-commit-config.yaml` exists and you changed code, run `uv run prek run --all-files`.
 - Commands: don't run shell for discussion-only requests. Run safe, routine commands by default; ask only when destructive or touching secrets.
+- Bugfix testing: every bugfix must include a regression test that fails without the fix and passes with it. Add boundary probes if the bug is an edge case; add an integration test if the bug crosses module boundaries.
 
 ## Repo-specific context
 
