@@ -58,6 +58,12 @@ For deeper tool parameter details, see `references/tool-parameters.md`.
 - **Clone before creating.** When the page already contains a component similar to what you need, `duplicate_nodes` and modify the clone rather than building from scratch. This inherits the established visual language automatically.
 - **Reference existing nodes by ID.** When the user points at something on the canvas or mentions an existing element, `get_selection` or `get_node_info` to read it — do not assume its structure or styles.
 
+### Responsive by default
+
+- **Always create both desktop and mobile artboards** unless the user explicitly asks for only one viewport. When the request is ambiguous, deliver desktop (1440×900) and mobile (390×844) side by side. Tablet is optional — add it only when requested or when the design has a meaningfully different tablet layout.
+- **Order of work**: build the desktop artboard first, then `duplicate_nodes` and adapt the clone for mobile (reflow to single column, adjust font sizes, tighten spacing). This keeps visual consistency and minimizes calls.
+- **Mobile buttons must be proportional** — never stretch buttons to full viewport width. Buttons should be sized to fit their label with comfortable horizontal padding (16–24px each side), not set to `width: 100%` or `align-self: stretch`. Group side-by-side buttons with `gap` instead of stacking them full-width. The only exception is a single primary CTA at the very bottom of a screen (e.g., "Continue" in an onboarding flow) where full-width is the established platform convention — and even then, add horizontal margin (16px each side) so it doesn't touch the screen edges.
+
 ### Technical constraints
 
 - **Inline styles only** — no class names, no `<style>` blocks, no external CSS.
@@ -138,12 +144,12 @@ Full rules with examples in `references/html-rules.md`. Key points:
 4. Screenshot both for comparison.
 
 ### Responsive preview
-Create artboards at each breakpoint using default sizes:
+Desktop + mobile artboards are created by default (see "Responsive by default" rule). For explicit multi-breakpoint work, use these sizes:
 - Desktop: 1440×900
 - Tablet: 768×1024
 - Mobile: 390×844
 
-Use `relatedNodeId` on `create_artboard` to place breakpoint variants adjacent. Adapt layout per breakpoint (stack on mobile, side-by-side on desktop).
+Use `relatedNodeId` on `create_artboard` to place breakpoint variants adjacent. Adapt layout per breakpoint (stack on mobile, side-by-side on desktop). On mobile, ensure buttons remain proportional — never full-width unless it's a single bottom CTA with margin.
 
 ### Component state matrix
 Clone a base component for each state: empty, filled, error, loading, disabled. Modify content/styles per clone. Name artboards as `Component / Viewport / State`.
