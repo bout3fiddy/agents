@@ -58,9 +58,32 @@ git commit -m "<summary of fixes>"
 git push
 ```
 
-### e) Respond on review threads
+### e) Respond to and resolve ALL review threads
 
-Reply to each addressed comment confirming the fix. For false positives or deferrals, state the rationale.
+**Every review comment must get a reply and be resolved.** Some repos block merging until all conversation threads are marked resolved — leaving even one unresolved blocks the entire PR.
+
+For each review thread:
+
+1. **True positive (fixed)** — reply confirming the fix with a brief description of the change, then resolve the thread.
+2. **False positive / stylistic** — reply with a clear rationale explaining why no change is needed, then resolve the thread.
+3. **Deferred** — reply explaining why it's deferred and what the follow-up plan is, then resolve the thread.
+4. **Informational / praise** — reply with a brief acknowledgement (e.g. "Thanks!" or "Noted"), then resolve the thread.
+
+```bash
+# Reply to a review comment
+gh api repos/:owner/:repo/pulls/<PR>/comments/<COMMENT_ID>/replies -f body="<response>"
+
+# Resolve a review thread (requires the thread's graphql node ID)
+gh api graphql -f query='mutation { resolveReviewThread(input: {threadId: "<THREAD_NODE_ID>"}) { thread { isResolved } } }'
+```
+
+**Zero unresolved threads is the exit target.** After responding, verify with:
+
+```bash
+gh pr view <PR> --json reviewThreads --jq '[.reviewThreads[] | select(.isResolved == false)] | length'
+```
+
+If this returns anything other than `0`, find and resolve the remaining threads before proceeding.
 
 ### f) Wait for code review agents
 
@@ -110,6 +133,7 @@ The loop ends when:
 - All GitHub Actions runs on the head branch have completed
 - No new actionable review comments after agents finish
 - CI checks are passing
+- **All review threads are resolved** (zero unresolved threads)
 
 Summarize the final state to the user: what was fixed, what was deferred (if any), and current CI status.
 
