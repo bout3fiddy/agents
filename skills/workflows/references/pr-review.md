@@ -36,15 +36,27 @@ gh pr checks <PR>
 
 ### b) Classify findings
 
-For each comment, classify:
+For each comment, classify by **severity** and **type**:
 
-- **True positive** — fix it
-- **False positive / stylistic** — reply with rationale, no code change
-- **CI failure** — fix root cause, not symptoms
+- **P0 / P1 (high severity)** — bugs, security issues, correctness problems, data loss risks, CI failures. **Always fix these.**
+- **P2 (low severity)** — style nits, naming preferences, minor refactors, "consider doing X", optional improvements. **Use judgement** (see below).
+- **False positive** — reviewer or bot is wrong. Reply with rationale, no code change.
 
-### c) Fix true positives
+#### Handling low-severity (P2) findings
 
-For each true positive:
+Low-severity findings from code review bots can trigger endless remediation loops: you fix a nit, push, the bot finds another nit, you fix that, push again, and so on. This is counterproductive.
+
+**On the first pass**, fix P2 findings if they are quick and clearly beneficial. **On subsequent passes** (second loop iteration or later), apply this rule:
+
+- If the new P2 finding was **introduced by your own fix** in this loop — fix it (you caused it).
+- If the new P2 finding is a **pre-existing nit** the bot only now flagged, or a **subjective style preference** — acknowledge it in a reply, explain it's low severity and not blocking, then resolve the thread. Do not change code.
+- If the **same bot keeps raising new P2s on each push** — stop the loop. Reply to the remaining findings with a brief rationale, resolve the threads, and proceed to the exit condition. Note in the summary that remaining low-severity items were intentionally deferred.
+
+The goal is convergence, not perfection. A PR that fixes all P0/P1 issues and ships is better than one stuck in an infinite P2 nit cycle.
+
+### c) Fix actionable findings
+
+For each finding you've decided to fix:
 
 1. Make the smallest safe change.
 2. Update or add tests if behavior changes.
