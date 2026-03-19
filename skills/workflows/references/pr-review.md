@@ -83,6 +83,18 @@ gh run list --branch <HEAD_BRANCH> --limit 10 --json status,name,conclusion,crea
 
 4. **Repeat polling** at 60-second intervals until all runs complete or a 15-minute ceiling is hit. If the ceiling is reached with runs still in progress, proceed anyway and note the incomplete runs.
 
+#### Codex review agents (no GitHub Action)
+
+Some review agents (e.g. Codex) respond directly as PR comments on each push but have **no associated GitHub Actions run**. You cannot detect their activity via `gh run list`. Instead:
+
+1. **Infer expected wait time from prior comments.** After pushing, fetch all review comments on the PR and look at timestamps from the Codex review agent's previous responses. Calculate the typical delay between a push and the agent's comment (e.g. if the last three Codex comments arrived 4m, 5m, and 6m after their triggering pushes, expect ~5–6 minutes).
+
+2. **Wait based on inferred timing.** Sleep for the inferred duration (or a minimum of 3 minutes if no prior data exists), then fetch comments to check whether the agent has responded to the latest push.
+
+3. **Identify the agent's comments.** Match by author (bot account or consistent username) and timestamp (must be after your most recent push). If a new comment from the agent exists, process it. If not, wait another 60 seconds and retry, up to a ceiling of the inferred time + 3 minutes buffer.
+
+4. **First push on a PR (no prior data).** If there are no previous Codex review comments to calibrate from, fall back to a 5-minute initial wait, then poll at 60-second intervals for up to 10 minutes total.
+
 #### Why not blind sleep
 
 A 13-minute sleep misses two cases: (a) agents finish in 5 minutes and you waste 8 minutes waiting, (b) agents take 18 minutes and you proceed too early, missing their findings. Action-aware polling handles both.
