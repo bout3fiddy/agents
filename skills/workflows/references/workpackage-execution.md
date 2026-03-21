@@ -18,6 +18,27 @@ Before starting, resolve all placeholders:
 
 Do not stop until all work packages are complete. This prompt is idempotent — repeated invocations resume from the first non-done WP.
 
+### Momentum rule
+
+A work package is not finished until its Completion Checklist is fully verified by an independent subagent and its status reads `[Status: Done]`. Everything before that point is **mid-flight** — you must keep going.
+
+**None of these are reasons to stop:**
+
+- You just pushed a commit or opened a PR
+- A subagent returned a pass verdict on one part of the WP
+- Compilation or tests succeeded on a partial implementation
+- You produced a meaningful intermediate result
+- The response is getting long
+- You feel like a "natural checkpoint" has been reached
+
+**The only valid reasons to stop are:**
+
+- Every WP is `[Status: Done]` and the PR review chain is complete (you're finished)
+- You need information or a decision only the user can provide (ask, then resume)
+- An unrecoverable external failure blocks all remaining WPs (report it)
+
+If you catch yourself about to yield and the current WP is not done, that is the signal to keep working — not to stop.
+
 ### For each WP item:
 
 #### 1. Implement
@@ -109,7 +130,7 @@ Once all WPs are verified and validation passes (if applicable):
 
 ## Hard rules
 
-- **Do not stop mid-execution.** If you hit a blocker on one WP, note it and attempt the next. Return to blocked items after.
+- **Do not stop mid-execution — especially not mid-WP.** A commit, a push, a passing build, or a subagent verdict on one aspect of a WP are progress markers, not turn boundaries. The only exit from the loop is: all WPs done, user input required, or an unrecoverable external failure. If you hit a blocker on one WP, note it and attempt the next. Return to blocked items after.
 - **Verification is mandatory and independent.** Never self-certify a WP as done. Always use verification subagents.
 - **Scale verification to complexity.** 1 verifier for trivial changes, 2–3 for substantial WPs spanning multiple concerns. Run them in parallel.
 - **Subagents must load domain skills.** A verifier without the right skill context will miss domain-specific issues.
