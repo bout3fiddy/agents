@@ -17,6 +17,32 @@ PI_PACKAGE_NAME="${PI_EVAL_GONDOLIN_PI_PACKAGE_NAME:-@mariozechner/pi-coding-age
 PI_PACKAGE_VERSION="${PI_EVAL_GONDOLIN_PI_PACKAGE_VERSION:-0.52.6}"
 GUEST_LOCK_PATH="${PI_EVAL_GONDOLIN_GUEST_LOCK:-$DEFAULT_GUEST_LOCK_PATH}"
 
+resolve_installed_guest_dir() {
+	node - "$PI_EVAL_DIR" <<'EOF'
+const fs = require("fs");
+const path = require("path");
+
+const cwd = process.argv[2];
+
+try {
+  const packageJson = require.resolve("@earendil-works/gondolin/package.json", {
+    paths: [cwd],
+  });
+  const packageRoot = path.dirname(packageJson);
+  const candidates = [
+    path.join(packageRoot, "dist", "guest"),
+    path.join(packageRoot, "guest"),
+  ];
+  const found = candidates.find((candidate) =>
+    fs.existsSync(path.join(candidate, "build.zig")),
+  );
+  process.stdout.write(found ?? "");
+} catch {
+  process.stdout.write("");
+}
+EOF
+}
+
 if [[ "$#" -gt 0 ]]; then
 	echo "build-image.sh takes no CLI args. Configure via env vars only." >&2
 	exit 1
@@ -32,47 +58,54 @@ if [[ ! -d "$PI_EVAL_DIR" ]]; then
 	exit 1
 fi
 
-if [[ ! -f "$GUEST_LOCK_PATH" ]]; then
-	echo "Guest source lock not found: $GUEST_LOCK_PATH" >&2
-	exit 1
-fi
-
 if [[ -z "${GONDOLIN_GUEST_SRC:-}" ]]; then
-	GUEST_REPO_URL="$(
-		node -e 'const fs=require("fs"); const j=JSON.parse(fs.readFileSync(process.argv[1],"utf8")); process.stdout.write(j.repository || "");' "$GUEST_LOCK_PATH"
-	)"
-	GUEST_REPO_REF="$(
-		node -e 'const fs=require("fs"); const j=JSON.parse(fs.readFileSync(process.argv[1],"utf8")); process.stdout.write(j.ref || "");' "$GUEST_LOCK_PATH"
-	)"
-	GUEST_RELATIVE_PATH="$(
-		node -e 'const fs=require("fs"); const j=JSON.parse(fs.readFileSync(process.argv[1],"utf8")); process.stdout.write(j.guestPath || "guest");' "$GUEST_LOCK_PATH"
-	)"
+	INSTALLED_GUEST_DIR="$(resolve_installed_guest_dir)"
+	if [[ -f "$INSTALLED_GUEST_DIR/build.zig" ]]; then
+		export GONDOLIN_GUEST_SRC="$INSTALLED_GUEST_DIR"
+	else
+		if [[ ! -f "$GUEST_LOCK_PATH" ]]; then
+			echo "Guest source lock not found: $GUEST_LOCK_PATH" >&2
+			exit 1
+		fi
 
-	if [[ -z "$GUEST_REPO_URL" || -z "$GUEST_REPO_REF" ]]; then
-		echo "Guest source lock is missing repository/ref fields: $GUEST_LOCK_PATH" >&2
-		exit 1
-	fi
+		GUEST_REPO_URL="$(
+			node -e 'const fs=require("fs"); const j=JSON.parse(fs.readFileSync(process.argv[1],"utf8")); process.stdout.write(j.repository || "");' "$GUEST_LOCK_PATH"
+		)"
+		GUEST_REPO_REF="$(
+			node -e 'const fs=require("fs"); const j=JSON.parse(fs.readFileSync(process.argv[1],"utf8")); process.stdout.write(j.ref || "");' "$GUEST_LOCK_PATH"
+		)"
+		GUEST_RELATIVE_PATH="$(
+			node -e 'const fs=require("fs"); const j=JSON.parse(fs.readFileSync(process.argv[1],"utf8")); process.stdout.write(j.guestPath || "guest");' "$GUEST_LOCK_PATH"
+		)"
 
-	GUEST_VENDOR_ROOT="$ROOT_DIR/skills-evals/gondolin/vendor/gondolin"
-	GUEST_DIR="$GUEST_VENDOR_ROOT/$GUEST_RELATIVE_PATH"
+		if [[ -z "$GUEST_REPO_URL" || -z "$GUEST_REPO_REF" ]]; then
+			echo "Guest source lock is missing repository/ref fields: $GUEST_LOCK_PATH" >&2
+			exit 1
+		fi
 
-	if [[ ! -f "$GUEST_DIR/build.zig" ]]; then
 		if ! command -v git >/dev/null 2>&1; then
 			echo "git is required to fetch Gondolin guest sources." >&2
 			exit 1
 		fi
-		echo "[gondolin-image] syncing guest sources from $GUEST_REPO_URL @ $GUEST_REPO_REF"
-		mkdir -p "$(dirname "$GUEST_VENDOR_ROOT")"
-		if [[ -d "$GUEST_VENDOR_ROOT/.git" ]]; then
-			git -C "$GUEST_VENDOR_ROOT" fetch --depth 1 origin "$GUEST_REPO_REF"
-			git -C "$GUEST_VENDOR_ROOT" checkout --force FETCH_HEAD
-		else
-			rm -rf "$GUEST_VENDOR_ROOT"
-			git clone --depth 1 --branch "$GUEST_REPO_REF" "$GUEST_REPO_URL" "$GUEST_VENDOR_ROOT"
-		fi
-	fi
 
-	export GONDOLIN_GUEST_SRC="$GUEST_DIR"
+		CACHE_ROOT="${XDG_CACHE_HOME:-$HOME/.cache}/pi-eval/gondolin-guest"
+		REPO_BASENAME="$(basename "$GUEST_REPO_URL" .git)"
+		CACHE_KEY="${REPO_BASENAME}-${GUEST_REPO_REF//\//_}"
+		GUEST_CACHE_ROOT="$CACHE_ROOT/$CACHE_KEY"
+		GUEST_DIR="$GUEST_CACHE_ROOT/$GUEST_RELATIVE_PATH"
+
+		echo "[gondolin-image] installed package guest sources unavailable; syncing fallback sources from $GUEST_REPO_URL @ $GUEST_REPO_REF"
+		mkdir -p "$CACHE_ROOT"
+		if [[ -d "$GUEST_CACHE_ROOT/.git" ]]; then
+			git -C "$GUEST_CACHE_ROOT" fetch --depth 1 origin "$GUEST_REPO_REF"
+			git -C "$GUEST_CACHE_ROOT" checkout --force FETCH_HEAD
+		else
+			rm -rf "$GUEST_CACHE_ROOT"
+			git clone --depth 1 --branch "$GUEST_REPO_REF" "$GUEST_REPO_URL" "$GUEST_CACHE_ROOT"
+		fi
+
+		export GONDOLIN_GUEST_SRC="$GUEST_DIR"
+	fi
 fi
 
 if [[ ! -f "${GONDOLIN_GUEST_SRC}/build.zig" ]]; then

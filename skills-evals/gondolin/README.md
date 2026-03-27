@@ -6,36 +6,24 @@ custom Gondolin image used by `pi-eval`.
 ## Files
 
 - `pi-eval-image.json`: Gondolin build configuration (includes pinned `pi` package).
-- `guest-source.lock.json`: pinned Gondolin guest source repository/ref for image builds.
+- `guest-source.lock.json`: fallback Gondolin guest source repository/ref for image builds when the installed npm package does not expose guest sources.
 - `image.lock.json`: generated lock metadata for the built image.
 - `scripts/build-image.sh`: builds and verifies the image into `image/current`.
 - `scripts/write-image-lock.ts`: emits lock metadata from built assets.
-- `vendor/gondolin/`: vendored Gondolin source tracked as a **git subtree** from `https://github.com/bout3fiddy/gondolin.git` (branch `main`, squash-merged).
 
-## Vendored Gondolin (git subtree)
+## Gondolin Package Source
 
-`vendor/gondolin/` is a git subtree of the upstream Gondolin repo. `pi-eval` depends on
-`vendor/gondolin/host` via a `file:` dependency instead of the npm-published package, so
-local patches are picked up immediately without waiting for an npm release.
-
-### Pull upstream updates
+`pi-eval` depends on the published npm package `@earendil-works/gondolin`.
+Refresh that dependency from `skills-evals/pi-eval/`:
 
 ```bash
-git subtree pull --prefix=skills-evals/gondolin/vendor/gondolin \
-  https://github.com/bout3fiddy/gondolin.git main --squash
-```
-
-Then rebuild and reinstall:
-
-```bash
-cd skills-evals/gondolin/vendor/gondolin && pnpm install && pnpm --filter @earendil-works/gondolin run build
 cd skills-evals/pi-eval && bun install
 ```
 
 ### Notes
 
-- `host/dist/` is gitignored upstream, so it is **not** part of the subtree. You must build after every subtree add/pull.
-- `vendor/gondolin/node_modules/` is likewise not tracked; `pnpm install` in the vendor root handles it.
+- `scripts/build-image.sh` prefers the installed package's bundled `dist/guest` sources.
+- If those guest sources are unavailable, the script falls back to `guest-source.lock.json` and syncs the pinned repo/ref into a cache directory outside the workspace.
 
 ## Image Build
 
@@ -72,6 +60,6 @@ PI_EVAL_GONDOLIN_IMAGE_PATH=/abs/path/to/image/current ./skills-evals/run.sh
 - Build requires Docker (or another supported container runtime) because the
   config uses `postBuild.commands` to install `pi` into the guest image.
 - Ensure Docker daemon is running before build (`docker run ...` must work).
-- Build also requires `git` so the pinned Gondolin guest sources can be fetched
-  based on `guest-source.lock.json` when `GONDOLIN_GUEST_SRC` is not provided.
+- Build requires `git` only when the installed Gondolin package does not expose
+  guest sources and the script falls back to `guest-source.lock.json`.
 - Rebuild and refresh lock metadata whenever `pi` version or base image inputs change.
