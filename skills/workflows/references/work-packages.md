@@ -1,148 +1,295 @@
 # Work Package Standard
 
-Load this workflow when creating or executing work packages.
+Load this workflow when creating or revising versioned work package docs. Use
+`workpackage-execution.md` as the companion procedure when the request is to
+implement from an existing package.
 
-## Structure
+The canonical pattern is the planning-first, multi-file structure used in
+`docs/workpackages/absurd-cutover/`: one package index plus one markdown file
+per `WP-XX`.
 
-Work packages live in `docs/workpackages/<task_type>_<name>_<date>/`.
+Concrete starting points live here:
 
-- Folder name must include a task type prefix: `refactor`, `review`, `bugfix`, `migration`, or `feature`.
-- `overview.md` is required — canonical rollup for all `WP-*` items (status, evidence pointer, next action).
-- Additional markdown docs per work item are optional.
+- `references/templates/mock-overview.md`
+- `references/templates/mock-wp.md`
+
+## Canonical folder shape
+
+Work packages live in `docs/workpackages/<slug>/`.
+
+- Use a short, stable, hyphenated slug that names the cutover, refactor,
+  migration, or feature set.
+- `README.md` is required. It is the shared entrypoint and package index.
+- Each work package item lives in its own file:
+  `wp-XX-<short-slug>.md`.
+- Use zero-padded numbering (`WP-01`, `WP-02`, ...), and keep the file name,
+  title, and package list entry aligned.
+- Treat these docs as versioned planning artifacts by default, not scratch
+  notes.
+
+## README requirements
+
+`README.md` should mirror the example structure and include:
+
+1. `# <Initiative Name> Workpackages`
+2. `## Overview`
+3. `## Critical Path`
+4. `## Packages`
+5. `## Shared Architectural Rules`
+6. `## Existing Runtime Anchors` or equivalent source anchors when the plan is
+   grounded in a live system
+
+Recommended skeleton:
+
+```markdown
+# <Initiative Name> Workpackages
+
+## Overview
+
+This folder captures the planning-only workpackages for moving <system> to:
+
+- <move 1>
+- <move 2>
+
+## Critical Path
+
+`WP-01 -> WP-02 -> (WP-03 / WP-04) -> WP-05`
+
+## Packages
+
+- [WP-01 <Title>](./wp-01-<slug>.md)
+- [WP-02 <Title>](./wp-02-<slug>.md)
+
+## Shared Architectural Rules
+
+- <cross-cutting invariant 1>
+- <cross-cutting invariant 2>
+
+## Existing Runtime Anchors
+
+- Trigger path:
+  - `path/to/current/entrypoint.py`
+- Current orchestration:
+  - `path/to/current/orchestrator.py`
+```
+
+Notes:
+
+- `## Critical Path` should show the intended dependency order compactly.
+- `## Packages` should be a flat linked list of every `WP-XX`.
+- `## Shared Architectural Rules` should capture the invariants every package
+  must preserve.
+- Use `## Existing Runtime Anchors` when current code paths, services, queues,
+  or tables need to be named up front.
+
+## Per-package file requirements
+
+Each `wp-XX-*.md` file is one self-contained plan unit and should use this
+shape:
+
+```markdown
+# WP-XX <Title>
+
+## Metadata
+
+- Created: YYYY-MM-DD
+- Scope: <single-sentence scope>
+- Input sources:
+  - `path/to/source_a`
+  - `path/to/source_b`
+- Dependencies:
+  - none
+- Reference baseline:
+  - <current code path or doc>
+
+## Background
+
+<current-state explanation>
+
+## Overarching Goals
+
+- <goal 1>
+- <goal 2>
+
+## Non-goals
+
+- <explicit non-goal 1>
+- <explicit non-goal 2>
+
+### WP-XX <Sentence case title> [Status: Todo]
+
+Issue:
+<what is broken, missing, or ambiguous today>
+
+Needs:
+- <requirement 1>
+- <requirement 2>
+
+How:
+1. <step 1>
+2. <step 2>
+
+Why this approach:
+<why this decomposition is the right one>
+
+Desired outcome:
+<what is true after this package lands>
+
+Non-destructive tests:
+- `<command 1>`
+- `<command 2>`
+
+Files by type:
+- New targets:
+  - `path/to/new_file`
+- Existing targets to refactor:
+  - `path/to/existing_file`
+- Validation targets:
+  - `path/to/test_file`
+
+## Exact Patch Checklist
+
+- [ ] <concrete code or schema change>
+- [ ] <concrete invariant or publication change>
+- [ ] <concrete validation or migration step>
+
+## Completion Checklist
+
+- [ ] Implementation matches the described approach
+- [ ] Non-destructive tests pass
+- [ ] <package-specific acceptance gate>
+- [ ] <package-specific acceptance gate>
+
+## Implementation Status (YYYY-MM-DD)
+
+Planning only. No code changes yet.
+
+## Why This Works
+
+<causal explanation>
+
+## Proof / Validation
+
+- Planned: <validation scenario>
+- Planned: <validation scenario>
+
+## How To Test
+
+1. <reproducible verification step>
+2. <reproducible verification step>
+```
+
+## Section rules
+
+### Metadata
+
+Required metadata fields:
+
+- `Created`
+- `Scope`
+- `Input sources`
+- `Dependencies`
+- `Reference baseline`
+
+Use `Dependencies: - none` only when the package is truly independent. Otherwise
+list upstream `WP-XX` items explicitly.
+
+### Background / goals / non-goals
+
+- `## Background` explains the current state and why the package exists.
+- `## Overarching Goals` captures the intended outcomes at a higher level than
+  the patch checklist.
+- `## Non-goals` makes boundaries explicit. If another package owns a concern,
+  name it directly.
+
+### Primary package section
+
+The `### WP-XX ... [Status: Todo]` block is the execution contract for that
+file. It must include:
+
+- `Issue`
+- `Needs`
+- `How`
+- `Why this approach`
+- `Desired outcome`
+- `Non-destructive tests`
+- `Files by type`
+
+Keep `Needs` and `How` concrete enough that another engineer could implement the
+package without reconstructing the plan from scratch.
+
+### Exact Patch Checklist
+
+This checklist is required and must be concrete. It is where the plan stops
+being thematic and starts being implementation-shaped.
+
+- Prefer exact functions, tables, services, and files.
+- Encode cutover rules, migration boundaries, replay/idempotency expectations,
+  and invariants here.
+- If a package contains several meaningful substeps, the checklist should make
+  those boundaries obvious.
+
+### Completion Checklist
+
+This checklist is also required and should combine:
+
+- baseline execution gates
+- package-specific acceptance criteria
+
+At minimum include:
+
+- `Implementation matches the described approach`
+- `Non-destructive tests pass`
+
+Add package-specific gates for the real success conditions. Examples:
+
+- `Provider-only revision bump does not force full-stage rerun`
+- `Migrations are additive only`
+- `Manual edit guard works`
+
+### Accountability sections
+
+Every package file must end with:
+
+- `## Implementation Status (YYYY-MM-DD)`
+- `## Why This Works`
+- `## Proof / Validation`
+- `## How To Test`
+
+For planning-only docs, it is correct to start with `Planning only. No code
+changes yet.` in `Implementation Status`.
+
+When implementation happens, replace the placeholder text with the actual change
+set, proof, and reproducible verification steps.
+
+## Status rules
+
+- Start new packages at `[Status: Todo]`.
+- Use `[Status: In Progress]` only when execution has begun and the package is
+  partially complete.
+- Use `[Status: Done]` only when every item in `## Completion Checklist` is
+  checked.
+
+Never mark a package done while any checklist box is still unchecked.
 
 ## Lifecycle
 
-- Keep a linked Linear issue refined and traceable (scope, acceptance criteria, validation plan, and work-package path).
-- Transition Linear lifecycle state as execution starts/completes.
-- Treat repeated execution requests as continuation signals from the first non-done `WP-*` unless release criteria are already met.
+- Keep a linked Linear issue refined and traceable when Linear is part of the
+  workflow.
+- Use `README.md` plus the per-file `Dependencies` metadata to make sequencing
+  obvious.
+- Treat repeated requests as continuation signals: resume from the first
+  non-done runnable `WP-XX`.
+- Default to hard cutovers. Do not add fallback branches or temporary shims
+  unless they are explicitly approved and come with an owner, removal date, and
+  tracking issue.
 
-## Execution Directive
+## Version-control notes
 
-Embed this block near the top of the primary entry file in each work package folder under `## Execution Directive (Standard)`:
-
-```text
-REQUIRED: Replace every <VARIABLE> placeholder before running this directive. Do not leave any <...> token unresolved.
-
-start implementing fixes per work package: <WORK_PACKAGE_PATH_OR_DIR>
-
-if a directory path is provided (for example `docs/review/workpackages_<name>_<date>/`):
-- scan all markdown files in that directory
-- read `overview.md` first (required canonical status summary)
-- start from the primary entry doc (`overview.md` when present, otherwise first alphabetical markdown file)
-- continue from the first non-done `WP-*` status across the directory
-
-ensure changes are non-destructive.
-the app is locally hosted at <APP_URL>, started via <APP_START_COMMAND>.
-use playwright/browser tooling to validate runtime behavior and impact.
-
-when each work package item is implemented:
-- complete every checkbox in that WP's `## Completion Checklist` — each box must be checked (`- [x]`) individually; do not bulk-mark
-- update that WP section with:
-  - updated Recommendation rationale
-  - Implementation status (YYYY-MM-DD)
-  - Why this works
-  - Proof / validation
-  - How to test
-- mark the WP title status line as [Status: Done YYYY-MM-DD] only AFTER all checklist boxes are checked
-- update `overview.md` rollup row for that `WP-*` with status, last-updated date, proof pointer, and next action
-
-a WP item is NOT done until every checklist box is checked. do not advance to the next WP until the current one's checklist is fully complete.
-
-before every commit:
-- stage only intended shipping files with explicit paths; never use `git add .`, `git add -A`, or `git add -f`
-- inspect ignored state before staging (`git status --short --ignored` and `git check-ignore <path>` when unsure)
-- do not stage `overview.md`, `wp-*.md`, scratch notes, or other workpackage tracking files unless the user explicitly asked to version them, repo instructions explicitly require them to ship, or this task is itself modifying workflow/workpackage docs
-- confirm the staged set with `git diff --cached --name-only`
-
-commit and push periodically as coherent checkpoints for shipping files only.
-
-when all work packages are done:
-- run the PR review remediation loop until:
-  - all required checks pass
-  - no new actionable review comments remain
-- create a staging release
-- only after staging release, update Linear issue <LINEAR_ISSUE_ID> with shipped outcomes and move it to In Review
-
-this command may be repeated.
-if staging release already exists for this work package, treat repeats as reminder signals and continue only unfinished steps.
-
-default to hard cutovers; do not add fallback branches/shims unless explicitly approved with owner + removal date + tracking issue.
-```
-
-## Work Package Template
-
-### Required folder layout
-
-- `overview.md` (required): canonical progress summary and execution entry point.
-- `wp-*.md` (optional but recommended): detailed per-item execution/audit notes.
-
-### Required document structure
-
-1. Title
-2. `Execution Directive (Standard)` block
-3. Metadata (created date, scope, input sources, constraints)
-4. Background
-5. Overarching goals
-6. Non-goals
-7. Work package items (`WP-01`, `WP-02`, ...)
-
-### Overview summary requirements
-
-`overview.md` must include a compact rollup table for all `WP-*` items with:
-- `WP ID`, `Status`, `Last updated`, `Proof / validation pointer`, `Next action`
-
-### Work package item template
-
-Heading pattern: `### WP-XX <Short title> [Status: Todo]`
-
-Each item must include:
-- Issue, Needs, How, Why this approach
-- Recommendation rationale
-- Desired outcome
-- Non-destructive tests
-- Files by type (when useful for traceability)
-
-#### Completion Checklist (required)
-
-Every WP item MUST end with a `## Completion Checklist` containing at minimum these checkboxes:
-
-```markdown
-## Completion Checklist
-- [ ] Implementation matches the described approach
-- [ ] Non-destructive tests pass
-- [ ] Proof / validation section filled with exact commands and outcomes
-- [ ] How to test section is reproducible
-- [ ] `overview.md` rollup row updated
-```
-
-Authors may add task-specific checkboxes (e.g. `- [ ] Migration tested against staging DB`). Agents MUST check each box individually as they complete the corresponding step — not in bulk at the end. A WP item cannot be marked `[Status: Done]` while any box remains unchecked.
-
-### Accountability sections (required after implementation)
-
-For each completed `WP-XX`, append:
-- `Implementation status (YYYY-MM-DD)`: exactly what changed and where
-- `Why this works`: causal explanation
-- `Proof / validation`: exact commands run and key outcomes
-- `How to test`: reproducible verification steps
-
-After updating the detailed `WP-XX` content, update `overview.md` in the same change.
-
-### Hard rule: checklist gates "done"
-
-An agent MUST NOT mark a WP item as `[Status: Done]` or advance to the next item unless every checkbox in that item's Completion Checklist is `[x]`. If an agent cannot complete a checklist item, it must leave the box unchecked and note the blocker — the WP stays `[Status: In Progress]`.
-
-### Version-control guardrails
-
-During execution, `overview.md`, `wp-*.md`, and similar tracking docs are operational state by default. Keep them accurate locally, but do not include them in commits or PRs unless:
-- the user explicitly asks for those files to be versioned
-- repo instructions explicitly require those files to ship
-- the task itself is updating the workflow/work-package docs/templates
-
-Ignored files stay ignored. Never use `git add .`, `git add -A`, or `git add -f`; stage exact paths and verify the staged set before every commit.
-
-### Resume semantics
-
-1. Read status lines across all `WP-XX`.
-2. Continue from the first non-done item.
-3. Avoid redoing done items unless regressions are detected.
-4. If staging release is already complete, report final state and stop.
+- When the task is to author or revise the work package plan itself, commit the
+  docs as normal versioned source.
+- When the task is to execute from an existing plan, follow
+  `workpackage-execution.md` for how to keep the docs current and whether those
+  updates should ship.
+- Never use `git add .`, `git add -A`, or `git add -f`; stage exact paths and
+  verify the staged set before every commit.

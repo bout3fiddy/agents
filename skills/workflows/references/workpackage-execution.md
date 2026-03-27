@@ -4,6 +4,13 @@ Continuous, subagent-verified execution of work packages. Load this when the use
 
 Assumes familiarity with `work-packages.md` — this workflow governs *how* to execute, not how to structure WPs.
 
+The canonical package layout is:
+
+- `docs/workpackages/<slug>/README.md`
+- `docs/workpackages/<slug>/wp-XX-<slug>.md`
+
+Do not assume `overview.md` exists.
+
 ## Prerequisites
 
 Before starting, resolve all placeholders:
@@ -17,6 +24,20 @@ Before starting, resolve all placeholders:
 ## Execution loop
 
 Do not stop until all work packages are complete. This prompt is idempotent — repeated invocations resume from the first non-done WP.
+
+### Initial read order
+
+1. Read `README.md` first.
+2. Parse `## Critical Path` and the `## Packages` links.
+3. Read the `# WP-XX ...` title, `Dependencies`, and status line from each
+   `wp-XX-*.md`.
+4. Select the first non-done runnable WP:
+   - follow `## Critical Path` when present
+   - otherwise use explicit `Dependencies`
+   - otherwise fall back to numeric `WP-XX` order
+
+Treat `README.md` as shared context and each `wp-XX-*.md` as the source of
+truth for execution status.
 
 ### Momentum rule
 
@@ -43,7 +64,10 @@ If you catch yourself about to yield and the current WP is not done, that is the
 
 #### 1. Implement
 
-Read `overview.md`, the WP item's demands, and any audit/context docs. Implement the fix. Use subagents for research, vendored code inspection, or parallel investigation when the WP touches multiple concerns.
+Read `README.md`, the active WP file, any dependency WP files that constrain it,
+and any audit/context docs. Implement the fix. Use subagents for research,
+vendored code inspection, or parallel investigation when the WP touches
+multiple concerns.
 
 #### 2. Verify with an independent subagent
 
@@ -60,7 +84,7 @@ At minimum, always spawn a correctness verifier. Add context and test verifiers 
 Each verification subagent must:
 
 1. Load the relevant domain skills.
-2. Read `overview.md`, the WP item's requirements, and any audit docs.
+2. Read `README.md`, the active WP file, and any audit docs.
 3. Read the actual code changes (`git diff` of the WP's commits).
 4. Confirm each Completion Checklist item against the code, not just the checkbox state.
 5. Return a verdict: **pass** (work matches demands) or **fail** (with specific gaps).
@@ -69,18 +93,37 @@ Run verifiers in parallel when they are independent of each other.
 
 If **any** verifier returns **fail**: fix the gaps and re-verify with the failing verifier. Do not advance.
 
-If **all** verifiers return **pass**: check off all Completion Checklist boxes, mark `[Status: Done]`, update `overview.md`.
+If **all** verifiers return **pass**:
+
+1. Check off the active WP file's Completion Checklist boxes individually.
+2. Update:
+   - status line
+   - `## Implementation Status`
+   - `## Why This Works`
+   - `## Proof / Validation`
+   - `## How To Test`
+3. Mark the package `[Status: Done]` only after every checklist item is `[x]`.
+4. Update `README.md` only if it contains progress text or sequencing context
+   that would otherwise become stale.
 
 #### 3. Selectively stage, then commit/push early
 
-Treat work-package tracking docs (`overview.md`, `wp-*.md`, scratch notes) as execution artifacts by default. Keep them current for local resume state, but do not stage or push them unless the user explicitly asked to version those updates, repo instructions explicitly require them to ship, or this task is modifying the workflow/work-package docs themselves.
+Treat work-package docs carefully:
+
+- If the task is authoring or revising the work package plan, the docs are
+  versioned deliverables and should ship.
+- If the task is implementing code from an existing plan, keep the active WP doc
+  current for resume state, but only stage those status/doc updates when the
+  user asks for them, repo instructions require them, or the docs are themselves
+  part of the deliverable.
 
 Before every commit:
 
 1. Build an explicit list of shipping files for this WP.
 2. Check that list against ignored state with `git status --short --ignored` and `git check-ignore <path>` when unsure.
 3. Stage only those exact paths. Never use `git add .`, `git add -A`, or `git add -f`.
-4. Review `git diff --cached --name-only` and confirm no WP tracking docs, generated artifacts, or other out-of-scope files slipped in.
+4. Review `git diff --cached --name-only` and confirm no out-of-scope files
+   slipped in.
 
 ```bash
 git status --short --ignored
@@ -135,7 +178,9 @@ Once all WPs are verified and validation passes (if applicable):
 - **Scale verification to complexity.** 1 verifier for trivial changes, 2–3 for substantial WPs spanning multiple concerns. Run them in parallel.
 - **Subagents must load domain skills.** A verifier without the right skill context will miss domain-specific issues.
 - **Ignored files stay ignored.** Never force-add ignored files. `.gitignore` and repo-local ignore rules win unless the user explicitly overrides them.
-- **WP tracking docs do not auto-ship.** `overview.md`, `wp-*.md`, scratch notes, and similar execution-state files stay out of commits/PRs unless the user explicitly requests them or repo instructions explicitly require them.
+- **Use the package docs that exist.** Read `README.md` first; do not invent or require `overview.md`.
+- **A WP file is the completion record.** Status, proof, and test instructions live in the active `wp-XX-*.md` file.
+- **WP docs do not all auto-ship.** Planning docs usually ship when you are authoring or revising the plan. Execution-status churn only ships when the user asks for it, repo instructions require it, or the docs are part of the deliverable.
 - **No shortcuts in failure analysis.** When validation fails, systematic root-cause investigation only. No "try this and see" loops.
 - **Early PR, always.** Open the PR after the first push. The earlier review bots start, the less rework at the end.
 - **Commit per WP.** Each WP gets its own shipping commit (or small commit group). Do not batch all WPs into one commit, and do not let tracker-file churn hitch a ride.
