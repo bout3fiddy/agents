@@ -7,7 +7,6 @@ description: Systematic UI critique and review framework. Use when the user asks
 
 **When**: UI critique, review, feedback, audit, polish, refine, or redesign requests.
 **Key rule**: Follow the full critique methodology — do not skip steps or merge sections.
-**Related**: Design guidelines -> `design-guidelines.md`
 
 ---
 

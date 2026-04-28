@@ -134,6 +134,12 @@ Some review agents (e.g. Codex) respond directly as PR comments on each push but
 
 A 13-minute sleep misses two cases: (a) agents finish in 5 minutes and you waste 8 minutes waiting, (b) agents take 18 minutes and you proceed too early, missing their findings. Action-aware polling handles both.
 
+#### Codex grace window after Cursor BugBot skips
+
+Codex is unpredictable: it will sometimes finish well after the other reviewers, and Cursor BugBot frequently posts a "skipping review" comment that *looks* like the loop is done while Codex is still thinking. Do not exit immediately when BugBot skips — its silence is not a signal that Codex is also done.
+
+After Cursor BugBot has posted its skip comment (or otherwise concluded with no findings), keep polling for new review comments for **at least 5 additional minutes** before treating the loop as drained. Fetch comments at 60-second intervals during this grace window and, if a Codex comment lands, process it through the normal classify/fix/respond loop and reset the window. This prevents missing valuable late Codex feedback.
+
 ### g) Fetch new comments and repeat
 
 Go back to step **(a)**. Fetch comments again and check for new findings from reviewers or code review bots. If there are new actionable comments, fix them and repeat the loop. If there are no new actionable comments, the loop is done.
@@ -143,7 +149,7 @@ Go back to step **(a)**. Fetch comments again and check for new findings from re
 The loop ends when:
 
 - All GitHub Actions runs on the head branch have completed
-- No new actionable review comments after agents finish
+- No new actionable review comments after agents finish, including a 5-minute Codex grace window past any Cursor BugBot skip
 - CI checks are passing
 - **All review threads are resolved** (zero unresolved threads)
 

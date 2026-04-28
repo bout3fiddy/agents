@@ -6,7 +6,7 @@ description: Use Paper MCP to create, explore, and iterate on UI designs directl
 # Paper Design
 
 **When**: Visualize components, explore design directions, preview CSS changes, create static mockups, build design variants, import Figma designs.
-**Not for**: Interactive testing (use dev server), animation/motion (use storyboard-animation), design critique of live sites (use design-critique), general design guidance without Paper (use design-guidelines).
+**Not for**: Interactive testing (use dev server), design critique of live sites (use design-critique).
 **Requires**: Paper MCP server connected and a Paper file open. Verify with `get_basic_info` — if it errors, the server is not running.
 
 ---

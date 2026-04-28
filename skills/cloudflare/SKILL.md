@@ -30,6 +30,3 @@ When a reference file and the docs disagree, **trust the docs**. This is especia
 | R2 object storage, S3-compatible buckets | [r2/](references/r2/) | API, configuration, patterns, gotchas |
 | Client-side RUM, page analytics | [web-analytics/](references/web-analytics/) | Configuration, integration, patterns, gotchas |
 | Workers logs, real-time debugging | [observability/](references/observability/) | API, configuration, patterns, gotchas |
-
-For Workers best practices and anti-pattern reviews, load `skills/cloudflare-workers-best-practices/SKILL.md`.
-For web performance auditing (Core Web Vitals, Lighthouse), load `skills/cloudflare-web-perf/SKILL.md`.
