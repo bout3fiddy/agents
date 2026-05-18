@@ -37,6 +37,7 @@ Prefer direct, measurable reasoning over abstract architecture taste. When choos
 - Objects/classes should mostly hold coherent data and simple lifecycle rules. Avoid complex mutation methods that hide control flow, allocation, or performance cost.
 - Keep state explicit. Pass stores, workspaces, contexts, and buffers directly rather than hiding them behind global mutable state.
 - Use named types for real domain or data-layout concepts. Do not pass raw strings, dictionaries, or integer flags when they spread validation and meaning across call sites.
+- Do not introduce new leading-underscore variable names. Prefer clear names that say what the value is; use the language's discard pattern only when a value is truly ignored. Extend this preference to helper functions, files, and modules unless an external API, generated code, or existing touched-area convention requires otherwise.
 - If adding an object-heavy design, check whether it improves locality and clarity or adds pointer chasing, hidden mutation, allocation, and harder testing.
 
 ## Folder Structure
@@ -103,6 +104,7 @@ Instrumentation rules:
 - Benchmarks that compare different boundaries, warmup states, worker counts, or validation conditions.
 - Memory-footprint reductions that add more scattered reads, branches, or recomputation in the hot path.
 - Compatibility wrappers that mostly forward calls while preserving old names or routes.
+- New leading-underscore names used to signal privacy, temporary status, or "internal" code instead of choosing a clear name.
 - Speculative parameters, hooks, config, or abstractions with no current measured need.
 - Global mutable state outside process boundaries, FFI boundaries, or true singletons.
 - Comments that use jargon to hide an unclear decision.
@@ -112,6 +114,7 @@ Instrumentation rules:
 - [ ] What path changed, and where is behavior verified?
 - [ ] What data does the important loop or workflow read and write?
 - [ ] Does the chosen shape reduce runtime, memory traffic, allocation, branch cost, or verification cost?
+- [ ] Did the change avoid new leading-underscore names unless required by an external or generated interface?
 - [ ] If objects/classes were added, are they simple state holders rather than hidden logic containers?
 - [ ] Does the folder structure group code by real data/runtime ownership?
 - [ ] Was relevant scaffolding or instrumentation used instead of guessing?
