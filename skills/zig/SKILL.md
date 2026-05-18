@@ -49,12 +49,24 @@ The default posture is performance-first: identify repeated work, make hot loops
 - Prefer array-of-structs when loops consume most fields of each item together.
 - Split common and rare payloads instead of forcing every item into a maximal tagged union.
 - Store sparse or optional data out of band when most items do not use it.
-- Prefer recomputing cheap derived values over storing them in hot structs when memory traffic dominates.
+- Decide whether to store or recompute derived values from the consumer loop's total cost, not from a general preference for memoization or lazy computation.
 - Use indexes or typed handles instead of pointers when data lives in stable arrays.
 - Use distinct index types or small wrappers when raw integers would erase meaning.
 - Turn loop-membership booleans into active lists, masks, bitsets, or partitioned arrays when they dominate the loop.
 - Use compact masks for selected output/state work, but keep enum-backed accessors for type clarity.
 - Keep row/column order and state dimensions tied to typed enums or explicit types, not comments around raw offsets.
+
+## Memoization Vs Lazy Computation
+
+- Do not treat memoization or lazy computation as inherently faster. The real question is which version makes the actual hot loop move less expensive data and do less expensive work.
+- Memoize when recompute cost multiplied by reuse count is higher than stored-value load cost plus storage/cache pressure.
+- Compute lazily when stored-value load cost plus storage/cache pressure is higher than recompute cost multiplied by reuse count.
+- Count input bytes, not just output bytes. Removing a stored value is not a win if recomputing it requires scattered source reads, pointer chasing, extra branches, divisions, function calls, or vectorization barriers.
+- Check locality. A larger stored value can be faster when it streams with adjacent hot data; a smaller struct can be slower when it forces distant loads or unpredictable control flow.
+- Separate hot and cold paths. Memoize expensive, frequently reused, cache-friendly results. Recompute cheap, rarely used, or bloated derived values. Keep diagnostic, optional, and rare payloads out of every hot item.
+- Store compact source data when that lets the hot loop stream predictably.
+- Do not optimize memory footprint in isolation. Smaller structs are useful only when the hot loop gets faster, or when memory drops materially while runtime stays acceptably close.
+- Benchmark both shapes under the same workload, build mode, worker count, warmup, timing boundary, and correctness checks.
 
 ## Allocation And Workspace Rules
 
@@ -131,6 +143,9 @@ The default posture is performance-first: identify repeated work, make hot loops
 - Storing all optional payloads inline when most items do not use them.
 - Repeated string-key lookup, parsing, unit conversion, or dynamic dispatch inside steady-state loops.
 - Workspace caches with vague keys, hidden invalidation, or cross-request mutation.
+- Memoizing rare, diagnostic, or optional data inside every hot item.
+- Removing stored derived values while adding scattered source loads, branches, divisions, or function calls.
+- Optimizing memory footprint without proving the hot loop is faster or acceptably close.
 - Runtime vtables for build-time choices.
 - Raw integer state masks without enum-backed accessors.
 - Silent truncation or threshold relaxation to get a faster result.
@@ -148,7 +163,8 @@ The default posture is performance-first: identify repeated work, make hot loops
 - [ ] Are setup, preparation, steady-state execution, diagnostics, formatting, and final evaluation separated?
 - [ ] Are hot fields dense and cold fields out of the loop?
 - [ ] Is the layout SoA, AoS, sparse side storage, or partitioned storage for a concrete reason?
-- [ ] Are cheap derived values recomputed instead of stored when memory traffic dominates?
+- [ ] Is the memoized/lazy choice based on the consumer loop, reuse count, input bytes, and locality?
+- [ ] Does a smaller layout avoid adding scattered reads, branches, divisions, or recomputation?
 - [ ] Are active states represented as typed enums, masks, bitsets, or lists?
 - [ ] Are allocations outside hot loops?
 - [ ] Is workspace reuse explicit and invalidated by typed keys?
@@ -172,6 +188,7 @@ Before editing Zig performance code, make these questions cheap to answer:
 - What data repeats?
 - Which fields does the hot loop actually touch?
 - What allocation, branch, conversion, or cache miss is being removed?
+- Which side of the memoization/lazy-computation tradeoff moves less expensive data and does less expensive work?
 - What workspace or prepared representation is reused?
 - What correctness gate proves the same behavior is preserved?
 - What timing boundary proves the speedup?
