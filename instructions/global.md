@@ -16,7 +16,7 @@ intent to a skill and read its SKILL.md. Skills contain domain guardrails
 | AST structural code search, ast-grep rules | `ast-grep` | `skills/ast-grep/SKILL.md` |
 | PR review, Linear tickets, work packages | `workflows` | `skills/workflows/SKILL.md` |
 | Paper MCP, design canvas, UI mockups, design directions | `paper-design` | `skills/paper-design/SKILL.md` |
-| Zig, systems code, ownership, error paths, comptime, data layout | `zig` | `skills/zig/SKILL.md` |
+| Zig, performance-sensitive systems code, hot loops, data-oriented layout, allocation removal, comptime | `zig` | `skills/zig/SKILL.md` |
 
 - Match by intent, not exact keywords. Load multiple skills if ambiguous.
 - If no clear match, ask one clarifying question and retry.
