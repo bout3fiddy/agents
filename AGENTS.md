@@ -17,7 +17,7 @@
 - Runtime routing is handled by the inline routing table in `instructions/global.md` — no separate router artifact.
 - `bin/sync.sh` does not run sync-time gates; it only syncs files.
 - Eval cases source of truth is `skills-evals/fixtures/eval-cases/` (one JSONL per case); reports mirror to `docs/specs/pi-eval/reports/`.
-- Eval fixture convention: skill-driven baseline cases in `skills-evals/fixtures/eval-cases/` should declare targeted `expectedRefs`; only explicit no-skill/no-payload controls and pure assertion probes should keep `expectedRefs` empty.
+- Eval fixture convention: skill-driven baseline cases in `skills-evals/fixtures/eval-cases/` should declare targeted `expectedRefs` when the skill has task-relevant reference files; skills without references, explicit no-skill/no-payload controls, and pure assertion probes should keep `expectedRefs` empty.
 - Per-case routing/read telemetry traces are written to `skills-evals/reports/routing-traces/<provider-model>/<case-id>.json` on each eval run.
 - `pi-eval` runtime now treats case IDs as data only: filesystem path segments are sanitized, and sandbox/home recursive cleanup is restricted to managed tmp roots (`/tmp/pi-eval-sandbox`, `/tmp/pi-eval-home`) with depth checks.
 - `pi-eval` case worker launches are mandatory-sandboxed via Gondolin VM runtime; there is no runtime toggle to disable sandboxing, and launch failures fail closed (no plain host `spawn` fallback).
@@ -44,4 +44,4 @@
 - Global policy now requires AGENTS docs to be curated and progressive-disclosure based (concise root router + scoped/nested AGENTS + deep docs), and to migrate legacy monolithic AGENTS files instead of appending indefinitely.
 - Workflows (Linear, work packages, PR review) live in `skills/workflows/references/`. The `workflows/` directory at repo root is kept for backward compatibility but `skills/workflows/` is the canonical source. The global directive (`instructions/global.md`) uses an inline routing table — no separate router artifact.
 - Skills are flat peers (10 skills total): coding, design-critique, housekeeping, railway-operations, cloudflare, ast-grep, workflows, wrangler, paper-design, zig. The `workflows` skill has four reference procedures: `pr-review.md`, `linear.md`, `work-packages.md`, `workpackage-execution.md`.
-- Coding SKILL.md is the unified code quality skill: principles (legible, replaceable, verifiable), workflow, hard rules, and smell signals. No separate smell detection skill.
+- Coding SKILL.md is the unified performance-grounded code quality skill: hard cutovers, instrumentation, data layout, simple state objects, structured comments, and anti-pattern detection. No separate smell detection skill.
