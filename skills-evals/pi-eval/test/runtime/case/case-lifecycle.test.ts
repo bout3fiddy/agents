@@ -120,7 +120,7 @@ test("mirrorBootstrapPayloadToWorkspace projects synced bootstrap files into wor
 		await mkdir(path.join(homeDir, ".agents", "workflows"), { recursive: true });
 		await writeFile(path.join(homeDir, ".agents", "AGENTS.md"), "# sandbox instructions\n", "utf-8");
 		await writeFile(path.join(homeDir, ".agents", "skills", "coding", "SKILL.md"), "# coding skill\n", "utf-8");
-		await writeFile(path.join(homeDir, ".agents", "workflows", "linear.md"), "# linear\n", "utf-8");
+		await writeFile(path.join(homeDir, ".agents", "workflows", "pr-review.md"), "# pr review\n", "utf-8");
 
 		await mirrorBootstrapPayloadToWorkspace({
 			workspaceAgentDir,
@@ -133,7 +133,7 @@ test("mirrorBootstrapPayloadToWorkspace projects synced bootstrap files into wor
 			true,
 		);
 		assert.equal(
-			await fileExists(path.join(workspaceAgentDir, "workflows", "linear.md")),
+			await fileExists(path.join(workspaceAgentDir, "workflows", "pr-review.md")),
 			true,
 		);
 	} finally {

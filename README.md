@@ -17,7 +17,7 @@ Repo-specific operating notes live in `AGENTS.md`.
 ```text
 agents/
 ├── skills/                    # Skill packages: <name>/SKILL.md (+ references/)
-├── workflows/                 # Domain workflows (linear, work-packages, pr-review)
+├── workflows/                 # Domain workflows (work-packages, pr-review)
 ├── instructions/
 │   └── global.md              # Source copied to ~/.agents/AGENTS.md
 ├── bin/

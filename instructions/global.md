@@ -8,14 +8,9 @@ intent to a skill and read its SKILL.md. Skills contain domain guardrails
 | Intent | Skill | Read |
 |--------|-------|------|
 | code, implement, bugfix, refactor, code review, smell audit | `coding` | `skills/coding/SKILL.md` |
-| UI critique, review, feedback, audit | `design-critique` | `skills/design-critique/SKILL.md` |
 | AGENTS/CLAUDE architecture, housekeeping | `housekeeping` | `skills/housekeeping/SKILL.md` |
 | Railway, deployments, services, environments, build failures | `railway-operations` | `skills/railway-operations/SKILL.md` |
-| Cloudflare Workers, R2, web analytics, observability | `cloudflare` | `skills/cloudflare/SKILL.md` |
-| Wrangler CLI, wrangler commands, Workers config | `wrangler` | `skills/wrangler/SKILL.md` |
-| AST structural code search, ast-grep rules | `ast-grep` | `skills/ast-grep/SKILL.md` |
-| PR review, Linear tickets, work packages | `workflows` | `skills/workflows/SKILL.md` |
-| Paper MCP, design canvas, UI mockups, design directions | `paper-design` | `skills/paper-design/SKILL.md` |
+| PR review, work packages | `workflows` | `skills/workflows/SKILL.md` |
 | Zig, performance-sensitive systems code, hot loops, data-oriented layout, allocation removal, comptime | `zig` | `skills/zig/SKILL.md` |
 
 - Match by intent, not exact keywords. Load multiple skills if ambiguous.

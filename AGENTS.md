@@ -42,6 +42,6 @@
   - `python3 bin/build_agents_index.py`
   - `./bin/sync.sh`
 - Global policy now requires AGENTS docs to be curated and progressive-disclosure based (concise root router + scoped/nested AGENTS + deep docs), and to migrate legacy monolithic AGENTS files instead of appending indefinitely.
-- Workflows (Linear, work packages, PR review) live in `skills/workflows/references/`. The `workflows/` directory at repo root is kept for backward compatibility but `skills/workflows/` is the canonical source. The global directive (`instructions/global.md`) uses an inline routing table — no separate router artifact.
-- Skills are flat peers (10 skills total): coding, design-critique, housekeeping, railway-operations, cloudflare, ast-grep, workflows, wrangler, paper-design, zig. The `workflows` skill has four reference procedures: `pr-review.md`, `linear.md`, `work-packages.md`, `workpackage-execution.md`.
+- Workflows (work packages, PR review) live in `skills/workflows/references/`. The `workflows/` directory at repo root is kept for backward compatibility but `skills/workflows/` is the canonical source. The global directive (`instructions/global.md`) uses an inline routing table — no separate router artifact.
+- Skills are flat peers (5 skills total): coding, housekeeping, railway-operations, workflows, zig. The `workflows` skill has three reference procedures: `pr-review.md`, `work-packages.md`, `workpackage-execution.md`.
 - Coding SKILL.md is the unified performance-grounded code quality skill: hard cutovers, instrumentation, data layout, simple state objects, structured comments, and anti-pattern detection. No separate smell detection skill.

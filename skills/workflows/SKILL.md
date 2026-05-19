@@ -1,6 +1,6 @@
 ---
 name: workflows
-description: Use for PR review remediation, Linear ticket work, or versioned work package creation/execution. Each workflow has a step-by-step procedure — read it and follow it exactly.
+description: Use for PR review remediation or versioned work package creation/execution. Each workflow has a step-by-step procedure; read it and follow it exactly.
 ---
 
 # Workflows
@@ -10,7 +10,6 @@ Structured procedures for recurring multi-step tasks. Each workflow is a referen
 ## When to use
 
 - PR review, fix review comments, remediation loop → read `references/pr-review.md`
-- Linear tickets, create/refine/transition issues → read `references/linear.md`
 - Work packages, versioned planning packages, structured execution plans → read `references/work-packages.md`
 - Work package execution, autonomous WP run, "do not stop" → read `references/workpackage-execution.md`
 

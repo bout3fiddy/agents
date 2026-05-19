@@ -12,8 +12,7 @@ Work packages live in `docs/workpackages/<task_type>_<name>_<date>/`.
 
 ## Lifecycle
 
-- Keep a linked Linear issue refined and traceable (scope, acceptance criteria, validation plan, and work-package path).
-- Transition Linear lifecycle state as execution starts/completes.
+- Keep any linked external tracker ticket refined and traceable when the project uses one.
 - Treat repeated execution requests as continuation signals from the first non-done `WP-*` unless release criteria are already met.
 
 ## Execution Directive
@@ -57,8 +56,9 @@ when all work packages are done:
 - run the PR review remediation loop until:
   - all required checks pass
   - no new actionable review comments remain
-- create a staging release
-- only after staging release, update Linear issue <LINEAR_ISSUE_ID> with shipped outcomes and move it to In Review
+- create a staging release when the project has a staging release flow
+- update any linked external tracker ticket with shipped outcomes when the
+  project uses one
 
 this command may be repeated.
 if staging release already exists for this work package, treat repeats as reminder signals and continue only unfinished steps.

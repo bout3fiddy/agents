@@ -274,8 +274,8 @@ Never mark a package done while any checklist box is still unchecked.
 
 ## Lifecycle
 
-- Keep a linked Linear issue refined and traceable when Linear is part of the
-  workflow.
+- Keep any linked external tracker ticket refined and traceable when the project
+  uses one.
 - Use `README.md` plus the per-file `Dependencies` metadata to make sequencing
   obvious.
 - Treat repeated requests as continuation signals: resume from the first
