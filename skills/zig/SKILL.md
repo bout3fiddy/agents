@@ -30,11 +30,12 @@ For performance-sensitive Zig work, do not judge code by whether it looks clean.
 4. Map the hot path from source: what repeats, what mutates, what is invariant, what allocates, and what data is read per item.
 5. Build the project's optimized artifact and record the exact command.
 6. Get the real compiler command before inspecting generated output, so the inspected artifact is the one being measured.
-7. Inspect symbols or compiler output when the claim depends on inlining, call removal, allocation removal, vectorization, branch removal, or layout.
-8. Check allocation behavior inside the repeated boundary. A hot kernel should normally have zero allocator traffic.
-9. Benchmark the same boundary with the same workload, worker count, warmup, build mode, and correctness checks.
-10. Change one thing: layout, allocation, prepared-state reuse, branch removal, SIMD-friendly loop, or fused output.
-11. Re-check correctness before reporting speed. Fast wrong code is a different program.
+7. Write large compiler outputs to scratch files, then extract the target symbol or address range before reading.
+8. Inspect symbols or compiler output when the claim depends on inlining, call removal, allocation removal, vectorization, branch removal, or layout.
+9. Check allocation behavior inside the repeated boundary. A hot kernel should normally have zero allocator traffic.
+10. Benchmark the same boundary with the same workload, worker count, warmup, build mode, and correctness checks.
+11. Change one thing: layout, allocation, prepared-state reuse, branch removal, SIMD-friendly loop, or fused output.
+12. Re-check correctness before reporting speed. Fast wrong code is a different program.
 
 ## Verification Commands
 
@@ -50,36 +51,76 @@ zig build <step> -Doptimize=ReleaseSafe --summary all
 
 Use the optimized artifact for performance evidence. In ordinary Zig projects that is usually `-Doptimize=ReleaseFast` through `build.zig`, or `-O ReleaseFast` for direct compiler commands. Use `ReleaseSafe` when optimized validation with runtime safety checks is useful.
 
-Get the real compiler command:
+Create a scratch output directory and keep large outputs there:
 
 ```sh
-zig build <step> -Doptimize=ReleaseFast --verbose
+perf_scratch="${TMPDIR:-/tmp}/zig-perf-$(date +%Y%m%d-%H%M%S)"
+mkdir -p "$perf_scratch"
+artifact="zig-out/bin/<exe>"
+target_symbol="_hotFunction"
 ```
 
-Inspect symbols to see whether hot helpers became real calls:
+Get the real compiler command without dumping it into the conversation:
 
 ```sh
-nm -an zig-out/bin/<exe> | rg 'hotFunction|hotKernel|helperName'
-nm -an zig-out/lib/lib<name>.dylib | rg 'hotFunction|hotKernel|helperName'
-nm -an zig-out/lib/lib<name>.a | rg 'hotFunction|hotKernel|helperName'
+zig build <step> -Doptimize=ReleaseFast --verbose > "$perf_scratch/build.verbose.txt" 2>&1
+sed -n '1,20p' "$perf_scratch/build.verbose.txt"
+```
+
+Inspect symbols from a scratch file to find the target boundary and see whether hot helpers became real calls:
+
+```sh
+nm -an "$artifact" > "$perf_scratch/symbols.nm"
+rg -n 'hotFunction|hotKernel|helperName' "$perf_scratch/symbols.nm"
 ```
 
 If tiny hot helpers survive unexpectedly, investigate. If only the public or kernel boundary survives, helper splitting is probably not the issue.
 
-Emit assembly for a direct compiler invocation:
+Emit assembly for a direct compiler invocation into scratch:
 
 ```sh
-zig build-exe path/to/main.zig -O ReleaseFast -femit-asm=/tmp/hot.s -fno-emit-bin
-zig build-obj path/to/file.zig -O ReleaseFast -femit-asm=/tmp/hot.s
-rg -n 'hotFunction|hotKernel|memcpy|memmove|malloc|alloc|free|div|idiv|call|bl|fmla|fmul|fadd' /tmp/hot.s
+zig build-exe path/to/main.zig -O ReleaseFast -femit-asm="$perf_scratch/full.s" -fno-emit-bin
+wc -l -c "$perf_scratch/full.s"
 ```
 
-Disassemble a built artifact when direct assembly emission is not the real build path:
+Disassemble a built artifact into scratch when direct assembly emission is not the real build path:
 
 ```sh
-objdump --disassemble --no-show-raw-insn zig-out/bin/<exe> | rg -n 'hotFunction|hotKernel|memcpy|alloc|div|idiv|call'
-objdump --macho --disassemble --no-show-raw-insn zig-out/lib/lib<name>.dylib | rg -n 'hotFunction|hotKernel|memcpy|alloc|bl|fmla|fmul|fadd'
-otool -tvV zig-out/lib/lib<name>.dylib | rg -n 'hotFunction|hotKernel|memcpy|alloc|bl|fmla|fmul|fadd'
+objdump --disassemble --no-show-raw-insn "$artifact" > "$perf_scratch/full.asm"
+# macOS Mach-O alternatives when plain objdump output is not useful:
+objdump --macho --disassemble --no-show-raw-insn "$artifact" > "$perf_scratch/full.asm"
+otool -tvV "$artifact" > "$perf_scratch/full.asm"
+wc -l -c "$perf_scratch/full.asm"
+```
+
+Extract the target symbol or range before reading output. Prefer symbol-specific disassembly when the tool supports it:
+
+```sh
+objdump --macho --disassemble --dis-symname "$target_symbol" --no-show-raw-insn "$artifact" > "$perf_scratch/hotFunction.asm"
+wc -l -c "$perf_scratch/hotFunction.asm"
+```
+
+When symbol-specific disassembly is unavailable, locate function starts and cut the smallest useful range:
+
+```sh
+rg -n '^_hotFunction:|^_hotKernel:|^_nextFunction:' "$perf_scratch/full.asm"
+sed -n '<start>,<end>p' "$perf_scratch/full.asm" > "$perf_scratch/hotFunction.asm"
+wc -l -c "$perf_scratch/hotFunction.asm"
+```
+
+Run focused checks on the extracted file, not on the whole artifact:
+
+```sh
+rg -n 'bl|blr|call|memcpy|memmove|malloc|alloc|free|div|idiv|fdiv|fmla|fmul|fadd' "$perf_scratch/hotFunction.asm"
+rg -o '\b(bl|call)\s+[^ ;]+' "$perf_scratch/hotFunction.asm" | sort | uniq -c | sort -nr | head -40
+```
+
+Use pass/fail checks for expected absences:
+
+```sh
+if rg -n 'SmpAllocator|PageAllocator|GeneralPurposeAllocator|malloc|alloc|free' "$perf_scratch/hotFunction.asm"; then echo "FAIL: allocator traffic in boundary"; else echo "OK: no allocator symbol in boundary"; fi
+if rg -n 'memcpy|memmove' "$perf_scratch/hotFunction.asm"; then echo "FAIL: copy call in boundary"; else echo "OK: no copy call in boundary"; fi
+if rg -n 'print|format|json|trace|zone' "$perf_scratch/hotFunction.asm"; then echo "FAIL: diagnostics in boundary"; else echo "OK: no diagnostics symbol in boundary"; fi
 ```
 
 Check allocation behavior with the project's allocator counters, benchmark harness, or a scratch counting allocator around the boundary. Compiler output can show allocator calls; runtime counters tell you whether they execute in the hot loop.
@@ -92,6 +133,16 @@ zig build <bench-step> -Doptimize=ReleaseFast -- <bench-args>
 ```
 
 Do not compare setup-included timing to setup-excluded timing. Do not use timeline-tracing wall time as the final speed number unless tracing overhead is the thing being measured.
+
+## Compiler Output Budget
+
+- Do not paste full `nm`, assembly, disassembly, or broad grep output into the answer unless the user asks for raw output.
+- Redirect large outputs to `/tmp` or the repo's ignored scratch area.
+- Inspect the smallest useful artifact: one function, one object, one benchmark binary, or one address range.
+- Start with symbol lookup and call-target summaries before reading instruction listings.
+- Keep reported compiler-output evidence under about 80 lines unless the user asks for more.
+- Prefer pass/fail checks for expected absences: no allocator call, no `memcpy`, no tiny helper call, no formatting, no tracing.
+- If the extracted output is still large, write a scratch summarizer that reports call counts, suspicious symbols, and the exact file/range inspected.
 
 ## Compiler-Output Checks
 
