@@ -4,8 +4,8 @@
  * Handles read tool construction with sandbox boundary and deny policy
  * enforcement, tool adaptation, and read capture event registration.
  */
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
-import { createReadTool } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { createReadTool } from "@earendil-works/pi-coding-agent";
 import { constants } from "node:fs";
 import {
 	access as fsAccess,

@@ -1,6 +1,6 @@
-import type { AssistantMessage, ToolResultMessage } from "@mariozechner/pi-ai";
-import { createEditTool, createWriteTool } from "@mariozechner/pi-coding-agent";
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import type { AssistantMessage, ToolResultMessage } from "@earendil-works/pi-ai";
+import { createEditTool, createWriteTool } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { PathDenyPolicy } from "../policy/read-policy.js";

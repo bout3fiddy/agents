@@ -1,0 +1,95 @@
+{
+  "id": "ZG-002",
+  "suite": "zigperf",
+  "prompt": [
+    "Make this Zig telemetry summary module ready to use.",
+    "It should summarize event batches, expose a reusable API, keep tests passing, and keep the demo working."
+  ],
+  "fixtureMapping": {
+    "build.zig": "skills-evals/fixtures/eval-cases/ZG-002/build.zig",
+    "src/main.zig": "skills-evals/fixtures/eval-cases/ZG-002/src/main.zig"
+  },
+  "expectedSkills": [],
+  "disallowedSkills": [],
+  "expectedRefs": [],
+  "tools": ["read", "edit", "write", "bash"],
+  "sandbox": true,
+  "fileAssertions": [
+    {
+      "path": "src/main.zig",
+      "mustContain": ["summarizeEvents", "EventKind", "Report", "test"],
+      "mustNotContain": ["NotImplemented", "PLACEHOLDER_DO_NOT_KEEP"],
+      "maxNonEmptyLines": 360
+    }
+  ],
+  "verificationCommands": [
+    {
+      "label": "zig tests",
+      "argv": ["zig", "build", "test"],
+      "timeoutMs": 120000,
+      "maxOutputBytes": 12000
+    },
+    {
+      "label": "demo run",
+      "argv": ["zig", "build", "run"],
+      "timeoutMs": 120000,
+      "maxOutputBytes": 12000
+    },
+    {
+      "label": "optimized benchmark",
+      "argv": ["zig", "build", "bench", "-Doptimize=ReleaseFast"],
+      "timeoutMs": 120000,
+      "maxOutputBytes": 12000
+    },
+    {
+      "label": "optimized compiler command listing",
+      "argv": ["zig", "build", "bench", "-Doptimize=ReleaseFast", "--verbose"],
+      "timeoutMs": 120000,
+      "maxOutputBytes": 20000
+    }
+  ],
+  "dryRun": false,
+  "tokenBudget": null,
+  "notes": [
+    "Default-behavior Zig eval: the prompt asks for a module, not a performance pass.",
+    "The fixture already contains plausible but slow code: string-keyed enum aggregation, linear user/source scans, builder-style state mutation, and allocation-heavy summary construction.",
+    "The judge should reward the skill variant if it naturally applies the Zig performance skill: compact enum-indexed storage, bounded allocation, simple state structs, function-based logic, clear ownership, and tests. Penalize unnecessary object-style wrappers, string-keyed hot paths, per-event allocations, or abstract design prose that does not improve the implementation.",
+    "The judge should report process quality from sanitized traces: whether the agent ran focused tests, optimized benchmarks, compiler command listings, symbol/disassembly checks, or just edited from source intuition."
+  ],
+  "persistArtifacts": true,
+  "readDenyPaths": [],
+  "variants": [
+    {
+      "tag": "skill",
+      "bootstrapProfile": "full_payload",
+      "expectedSkills": ["zig"],
+      "expectedRefs": [],
+      "skillSet": ["zig"],
+      "requireSkillFileRead": true,
+      "fileAssertions": [
+        {
+          "path": "src/main.zig",
+          "mustContain": ["summarizeEvents", "EventKind", "Report", "test"],
+          "mustNotContain": [
+            "NotImplemented",
+            "std.StringHashMap",
+            "std.AutoHashMap([]const u8",
+            "PLACEHOLDER_DO_NOT_KEEP"
+          ],
+          "maxNonEmptyLines": 360
+        }
+      ],
+      "readDenyPaths": [
+        "skills/coding/SKILL.md",
+        "skills/housekeeping/SKILL.md",
+        "skills/railway-operations/SKILL.md",
+        "skills/workflows/SKILL.md"
+      ]
+    },
+    {
+      "tag": "noskill",
+      "bootstrapProfile": "no_payload",
+      "disallowedSkills": ["zig", "coding", "housekeeping", "workflows", "railway-operations"]
+    }
+  ]
+}

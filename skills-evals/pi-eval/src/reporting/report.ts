@@ -116,6 +116,7 @@ type BundleSection = {
 	variantRows: ReportRow[];
 	verdict: JudgeBundleVerdict;
 	notes: string;
+	verificationLines: string[];
 };
 
 const renderBundleVariantTable = (variantRows: ReportRow[]): string => {
@@ -146,6 +147,32 @@ const renderVariantVerdicts = (verdict: JudgeBundleVerdict): string => {
 	return lines.join("\n");
 };
 
+const renderProcessFindings = (verdict: JudgeBundleVerdict): string => {
+	if (verdict.processFindings.length === 0) return "";
+	const lines = ["**Process Findings**", ""];
+	if (verdict.processSummary) {
+		lines.push(`> ${verdict.processSummary}`);
+		lines.push("");
+	}
+	for (const finding of verdict.processFindings) {
+		const score = Number.isFinite(finding.score) ? finding.score : 0;
+		lines.push(`- **${finding.tag}** (${score}/10): ${finding.traceEvidence}`);
+		if (finding.compilerEvidence) lines.push(`  Compiler: ${finding.compilerEvidence}`);
+		if (finding.timingEvidence) lines.push(`  Timing: ${finding.timingEvidence}`);
+		if (finding.gaps) lines.push(`  Gaps: ${finding.gaps}`);
+	}
+	lines.push("");
+	return lines.join("\n");
+};
+
+const oneLine = (value: string): string =>
+	value.replace(/\s+/g, " ").trim();
+
+const renderVerificationLines = (lines: string[]): string => {
+	if (lines.length === 0) return "";
+	return ["**Verification Output**", "", ...lines.map((line) => `- ${line}`), ""].join("\n");
+};
+
 const renderBundleSections = (sections: BundleSection[]): string => {
 	if (sections.length === 0) return "";
 	const parts: string[] = ["## Bundle Evaluations", ""];
@@ -154,10 +181,30 @@ const renderBundleSections = (sections: BundleSection[]): string => {
 		parts.push(`### ${section.bundleId}: ${bundleStatus} — ${section.verdict.verdict || "bundle comparison"}`);
 		parts.push(renderBundleVariantTable(section.variantRows));
 		parts.push("");
+		const verificationBlock = renderVerificationLines(section.verificationLines);
+		if (verificationBlock) parts.push(verificationBlock);
 		parts.push(`**Judge Verdict** (token cost: ${section.verdict.judgeTokens.totalTokens})`);
 		parts.push("");
 		parts.push(renderVariantVerdicts(section.verdict));
 		parts.push("");
+		if (section.verdict.evidenceSummary) {
+			parts.push(`> **Evidence**: ${section.verdict.evidenceSummary}`);
+			parts.push("");
+		}
+		const processBlock = renderProcessFindings(section.verdict);
+		if (processBlock) parts.push(processBlock);
+		if (section.verdict.commandsRun.length > 0) {
+			parts.push("**Judge Commands**");
+			parts.push("");
+			for (const command of section.verdict.commandsRun) parts.push(`- \`${command}\``);
+			parts.push("");
+		}
+		if (section.verdict.acceptanceCriteria.length > 0) {
+			parts.push("**Acceptance Criteria**");
+			parts.push("");
+			for (const criterion of section.verdict.acceptanceCriteria) parts.push(`- ${criterion}`);
+			parts.push("");
+		}
 		parts.push(renderDimensionsTable(section.verdict));
 		parts.push("");
 		if (section.verdict.costAnalysis) {
@@ -206,6 +253,7 @@ const collectBundleSections = (
 	const sections: BundleSection[] = [];
 	const seenBundles = new Set<string>();
 	const rowByCaseId = new Map(allRows.map((r) => [r.caseId, r]));
+	const evaluationByCaseId = new Map(evaluations.map((evaluation) => [evaluation.caseId, evaluation]));
 
 	for (const evaluation of evaluations) {
 		if (!evaluation.judgeVerdict) continue;
@@ -222,9 +270,22 @@ const collectBundleSections = (
 			.map((caseId) => rowByCaseId.get(caseId))
 			.filter((r): r is ReportRow => r !== undefined);
 		if (variantRows.length === 0) continue;
+		const verificationLines = variantCaseIds.flatMap((caseId) => {
+			const evaluation = evaluationByCaseId.get(caseId);
+			return (evaluation?.result.verificationResults ?? []).map((result) => {
+				const status = result.timedOut ? "timed out" : `exit ${result.exitCode ?? "unknown"}`;
+				const stdout = oneLine(result.stdout);
+				const stderr = oneLine(result.stderr);
+				const output = stdout || stderr;
+				const snippet = output.length > 0
+					? ` output: \`${output.length > 180 ? `${output.slice(0, 177)}...` : output}\``
+					: "";
+				return `${caseId} / ${result.label}: ${status}, ${result.durationMs}ms${snippet}`;
+			});
+		});
 
 		const verdictLabel = verdict.pass ? "PASS" : "FAIL";
-		sections.push({ bundleId, variantRows, verdict, notes: `${verdictLabel}: ${verdict.verdict}` });
+		sections.push({ bundleId, variantRows, verdict, notes: `${verdictLabel}: ${verdict.verdict}`, verificationLines });
 		for (const caseId of variantCaseIds) bundleCaseIds.add(caseId);
 	}
 	return { sections, bundleCaseIds };

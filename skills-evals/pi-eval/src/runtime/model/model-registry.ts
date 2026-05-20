@@ -1,5 +1,5 @@
-import type { ExtensionCommandContext } from "@mariozechner/pi-coding-agent";
-import type { Model } from "@mariozechner/pi-ai";
+import type { ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
+import type { Model } from "@earendil-works/pi-ai";
 import type { EvalConfig, ModelSpec } from "../../data/types.js";
 
 export const modelSpecFromModel = (model: Model<any>): ModelSpec => ({
@@ -78,10 +78,31 @@ export const ensureModelAuth = async (
 	if (!resolved) {
 		throw new Error(`Model not registered: ${model.provider}/${model.id}`);
 	}
-	const apiKey = await ctx.modelRegistry.getApiKey(resolved);
-	if (!apiKey) {
-		throw new Error(
-			`Missing credentials for ${model.provider}/${model.id}. Authenticate before running evals.`,
-		);
+
+	const registry = ctx.modelRegistry as typeof ctx.modelRegistry & {
+		getApiKey?: (model: typeof resolved) => Promise<string | undefined>;
+		hasConfiguredAuth?: (model: typeof resolved) => boolean;
+		getApiKeyAndHeaders?: (
+			model: typeof resolved,
+		) => Promise<{ ok: true; apiKey?: string; headers?: Record<string, string> } | { ok: false; error: string }>;
+	};
+
+	if (typeof registry.getApiKey === "function") {
+		const apiKey = await registry.getApiKey(resolved);
+		if (apiKey) return;
 	}
+
+	if (typeof registry.hasConfiguredAuth === "function" && registry.hasConfiguredAuth(resolved)) {
+		return;
+	}
+
+	if (typeof registry.getApiKeyAndHeaders === "function") {
+		const auth = await registry.getApiKeyAndHeaders(resolved);
+		if (auth.ok && (auth.apiKey || auth.headers)) return;
+		if (!auth.ok) throw new Error(auth.error);
+	}
+
+	throw new Error(
+		`Missing credentials for ${model.provider}/${model.id}. Authenticate before running evals.`,
+	);
 };

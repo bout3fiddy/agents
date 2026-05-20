@@ -82,6 +82,8 @@ const writeRoutingTraceArtifacts = async (params: {
 			turnBreakdown: evaluation.result.turnBreakdown ?? [],
 			toolUsage: evaluation.result.toolUsage ?? null,
 			rpcDiagnostics: evaluation.result.rpcDiagnostics ?? null,
+			sanitizedStepTrace: evaluation.result.sanitizedStepTrace ?? [],
+			verificationResults: evaluation.result.verificationResults ?? [],
 			outputTextPreview: (evaluation.result.outputText ?? "").slice(0, 1200),
 			resultErrors: evaluation.result.errors ?? [],
 			routing: evaluation.routing,

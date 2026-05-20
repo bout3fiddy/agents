@@ -1,4 +1,4 @@
-import type { ExtensionCommandContext } from "@mariozechner/pi-coding-agent";
+import type { ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 import { homedir } from "node:os";
 import path from "node:path";
 import { ensureModelAuth, modelSpecFromKey, resolveModelSpec } from "../runtime/model/model-registry.js";

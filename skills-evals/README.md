@@ -56,8 +56,8 @@ Custom Gondolin image expectations:
 
 `run.sh` behavior:
 
-- Takes no CLI args/flags.
-- Always executes `/eval run` for every model listed in `skills-evals/fixtures/models.jsonl` (or `PI_EVAL_MODELS_FILE`).
+- Executes `/eval run` for every model listed in `skills-evals/fixtures/models.jsonl` (or `PI_EVAL_MODELS_FILE`).
+- Supports `--case <CASE_ID>` for a targeted single-case run.
 - `models.jsonl` entry shape is `{"model":"provider/model","thinking":"low"}`.
 - Uses `PI_EVAL_GONDOLIN_IMAGE_PATH` when set, otherwise defaults to `skills-evals/gondolin/image/current`.
 - Runs models in parallel; parallelism defaults to number of models and can be capped with `PI_EVAL_MAX_PARALLEL`.
@@ -74,6 +74,12 @@ Custom Gondolin image expectations:
   - Any paths outside mutable overlays are read via the shared workspace, so writes there can contaminate across cases; keep overlays covering all mutable targets.
 - Worker routing hint:
   - Runner passes `PI_EVAL_SKILL_PATHS` to worker mode so the worker can enforce concise, deterministic skill-onboarding hints during each case.
+- Cases can declare trusted `verificationCommands`. These run in the sandbox workspace after
+  the agent finishes, and their exit codes/stdout/stderr are passed to the judge and summarized
+  in the report.
+- The runtime derives a compact sanitized model-step trace from RPC events. Raw traces can still
+  be written with `PI_EVAL_RPC_TRACE_DIR`, but judge input excludes encrypted reasoning and large
+  file contents.
 
 Direct invocation:
 
@@ -110,9 +116,12 @@ Sandbox model:
 Scoring model:
 
 - Checks expected/disallowed skills.
+- When a full-payload variant sets `skillSet`, the bootstrap payload is scoped to that set before mirroring into the sandbox: unrelated skills are removed and the sandbox `AGENTS.md` references only the selected skills.
 - Skill expectations are satisfied either by direct `SKILL.md` reads or by routed reference reads under `skills/<name>/references/` (skill inferred from path).
 - Checks expected references.
 - Produces routing scorecards per case: read skills, read skill files, read refs, missing refs, unexpected refs.
+- Passes sanitized model steps and harness-run verification output to the judge for bundled cases.
+- Bundle reports include explicit process findings so trace quality is evaluated separately from final code quality. The judge should say whether each agent used targeted tests, optimized builds, compiler command listings, filtered compiler output, symbol/disassembly checks, allocation checks, or timing runs.
 - Runs text assertions and file assertions.
 - Enforces optional token budgets.
 
@@ -128,6 +137,10 @@ Routing assertions (optional per case):
 Cases source of truth:
 
 - `skills-evals/fixtures/eval-cases/` (one JSONL per case)
+- Zig performance cases currently cover six bundled comparisons:
+  - `ZG-001` and `ZG-002`: refactor existing reasonably structured but slow Zig code.
+  - `ZG-003` and `ZG-004`: implement more complex Zig modules from starter stubs.
+  - `ZG-005` and `ZG-006`: create single-file Zig modules from blank workspaces (`src/main.zig` only).
 
 Primary reports:
 

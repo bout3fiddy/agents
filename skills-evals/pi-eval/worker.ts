@@ -1,4 +1,4 @@
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { registerEvalWorker } from "./src/runtime/entry/worker.js";
 
 export default function (pi: ExtensionAPI) {

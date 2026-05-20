@@ -64,6 +64,19 @@ const buildEvaluation = (caseId: string, status: "pass" | "fail"): CaseEvaluatio
 		tokens: { input: 1, output: 1, cacheRead: 0, cacheWrite: 0, totalTokens: 2 },
 		durationMs: 10,
 		errors: [],
+		sanitizedStepTrace: ["[turn] start", "[tool-start] bash cmd=zig test src/main.zig"],
+		verificationResults: [
+			{
+				label: "zig tests",
+				argv: ["zig", "test", "src/main.zig"],
+				exitCode: 0,
+				durationMs: 25,
+				timedOut: false,
+				stdout: "All tests passed",
+				stderr: "",
+				outputTruncated: false,
+			},
+		],
 	},
 	expectedSkills: [],
 	disallowedSkills: [],
@@ -125,6 +138,18 @@ test("persistRunReport merges with previous report rows and updates index on ful
 			"CD-TRACE.json",
 		);
 		assert.equal(await fileExists(routingTracePath), true);
+		const routingTrace = JSON.parse(await readFile(routingTracePath, "utf-8")) as {
+			sanitizedStepTrace?: string[];
+			verificationResults?: Array<{ label: string; exitCode: number | null }>;
+		};
+		assert.deepEqual(routingTrace.sanitizedStepTrace, [
+			"[turn] start",
+			"[tool-start] bash cmd=zig test src/main.zig",
+		]);
+		assert.deepEqual(routingTrace.verificationResults?.map((result) => ({
+			label: result.label,
+			exitCode: result.exitCode,
+		})), [{ label: "zig tests", exitCode: 0 }]);
 	} finally {
 		await rm(agentDir, { recursive: true, force: true });
 	}

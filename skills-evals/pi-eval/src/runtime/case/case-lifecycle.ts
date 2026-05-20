@@ -1,12 +1,13 @@
 import { copyFile, mkdir, readFile } from "node:fs/promises";
 import path from "node:path";
+import { slugFromId } from "../../data/cases.js";
 import {
 	createSandbox,
 	cleanupSandbox,
 	cleanupSandboxHome,
 } from "../sandbox/sandbox.js";
 import { assembleEvaluation, buildCaseResult } from "./evaluation.js";
-import type { CaseEvaluation, EvalCase, ModelSpec } from "../../data/types.js";
+import type { CaseEvaluation, EvalCase, ModelSpec, ResolvedEvalCase } from "../../data/types.js";
 import { resolveInsideRoot } from "../policy/path-policy.js";
 import { buildStubResult, runCaseProcess } from "./case-process.js";
 import {
@@ -21,6 +22,7 @@ import {
 	collectPolicyDenyProbeErrors,
 	hardenNoPayloadWorkspace,
 } from "../policy/case-policy.js";
+import { runVerificationCommands } from "./verification.js";
 
 type CaseWorkspace = {
 	agentDir: string;
@@ -93,6 +95,28 @@ const resolvePersistArtifactPaths = (evalCase: EvalCase): string[] => {
 	return resolveAssertionPaths(evalCase);
 };
 
+export const resolvePersistArtifactTarget = (params: {
+	evalCase: EvalCase | ResolvedEvalCase;
+	hostAgentDir: string;
+	artifactPath: string;
+}): string => {
+	const resolved = params.evalCase as EvalCase & {
+		bundleId?: string | null;
+		variantTag?: string | null;
+	};
+	const caseSlug = slugFromId(resolved.bundleId ?? params.evalCase.id);
+	const variantSlug = resolved.variantTag ?? "single";
+	const generatedRelativePath = path.join(
+		"skills-evals",
+		"generated",
+		params.evalCase.suite,
+		caseSlug,
+		variantSlug,
+		params.artifactPath,
+	);
+	return resolveInsideRoot(params.hostAgentDir, generatedRelativePath);
+};
+
 const captureArtifacts = async (
 	evalCase: EvalCase,
 	sandboxAgentDir: string,
@@ -118,7 +142,11 @@ const persistCaseArtifacts = async (params: {
 	for (const artifactPath of artifactPaths) {
 		try {
 			const sourcePath = resolveInsideRoot(params.sandboxAgentDir, artifactPath);
-			const targetPath = resolveInsideRoot(params.hostAgentDir, artifactPath);
+			const targetPath = resolvePersistArtifactTarget({
+				evalCase: params.evalCase,
+				hostAgentDir: params.hostAgentDir,
+				artifactPath,
+			});
 			await mkdir(path.dirname(targetPath), { recursive: true });
 			await copyFile(sourcePath, targetPath);
 		} catch {
@@ -212,6 +240,9 @@ export const runCase = async (params: {
 				assertions: evalCase.assertions ?? [],
 			})),
 		);
+		const verification = await runVerificationCommands(evalCase.verificationCommands, workspace.cwd);
+		result.verificationResults = verification.results;
+		result.errors.push(...verification.errors);
 		await persistCaseArtifacts({
 			evalCase,
 			hostAgentDir: agentDir,

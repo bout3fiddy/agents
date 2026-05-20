@@ -165,11 +165,19 @@ run_for_model() {
 		fi
 		mkdir -p "$(dirname "$run_log")"
 		echo "[$model] Logging to $run_log"
-		env "${env_prefix[@]}" pi --no-session --no-extensions -e "$EXT_PATH" -p "$prompt" 2>&1 | tee "$run_log"
+		if [[ "${#env_prefix[@]}" -gt 0 ]]; then
+			env "${env_prefix[@]}" pi --no-session --no-extensions -e "$EXT_PATH" -p "$prompt" 2>&1 | tee "$run_log"
+		else
+			pi --no-session --no-extensions -e "$EXT_PATH" -p "$prompt" 2>&1 | tee "$run_log"
+		fi
 		return
 	fi
 
-	env "${env_prefix[@]}" pi --no-session --no-extensions -e "$EXT_PATH" -p "$prompt"
+	if [[ "${#env_prefix[@]}" -gt 0 ]]; then
+		env "${env_prefix[@]}" pi --no-session --no-extensions -e "$EXT_PATH" -p "$prompt"
+	else
+		pi --no-session --no-extensions -e "$EXT_PATH" -p "$prompt"
+	fi
 }
 
 wait_for_pids() {

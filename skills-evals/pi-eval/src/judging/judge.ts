@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { createInterface } from "node:readline";
 import {
@@ -24,7 +24,10 @@ type JudgeVariantInput = {
 	tag: string;
 	code: string;
 	artifacts: Record<string, string>;
+	files: Record<string, string>;
 	output: string;
+	stepTrace: string[];
+	verification: string;
 	tokens: TokenUsage;
 	toolSummary: string;
 	routingTrace: string;
@@ -41,6 +44,18 @@ type JudgeBundleInput = {
 type JudgeResponseSchema = {
 	pass: boolean;
 	verdict: string;
+	evidenceSummary?: string;
+	processSummary?: string;
+	processFindings?: Array<{
+		tag: string;
+		score: number;
+		traceEvidence: string;
+		compilerEvidence: string;
+		timingEvidence: string;
+		gaps: string;
+	}>;
+	commandsRun?: string[];
+	acceptanceCriteria?: string[];
 	dimensions: Array<{
 		name: string;
 		scores: Record<string, number>;
@@ -63,7 +78,7 @@ const JUDGE_DIMENSIONS = [
 	"idiomatic style",
 ];
 
-const JUDGE_TIMEOUT_MS = 120_000;
+const JUDGE_TIMEOUT_MS = 900_000;
 
 const formatRoutingTrace = (evaluation: CaseEvaluation): string => {
 	const r = evaluation.routing;
@@ -99,6 +114,27 @@ const formatToolSummary = (evaluation: CaseEvaluation): string => {
 		lines.push(`Write calls: ${toolUsage.writeCalls}`, `Edit calls: ${toolUsage.editCalls}`);
 	}
 	return lines.join(", ");
+};
+
+const formatVerificationResults = (evaluation: CaseEvaluation): string => {
+	const results = evaluation.result.verificationResults ?? [];
+	if (results.length === 0) return "(no verification commands were run)";
+	return results.map((result) => {
+		const command = result.argv.join(" ");
+		const status = result.timedOut ? "timed out" : `exit ${result.exitCode ?? "unknown"}`;
+		const stdout = result.stdout.trim();
+		const stderr = result.stderr.trim();
+		const sections = [
+			`### ${result.label}`,
+			`Command: ${command}`,
+			`Status: ${status}`,
+			`Duration: ${result.durationMs}ms`,
+		];
+		if (stdout.length > 0) sections.push(`stdout:\n\`\`\`\n${stdout}\n\`\`\``);
+		if (stderr.length > 0) sections.push(`stderr:\n\`\`\`\n${stderr}\n\`\`\``);
+		if (result.outputTruncated) sections.push("Output was truncated by the harness.");
+		return sections.join("\n");
+	}).join("\n\n");
 };
 
 const readArtifact = async (evalCase: ResolvedEvalCase, agentDir: string): Promise<string> => {
@@ -161,6 +197,22 @@ const collectArtifacts = async (
 	return artifacts;
 };
 
+const collectVariantFiles = async (
+	evalCase: ResolvedEvalCase,
+	artifacts: Record<string, string>,
+	agentDir: string,
+): Promise<Record<string, string>> => {
+	const files: Record<string, string> = {};
+	for (const [neutralPath, realPath] of Object.entries(evalCase.fixtureMapping ?? {})) {
+		const sourcePath = resolveInsideRoot(agentDir, realPath);
+		files[neutralPath] = await readFile(sourcePath, "utf-8");
+	}
+	for (const [artifactPath, content] of Object.entries(artifacts)) {
+		files[artifactPath] = content;
+	}
+	return files;
+};
+
 const assembleJudgeBundleInput = async (
 	bundleId: string,
 	variants: Array<{ evaluation: CaseEvaluation; evalCase: ResolvedEvalCase }>,
@@ -168,6 +220,9 @@ const assembleJudgeBundleInput = async (
 ): Promise<JudgeBundleInput> => {
 	const allArtifacts = await Promise.all(
 		variants.map((v) => collectArtifacts(v.evalCase, v.evaluation, agentDir)),
+	);
+	const allFiles = await Promise.all(
+		variants.map((v, index) => collectVariantFiles(v.evalCase, allArtifacts[index], agentDir)),
 	);
 	const prompt = variants[0].evalCase.prompt;
 	const notes = variants[0].evalCase.notes ?? "";
@@ -183,7 +238,10 @@ const assembleJudgeBundleInput = async (
 				tag: v.evalCase.variantTag ?? v.evalCase.id,
 				code,
 				artifacts,
+				files: allFiles[i],
 				output: v.evaluation.result.outputText,
+				stepTrace: v.evaluation.result.sanitizedStepTrace ?? [],
+				verification: formatVerificationResults(v.evaluation),
 				tokens: v.evaluation.result.tokens,
 				toolSummary: formatToolSummary(v.evaluation),
 				routingTrace: formatRoutingTrace(v.evaluation),
@@ -198,8 +256,20 @@ const buildJudgeResponseSchema = (variantTags: string[]): string => {
 	for (const tag of variantTags) scoreShape[tag] = "<1-10>";
 	return JSON.stringify(
 		{
-			pass: "<true if skill variant demonstrates clear benefit over baseline, false otherwise>",
-			verdict: "<one-line summary of whether skills helped>",
+				pass: "<true if skill variant demonstrates clear benefit over baseline, false otherwise>",
+				verdict: "<one-line summary of whether skills helped>",
+				evidenceSummary: "<one paragraph naming the decisive tests, timings, compiler-output checks, or trace findings>",
+				processSummary: "<one paragraph comparing the agents' investigation process from sanitized traces>",
+				processFindings: variantTags.map((tag) => ({
+					tag,
+					score: "<1-10 process score>",
+					traceEvidence: "<what the sanitized trace shows this agent did>",
+					compilerEvidence: "<compiler flags/output/disassembly/symbol inspection used, or explicit gap>",
+					timingEvidence: "<timing/benchmark/allocation evidence used by the agent, or explicit gap>",
+					gaps: "<important missing process evidence>",
+				})),
+				commandsRun: ["<commands the judge ran or inspected, including paths/boundaries>"],
+				acceptanceCriteria: ["<criterion checked and whether it passed>"],
 			dimensions: JUDGE_DIMENSIONS.map((name) => ({
 				name,
 				scores: scoreShape,
@@ -227,6 +297,58 @@ const formatArtifactSections = (artifacts: Record<string, string>): string => {
 		.join("\n\n");
 };
 
+const writeJudgeWorkspaceFiles = async (
+	layout: JudgeSandboxLayout,
+	input: JudgeBundleInput,
+): Promise<void> => {
+	await mkdir(resolveInsideRoot(layout.workspaceDir, "variants"), { recursive: true });
+	await mkdir(resolveInsideRoot(layout.workspaceDir, "evidence"), { recursive: true });
+	await writeFile(
+		resolveInsideRoot(layout.workspaceDir, "case.md"),
+		[
+			`# ${input.bundleId}`,
+			"",
+			"## Prompt",
+			input.prompt,
+			"",
+			input.notes ? `## Notes\n${input.notes}\n` : "",
+			"## Variants",
+			...input.variants.map((variant) => `- ${variant.tag}: variants/${variant.tag}/`),
+			"",
+		].join("\n"),
+		"utf-8",
+	);
+	for (const variant of input.variants) {
+		const variantRoot = resolveInsideRoot(layout.workspaceDir, path.join("variants", variant.tag));
+		await mkdir(variantRoot, { recursive: true });
+		for (const [filePath, content] of Object.entries(variant.files)) {
+			const targetPath = resolveInsideRoot(variantRoot, filePath);
+			await mkdir(path.dirname(targetPath), { recursive: true });
+			await writeFile(targetPath, content, "utf-8");
+		}
+		await writeFile(
+			resolveInsideRoot(variantRoot, "agent-output.md"),
+			variant.output || "(no final agent output)",
+			"utf-8",
+		);
+		await writeFile(
+			resolveInsideRoot(variantRoot, "sanitized-steps.md"),
+			variant.stepTrace.length > 0 ? variant.stepTrace.join("\n") : "(no sanitized step trace)",
+			"utf-8",
+		);
+		await writeFile(
+			resolveInsideRoot(variantRoot, "verification-output.md"),
+			variant.verification,
+			"utf-8",
+		);
+		await writeFile(
+			resolveInsideRoot(variantRoot, "routing.md"),
+			variant.routingTrace,
+			"utf-8",
+		);
+	}
+};
+
 const buildJudgePrompt = (input: JudgeBundleInput): string => {
 	const variantSections = input.variants.map((v) => {
 		const cost = apiCostFromTokens(v.tokens);
@@ -239,6 +361,10 @@ const buildJudgePrompt = (input: JudgeBundleInput): string => {
 ${formatArtifactSections(v.artifacts)}
 ### Agent reasoning
 ${v.output}
+### Sanitized Model Steps
+${v.stepTrace.length > 0 ? v.stepTrace.join("\n") : "(no sanitized step trace)"}
+### Verification Output
+${v.verification}
 ### Routing Trace
 ${v.routingTrace}
 ### ${tokenLine}
@@ -256,11 +382,18 @@ ${v.routingTrace}
 		? `\n## Case Notes\n${input.notes}\n`
 		: "";
 
-	return `You are an expert code reviewer and eval judge. You evaluate two implementations of the same task and decide whether skill knowledge helped.
+	return `You are an active investigative eval judge. You evaluate two implementations of the same task and decide whether skill knowledge helped.
 
 ## Task Prompt
 ${input.prompt}
 ${notesSection}
+## Workspace
+
+You are running in a scratch judge workspace. Each variant is available as a runnable project under:
+${input.variants.map((v) => `- ${v.tag}: variants/${v.tag}/`).join("\n")}
+
+You may read, edit, and write files in this scratch workspace. You may add temporary benchmark, allocation, compiler-output, or disassembly scaffolding under variants/* or evidence/. Do not treat scratch edits as submitted solution code. Run the original submitted code first before adding instrumentation.
+
 ${variantSections.join("\n\n")}
 
 ## Instructions
@@ -270,7 +403,9 @@ You are the sole evaluator. Your verdict determines pass/fail for this eval case
 ### What to evaluate
 1. **Code quality**: Rate each implementation 1-10 on: ${JUDGE_DIMENSIONS.join(", ")}
 2. **Skill effectiveness**: Did the skill variant's routing (skills read, refs read) translate into measurably better code?
-3. **Pass/fail verdict**: For each variant and overall.
+3. **Execution evidence**: Run or inspect tests, timing boundaries, compiler output, traces, allocation behavior, and disassembly as needed.
+4. **Agent behavior**: Use sanitized model steps to see whether the agent inspected the right files, ran useful checks, used compiler/build flags, kept large output filtered, and avoided blind edits.
+5. **Pass/fail verdict**: For each variant and overall.
 
 ### Verdict criteria
 - The **skill variant PASSES** if it demonstrates clear quality improvement over baseline that can be attributed to the skill knowledge it received. Look at the routing trace — did it read the expected skills/refs, and did that knowledge improve the code?
@@ -278,6 +413,12 @@ You are the sole evaluator. Your verdict determines pass/fail for this eval case
 - The **noskill/baseline variant PASSES** if it produced reasonable working code for the task.
 - The **noskill/baseline variant FAILS** if it failed to produce working code or had errors that prevented execution.
 - The **bundle PASSES** if the skill variant demonstrates clear benefit over baseline.
+- If required verification commands fail for a variant, treat that as a serious correctness issue even if the code looks plausible.
+- Do not reward performance claims unless they are supported by same-boundary verification output, your own scratch investigation, or a clearly stated plan without invented numbers.
+- Prefer commands that answer concrete questions: tests pass, benchmark boundary, allocation in hot loops, compiler output surprises, and whether the compared timings measure the same work.
+- In processFindings, explicitly say whether each agent used targeted Zig commands such as optimized builds, --verbose, emitted assembly, nm, objdump, allocator counters, or timing runs. If it did not, call that out as a process gap even if the final code is good.
+- Treat raw large compiler output as low quality process evidence unless the agent filtered it to the target symbols, functions, or flags it needed.
+- If you cannot run a command, report that as an evidence gap instead of guessing.
 
 ### Cost analysis
 - API costs (input + output): ${tokenCosts}
@@ -291,7 +432,7 @@ ${responseSchema}`;
 const runPiJudge = async (params: {
 	model: ModelSpec;
 	thinking: string;
-	prompt: string;
+	input: JudgeBundleInput;
 	judgeAgentsPath: string;
 	authSourcePath: string | null;
 }): Promise<{ content: string; tokens: TokenUsage }> => {
@@ -302,13 +443,16 @@ const runPiJudge = async (params: {
 			judgeAgentsPath: params.judgeAgentsPath,
 			authSourcePath: params.authSourcePath,
 		});
+		await writeJudgeWorkspaceFiles(layout, params.input);
 
 		const outputPath = path.join(layout.outputDir, "judge-output.json");
 		const engine = createMandatorySandboxEngine();
+		const prompt = buildJudgePrompt(params.input);
 		const args = [
 			"--mode", "rpc",
 			"--no-session",
 			"--no-extensions",
+			"--tools", "read,bash,edit,write,grep,find,ls",
 			"--provider", params.model.provider,
 			"--model", params.model.id,
 			"--thinking", params.thinking,
@@ -360,7 +504,7 @@ const runPiJudge = async (params: {
 			return { content, tokens };
 		})();
 
-		launch.stdin.write(`${JSON.stringify({ type: "prompt", message: params.prompt })}\n`);
+		launch.stdin.write(`${JSON.stringify({ type: "prompt", message: prompt })}\n`);
 
 		return await Promise.race([exitPromise, timeoutPromise]);
 	} finally {
@@ -412,6 +556,23 @@ const parseJudgeResponse = (
 		variantTags,
 		pass: Boolean(parsed.pass),
 		verdict: String(parsed.verdict ?? ""),
+		evidenceSummary: String(parsed.evidenceSummary ?? ""),
+		processSummary: String(parsed.processSummary ?? ""),
+		processFindings: Array.isArray(parsed.processFindings)
+			? parsed.processFindings.map((finding) => {
+				const record = finding as Record<string, unknown>;
+				return {
+					tag: String(record.tag ?? ""),
+					score: Number(record.score ?? 0),
+					traceEvidence: String(record.traceEvidence ?? ""),
+					compilerEvidence: String(record.compilerEvidence ?? ""),
+					timingEvidence: String(record.timingEvidence ?? ""),
+					gaps: String(record.gaps ?? ""),
+				};
+			})
+			: [],
+		commandsRun: Array.isArray(parsed.commandsRun) ? parsed.commandsRun.map(String) : [],
+		acceptanceCriteria: Array.isArray(parsed.acceptanceCriteria) ? parsed.acceptanceCriteria.map(String) : [],
 		dimensions,
 		variantVerdicts,
 		costAnalysis: String(parsed.costAnalysis ?? ""),
@@ -472,11 +633,10 @@ export const runJudge = async (params: {
 	for (const [bundleId, { bundle, variants }] of resolved) {
 		try {
 			const input = await assembleJudgeBundleInput(bundleId, variants, agentDir);
-			const prompt = buildJudgePrompt(input);
 			const { content, tokens } = await runPiJudge({
 				model: judgeModelSpec,
 				thinking: options.judgeThinking,
-				prompt,
+				input,
 				judgeAgentsPath: options.judgeAgentsPath,
 				authSourcePath: options.evalAuthSource,
 			});

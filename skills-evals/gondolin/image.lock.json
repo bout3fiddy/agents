@@ -1,37 +1,37 @@
 {
   "name": "pi-eval-gondolin-image",
-  "version": "2026.03.03.234527",
-  "generatedAt": "2026-03-03T23:46:31.436Z",
-  "buildId": "b0e0dac9-fee8-51b2-a0c4-83d6901ffcfc",
+  "version": "2026.05.20.121233",
+  "generatedAt": "2026-05-20T12:13:20.867Z",
+  "buildId": "6d50406d-1685-5653-93ba-5afaea89a0b0",
   "arch": "aarch64",
   "imageDir": "skills-evals/gondolin/image/current",
   "piPackage": {
-    "name": "@mariozechner/pi-coding-agent",
-    "version": "0.52.6"
+    "name": "@earendil-works/pi-coding-agent",
+    "version": "0.75.3"
   },
   "buildConfig": {
     "path": "skills-evals/gondolin/pi-eval-image.json",
-    "sha256": "5c5edb51b1355ae3575ff35f73e3da82db267666924851dc7d5a42b749116c0f"
+    "sha256": "018bb6d05a9fde5a4ec6b4c051b034678991bb1835bc6caa0f603a9f80ebbd55"
   },
   "artifacts": {
     "manifest": {
       "path": "skills-evals/gondolin/image/current/manifest.json",
-      "sha256": "e3d6d368c4a5395e120304d3268bfd8539eac7239c6eeee3936b75c4848caee7"
+      "sha256": "748bfd34b15bda2db56be56a6cfcee1738997afff1d2d6425bc193d9f1e4e225"
     },
     "kernel": {
       "path": "skills-evals/gondolin/image/current/vmlinuz-virt",
-      "sizeBytes": 10248704,
-      "sha256": "08fadab025ba6e78e2a1063c18922af9ed2d3306621ea1c3c94538a841e7005e"
+      "sizeBytes": 10334720,
+      "sha256": "7e352c6933065be793512b7845b1bbfedb9208747b0a0772ea027e38fba1c856"
     },
     "initramfs": {
       "path": "skills-evals/gondolin/image/current/initramfs.cpio.lz4",
-      "sizeBytes": 6325979,
-      "sha256": "b67d55c021fa3af197563239ad9089282defbb80fe2f6ff4b441e2503db38f15"
+      "sizeBytes": 6329881,
+      "sha256": "4c87d99916d9e49c1bc1b4cc647e0cd9f3f81b1eabb82e30493d0069804ed442"
     },
     "rootfs": {
       "path": "skills-evals/gondolin/image/current/rootfs.ext4",
       "sizeBytes": 4294967296,
-      "sha256": "8aa068c4486e0d810730aa63d5c9ba3b350eec28ecef82eedeb08744da8492ba"
+      "sha256": "6137f2846cd48567679bb4ab19c2ae7e324a1dceebb293b7a81a6acbfaea73b6"
     }
   }
 }
