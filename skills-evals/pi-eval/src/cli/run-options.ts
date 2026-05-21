@@ -1,5 +1,5 @@
 import type { ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
-import { homedir } from "node:os";
+import { availableParallelism, homedir } from "node:os";
 import path from "node:path";
 import { ensureModelAuth, modelSpecFromKey, resolveModelSpec } from "../runtime/model/model-registry.js";
 import type { EvalConfig, EvalRunOptions } from "../data/types.js";
@@ -9,12 +9,13 @@ import { fileURLToPath } from "node:url";
 import {
 	assertAllowedFlags,
 	parseLimitFlag,
+	parseParallelismFlag,
 	parseStringFlag,
 	resolveCasesPath,
 } from "./validation.js";
 
 const DEFAULT_CASES_PATH = "skills-evals/fixtures/eval-cases";
-const DEFAULT_CASE_PARALLELISM = 10;
+const MAX_CASE_PARALLELISM = 6;
 
 type EvalFlags = Record<string, string | boolean>;
 
@@ -24,12 +25,25 @@ const ALLOWED_RUN_FLAGS = [
 	"--cases",
 	"--filter",
 	"--limit",
+	"--parallelism",
 	"--dry-run",
 	"--thinking",
 ] as const;
 
 const parsePositiveIntEnv = (value: string | undefined, fallback: number): number =>
 	parsePositiveInt(value, fallback);
+
+export const resolveCaseParallelism = (params: {
+	flagValue?: string | boolean;
+	envValue?: string;
+	availableWorkers?: number;
+}): number => {
+	const availableWorkers = Math.max(1, Math.floor(params.availableWorkers ?? availableParallelism()));
+	const defaultParallelism = Math.min(availableWorkers, MAX_CASE_PARALLELISM);
+	const fromFlag = parseParallelismFlag(params.flagValue);
+	const requested = fromFlag ?? parsePositiveIntEnv(params.envValue, defaultParallelism);
+	return Math.max(1, Math.min(requested, availableWorkers, MAX_CASE_PARALLELISM));
+};
 
 export const isSameResolvedPath = (left: string, right: string): boolean =>
 	normalizePath(path.resolve(left)) === normalizePath(path.resolve(right));
@@ -61,10 +75,10 @@ export const resolveRunOptions = async (
 	const limitOverride = parseLimitFlag(flags["--limit"]);
 	const dryRunOverride = Boolean(flags["--dry-run"]);
 	const thinkingLevel = parseStringFlag("--thinking", flags["--thinking"]) ?? "medium";
-	const caseParallelism = parsePositiveIntEnv(
-		process.env.PI_EVAL_CASE_PARALLELISM,
-		DEFAULT_CASE_PARALLELISM,
-	);
+	const caseParallelism = resolveCaseParallelism({
+		flagValue: flags["--parallelism"],
+		envValue: process.env.PI_EVAL_CASE_PARALLELISM,
+	});
 	const authSourcePath =
 		process.env.PI_EVAL_AUTH_SOURCE ?? path.join(homedir(), ".pi", "agent", "auth.json");
 	const evalAuthSource = (await fileExists(authSourcePath)) ? authSourcePath : null;

@@ -42,6 +42,10 @@ export const parseLimitFlag = (value: string | boolean | undefined): number | un
 	return parsePositiveIntFlag("--limit", value);
 };
 
+export const parseParallelismFlag = (value: string | boolean | undefined): number | undefined => {
+	return parsePositiveIntFlag("--parallelism", value);
+};
+
 export const resolveCasesPath = async (
 	agentDir: string,
 	value: string | boolean | undefined,

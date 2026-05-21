@@ -17,7 +17,8 @@ import {
 import { errorMessage } from "../data/utils.js";
 import { resolveInsideRoot } from "../runtime/policy/path-policy.js";
 import { collectAssistantText, sumUsageFromMessages } from "../runtime/rpc/rpc-messages.js";
-import { createMandatorySandboxEngine } from "../runtime/engine/sandbox-engine.js";
+import { createMandatorySandboxEngine, type SandboxedProcessHandle } from "../runtime/engine/sandbox-engine.js";
+import { runItemsInParallel } from "../runtime/util/parallel.js";
 import { createJudgeSandbox, cleanupJudgeSandbox, type JudgeSandboxLayout } from "./judge-sandbox.js";
 
 type JudgeVariantInput = {
@@ -437,6 +438,10 @@ const runPiJudge = async (params: {
 	authSourcePath: string | null;
 }): Promise<{ content: string; tokens: TokenUsage }> => {
 	let layout: JudgeSandboxLayout | null = null;
+	let launch: SandboxedProcessHandle | null = null;
+	let processExited = false;
+	let rl: ReturnType<typeof createInterface> | null = null;
+	let timeoutId: ReturnType<typeof setTimeout> | null = null;
 
 	try {
 		layout = await createJudgeSandbox({
@@ -458,7 +463,7 @@ const runPiJudge = async (params: {
 			"--thinking", params.thinking,
 		];
 
-		const launch = await engine.launchWorker({
+		launch = await engine.launchWorker({
 			command: "pi",
 			args,
 			env: process.env as NodeJS.ProcessEnv,
@@ -476,7 +481,7 @@ const runPiJudge = async (params: {
 
 		launch.stderr.on("data", (chunk: Buffer | string) => stderrChunks.push(String(chunk)));
 
-		const rl = createInterface({ input: launch.stdout as NodeJS.ReadableStream & AsyncIterable<string> });
+		rl = createInterface({ input: launch.stdout as NodeJS.ReadableStream & AsyncIterable<string> });
 		rl.on("line", (line: string) => {
 			let event: Record<string, unknown>;
 			try {
@@ -492,12 +497,13 @@ const runPiJudge = async (params: {
 		});
 
 		const timeoutPromise = new Promise<never>((_, reject) => {
-			setTimeout(() => reject(new Error("judge pi process timed out")), JUDGE_TIMEOUT_MS);
+			timeoutId = setTimeout(() => reject(new Error("judge pi process timed out")), JUDGE_TIMEOUT_MS);
 		});
 
 		const exitPromise = (async () => {
-			const exitCode = await launch.waitForExit();
-			rl.close();
+			const exitCode = await launch!.waitForExit();
+			processExited = true;
+			rl?.close();
 			if (!content && exitCode !== 0) {
 				throw new Error(`pi judge exited with code ${exitCode}: ${stderrChunks.join("")}`);
 			}
@@ -508,17 +514,83 @@ const runPiJudge = async (params: {
 
 		return await Promise.race([exitPromise, timeoutPromise]);
 	} finally {
+		if (timeoutId) clearTimeout(timeoutId);
+		rl?.close();
+		if (launch && !processExited) launch.kill();
+		await launch?.cleanup().catch(() => undefined);
 		await cleanupJudgeSandbox(layout);
 	}
 };
 
-const extractJson = (raw: string): string => {
-	const fenceMatch = raw.match(/```(?:json)?\s*\n?([\s\S]*?)```/);
-	if (fenceMatch) return fenceMatch[1].trim();
-	const braceStart = raw.indexOf("{");
-	const braceEnd = raw.lastIndexOf("}");
-	if (braceStart >= 0 && braceEnd > braceStart) return raw.slice(braceStart, braceEnd + 1);
-	return raw;
+const collectJsonObjectCandidates = (raw: string): string[] => {
+	const candidates: string[] = [];
+	let depth = 0;
+	let start = -1;
+	let inString = false;
+	let escaped = false;
+
+	for (let index = 0; index < raw.length; index += 1) {
+		const char = raw[index];
+		if (inString) {
+			if (escaped) {
+				escaped = false;
+			} else if (char === "\\") {
+				escaped = true;
+			} else if (char === "\"") {
+				inString = false;
+			}
+			continue;
+		}
+
+		if (char === "\"") {
+			inString = true;
+			continue;
+		}
+		if (char === "{") {
+			if (depth === 0) start = index;
+			depth += 1;
+			continue;
+		}
+		if (char === "}" && depth > 0) {
+			depth -= 1;
+			if (depth === 0 && start >= 0) {
+				candidates.push(raw.slice(start, index + 1));
+				start = -1;
+			}
+		}
+	}
+
+	return candidates;
+};
+
+const parseCandidate = (candidate: string): Record<string, unknown> | null => {
+	try {
+		const parsed = JSON.parse(candidate) as unknown;
+		if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+			return parsed as Record<string, unknown>;
+		}
+		return null;
+	} catch {
+		return null;
+	}
+};
+
+export const extractJson = (raw: string): string => {
+	const candidates: string[] = [];
+	for (const match of raw.matchAll(/```(?:json)?\s*\n?([\s\S]*?)```/g)) {
+		candidates.push(match[1].trim());
+	}
+	candidates.push(...collectJsonObjectCandidates(raw));
+
+	const parseable = candidates
+		.map((candidate) => ({ candidate, parsed: parseCandidate(candidate) }))
+		.filter((entry): entry is { candidate: string; parsed: Record<string, unknown> } => Boolean(entry.parsed));
+	const preferred = parseable.findLast((entry) =>
+		Array.isArray(entry.parsed.variantVerdicts) || Array.isArray(entry.parsed.dimensions)
+	);
+	if (preferred) return preferred.candidate;
+	if (parseable.length > 0) return parseable[parseable.length - 1].candidate;
+	return raw.trim();
 };
 
 const parseJudgeResponse = (
@@ -528,7 +600,17 @@ const parseJudgeResponse = (
 	tokens: TokenUsage,
 ): JudgeBundleVerdict => {
 	const jsonStr = extractJson(raw);
-	const parsed = JSON.parse(jsonStr) as JudgeResponseSchema;
+	let parsed: JudgeResponseSchema;
+	try {
+		parsed = JSON.parse(jsonStr) as JudgeResponseSchema;
+	} catch (error) {
+		const excerpt = raw.slice(0, 800).replace(/\s+/g, " ").trim();
+		throw new Error(`${errorMessage(error)}; raw judge response excerpt: ${excerpt}`);
+	}
+	if (!Array.isArray(parsed.variantVerdicts) || parsed.variantVerdicts.length === 0) {
+		const excerpt = raw.slice(0, 800).replace(/\s+/g, " ").trim();
+		throw new Error(`judge response missing variantVerdicts; raw judge response excerpt: ${excerpt}`);
+	}
 	const dimensions: JudgeDimensionScore[] = (parsed.dimensions ?? []).map((d) => {
 		const scores: Record<string, number> = {};
 		for (const tag of variantTags) {
@@ -582,6 +664,52 @@ const parseJudgeResponse = (
 	};
 };
 
+const buildJudgeErrorVerdict = (
+	bundleId: string,
+	variantTags: string[],
+	message: string,
+): JudgeBundleVerdict => {
+	const zeroTokens: TokenUsage = {
+		input: 0,
+		output: 0,
+		cacheRead: 0,
+		cacheWrite: 0,
+		totalTokens: 0,
+	};
+	return {
+		bundleId,
+		variantTags,
+		pass: false,
+		verdict: `Judge failed: ${message}`,
+		evidenceSummary: "The judge process failed before returning a parseable verdict.",
+		processSummary: "No process comparison is available because the judge verdict was unavailable.",
+		processFindings: variantTags.map((tag) => ({
+			tag,
+			score: 0,
+			traceEvidence: "Judge verdict unavailable.",
+			compilerEvidence: "Judge verdict unavailable.",
+			timingEvidence: "Judge verdict unavailable.",
+			gaps: message,
+		})),
+		commandsRun: [],
+		acceptanceCriteria: ["judge returned parseable JSON: failed"],
+		dimensions: JUDGE_DIMENSIONS.map((name) => ({
+			name,
+			scores: Object.fromEntries(variantTags.map((tag) => [tag, 0])),
+			rationale: "Judge verdict unavailable.",
+		})),
+		variantVerdicts: variantTags.map((tag) => ({
+			tag,
+			pass: false,
+			rationale: `Judge failed before returning a parseable verdict: ${message}`,
+		})),
+		costAnalysis: "Judge cost unavailable.",
+		recommendation: "Rerun the judge after inspecting the raw error.",
+		rawResponse: message,
+		judgeTokens: zeroTokens,
+	};
+};
+
 /** Apply judge verdicts to evaluations, setting pass/fail status. */
 export const applyJudgeVerdicts = (
 	evaluations: CaseEvaluation[],
@@ -601,14 +729,15 @@ export const applyJudgeVerdicts = (
 			(v) => v.tag === evalCase.variantTag,
 		);
 		if (variantVerdict) {
-			evaluation.status = variantVerdict.pass ? "pass" : "fail";
-			if (!variantVerdict.pass) {
+			if (variantVerdict.pass) {
+				continue;
+			}
+			evaluation.status = "fail";
 				evaluation.reasons = [`JUDGE: ${variantVerdict.rationale}`];
 				evaluation.failureReasons = [{
 					category: "TASK_FAILURE",
 					message: variantVerdict.rationale,
 				}];
-			}
 		}
 	}
 };
@@ -630,21 +759,38 @@ export const runJudge = async (params: {
 
 	const judgeModelSpec = options.judgeModel ?? options.model;
 
-	for (const [bundleId, { bundle, variants }] of resolved) {
-		try {
+	const bundleInputs = [...resolved.entries()];
+	const bundleVerdicts = await runItemsInParallel(
+		bundleInputs,
+		options.caseParallelism,
+		async ([bundleId, { bundle, variants }]) => {
 			const input = await assembleJudgeBundleInput(bundleId, variants, agentDir);
-			const { content, tokens } = await runPiJudge({
-				model: judgeModelSpec,
-				thinking: options.judgeThinking,
-				input,
-				judgeAgentsPath: options.judgeAgentsPath,
-				authSourcePath: options.evalAuthSource,
-			});
-			const verdict = parseJudgeResponse(content, bundleId, bundle.variantTags, tokens);
-			verdicts.set(bundleId, verdict);
-		} catch (error) {
-			console.error(`[judge] Failed for bundle ${bundleId}: ${errorMessage(error)}`);
-		}
+			let lastError: unknown = null;
+			for (let attempt = 1; attempt <= 2; attempt += 1) {
+				try {
+					const { content, tokens } = await runPiJudge({
+						model: judgeModelSpec,
+						thinking: options.judgeThinking,
+						input,
+						judgeAgentsPath: options.judgeAgentsPath,
+						authSourcePath: options.evalAuthSource,
+					});
+					return parseJudgeResponse(content, bundleId, bundle.variantTags, tokens);
+				} catch (error) {
+					lastError = error;
+					if (attempt < 2) {
+						console.error(`[judge] Retrying bundle ${bundleId}: ${errorMessage(error)}`);
+					}
+				}
+			}
+			const message = errorMessage(lastError);
+			console.error(`[judge] Failed for bundle ${bundleId}: ${message}`);
+			return buildJudgeErrorVerdict(bundleId, bundle.variantTags, message);
+		},
+	);
+
+	for (const verdict of bundleVerdicts) {
+		if (verdict) verdicts.set(verdict.bundleId, verdict);
 	}
 
 	return verdicts;

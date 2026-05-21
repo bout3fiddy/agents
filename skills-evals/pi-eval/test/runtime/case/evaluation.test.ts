@@ -56,6 +56,40 @@ test("assembleEvaluation populates routing scorecard from result", () => {
 	assert.deepEqual(evaluation.routing.attemptedRefs, ["skills/coding/references/index.md"]);
 	assert.deepEqual(evaluation.routing.successfulRefs, ["skills/coding/references/index.md"]);
 	assert.deepEqual(evaluation.routing.deniedRefs, []);
+	assert.deepEqual(evaluation.routing.missingRefs, []);
+	assert.deepEqual(evaluation.routing.unexpectedRefs, []);
+});
+
+test("assembleEvaluation reports missing and unexpected reference reads", () => {
+	const evalCase = buildEvalCase({
+		expectedRefs: [
+			"./skills/coding/references/index.md",
+			"skills/coding/references/performance.md",
+		],
+	});
+	const result = buildResult(evalCase, {
+		refInvocations: [
+			"skills/coding/references/index.md",
+			"skills/coding/references/comments.md",
+		],
+		refAttempts: [
+			"skills/coding/references/index.md",
+			"skills/coding/references/comments.md",
+		],
+	});
+
+	const evaluation = assembleEvaluation(evalCase, result);
+
+	assert.deepEqual(evaluation.routing.readRefs, [
+		"skills/coding/references/comments.md",
+		"skills/coding/references/index.md",
+	]);
+	assert.deepEqual(evaluation.routing.missingRefs, [
+		"skills/coding/references/performance.md",
+	]);
+	assert.deepEqual(evaluation.routing.unexpectedRefs, [
+		"skills/coding/references/comments.md",
+	]);
 });
 
 test("assembleEvaluation uses attempts in dry-run mode", () => {

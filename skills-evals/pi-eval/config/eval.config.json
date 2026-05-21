@@ -1,5 +1,5 @@
 {
-  "requiredModels": ["openai-codex/gpt-5.3-codex"],
+  "requiredModels": ["openai-codex/gpt-5.5"],
   "models": {
     "default": {
       "globalInstructions": ["AGENTS.md", "instructions/global.md"]

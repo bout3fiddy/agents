@@ -114,6 +114,29 @@ test("applyJudgeVerdicts sets fail status when judge fails a variant", () => {
 	assert.equal(evaluations[1].status, "pass");
 });
 
+test("applyJudgeVerdicts preserves existing failures when judge marks variant pass", () => {
+	const cases = [
+		buildEvalCase({ id: "CD-TEST:skill", variantTag: "skill" }),
+	];
+	const failedEvaluation = buildEvaluation("CD-TEST:skill");
+	failedEvaluation.status = "fail";
+	failedEvaluation.reasons = ["TASK_FAILURE: verification failed"];
+	failedEvaluation.failureReasons = [{
+		category: "TASK_FAILURE",
+		message: "verification failed",
+	}];
+	const verdicts = new Map([["CD-TEST", buildVerdict({
+		variantVerdicts: [
+			{ tag: "skill", pass: true, rationale: "Looks fine" },
+		],
+	})]]);
+
+	applyJudgeVerdicts([failedEvaluation], verdicts, cases);
+
+	assert.equal(failedEvaluation.status, "fail");
+	assert.equal(failedEvaluation.failureReasons[0].message, "verification failed");
+});
+
 test("applyJudgeVerdicts attaches verdict to evaluations", () => {
 	const cases = [
 		buildEvalCase({ id: "CD-TEST:skill", variantTag: "skill" }),

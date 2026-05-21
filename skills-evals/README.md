@@ -84,7 +84,7 @@ Custom Gondolin image expectations:
 Direct invocation:
 
 ```bash
-pi --no-session --no-extensions -e skills-evals/pi-eval/index.ts -p "/eval audit --model openai-codex/gpt-5.3-codex"
+pi --no-session --no-extensions -e skills-evals/pi-eval/index.ts -p "/eval audit --model openai-codex/gpt-5.5"
 ```
 
 Supported command surface:

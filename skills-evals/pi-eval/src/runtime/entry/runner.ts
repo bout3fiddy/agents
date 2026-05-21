@@ -67,6 +67,7 @@ export const registerEvalCommand = (pi: ExtensionAPI) => {
 					cases: evaluations.length,
 					pass: passed,
 					fail: failed,
+					caseParallelism: options.caseParallelism,
 					duration: formatDuration(durationMs),
 					report: paths.reportPath,
 					indexUpdated: options.isFullRun ? paths.indexPath : null,

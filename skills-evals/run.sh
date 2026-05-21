@@ -6,13 +6,15 @@ EXT_PATH="$ROOT_DIR/skills-evals/pi-eval/index.ts"
 MODELS_FILE_DEFAULT="$ROOT_DIR/skills-evals/fixtures/models.jsonl"
 DEFAULT_GONDOLIN_IMAGE_PATH="$ROOT_DIR/skills-evals/gondolin/image/current"
 CASE_FILTER=""
+CASE_PARALLELISM=""
 
 usage() {
 	cat <<'EOF'
-Usage: skills-evals/run.sh [--case CASE_ID]
+Usage: skills-evals/run.sh [--case CASE_ID] [--parallelism N]
 
 Options:
   --case CASE_ID   Run only the matching case ID (applies --filter CASE_ID --limit 1)
+  --parallelism N  Max eval cases/variants to run in parallel (runner caps at 6)
   -h, --help       Show this help message
 EOF
 }
@@ -26,6 +28,15 @@ while [[ "$#" -gt 0 ]]; do
 			exit 1
 		fi
 		CASE_FILTER="$2"
+		shift 2
+		;;
+	--parallelism)
+		if [[ "$#" -lt 2 || ! "$2" =~ ^[0-9]+$ || "$2" -lt 1 ]]; then
+			echo "--parallelism requires a positive integer." >&2
+			usage >&2
+			exit 1
+		fi
+		CASE_PARALLELISM="$2"
 		shift 2
 		;;
 	-h | --help)
@@ -147,6 +158,9 @@ run_for_model() {
 	if [[ -n "$CASE_FILTER" ]]; then
 		prompt="$prompt --filter $CASE_FILTER --limit 1"
 	fi
+	if [[ -n "$CASE_PARALLELISM" ]]; then
+		prompt="$prompt --parallelism $CASE_PARALLELISM"
+	fi
 
 	local -a env_prefix=()
 	if [[ -n "$judge_model" ]]; then
@@ -202,6 +216,11 @@ echo "Running ${#MODEL_SPECS[@]} model(s); max parallel=$MAX_PARALLEL"
 echo "Models source: $MODELS_FILE"
 if [[ -n "$CASE_FILTER" ]]; then
 	echo "Case filter: $CASE_FILTER (limit=1)"
+fi
+if [[ -n "$CASE_PARALLELISM" ]]; then
+	echo "Case parallelism request: $CASE_PARALLELISM (runner caps at 6)"
+else
+	echo "Case parallelism: auto (runner caps at 6)"
 fi
 
 failed=0

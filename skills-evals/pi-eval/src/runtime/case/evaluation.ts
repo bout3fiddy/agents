@@ -12,7 +12,10 @@ import { normalizePath } from "../policy/path-policy.js";
 const normalizeRefPath = (ref: string): string =>
 	normalizePath(ref).trim().replace(/^\.\/+/, "");
 
-const buildRoutingScorecard = (result: CaseRunResult): RoutingScorecard => {
+const buildRoutingScorecard = (
+	result: CaseRunResult,
+	expectedRefs: string[],
+): RoutingScorecard => {
 	const attemptedSkills = uniqueSorted(result.skillAttempts ?? []);
 	const successfulSkills = uniqueSorted(result.skillInvocations ?? []);
 	const deniedSkills = uniqueSorted(result.skillDenied ?? []);
@@ -25,6 +28,12 @@ const buildRoutingScorecard = (result: CaseRunResult): RoutingScorecard => {
 	const invokedSkills = result.dryRun ? attemptedSkills : successfulSkills;
 	const invokedSkillFiles = result.dryRun ? attemptedSkillFiles : successfulSkillFiles;
 	const invokedRefs = result.dryRun ? attemptedRefs : successfulRefs;
+	const expectedRefSet = new Set(uniqueSorted(expectedRefs.map(normalizeRefPath)));
+	const invokedRefSet = new Set(invokedRefs);
+	const missingRefs = [...expectedRefSet].filter((ref) => !invokedRefSet.has(ref));
+	const unexpectedRefs = expectedRefSet.size === 0
+		? []
+		: invokedRefs.filter((ref) => !expectedRefSet.has(ref));
 
 	return {
 		readSkills: invokedSkills,
@@ -40,8 +49,8 @@ const buildRoutingScorecard = (result: CaseRunResult): RoutingScorecard => {
 		successfulRefs,
 		deniedRefs,
 		missingSkillFileReads: [],
-		missingRefs: [],
-		unexpectedRefs: [],
+		missingRefs,
+		unexpectedRefs,
 	};
 };
 
@@ -61,7 +70,7 @@ export const buildCaseResult = (
 	expectedSkills: evalCase.expectedSkills,
 	disallowedSkills: evalCase.disallowedSkills,
 	expectedRefs: evalCase.expectedRefs,
-	routing: buildRoutingScorecard(result),
+	routing: buildRoutingScorecard(result, evalCase.expectedRefs),
 	assertions: evalCase.assertions ?? [],
 	tokenBudget: evalCase.tokenBudget ?? null,
 });

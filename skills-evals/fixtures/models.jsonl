@@ -1,1 +1,1 @@
-{"eval":{"model":"openai-codex/gpt-5.3-codex","thinking":"medium"},"judge":{"model":"openai-codex/gpt-5.3-codex","thinking":"xhigh"}}
+{"eval":{"model":"openai-codex/gpt-5.5","thinking":"medium"},"judge":{"model":"openai-codex/gpt-5.5","thinking":"xhigh"}}
