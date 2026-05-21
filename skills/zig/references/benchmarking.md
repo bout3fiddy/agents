@@ -18,6 +18,8 @@ Compare matching optimized timing boundaries: `ReleaseFast` with `ReleaseFast`, 
 
 For machine-level work, the benchmark should be boring. The interesting part is the boundary and checksum, not a clever harness. Prefer deterministic in-memory inputs, a warmup, an iteration loop around the exact boundary, and a checksum or domain invariant that prevents dead-code elimination and catches behavior changes.
 
+Keep benchmark-only bookkeeping outside the timed boundary unless it is part of the user-visible work. Precompute active counts, expected totals, labels, and fixture metadata before timing; keep the timed loop focused on the boundary plus the minimal checksum needed to prove the result was consumed.
+
 ## Build Modes
 
 Use project steps when they exist:
@@ -90,6 +92,15 @@ run boundary=analyzePrepared batches=20 samples=1000000 elapsed_ns=13920000 chec
 ```
 
 This keeps "we moved work to setup" distinct from "the repeated boundary is faster."
+
+When the task says one stable rule set, weight table, plan, cache, or model is applied to many batches, make that workload visible in the benchmark:
+
+```text
+bench boundary=scoreSegments weights=4 batches=1000 batch_size=64 iterations=40 warmup=3 elapsed_ns=2857000 checksum=5054062585016
+bench boundary=PreparedWeights.score weights=4 batches=1000 batch_size=64 iterations=40 warmup=3 elapsed_ns=2483000 checksum=5054062585016
+```
+
+This is a different question from repeating one large full-slice call. Keep both numbers when the public one-shot API remains, but use the many-batch prepared boundary for claims about reused controls.
 
 ## When No Benchmark Exists
 

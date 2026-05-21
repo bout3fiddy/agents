@@ -33,7 +33,7 @@ import {
 	type SandboxEngine,
 } from "../engine/sandbox-engine.js";
 
-const DEFAULT_CASE_TIMEOUT_MS = 300_000;
+const DEFAULT_CASE_TIMEOUT_MS = 600_000;
 const DEFAULT_SHUTDOWN_TIMEOUT_MS = 30_000;
 
 const parsePositiveIntEnv = (name: string, fallback: number): number =>

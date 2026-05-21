@@ -10,7 +10,7 @@ from .allocation import read_allocation_report
 from .artifacts import (
     copy_if_exists,
     infer_artifact,
-    parse_elapsed_ns,
+    parse_benchmark_fields,
     parse_zig_env,
     resolve_source,
     zig_build_argv,
@@ -27,6 +27,7 @@ from .common import (
     read_text,
     run_command,
 )
+from .decision_card import build_inspect_decision_card
 from .llvm_mca import run_llvm_mca
 from .next_checks import build_next_checks
 from .profiling import run_profiler
@@ -444,7 +445,7 @@ def inspect(options: InspectOptions) -> JsonObject:
             "benchmark": {
                 "status": run_command_result.status if run_command_result else "skip",
                 "command_name": run_command_result.name if run_command_result else None,
-                "parsed": {"elapsed_ns": parse_elapsed_ns(output)},
+                "parsed": parse_benchmark_fields(output, options.symbol),
             },
         },
         "symbols": symbols,
@@ -469,9 +470,12 @@ def inspect(options: InspectOptions) -> JsonObject:
                 "| [.key, .count] | @tsv' report.json"
             ),
             "jq -r '.artifacts.hot_asm' report.json | xargs sed -n '1,160p'",
+            "jq '.runtime.benchmark.parsed' report.json",
+            "jq '.decision_card' report.json",
             "jq -r '.calls.summary // {}' report.json",
             "jq -r '.symbols.matches[].name' report.json",
         ],
     }
     report["next_checks"] = build_next_checks(report)
+    report["decision_card"] = build_inspect_decision_card(report)
     return report

@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import re
 from collections.abc import Callable
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Literal
 
 from .types import JsonArray, JsonObject, as_json_array, as_json_object
@@ -105,6 +107,16 @@ def str_at(report: JsonObject, path: tuple[str, ...]) -> str:
             return ""
         current = current_object.get(part)
     return current if isinstance(current, str) else ""
+
+
+def source_text(report: JsonObject) -> str:
+    source = str_at(report, ("inputs", "source"))
+    if not source:
+        return ""
+    try:
+        return Path(source).read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return ""
 
 
 def check_count(report: JsonObject, key: str) -> int:
@@ -245,6 +257,135 @@ def llvm_mca_candidate_evidence(report: JsonObject) -> list[EvidencePoint]:
     ]
 
 
+def clean_hot_boundary_ceiling_evidence(report: JsonObject) -> list[EvidencePoint]:
+    hot_found = object_at(report, ("hot_boundary",)).get("symbol_found")
+    elapsed = object_at(report, ("runtime", "benchmark", "parsed")).get("elapsed_ns")
+    call_total = int_at(report, ("calls", "count"))
+    check_counts = (
+        check_count(report, "allocator_hash_cache"),
+        check_count(report, "copy_helpers"),
+        check_count(report, "diagnostics"),
+        check_count(report, "division"),
+    )
+    if hot_found is not True or not isinstance(elapsed, int):
+        return []
+    if call_total != 0 or any(count != 0 for count in check_counts):
+        return []
+    return [
+        EvidencePoint(
+            path=".hot_boundary.symbol_found",
+            value=hot_found,
+            condition="is true",
+        ),
+        EvidencePoint(
+            path=".runtime.benchmark.parsed.elapsed_ns",
+            value=elapsed,
+            condition="is present",
+        ),
+    ]
+
+
+def bounded_fast_path_evidence(report: JsonObject) -> list[EvidencePoint]:
+    source = source_text(report)
+    if not source:
+        return []
+
+    has_private_limit = (
+        re.search(r"\b(?:max|limit)_[A-Za-z0-9_]*\s*=", source) is not None
+    )
+    has_len_guard = (
+        re.search(
+            r"\bif\s*\([^)]*\.len\s*(?:>|>=)\s*[A-Za-z_][A-Za-z0-9_]*",
+            source,
+        )
+        is not None
+    )
+    has_fallback_shape = re.search(r"\b(?:fallback|slow|Slow)\b", source) is not None
+    has_null_or_error_escape = (
+        re.search(
+            r"\breturn\s+(?:null|error\.[A-Za-z_][A-Za-z0-9_]*)\b",
+            source,
+        )
+        is not None
+    )
+
+    if not (
+        has_private_limit
+        and has_len_guard
+        and (has_fallback_shape or has_null_or_error_escape)
+    ):
+        return []
+
+    return [
+        EvidencePoint(
+            path=".inputs.source",
+            value=str_at(report, ("inputs", "source")),
+            condition="source has a private size limit plus a guarded fallback path",
+        )
+    ]
+
+
+def candidate_scan_evidence(report: JsonObject) -> list[EvidencePoint]:
+    source = source_text(report)
+    if not source:
+        return []
+
+    has_bit_scan = "@ctz" in source or "remaining &= remaining - 1" in source
+    has_candidate_loop = (
+        re.search(
+            r"\bwhile\s*\([^)]*(?:remaining|candidate|mask)[^)]*!=\s*0",
+            source,
+        )
+        is not None
+    )
+    has_lookup_context = (
+        re.search(r"\b(?:lookup|match|rule|policy|control)\b", source) is not None
+    )
+
+    if not (has_bit_scan and has_candidate_loop and has_lookup_context):
+        return []
+
+    return [
+        EvidencePoint(
+            path=".inputs.source",
+            value=str_at(report, ("inputs", "source")),
+            condition="source uses a bitset or candidate scan in lookup-like code",
+        )
+    ]
+
+
+def wide_record_by_value_evidence(report: JsonObject) -> list[EvidencePoint]:
+    source = source_text(report)
+    if not source:
+        return []
+
+    has_cold_wide_field = (
+        re.search(
+            r"\b(?:label|provenance|metadata|payload)\b[^;\n]*\[[0-9_]+\]u8",
+            source,
+        )
+        is not None
+    )
+    has_by_value_loop = (
+        re.search(
+            r"\bfor\s*\([^)]*\)\s*\|[A-Za-z_][A-Za-z0-9_]*\|",
+            source,
+        )
+        is not None
+    )
+
+    if not (has_cold_wide_field and has_by_value_loop):
+        return []
+
+    return [
+        EvidencePoint(
+            path=".inputs.source",
+            value=str_at(report, ("inputs", "source")),
+            condition="source has wide cold fields and by-value loop iteration",
+        )
+    ]
+
+
 CODEGEN_INSPECT = "codegen.inspect"
 
 NEXT_CHECK_RULES: tuple[NextCheckRule, ...] = (
@@ -329,11 +470,15 @@ NEXT_CHECK_RULES: tuple[NextCheckRule, ...] = (
         confidence="high",
         interpretation=(
             "Diagnostics, formatting, tracing, or panic paths appear in the "
-            "hot boundary."
+            "hot boundary; active formatting can also keep allocator work alive."
         ),
         next_checks=(
             "separate steady-state compute from reporting and validation",
-            "keep trace or format work behind an explicit cold path",
+            (
+                "use bounded stack or caller-owned buffers for formatting that "
+                "must run on active records"
+            ),
+            "keep trace and report formatting behind an explicit cold path",
             "check whether safety or panic edges are expected for this build mode",
         ),
         tool_call=ToolCall(
@@ -482,6 +627,122 @@ NEXT_CHECK_RULES: tuple[NextCheckRule, ...] = (
             ),
         ),
         trigger=benchmark_signal_evidence,
+    ),
+    NextCheckRule(
+        id="bounded_fast_path_cliff",
+        category="source-shape",
+        severity="high",
+        confidence="medium",
+        interpretation=(
+            "The source appears to use a capped optimized path with a fallback; "
+            "that can create a performance cliff outside the benchmark shape."
+        ),
+        next_checks=(
+            "run the same public boundary at the benchmark size and just above the cap",
+            "compare against a uniform fast path when the prompt has no such limit",
+            "report prepared-state size together with same-boundary timing",
+        ),
+        tool_call=ToolCall(
+            tool=CODEGEN_INSPECT,
+            purpose="compare the capped path with the fallback boundary",
+            jq=(
+                ".inputs.source",
+                ".runtime.benchmark.parsed",
+                ".decision_card",
+            ),
+            command_hint=(
+                "add a scratch benchmark that exercises the cap and cap-plus-one"
+            ),
+        ),
+        trigger=bounded_fast_path_evidence,
+    ),
+    NextCheckRule(
+        id="candidate_scan_source_probe",
+        category="source-shape",
+        severity="medium",
+        confidence="medium",
+        interpretation=(
+            "The source appears to use a candidate or bitset scan inside a lookup; "
+            "clean codegen for that scan still needs comparison against direct "
+            "table lookup or prepared indexes."
+        ),
+        next_checks=(
+            "measure candidate count per item on the benchmark workload",
+            "compare a direct decision table or preselected rule-index table",
+            "keep ordered semantics tests while comparing the rival shape",
+        ),
+        tool_call=ToolCall(
+            tool=CODEGEN_INSPECT,
+            purpose="move from current-symbol inspection to a source-shape comparison",
+            jq=(
+                ".inputs.source",
+                ".checks",
+                ".runtime.benchmark.parsed",
+            ),
+        ),
+        trigger=candidate_scan_evidence,
+    ),
+    NextCheckRule(
+        id="wide_record_by_value",
+        category="source-shape",
+        severity="medium",
+        confidence="medium",
+        interpretation=(
+            "The source appears to iterate records by value while the record "
+            "contains wide cold fields such as labels, provenance, metadata, "
+            "or payload."
+        ),
+        next_checks=(
+            "switch the hot loop to pointer or index iteration",
+            "keep cold fields out of the measured data path when possible",
+            "rerun the same-boundary benchmark and checksum after the change",
+        ),
+        tool_call=ToolCall(
+            tool=CODEGEN_INSPECT,
+            purpose="check for large per-item copies in the hot source path",
+            jq=(
+                ".inputs.source",
+                ".runtime.benchmark.parsed",
+                ".decision_card",
+            ),
+        ),
+        trigger=wide_record_by_value_evidence,
+    ),
+    NextCheckRule(
+        id="clean_hot_boundary_ceiling_probe",
+        category="ceiling",
+        severity="low",
+        confidence="medium",
+        interpretation=(
+            "Focused compiler output is clean for the current symbol; the next "
+            "useful question is likely a source-level data, control, or "
+            "algorithm comparison."
+        ),
+        next_checks=(
+            "compare before and after with the same benchmark workload",
+            (
+                "look for a stronger source hypothesis: prepared controls, "
+                "direct decision tables, fused passes, field grouping, "
+                "or workspace reuse"
+            ),
+            (
+                "when the simple source shape is already optimal for the "
+                "contract, report that ceiling instead of adding scaffolding"
+            ),
+        ),
+        tool_call=ToolCall(
+            tool=CODEGEN_INSPECT,
+            purpose=(
+                "decide whether more low-level inspection or a higher-level "
+                "comparison is useful"
+            ),
+            jq=(
+                ".runtime.benchmark.parsed",
+                ".checks",
+                ".calls.summary",
+            ),
+        ),
+        trigger=clean_hot_boundary_ceiling_evidence,
     ),
     NextCheckRule(
         id="llvm_mca_candidate",

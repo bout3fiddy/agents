@@ -62,7 +62,7 @@ Custom Gondolin image expectations:
 - Uses `PI_EVAL_GONDOLIN_IMAGE_PATH` when set, otherwise defaults to `skills-evals/gondolin/image/current`.
 - Runs models in parallel; parallelism defaults to number of models and can be capped with `PI_EVAL_MAX_PARALLEL`.
 - Thinking mode is read per model from `models.jsonl`; if omitted, fallback is `PI_EVAL_THINKING` (default `low`).
-- Per-case prompt timeout is configurable via `PI_EVAL_CASE_TIMEOUT_MS` (default `300000`).
+- Per-case prompt timeout is configurable via `PI_EVAL_CASE_TIMEOUT_MS` (default `600000`).
 - Worker shutdown wait timeout is configurable via `PI_EVAL_CASE_SHUTDOWN_TIMEOUT_MS` (default `30000`).
 - Within each model run, eval cases execute in a case worker pool by default with `PI_EVAL_CASE_PARALLELISM=10` (can be overridden via env).
 - Shared case sandbox mode (default on):
@@ -137,10 +137,12 @@ Routing assertions (optional per case):
 Cases source of truth:
 
 - `skills-evals/fixtures/eval-cases/` (one JSONL per case)
-- Zig performance cases currently cover six bundled comparisons:
+- Zig performance cases include bundled comparisons and standalone skill-tool probes:
   - `ZG-001` and `ZG-002`: refactor existing reasonably structured but slow Zig code.
   - `ZG-003` and `ZG-004`: implement more complex Zig modules from starter stubs.
   - `ZG-005` and `ZG-006`: create single-file Zig modules from blank workspaces (`src/main.zig` only).
+  - `ZG-007`: optimize a caller-owned alert engine while using the JSON codegen ladder.
+  - `ZG-008` and `ZG-009`: anti-overfit cases for multi-module repeated-batch work and source-level algorithmic improvement when obvious allocator/call smells are absent.
 
 Primary reports:
 

@@ -42,6 +42,7 @@ skills/zig/scripts/codegen-ladder.sh \
 Useful queries:
 
 ```sh
+jq '.decision_card' "$perf_scratch/codegen.json"
 jq -r '.runtime.benchmark.parsed.elapsed_ns' "$perf_scratch/codegen.json"
 jq -r '.hot_boundary' "$perf_scratch/codegen.json"
 jq -r '.checks[] | select(.status == "review") | [.key, .count] | @tsv' "$perf_scratch/codegen.json"
@@ -49,7 +50,13 @@ jq -r '.next_checks.suggestions[]? | [.id, .severity, .confidence] | @tsv' "$per
 jq -r '.source_map.entries[]? | [.address, (.frames | join(" <- "))] | @tsv' "$perf_scratch/codegen.json"
 ```
 
-`next_checks` is a rule-based checklist, not an optimizer oracle. Each suggestion includes `triggered_by` evidence and a `tool_call` object with `jq` queries back into the same report. The categories live in `scripts/codegen_ladder/next_checks.py` so tool maintainers can audit or extend the rules without reading the rest of the implementation.
+The decision card is the first-pass routing layer. It summarizes benchmark signal, hot-boundary state, hazards, recommended actions, and the reporting rule for the current evidence. Use it to choose between source edits, symbol/boundary repair, matched benchmark reruns, source-level alternatives, and ceiling reports.
+
+`next_checks` is a rule-based checklist for choosing the next investigation step. Each suggestion includes `triggered_by` evidence and a `tool_call` object with `jq` queries back into the same report. The categories live in `scripts/codegen_ladder/next_checks.py` so tool maintainers can audit or extend the rules without reading the rest of the implementation.
+
+Some `next_checks` are source-level probes. They catch patterns such as bounded fast paths with fallback scans or bitset candidate loops, then ask for a rival source-shape comparison. Treat those as design prompts: compiler evidence can show that the current shape compiles cleanly, while same-boundary timing and workload coverage decide whether a direct table, prepared indexes, active list, or uniform fallback-free path is better.
+
+For small project fixes, finish after one useful low-level check once correctness and same-boundary timing are good. If symbol-specific extraction is awkward, keep the optimized `--verbose` compiler command listing as the evidence and report symbol-level disassembly as a follow-up. Deeper compiler browsing is most valuable when timing is still bad, an allocator/copy/call fingerprint remains, or the user asked for assembly-level proof.
 
 For before/after comparisons, save both reports and run:
 
@@ -63,13 +70,14 @@ skills/zig/scripts/codegen-ladder.sh diff \
 Read the comparability block first:
 
 ```sh
+jq '.decision_card' "$perf_scratch/diff.json"
 jq -r '.comparability.status, .comparability.timing_claim' "$perf_scratch/diff.json"
 jq -r '.comparability.mismatches[]? | [.field, .before, .after] | @tsv' "$perf_scratch/diff.json"
 jq -r '.checks | to_entries[] | select(.value.delta != 0) | [.key, .value.before, .value.after, .value.delta] | @tsv' "$perf_scratch/diff.json"
 jq -r '.calls.summary | to_entries[] | select(.value.delta != 0) | [.key, .value.before, .value.after, .value.delta] | @tsv' "$perf_scratch/diff.json"
 ```
 
-When `comparability.status` is `review`, use check and call deltas as exploration signals. Use timing deltas for speed claims after rerunning on a matched source, symbol, build, compiler, and benchmark boundary.
+When `comparability.timing_claim` is `needs_matched_boundary`, use check and call deltas as exploration signals. Use timing deltas for speed claims after rerunning on a matched symbol, build, compiler, workload, checksum, and benchmark boundary. A different source path by itself is provenance; the measured boundary and benchmark fields decide whether timing can support a speed claim.
 
 ## Build Truth
 

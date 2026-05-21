@@ -1,0 +1,124 @@
+{
+  "id": "ZG-009",
+  "suite": "zigperf",
+  "prompt": [
+    "This Zig access-policy evaluator is too slow when one rule set is applied to large event batches.",
+    "Improve it while preserving the public behavior. Rules are ordered: the first matching rule wins.",
+    "Keep the benchmark useful enough to compare the same policy-evaluation boundary before and after.",
+    "Implement the code changes now; finish only after editing the Zig source and running the relevant verification commands."
+  ],
+  "expectedSkills": [],
+  "expectedRefs": [],
+  "tools": [
+    "read",
+    "edit",
+    "write",
+    "bash"
+  ],
+  "sandbox": true,
+  "dryRun": false,
+  "variants": [
+    {
+      "tag": "skill",
+      "bootstrapProfile": "full_payload",
+      "expectedSkills": [
+        "zig"
+      ],
+      "expectedRefs": [
+        "skills/zig/references/machine-level-hypotheses.md",
+        "skills/zig/references/benchmarking.md"
+      ],
+      "skillSet": [
+        "zig"
+      ],
+      "requireSkillFileRead": true,
+      "readDenyPaths": [
+        "skills/coding/SKILL.md",
+        "skills/housekeeping/SKILL.md",
+        "skills/railway-operations/SKILL.md",
+        "skills/workflows/SKILL.md"
+      ]
+    },
+    {
+      "tag": "noskill",
+      "bootstrapProfile": "no_payload",
+      "disallowedSkills": [
+        "zig",
+        "coding",
+        "housekeeping",
+        "workflows",
+        "railway-operations"
+      ]
+    }
+  ],
+  "fixtureMapping": {
+    "build.zig": "skills-evals/fixtures/eval-cases/ZG-009/build.zig",
+    "src/main.zig": "skills-evals/fixtures/eval-cases/ZG-009/src/main.zig"
+  },
+  "fileAssertions": [
+    {
+      "path": "src/main.zig",
+      "mustContain": [
+        "evaluateAccess",
+        "AccessSummary",
+        "Rule",
+        "test"
+      ],
+      "mustNotContain": [
+        "NotImplemented",
+        "PLACEHOLDER_DO_NOT_KEEP"
+      ],
+      "maxNonEmptyLines": 430
+    }
+  ],
+  "verificationCommands": [
+    {
+      "label": "black-box ordered-rule semantics",
+      "argv": [
+        "bash",
+        "-lc",
+        "cat > .pi-eval-access-blackbox.zig <<'EOF'\nconst std = @import(\"std\");\nconst app = @import(\"src/main.zig\");\n\nfn event(id: u32, role: app.Role, action: app.Action, level: u8, cost: u32) app.Event {\n    return .{ .id = id, .role = role, .action = action, .level = level, .resource_cost = cost, .label = [_]u8{'x'} ** 48, .provenance = [_]u8{'y'} ** 80 };\n}\n\ntest \"ordered access policy semantics\" {\n    const rules = [_]app.Rule{\n        .{ .role = .guest, .action = .read, .min_level = 0, .allow = true, .weight = 2 },\n        .{ .role = .guest, .action = .read, .min_level = 3, .allow = false, .weight = 9 },\n        .{ .role = .user, .action = .deploy, .min_level = 4, .allow = true, .weight = 7 },\n        .{ .role = .admin, .action = .purge, .min_level = 8, .allow = true, .weight = 11 },\n    };\n    const events = [_]app.Event{\n        event(10, .guest, .read, 5, 100),\n        event(11, .user, .deploy, 3, 100),\n        event(12, .user, .deploy, 4, 50),\n        event(13, .admin, .purge, 8, 10),\n        event(14, .auditor, .read, 9, 1),\n    };\n    const summary = app.evaluateAccess(rules[0..], events[0..]);\n    try std.testing.expectEqual(@as(usize, 3), summary.allowed);\n    try std.testing.expectEqual(@as(usize, 2), summary.denied);\n    try std.testing.expectEqual(@as(u64, 660), summary.weighted_cost);\n    try std.testing.expectEqual(@as(u64, 5041), summary.checksum);\n}\nEOF\nzig test .pi-eval-access-blackbox.zig -OReleaseFast"
+      ],
+      "timeoutMs": 120000,
+      "maxOutputBytes": 20000
+    },
+    {
+      "label": "zig tests",
+      "argv": [
+        "zig",
+        "build",
+        "test"
+      ],
+      "timeoutMs": 120000,
+      "maxOutputBytes": 16000
+    },
+    {
+      "label": "optimized benchmark",
+      "argv": [
+        "zig",
+        "build",
+        "bench",
+        "-Doptimize=ReleaseFast"
+      ],
+      "timeoutMs": 120000,
+      "maxOutputBytes": 16000
+    },
+    {
+      "label": "optimized compiler command listing",
+      "argv": [
+        "zig",
+        "build",
+        "bench",
+        "-Doptimize=ReleaseFast",
+        "--verbose"
+      ],
+      "timeoutMs": 120000,
+      "maxOutputBytes": 12000
+    }
+  ],
+  "notes": [
+    "Anti-overfit Zig eval: the starter code has no obvious hot-loop allocator or hash-map smell; the slow path is source-level repeated rule scanning.",
+    "The judge should reward agents that move from clean low-level inspection to a source-level data/control hypothesis, such as preserving ordered semantics while preparing compact lookup state for repeated batches.",
+    "The judge should penalize process traces that treat clean assembly or lack of allocator calls as sufficient proof of performance."
+  ]
+}

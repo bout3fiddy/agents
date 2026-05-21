@@ -57,9 +57,7 @@
       "expectedSkills": ["zig"],
       "expectedRefs": [
         "skills/zig/references/machine-level-hypotheses.md",
-        "skills/zig/references/compiler-evidence.md",
-        "skills/zig/references/benchmarking.md",
-        "skills/zig/references/allocation-evidence.md"
+        "skills/zig/references/benchmarking.md"
       ],
       "skillSet": ["zig"],
       "requireSkillFileRead": true,

@@ -68,8 +68,33 @@ def parse_zig_env(cwd: Path) -> JsonObject:
     return info
 
 
+def parse_benchmark_scalar(value: str) -> object:
+    cleaned = value.rstrip(",;")
+    if re.fullmatch(r"-?\d+", cleaned):
+        return int(cleaned)
+    if re.fullmatch(r"-?(?:\d+\.\d*|\d*\.\d+)(?:[eE][+-]?\d+)?", cleaned):
+        return float(cleaned)
+    return cleaned
+
+
+def parse_benchmark_fields(text: str, symbol: str | None = None) -> JsonObject:
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    if symbol:
+        symbol_lines = [
+            line
+            for line in lines
+            if f"boundary={symbol}" in line or f"boundary={symbol} " in line
+        ]
+        if symbol_lines:
+            lines = symbol_lines
+
+    parsed: JsonObject = {}
+    for line in lines:
+        for match in re.finditer(r"\b([A-Za-z_][A-Za-z0-9_]*)=([^\s]+)", line):
+            parsed[match.group(1)] = parse_benchmark_scalar(match.group(2))
+    return parsed
+
+
 def parse_elapsed_ns(text: str) -> int | None:
-    match = re.search(r"\belapsed_ns=(\d+)\b", text)
-    if match:
-        return int(match.group(1))
-    return None
+    elapsed = parse_benchmark_fields(text).get("elapsed_ns")
+    return elapsed if isinstance(elapsed, int) else None

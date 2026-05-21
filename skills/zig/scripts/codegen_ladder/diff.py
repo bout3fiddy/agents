@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 from typing import cast
 
+from .decision_card import build_diff_decision_card
 from .types import DiffOptions, JsonObject, JsonValue, as_json_array, as_json_object
 
 
@@ -43,12 +44,30 @@ def int_value(value: JsonValue) -> int | None:
     return value if isinstance(value, int) else None
 
 
-def string_path(report: JsonObject, path: tuple[str, ...]) -> str | None:
+def number_value(value: JsonValue) -> int | float | None:
+    if isinstance(value, bool):
+        return None
+    return value if isinstance(value, (int, float)) else None
+
+
+def primitive_value(value: JsonValue) -> str | int | float | bool | None:
+    if isinstance(value, (str, int, float, bool)):
+        return value
+    return None
+
+
+def value_path(
+    report: JsonObject, path: tuple[str, ...]
+) -> str | int | float | bool | None:
     current: JsonValue = report
     for part in path:
         current_object = json_object(current)
         current = current_object.get(part)
-    return string_value(current)
+    return primitive_value(current)
+
+
+def string_path(report: JsonObject, path: tuple[str, ...]) -> str | None:
+    return string_value(value_path(report, path))
 
 
 def check_count_map(report: JsonObject) -> dict[str, int]:
@@ -94,10 +113,54 @@ def symbol_name_set(report: JsonObject) -> set[str]:
 
 
 def benchmark_elapsed(report: JsonObject) -> int | None:
+    elapsed = benchmark_parsed(report).get("elapsed_ns")
+    return int_value(elapsed)
+
+
+def benchmark_parsed(report: JsonObject) -> JsonObject:
     runtime = json_object(report.get("runtime"))
     benchmark = json_object(runtime.get("benchmark"))
-    parsed = json_object(benchmark.get("parsed"))
-    return int_value(parsed.get("elapsed_ns"))
+    return json_object(benchmark.get("parsed"))
+
+
+def benchmark_value(report: JsonObject, key: str) -> str | int | float | bool | None:
+    return primitive_value(benchmark_parsed(report).get(key))
+
+
+BENCHMARK_COMPARE_KEYS = (
+    "boundary",
+    "records",
+    "samples",
+    "frames",
+    "pixels",
+    "events",
+    "items",
+    "bytes",
+    "rows",
+    "cols",
+    "iterations",
+    "warmup",
+    "checksum",
+)
+
+
+def benchmark_comparisons(before: JsonObject, after: JsonObject) -> list[JsonObject]:
+    before_parsed = benchmark_parsed(before)
+    after_parsed = benchmark_parsed(after)
+    keys = [
+        key
+        for key in BENCHMARK_COMPARE_KEYS
+        if key in before_parsed or key in after_parsed
+    ]
+    return [
+        comparison(
+            f"benchmark.{key}",
+            benchmark_value(before, key),
+            benchmark_value(after, key),
+            "runtime",
+        )
+        for key in keys
+    ]
 
 
 def hot_boundary_lines(report: JsonObject) -> int | None:
@@ -105,9 +168,7 @@ def hot_boundary_lines(report: JsonObject) -> int | None:
     return int_value(hot_boundary.get("lines"))
 
 
-def comparison(
-    field: str, before: str | None, after: str | None, affects: str
-) -> JsonObject:
+def comparison(field: str, before: object, after: object, affects: str) -> JsonObject:
     return {
         "field": field,
         "before": before,
@@ -123,7 +184,7 @@ def comparability_report(before: JsonObject, after: JsonObject) -> JsonObject:
             "source",
             string_path(before, ("inputs", "source")),
             string_path(after, ("inputs", "source")),
-            "boundary",
+            "provenance",
         ),
         comparison(
             "symbol",
@@ -173,12 +234,16 @@ def comparability_report(before: JsonObject, after: JsonObject) -> JsonObject:
             string_path(after, ("environment", "host", "machine")),
             "host",
         ),
+        *benchmark_comparisons(before, after),
     ]
     mismatches = [item for item in comparisons if item.get("match") is False]
     boundary_review = any(item.get("affects") == "boundary" for item in mismatches)
+    runtime_review = any(item.get("affects") == "runtime" for item in mismatches)
     return {
         "status": "review" if mismatches else "comparable",
-        "timing_claim": "needs_matched_boundary" if boundary_review else "usable",
+        "timing_claim": (
+            "needs_matched_boundary" if boundary_review or runtime_review else "usable"
+        ),
         "guidance": (
             "Use timing deltas for speed claims when status is comparable. "
             "When status is review, use check and call deltas as exploration "
@@ -202,7 +267,7 @@ def diff_reports(options: DiffOptions) -> JsonObject:
     after_targets = call_target_set(after)
     before_symbols = symbol_name_set(before)
     after_symbols = symbol_name_set(after)
-    return {
+    report: JsonObject = {
         "schema_version": 1,
         "mode": "diff",
         "inputs": {
@@ -210,6 +275,11 @@ def diff_reports(options: DiffOptions) -> JsonObject:
             "after": str(Path(options.after).resolve()),
         },
         "comparability": comparability_report(before, after),
+        "benchmark": {
+            "before": benchmark_parsed(before),
+            "after": benchmark_parsed(after),
+            "comparisons": benchmark_comparisons(before, after),
+        },
         "timing": {
             "elapsed_ns": numeric_delta(
                 benchmark_elapsed(before), benchmark_elapsed(after)
@@ -243,6 +313,10 @@ def diff_reports(options: DiffOptions) -> JsonObject:
                 "| [.field, .before, .after] | @tsv' diff.json"
             ),
             (
+                "jq -r '.benchmark.comparisons[]? | select(.match == false) "
+                "| [.field, .before, .after] | @tsv' diff.json"
+            ),
+            (
                 "jq -r '.checks | to_entries[] "
                 "| select(.value.delta != 0) "
                 "| [.key, .value.before, .value.after, .value.delta] "
@@ -254,5 +328,8 @@ def diff_reports(options: DiffOptions) -> JsonObject:
                 "| [.key, .value.before, .value.after, .value.delta] "
                 "| @tsv' diff.json"
             ),
+            "jq '.decision_card' diff.json",
         ],
     }
+    report["decision_card"] = build_diff_decision_card(report)
+    return report
