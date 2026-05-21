@@ -6,6 +6,7 @@ import subprocess
 import tempfile
 import time
 from dataclasses import dataclass
+from itertools import islice
 from pathlib import Path
 
 from .types import CommandResult
@@ -53,7 +54,7 @@ def command_head(path: Path, max_lines: int = 12) -> str:
         return ""
     lines: list[str] = []
     with path.open("r", encoding="utf-8", errors="replace") as handle:
-        for _, line in zip(range(max_lines), handle, strict=False):
+        for line in islice(handle, max_lines):
             lines.append(line.rstrip("\n"))
     return "\n".join(lines)
 

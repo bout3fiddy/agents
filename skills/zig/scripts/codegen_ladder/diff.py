@@ -35,8 +35,20 @@ def json_list(value: JsonValue) -> list[JsonValue]:
     return as_json_array(value) or []
 
 
+def string_value(value: JsonValue) -> str | None:
+    return value if isinstance(value, str) else None
+
+
 def int_value(value: JsonValue) -> int | None:
     return value if isinstance(value, int) else None
+
+
+def string_path(report: JsonObject, path: tuple[str, ...]) -> str | None:
+    current: JsonValue = report
+    for part in path:
+        current_object = json_object(current)
+        current = current_object.get(part)
+    return string_value(current)
 
 
 def check_count_map(report: JsonObject) -> dict[str, int]:
@@ -93,6 +105,90 @@ def hot_boundary_lines(report: JsonObject) -> int | None:
     return int_value(hot_boundary.get("lines"))
 
 
+def comparison(
+    field: str, before: str | None, after: str | None, affects: str
+) -> JsonObject:
+    return {
+        "field": field,
+        "before": before,
+        "after": after,
+        "match": before == after,
+        "affects": affects,
+    }
+
+
+def comparability_report(before: JsonObject, after: JsonObject) -> JsonObject:
+    comparisons = [
+        comparison(
+            "source",
+            string_path(before, ("inputs", "source")),
+            string_path(after, ("inputs", "source")),
+            "boundary",
+        ),
+        comparison(
+            "symbol",
+            string_path(before, ("inputs", "symbol")),
+            string_path(after, ("inputs", "symbol")),
+            "boundary",
+        ),
+        comparison(
+            "build_strategy",
+            string_path(before, ("build_strategy",)),
+            string_path(after, ("build_strategy",)),
+            "build",
+        ),
+        comparison(
+            "build_step",
+            string_path(before, ("inputs", "build_step")),
+            string_path(after, ("inputs", "build_step")),
+            "build",
+        ),
+        comparison(
+            "bench_step",
+            string_path(before, ("inputs", "bench_step")),
+            string_path(after, ("inputs", "bench_step")),
+            "runtime",
+        ),
+        comparison(
+            "benchmark_command",
+            string_path(before, ("runtime", "benchmark", "command_name")),
+            string_path(after, ("runtime", "benchmark", "command_name")),
+            "runtime",
+        ),
+        comparison(
+            "zig_version",
+            string_path(before, ("environment", "zig_env", "version")),
+            string_path(after, ("environment", "zig_env", "version")),
+            "compiler",
+        ),
+        comparison(
+            "zig_target",
+            string_path(before, ("environment", "zig_env", "target")),
+            string_path(after, ("environment", "zig_env", "target")),
+            "compiler",
+        ),
+        comparison(
+            "host_machine",
+            string_path(before, ("environment", "host", "machine")),
+            string_path(after, ("environment", "host", "machine")),
+            "host",
+        ),
+    ]
+    mismatches = [item for item in comparisons if item.get("match") is False]
+    boundary_review = any(item.get("affects") == "boundary" for item in mismatches)
+    return {
+        "status": "review" if mismatches else "comparable",
+        "timing_claim": "needs_matched_boundary" if boundary_review else "usable",
+        "guidance": (
+            "Use timing deltas for speed claims when status is comparable. "
+            "When status is review, use check and call deltas as exploration "
+            "signals and re-run on a matched boundary before claiming speed."
+        ),
+        "fields": comparisons,
+        "mismatches": mismatches,
+    }
+
+
 def diff_reports(options: DiffOptions) -> JsonObject:
     before = load_report(options.before)
     after = load_report(options.after)
@@ -113,6 +209,7 @@ def diff_reports(options: DiffOptions) -> JsonObject:
             "before": str(Path(options.before).resolve()),
             "after": str(Path(options.after).resolve()),
         },
+        "comparability": comparability_report(before, after),
         "timing": {
             "elapsed_ns": numeric_delta(
                 benchmark_elapsed(before), benchmark_elapsed(after)
@@ -139,4 +236,23 @@ def diff_reports(options: DiffOptions) -> JsonObject:
             "new_matches": sorted(after_symbols - before_symbols),
             "removed_matches": sorted(before_symbols - after_symbols),
         },
+        "agent_queries": [
+            "jq -r '.comparability.status, .comparability.timing_claim' diff.json",
+            (
+                "jq -r '.comparability.mismatches[]? "
+                "| [.field, .before, .after] | @tsv' diff.json"
+            ),
+            (
+                "jq -r '.checks | to_entries[] "
+                "| select(.value.delta != 0) "
+                "| [.key, .value.before, .value.after, .value.delta] "
+                "| @tsv' diff.json"
+            ),
+            (
+                "jq -r '.calls.summary | to_entries[] "
+                "| select(.value.delta != 0) "
+                "| [.key, .value.before, .value.after, .value.delta] "
+                "| @tsv' diff.json"
+            ),
+        ],
     }

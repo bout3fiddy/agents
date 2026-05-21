@@ -60,6 +60,17 @@ skills/zig/scripts/codegen-ladder.sh diff \
   --json-out "$perf_scratch/diff.json"
 ```
 
+Read the comparability block first:
+
+```sh
+jq -r '.comparability.status, .comparability.timing_claim' "$perf_scratch/diff.json"
+jq -r '.comparability.mismatches[]? | [.field, .before, .after] | @tsv' "$perf_scratch/diff.json"
+jq -r '.checks | to_entries[] | select(.value.delta != 0) | [.key, .value.before, .value.after, .value.delta] | @tsv' "$perf_scratch/diff.json"
+jq -r '.calls.summary | to_entries[] | select(.value.delta != 0) | [.key, .value.before, .value.after, .value.delta] | @tsv' "$perf_scratch/diff.json"
+```
+
+When `comparability.status` is `review`, use check and call deltas as exploration signals. Use timing deltas for speed claims after rerunning on a matched source, symbol, build, compiler, and benchmark boundary.
+
 ## Build Truth
 
 Use this when you need the actual build step, flags, target, CPU features, or artifact being measured.
