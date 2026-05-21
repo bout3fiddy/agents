@@ -21,6 +21,9 @@
       "nodejs",
       "npm",
       "yarn",
+      "zig",
+      "binutils",
+      "time",
       "uv",
       "python3",
       "openssh"
@@ -33,7 +36,7 @@
   },
   "postBuild": {
     "commands": [
-      "yarn global add @mariozechner/pi-coding-agent@0.52.6",
+      "yarn global add @earendil-works/pi-coding-agent@0.75.3",
       "command -v pi",
       "pi --help >/dev/null 2>&1 || true"
     ]

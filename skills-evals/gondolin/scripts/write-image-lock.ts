@@ -19,8 +19,8 @@ const parseArgs = (argv: string[]): CliArgs => {
 		lockFile: "",
 		configFile: "",
 		version: "",
-		piPackageName: "@mariozechner/pi-coding-agent",
-		piPackageVersion: "0.52.6",
+		piPackageName: "@earendil-works/pi-coding-agent",
+		piPackageVersion: "0.75.3",
 		projectRoot: "",
 	};
 

@@ -6,6 +6,7 @@ import path from "node:path";
 import test from "node:test";
 import {
 	assertAllowedFlags,
+	parseParallelismFlag,
 	resolveCasesPath,
 } from "../../src/cli/validation.js";
 
@@ -44,4 +45,11 @@ test("resolveCasesPath checks for existing files", async () => {
 	);
 
 	await rm(dir, { recursive: true, force: true });
+});
+
+test("parseParallelismFlag accepts positive integers", () => {
+	assert.equal(parseParallelismFlag(undefined), undefined);
+	assert.equal(parseParallelismFlag("3"), 3);
+	assert.throws(() => parseParallelismFlag("0"), /--parallelism/);
+	assert.throws(() => parseParallelismFlag(true), /--parallelism/);
 });

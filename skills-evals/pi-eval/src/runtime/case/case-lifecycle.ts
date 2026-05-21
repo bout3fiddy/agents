@@ -1,12 +1,13 @@
-import { copyFile, mkdir, readFile } from "node:fs/promises";
+import { copyFile, mkdir, readFile, readdir } from "node:fs/promises";
 import path from "node:path";
+import { slugFromId } from "../../data/cases.js";
 import {
 	createSandbox,
 	cleanupSandbox,
 	cleanupSandboxHome,
 } from "../sandbox/sandbox.js";
-import { assembleEvaluation, buildCaseResult } from "./evaluation.js";
-import type { CaseEvaluation, EvalCase, ModelSpec } from "../../data/types.js";
+import { buildCaseResult } from "./evaluation.js";
+import type { CaseEvaluation, EvalCase, ModelSpec, ResolvedEvalCase } from "../../data/types.js";
 import { resolveInsideRoot } from "../policy/path-policy.js";
 import { buildStubResult, runCaseProcess } from "./case-process.js";
 import {
@@ -21,6 +22,7 @@ import {
 	collectPolicyDenyProbeErrors,
 	hardenNoPayloadWorkspace,
 } from "../policy/case-policy.js";
+import { runVerificationCommands } from "./verification.js";
 
 type CaseWorkspace = {
 	agentDir: string;
@@ -93,12 +95,76 @@ const resolvePersistArtifactPaths = (evalCase: EvalCase): string[] => {
 	return resolveAssertionPaths(evalCase);
 };
 
+const shouldCaptureSubmissionPath = (relativePath: string): boolean => {
+	const normalized = relativePath.split(path.sep).join("/");
+	if (normalized === "build.zig" || normalized === "build.zig.zon") return true;
+	if (normalized.startsWith("src/") && normalized.endsWith(".zig")) return true;
+	return false;
+};
+
+const listSubmissionPaths = async (root: string): Promise<string[]> => {
+	const paths: string[] = [];
+	const walk = async (relativeDir: string): Promise<void> => {
+		const absoluteDir = resolveInsideRoot(root, relativeDir || ".");
+		const entries = await readdir(absoluteDir, { withFileTypes: true });
+		for (const entry of entries) {
+			const relativePath = relativeDir ? path.join(relativeDir, entry.name) : entry.name;
+			const normalized = relativePath.split(path.sep).join("/");
+			if (
+				normalized.startsWith(".zig-cache/") ||
+				normalized.startsWith("zig-out/") ||
+				normalized.startsWith("output/") ||
+				normalized.startsWith("skills/") ||
+				normalized.startsWith("skills-evals/") ||
+				normalized.startsWith(".git/")
+			) {
+				continue;
+			}
+			if (entry.isDirectory()) {
+				await walk(relativePath);
+				continue;
+			}
+			if (entry.isFile() && shouldCaptureSubmissionPath(relativePath)) {
+				paths.push(normalized);
+			}
+		}
+	};
+	await walk("");
+	return paths.sort((a, b) => a.localeCompare(b));
+};
+
+export const resolvePersistArtifactTarget = (params: {
+	evalCase: EvalCase | ResolvedEvalCase;
+	hostAgentDir: string;
+	artifactPath: string;
+}): string => {
+	const resolved = params.evalCase as EvalCase & {
+		bundleId?: string | null;
+		variantTag?: string | null;
+	};
+	const caseSlug = slugFromId(resolved.bundleId ?? params.evalCase.id);
+	const variantSlug = resolved.variantTag ?? "single";
+	const generatedRelativePath = path.join(
+		"skills-evals",
+		"generated",
+		params.evalCase.suite,
+		caseSlug,
+		variantSlug,
+		params.artifactPath,
+	);
+	return resolveInsideRoot(params.hostAgentDir, generatedRelativePath);
+};
+
 const captureArtifacts = async (
 	evalCase: EvalCase,
 	sandboxAgentDir: string,
 ): Promise<Record<string, string>> => {
 	const captured: Record<string, string> = {};
-	for (const artifactPath of resolveAssertionPaths(evalCase)) {
+	const artifactPaths = new Set([
+		...resolveAssertionPaths(evalCase),
+		...(await listSubmissionPaths(sandboxAgentDir)),
+	]);
+	for (const artifactPath of [...artifactPaths].sort((a, b) => a.localeCompare(b))) {
 		try {
 			const fullPath = resolveInsideRoot(sandboxAgentDir, artifactPath);
 			captured[artifactPath] = await readFile(fullPath, "utf-8");
@@ -118,7 +184,11 @@ const persistCaseArtifacts = async (params: {
 	for (const artifactPath of artifactPaths) {
 		try {
 			const sourcePath = resolveInsideRoot(params.sandboxAgentDir, artifactPath);
-			const targetPath = resolveInsideRoot(params.hostAgentDir, artifactPath);
+			const targetPath = resolvePersistArtifactTarget({
+				evalCase: params.evalCase,
+				hostAgentDir: params.hostAgentDir,
+				artifactPath,
+			});
 			await mkdir(path.dirname(targetPath), { recursive: true });
 			await copyFile(sourcePath, targetPath);
 		} catch {
@@ -212,6 +282,13 @@ export const runCase = async (params: {
 				assertions: evalCase.assertions ?? [],
 			})),
 		);
+		const verification = await runVerificationCommands(evalCase.verificationCommands, workspace.cwd);
+		result.verificationResults = verification.results;
+		result.errors.push(...verification.errors);
+		const verificationFailures = verification.errors.map((message) => ({
+			category: "TASK_FAILURE" as const,
+			message,
+		}));
 		await persistCaseArtifacts({
 			evalCase,
 			hostAgentDir: agentDir,
@@ -220,7 +297,7 @@ export const runCase = async (params: {
 		result.capturedArtifacts = await captureArtifacts(evalCase, workspace.agentDir);
 		result.workspaceDir = workspace.agentDir;
 		result.bootstrapBreakdown = homeSetup.bootstrapBreakdown;
-		return assembleEvaluation(evalCase, result);
+		return buildCaseResult(evalCase.id, result, evalCase, verificationFailures);
 	} finally {
 		await cleanupSandbox(workspace?.sandboxDir ?? null);
 		await cleanupSandboxHome(homeDir);

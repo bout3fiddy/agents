@@ -1,0 +1,92 @@
+{
+  "id": "ZG-001",
+  "suite": "zigperf",
+  "prompt": [
+    "This Zig packet scoring module is too slow on large batches.",
+    "Improve it while preserving behavior.",
+    "Keep the API straightforward and keep the existing tests and benchmark useful."
+  ],
+  "fixtureMapping": {
+    "build.zig": "skills-evals/fixtures/eval-cases/ZG-001/build.zig",
+    "src/main.zig": "skills-evals/fixtures/eval-cases/ZG-001/src/main.zig"
+  },
+  "expectedSkills": [],
+  "disallowedSkills": [],
+  "expectedRefs": [],
+  "tools": ["read", "edit", "write", "bash"],
+  "sandbox": true,
+  "fileAssertions": [
+    {
+      "path": "src/main.zig",
+      "mustContain": ["processBatch", "PacketScore"],
+      "mustNotContain": ["PLACEHOLDER_DO_NOT_KEEP", "NotImplementedError"],
+      "maxNonEmptyLines": 420
+    }
+  ],
+  "verificationCommands": [
+    {
+      "label": "zig tests",
+      "argv": ["zig", "build", "test"],
+      "timeoutMs": 120000,
+      "maxOutputBytes": 12000
+    },
+    {
+      "label": "optimized benchmark",
+      "argv": ["zig", "build", "bench", "-Doptimize=ReleaseFast"],
+      "timeoutMs": 120000,
+      "maxOutputBytes": 12000
+    },
+    {
+      "label": "optimized compiler command listing",
+      "argv": ["zig", "build", "bench", "-Doptimize=ReleaseFast", "--verbose"],
+      "timeoutMs": 120000,
+      "maxOutputBytes": 20000
+    }
+  ],
+  "dryRun": false,
+  "tokenBudget": null,
+  "notes": [
+    "Explicit optimization eval: the prompt says the code is slow, but it does not hand the agent specific optimization tactics.",
+    "The judge should reward behavior-preserving changes that reduce repeated allocation/work, improve data layout or preparation where appropriate, and make performance claims quantifiable without invented timings.",
+    "The judge should separately report process quality from sanitized traces: whether the agent used tests, optimized benchmarks, compiler command listings, symbol/disassembly checks, allocation inspection, or targeted output filtering."
+  ],
+  "persistArtifacts": true,
+  "readDenyPaths": [],
+  "variants": [
+    {
+      "tag": "skill",
+      "bootstrapProfile": "full_payload",
+      "expectedSkills": ["zig"],
+      "expectedRefs": [
+        "skills/zig/references/machine-level-hypotheses.md",
+        "skills/zig/references/benchmarking.md"
+      ],
+      "skillSet": ["zig"],
+      "requireSkillFileRead": true,
+      "fileAssertions": [
+        {
+          "path": "src/main.zig",
+          "mustContain": ["processBatch", "PacketScore"],
+          "mustNotContain": [
+            "std.fmt.allocPrint",
+            "allocator.alloc(f32, packet.samples.len)",
+            "PLACEHOLDER_DO_NOT_KEEP",
+            "NotImplementedError"
+          ],
+          "maxNonEmptyLines": 420
+        }
+      ],
+      "readDenyPaths": [
+        "skills/coding/SKILL.md",
+        "skills/housekeeping/SKILL.md",
+        "skills/railway-operations/SKILL.md",
+        "skills/workflows/SKILL.md"
+      ]
+    },
+    {
+      "tag": "noskill",
+      "bootstrapProfile": "no_payload",
+      "disallowedSkills": ["zig", "coding", "housekeeping", "workflows", "railway-operations"]
+    }
+  ]
+}

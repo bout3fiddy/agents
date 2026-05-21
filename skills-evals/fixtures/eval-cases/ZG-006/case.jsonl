@@ -1,0 +1,101 @@
+{
+  "id": "ZG-006",
+  "suite": "zigperf",
+  "prompt": [
+    "Create one Zig source file at src/main.zig. Do not create build.zig or split the solution across extra files; the evaluator will import and run this one file directly.",
+    "Implement a reusable sensor sample alert analyzer. It should process batches of samples, apply per-kind thresholds, update per-kind stats, and write alerts into caller-owned output storage.",
+    "Expose this public shape: SampleKind has temperature, pressure, vibration, voltage. Sample has sensor_id, kind, tick, value, quality, flags. Threshold has kind, min_quality, limit, required_flags. KindStats has count, alert_count, total, min, max. Alert has sensor_id, kind, tick, value. AnalyzeStats has accepted, rejected, alert_count.",
+    "analyzeSamplesInto should accept threshold and sample slices plus caller-owned stats and alert buffers, return !AnalyzeStats, and return error.OutputTooSmall when either output buffer is too short.",
+    "Include useful unit tests in the same file and a tiny main/demo that supports --bench for a larger in-memory workload."
+  ],
+  "fixtureMapping": {},
+  "expectedSkills": [],
+  "disallowedSkills": [],
+  "expectedRefs": [],
+  "tools": ["read", "edit", "write", "bash"],
+  "sandbox": true,
+  "fileAssertions": [
+    {
+      "path": "src/main.zig",
+      "mustContain": ["analyzeSamplesInto", "SampleKind", "KindStats", "test"],
+      "mustNotContain": ["NotImplemented", "PLACEHOLDER_DO_NOT_KEEP"],
+      "maxNonEmptyLines": 520
+    }
+  ],
+  "verificationCommands": [
+    {
+      "label": "single-file shape check",
+      "argv": [
+        "bash",
+        "-lc",
+        "test -f src/main.zig && test ! -e build.zig && test \"$(find src -type f | sort)\" = \"src/main.zig\""
+      ],
+      "timeoutMs": 120000,
+      "maxOutputBytes": 4000
+    },
+    {
+      "label": "harness black-box sample tests",
+      "argv": [
+        "bash",
+        "-lc",
+        "cat > .pi-eval-sample-blackbox.zig <<'EOF'\nconst std = @import(\"std\");\nconst app = @import(\"src/main.zig\");\n\nconst kind_count = @typeInfo(app.SampleKind).@\"enum\".fields.len;\n\ntest \"black-box sample analysis semantics\" {\n    const thresholds = [_]app.Threshold{\n        .{ .kind = .temperature, .min_quality = 6, .limit = 25, .required_flags = 0b0001 },\n        .{ .kind = .pressure, .min_quality = 4, .limit = 1008, .required_flags = 0 },\n        .{ .kind = .vibration, .min_quality = 5, .limit = 10, .required_flags = 0b0010 },\n    };\n    const samples = [_]app.Sample{\n        .{ .sensor_id = 1, .kind = .temperature, .tick = 10, .value = 24, .quality = 8, .flags = 0b0001 },\n        .{ .sensor_id = 2, .kind = .temperature, .tick = 11, .value = 27, .quality = 8, .flags = 0b0001 },\n        .{ .sensor_id = 3, .kind = .temperature, .tick = 12, .value = 30, .quality = 3, .flags = 0b0001 },\n        .{ .sensor_id = 4, .kind = .pressure, .tick = 13, .value = 1009, .quality = 5, .flags = 0 },\n        .{ .sensor_id = 5, .kind = .vibration, .tick = 14, .value = 11, .quality = 6, .flags = 0b0010 },\n        .{ .sensor_id = 6, .kind = .voltage, .tick = 15, .value = 220, .quality = 9, .flags = 0 },\n    };\n    var stats: [kind_count]app.KindStats = undefined;\n    var alerts: [samples.len]app.Alert = undefined;\n    const result = try app.analyzeSamplesInto(thresholds[0..], samples[0..], stats[0..], alerts[0..]);\n    try std.testing.expectEqual(@as(usize, 4), result.accepted);\n    try std.testing.expectEqual(@as(usize, 2), result.rejected);\n    try std.testing.expectEqual(@as(usize, 3), result.alert_count);\n    try std.testing.expectEqual(@as(usize, 2), stats[@intFromEnum(app.SampleKind.temperature)].count);\n    try std.testing.expectEqual(@as(i64, 51), stats[@intFromEnum(app.SampleKind.temperature)].total);\n    try std.testing.expectEqual(@as(i32, 24), stats[@intFromEnum(app.SampleKind.temperature)].min);\n    try std.testing.expectEqual(@as(i32, 27), stats[@intFromEnum(app.SampleKind.temperature)].max);\n    try std.testing.expectEqual(@as(usize, 1), stats[@intFromEnum(app.SampleKind.temperature)].alert_count);\n    try std.testing.expectEqual(@as(u16, 2), alerts[0].sensor_id);\n    try std.testing.expectEqual(app.SampleKind.temperature, alerts[0].kind);\n    try std.testing.expectEqual(@as(u16, 4), alerts[1].sensor_id);\n    try std.testing.expectEqual(app.SampleKind.pressure, alerts[1].kind);\n    try std.testing.expectEqual(@as(u16, 5), alerts[2].sensor_id);\n    try std.testing.expectEqual(app.SampleKind.vibration, alerts[2].kind);\n}\n\ntest \"black-box output sizes\" {\n    const thresholds = [_]app.Threshold{\n        .{ .kind = .temperature, .min_quality = 0, .limit = 0, .required_flags = 0 },\n    };\n    const samples = [_]app.Sample{\n        .{ .sensor_id = 1, .kind = .temperature, .tick = 1, .value = 1, .quality = 1, .flags = 0 },\n        .{ .sensor_id = 2, .kind = .temperature, .tick = 2, .value = 2, .quality = 1, .flags = 0 },\n    };\n    var short_stats: [kind_count - 1]app.KindStats = undefined;\n    var alerts: [samples.len]app.Alert = undefined;\n    try std.testing.expectError(error.OutputTooSmall, app.analyzeSamplesInto(thresholds[0..], samples[0..], short_stats[0..], alerts[0..]));\n    var stats: [kind_count]app.KindStats = undefined;\n    var short_alerts: [1]app.Alert = undefined;\n    try std.testing.expectError(error.OutputTooSmall, app.analyzeSamplesInto(thresholds[0..], samples[0..], stats[0..], short_alerts[0..]));\n}\nEOF\nzig test .pi-eval-sample-blackbox.zig -OReleaseFast"
+      ],
+      "timeoutMs": 120000,
+      "maxOutputBytes": 16000
+    },
+    {
+      "label": "zig tests",
+      "argv": ["zig", "test", "src/main.zig"],
+      "timeoutMs": 120000,
+      "maxOutputBytes": 12000
+    },
+    {
+      "label": "optimized benchmark",
+      "argv": ["zig", "run", "src/main.zig", "-OReleaseFast", "--", "--bench"],
+      "timeoutMs": 120000,
+      "maxOutputBytes": 12000
+    },
+    {
+      "label": "filtered assembly probe",
+      "argv": [
+        "bash",
+        "-lc",
+        "zig build-exe src/main.zig -OReleaseFast -femit-asm=.pi-eval-sample.s -fno-emit-bin && rg -n 'analyzeSamplesInto|memcpy|alloc|call|bl|callq|div' .pi-eval-sample.s | head -80"
+      ],
+      "timeoutMs": 120000,
+      "maxOutputBytes": 20000
+    }
+  ],
+  "dryRun": false,
+  "tokenBudget": null,
+  "notes": [
+    "Zero-code single-file Zig eval: the workspace starts without build.zig or src/main.zig, and the agent must create only src/main.zig.",
+    "The judge should reward enum-indexed threshold preparation, dense caller-owned output, predictable loops, no hot-loop allocation, same-boundary benchmark evidence, and process traces that use targeted Zig commands instead of broad compiler-output dumps."
+  ],
+  "persistArtifacts": true,
+  "readDenyPaths": [],
+  "variants": [
+    {
+      "tag": "skill",
+      "bootstrapProfile": "full_payload",
+      "expectedSkills": ["zig"],
+      "expectedRefs": [
+        "skills/zig/references/machine-level-hypotheses.md",
+        "skills/zig/references/benchmarking.md"
+      ],
+      "skillSet": ["zig"],
+      "requireSkillFileRead": true,
+      "readDenyPaths": [
+        "skills/coding/SKILL.md",
+        "skills/housekeeping/SKILL.md",
+        "skills/railway-operations/SKILL.md",
+        "skills/workflows/SKILL.md"
+      ]
+    },
+    {
+      "tag": "noskill",
+      "bootstrapProfile": "no_payload",
+      "disallowedSkills": ["zig", "coding", "housekeeping", "workflows", "railway-operations"]
+    }
+  ]
+}

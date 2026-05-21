@@ -4,7 +4,7 @@
  * Tracks token usage, turn breakdown, output text, and read captures
  * across agent_end events, then assembles the final CaseRunResult.
  */
-import type { AssistantMessage, ToolResultMessage } from "@mariozechner/pi-ai";
+import type { AssistantMessage, ToolResultMessage } from "@earendil-works/pi-ai";
 import {
 	isReferencePath,
 	isSkillPath,

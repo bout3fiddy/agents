@@ -1,0 +1,153 @@
+{
+  "id": "ZG-008",
+  "suite": "zigperf",
+  "prompt": [
+    "This Zig route scoring project is too slow when the same route weights are applied to many segment batches.",
+    "Improve it while preserving the observable route scoring semantics and keeping the current one-shot API working.",
+    "Keep the benchmark useful enough to compare the repeated scoring boundary before and after, and keep the project split across its existing modules.",
+    "Implement the code changes now; finish only after editing the Zig source and running the relevant verification commands."
+  ],
+  "expectedSkills": [],
+  "expectedRefs": [],
+  "tools": [
+    "read",
+    "edit",
+    "write",
+    "bash"
+  ],
+  "sandbox": true,
+  "dryRun": false,
+  "variants": [
+    {
+      "tag": "skill",
+      "bootstrapProfile": "full_payload",
+      "expectedSkills": [
+        "zig"
+      ],
+      "expectedRefs": [
+        "skills/zig/references/machine-level-hypotheses.md",
+        "skills/zig/references/benchmarking.md"
+      ],
+      "skillSet": [
+        "zig"
+      ],
+      "requireSkillFileRead": true,
+      "fileAssertions": [
+        {
+          "path": "src/route.zig",
+          "mustContain": [
+            "scoreSegments",
+            "RouteScore",
+            "test"
+          ],
+          "mustNotContain": [
+            "std.AutoHashMap",
+            "ensureTotalCapacity",
+            "NotImplemented",
+            "PLACEHOLDER_DO_NOT_KEEP"
+          ],
+          "maxNonEmptyLines": 360
+        }
+      ],
+      "readDenyPaths": [
+        "skills/coding/SKILL.md",
+        "skills/housekeeping/SKILL.md",
+        "skills/railway-operations/SKILL.md",
+        "skills/workflows/SKILL.md"
+      ]
+    },
+    {
+      "tag": "noskill",
+      "bootstrapProfile": "no_payload",
+      "disallowedSkills": [
+        "zig",
+        "coding",
+        "housekeeping",
+        "workflows",
+        "railway-operations"
+      ]
+    }
+  ],
+  "fixtureMapping": {
+    "build.zig": "skills-evals/fixtures/eval-cases/ZG-008/build.zig",
+    "src/main.zig": "skills-evals/fixtures/eval-cases/ZG-008/src/main.zig",
+    "src/route.zig": "skills-evals/fixtures/eval-cases/ZG-008/src/route.zig"
+  },
+  "fileAssertions": [
+    {
+      "path": "src/main.zig",
+      "mustContain": [
+        "route.zig",
+        "--bench"
+      ],
+      "mustNotContain": [
+        "NotImplemented",
+        "PLACEHOLDER_DO_NOT_KEEP"
+      ],
+      "maxNonEmptyLines": 180
+    },
+    {
+      "path": "src/route.zig",
+      "mustContain": [
+        "scoreSegments",
+        "RouteScore",
+        "test"
+      ],
+      "mustNotContain": [
+        "NotImplemented",
+        "PLACEHOLDER_DO_NOT_KEEP"
+      ],
+      "maxNonEmptyLines": 380
+    }
+  ],
+  "verificationCommands": [
+    {
+      "label": "black-box route scoring semantics",
+      "argv": [
+        "bash",
+        "-lc",
+        "cat > .pi-eval-route-blackbox.zig <<'EOF'\nconst std = @import(\"std\");\nconst app = @import(\"src/main.zig\");\n\nfn segment(id: u32, kind: app.SegmentKind, meters: u32, seconds: u32, toll: u32, flags: u16) app.Segment {\n    return .{ .id = id, .kind = kind, .meters = meters, .seconds = seconds, .toll_cents = toll, .flags = flags, .label = [_]u8{'x'} ** 32, .provenance = [_]u8{'y'} ** 64 };\n}\n\ntest \"route scoring black-box semantics\" {\n    const weights = [_]app.Weight{\n        .{ .kind = .local, .distance_factor = 2, .time_factor = 5, .toll_factor = 0, .required_flags = 0b0001, .blocked_flags = 0b1000 },\n        .{ .kind = .arterial, .distance_factor = 3, .time_factor = 4, .toll_factor = 1, .required_flags = 0, .blocked_flags = 0b0100 },\n        .{ .kind = .highway, .distance_factor = 4, .time_factor = 2, .toll_factor = 3, .required_flags = 0b0010, .blocked_flags = 0 },\n    };\n    const segments = [_]app.Segment{\n        segment(1, .local, 100, 10, 0, 0b0001),\n        segment(2, .local, 100, 10, 0, 0),\n        segment(3, .arterial, 50, 10, 20, 0),\n        segment(4, .arterial, 50, 10, 20, 0b0100),\n        segment(5, .highway, 80, 30, 10, 0b0010),\n        segment(6, .ferry, 80, 30, 10, 0),\n    };\n    const score = try app.scoreSegments(std.testing.allocator, weights[0..], segments[0..]);\n    try std.testing.expectEqual(@as(usize, 3), score.accepted);\n    try std.testing.expectEqual(@as(usize, 3), score.rejected);\n    try std.testing.expectEqual(@as(u64, 870), score.total);\n    try std.testing.expect(score.checksum != 0);\n}\nEOF\nzig test .pi-eval-route-blackbox.zig -OReleaseFast"
+      ],
+      "timeoutMs": 120000,
+      "maxOutputBytes": 20000
+    },
+    {
+      "label": "zig tests",
+      "argv": [
+        "zig",
+        "build",
+        "test"
+      ],
+      "timeoutMs": 120000,
+      "maxOutputBytes": 16000
+    },
+    {
+      "label": "optimized benchmark",
+      "argv": [
+        "zig",
+        "build",
+        "bench",
+        "-Doptimize=ReleaseFast"
+      ],
+      "timeoutMs": 120000,
+      "maxOutputBytes": 16000
+    },
+    {
+      "label": "optimized compiler command listing",
+      "argv": [
+        "zig",
+        "build",
+        "bench",
+        "-Doptimize=ReleaseFast",
+        "--verbose"
+      ],
+      "timeoutMs": 120000,
+      "maxOutputBytes": 12000
+    }
+  ],
+  "notes": [
+    "Anti-overfit Zig eval: this case uses an existing multi-module project rather than a single-file scratch task.",
+    "The visible prompt mentions repeated batches but leaves the optimization surface open. The judge should reward agents that preserve the one-shot API while moving stable weight preparation out of repeated scoring, avoid dynamic hash-map setup inside the hot boundary, keep benchmark boundaries comparable, and inspect optimized output with focused evidence.",
+    "The judge should distinguish a real source-shape improvement from merely adding benchmark prose or compiler-output traces."
+  ]
+}

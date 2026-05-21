@@ -5,9 +5,9 @@ import { resolveProviderAllowedHosts } from "../../../src/runtime/engine/sandbox
 test("resolveProviderAllowedHosts includes openai-codex alias", () => {
 	const hosts = resolveProviderAllowedHosts({
 		provider: "openai-codex",
-		id: "gpt-5.3-codex",
-		key: "openai-codex/gpt-5.3-codex",
-		label: "openai-codex/gpt-5.3-codex",
+		id: "gpt-5.5",
+		key: "openai-codex/gpt-5.5",
+		label: "openai-codex/gpt-5.5",
 	});
 	assert.equal(hosts.includes("api.openai.com"), true);
 });

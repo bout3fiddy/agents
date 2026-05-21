@@ -1,0 +1,80 @@
+{
+  "id": "ZG-007",
+  "suite": "zigperf",
+  "prompt": [
+    "This Zig telemetry alert rule engine is too slow on large batches, and the repeated path appears to allocate too much.",
+    "Optimize it while preserving the observable alert and per-kind stat semantics. Keep the benchmark useful enough to compare the same boundary before and after.",
+    "Add a reusable caller-owned batch entrypoint named `evaluateBatchInto` so callers can reuse stats and alert storage across repeated runs. Keep the API straightforward and keep existing demo/test behavior working.",
+    "Use the performance tools available in the workspace to inspect the optimized hot boundary and report concrete evidence from tests, timing, and generated-code or allocation checks.",
+    "Implement the code changes now; finish only after editing `src/main.zig` and running the relevant verification commands."
+  ],
+  "fixtureMapping": {
+    "build.zig": "skills-evals/fixtures/eval-cases/ZG-007/build.zig",
+    "src/main.zig": "skills-evals/fixtures/eval-cases/ZG-007/src/main.zig"
+  },
+  "expectedSkills": ["zig"],
+  "disallowedSkills": [],
+  "expectedRefs": [
+    "skills/zig/references/machine-level-hypotheses.md",
+    "skills/zig/references/benchmarking.md"
+  ],
+  "skillSet": ["zig"],
+  "requireSkillFileRead": true,
+  "tools": ["read", "edit", "write", "bash"],
+  "sandbox": true,
+  "fileAssertions": [
+    {
+      "path": "src/main.zig",
+      "mustContain": ["evaluateBatchInto", "KindStats"],
+      "mustNotContain": ["std.AutoHashMap", "std.fmt.allocPrint", "PLACEHOLDER_DO_NOT_KEEP", "NotImplemented"],
+      "maxNonEmptyLines": 560
+    }
+  ],
+  "verificationCommands": [
+    {
+      "label": "black-box caller-owned semantics",
+      "argv": [
+        "bash",
+        "-lc",
+        "cat > .pi-eval-telemetry-blackbox.zig <<'EOF'\nconst std = @import(\"std\");\nconst app = @import(\"src/main.zig\");\n\nconst kind_count = @typeInfo(app.SampleKind).@\"enum\".fields.len;\n\nfn sample(sensor_id: u32, kind: app.SampleKind, tick: u64, value: i32, quality: u8, flags: u16) app.Sample {\n    return .{\n        .sensor_id = sensor_id,\n        .kind = kind,\n        .tick = tick,\n        .value = value,\n        .quality = quality,\n        .flags = flags,\n        .label = [_]u8{'x'} ** 32,\n        .provenance = [_]u8{'y'} ** 64,\n    };\n}\n\nfn resultAlertCount(result: anytype, fallback: usize) usize {\n    const Result = @TypeOf(result);\n    if (@hasField(Result, \"alert_count\")) return result.alert_count;\n    if (@hasField(Result, \"alerts\")) return result.alerts.len;\n    return fallback;\n}\n\nfn resultAlerts(result: anytype, alerts: []app.Alert) []app.Alert {\n    const Result = @TypeOf(result);\n    if (@hasField(Result, \"alerts\")) return result.alerts;\n    if (@hasField(Result, \"alert_count\")) return alerts[0..result.alert_count];\n    return alerts;\n}\n\nfn resultStats(result: anytype, stats: []app.KindStats) []app.KindStats {\n    const Result = @TypeOf(result);\n    if (@hasField(Result, \"stats\")) return result.stats;\n    return stats[0..kind_count];\n}\n\nfn expectAnyError(value: anytype) !void {\n    if (value) |_| {\n        return error.ExpectedError;\n    } else |_| {}\n}\n\ntest \"caller-owned telemetry semantics\" {\n    const rules = [_]app.Rule{\n        .{ .kind = .temperature, .min_quality = 6, .limit = 25, .required_flags = 0b0001 },\n        .{ .kind = .pressure, .min_quality = 4, .limit = 1008, .required_flags = 0 },\n        .{ .kind = .vibration, .min_quality = 5, .limit = 10, .required_flags = 0b0010 },\n    };\n    const samples = [_]app.Sample{\n        sample(1, .temperature, 10, 24, 8, 0b0001),\n        sample(2, .temperature, 11, 27, 8, 0b0001),\n        sample(3, .temperature, 12, 30, 3, 0b0001),\n        sample(4, .pressure, 13, 1009, 5, 0),\n        sample(5, .vibration, 14, 11, 6, 0b0010),\n        sample(6, .voltage, 15, 220, 9, 0),\n    };\n    var stats_storage: [kind_count]app.KindStats = undefined;\n    var alert_storage: [samples.len]app.Alert = undefined;\n    const result = try app.evaluateBatchInto(rules[0..], samples[0..], stats_storage[0..], alert_storage[0..]);\n    const stats = resultStats(result, stats_storage[0..]);\n    const alerts = resultAlerts(result, alert_storage[0..]);\n    try std.testing.expectEqual(@as(usize, 3), resultAlertCount(result, alerts.len));\n    const temp = stats[@intFromEnum(app.SampleKind.temperature)];\n    try std.testing.expectEqual(@as(usize, 2), temp.count);\n    try std.testing.expectEqual(@as(i64, 51), temp.total);\n    try std.testing.expectEqual(@as(i32, 24), temp.min);\n    try std.testing.expectEqual(@as(i32, 27), temp.max);\n    try std.testing.expectEqual(@as(usize, 1), temp.alert_count);\n    try std.testing.expectEqual(@as(u32, 2), alerts[0].sensor_id);\n    try std.testing.expectEqual(app.SampleKind.temperature, alerts[0].kind);\n    try std.testing.expectEqual(@as(u32, 4), alerts[1].sensor_id);\n    try std.testing.expectEqual(app.SampleKind.pressure, alerts[1].kind);\n    try std.testing.expectEqual(@as(u32, 5), alerts[2].sensor_id);\n    try std.testing.expectEqual(app.SampleKind.vibration, alerts[2].kind);\n}\n\ntest \"caller-owned output sizes\" {\n    const rules = [_]app.Rule{.{ .kind = .temperature, .min_quality = 0, .limit = 0, .required_flags = 0 }};\n    const samples = [_]app.Sample{\n        sample(1, .temperature, 1, 1, 1, 0),\n        sample(2, .temperature, 2, 2, 1, 0),\n    };\n    var short_stats: [kind_count - 1]app.KindStats = undefined;\n    var alerts: [samples.len]app.Alert = undefined;\n    try expectAnyError(app.evaluateBatchInto(rules[0..], samples[0..], short_stats[0..], alerts[0..]));\n    var stats: [kind_count]app.KindStats = undefined;\n    var short_alerts: [1]app.Alert = undefined;\n    try expectAnyError(app.evaluateBatchInto(rules[0..], samples[0..], stats[0..], short_alerts[0..]));\n}\nEOF\nzig test .pi-eval-telemetry-blackbox.zig -OReleaseFast"
+      ],
+      "timeoutMs": 120000,
+      "maxOutputBytes": 20000
+    },
+    {
+      "label": "zig tests",
+      "argv": ["zig", "build", "test"],
+      "timeoutMs": 120000,
+      "maxOutputBytes": 16000
+    },
+    {
+      "label": "optimized benchmark",
+      "argv": ["zig", "build", "bench", "-Doptimize=ReleaseFast"],
+      "timeoutMs": 120000,
+      "maxOutputBytes": 16000
+    },
+    {
+      "label": "json codegen ladder",
+      "argv": [
+        "bash",
+        "-lc",
+        "skills/zig/scripts/codegen-ladder.sh --build-root . --test-step test --bench-step bench --build-step default --artifact zig-out/bin/telemetry-alerts --symbol evaluateBatchInto --json-out .pi-eval-codegen.json >/tmp/zg007-codegen.json && jq -e '.runtime.test.status == \"pass\" and .runtime.benchmark.status == \"pass\" and .hot_boundary.symbol_found == true and ([.checks[] | select(.key == \"allocator_hash_cache\" or .key == \"copy_helpers\" or .key == \"diagnostics\") | .status] | all(. == \"pass\"))' .pi-eval-codegen.json && jq '{elapsed_ns: .runtime.benchmark.parsed.elapsed_ns, hot_boundary: .hot_boundary, checks: [.checks[] | {key, status, count}], calls: .calls.summary, source_map: {status: .source_map.status, tool: .source_map.tool}}' .pi-eval-codegen.json"
+      ],
+      "timeoutMs": 120000,
+      "maxOutputBytes": 24000
+    }
+  ],
+  "dryRun": false,
+  "tokenBudget": null,
+  "notes": [
+    "Performance case: the baseline intentionally mixes allocated return values, a per-call hash map, cold diagnostic formatting, and hot-loop rule lookup.",
+    "The judge should inspect the sanitized trace for concrete generated-code or allocation evidence. Reward agents that tie source changes to structured evidence such as hot-boundary extraction, suspicious-call checks, source mapping, and benchmark elapsed time."
+  ],
+  "persistArtifacts": true,
+  "readDenyPaths": [
+    "skills/coding/SKILL.md",
+    "skills/housekeeping/SKILL.md",
+    "skills/railway-operations/SKILL.md",
+    "skills/workflows/SKILL.md"
+  ]
+}

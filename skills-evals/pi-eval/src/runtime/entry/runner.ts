@@ -1,4 +1,4 @@
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { tokenizeArgs, parseFlags } from "../../cli/args.js";
@@ -67,6 +67,7 @@ export const registerEvalCommand = (pi: ExtensionAPI) => {
 					cases: evaluations.length,
 					pass: passed,
 					fail: failed,
+					caseParallelism: options.caseParallelism,
 					duration: formatDuration(durationMs),
 					report: paths.reportPath,
 					indexUpdated: options.isFullRun ? paths.indexPath : null,

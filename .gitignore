@@ -33,3 +33,7 @@ skills-evals/generated/
 skills-evals/gondolin/image/current/*
 !skills-evals/gondolin/image/current/.gitkeep
 traces/
+
+# Disposable skill tooling probes stay out of the shipped skill payload.
+skills/zig/examples/
+skills/zig/scratch/

@@ -62,6 +62,7 @@ const flattenBundle = (
 		const expectedRefs = variant.expectedRefs ?? raw.expectedRefs ?? [];
 		const skillSet = variant.skillSet ?? raw.skillSet;
 		const requireSkillFileRead = variant.requireSkillFileRead ?? raw.requireSkillFileRead ?? false;
+		const verificationCommands = variant.verificationCommands ?? raw.verificationCommands ?? [];
 
 		// File assertions: variant replaces base, then interpolate
 		const rawFileAssertions = variant.fileAssertions ?? raw.fileAssertions ?? [];
@@ -88,6 +89,7 @@ const flattenBundle = (
 			expectedRefs,
 			skillSet,
 			requireSkillFileRead,
+			verificationCommands,
 			fileAssertions,
 			readDenyPaths,
 			bundleId,

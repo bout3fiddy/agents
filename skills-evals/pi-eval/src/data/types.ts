@@ -5,6 +5,26 @@ export type FileAssertion = {
 	maxNonEmptyLines?: number;
 };
 
+export type VerificationCommand = {
+	label: string;
+	argv: string[];
+	timeoutMs?: number;
+	maxOutputBytes?: number;
+	allowFailure?: boolean;
+	env?: Record<string, string>;
+};
+
+export type VerificationResult = {
+	label: string;
+	argv: string[];
+	exitCode: number | null;
+	durationMs: number;
+	timedOut: boolean;
+	stdout: string;
+	stderr: string;
+	outputTruncated: boolean;
+};
+
 export type BootstrapProfile = "full_payload" | "no_payload";
 
 export type EvalCaseVariant = {
@@ -17,6 +37,7 @@ export type EvalCaseVariant = {
 	skillSet?: string[];
 	requireSkillFileRead?: boolean;
 	fileAssertions?: FileAssertion[];
+	verificationCommands?: VerificationCommand[];
 	readDenyPaths?: string[];
 };
 
@@ -42,6 +63,7 @@ export type EvalCase = {
 	notes?: string;
 	fixtureMapping?: Record<string, string>;
 	persistArtifacts?: boolean;
+	verificationCommands?: VerificationCommand[];
 	variants?: EvalCaseVariant[];
 };
 
@@ -168,6 +190,8 @@ export type CaseRunResult = {
 	workspaceDir?: string | null;
 	toolUsage?: ToolUsageSummary;
 	rpcDiagnostics?: RpcDiagnostics;
+	sanitizedStepTrace?: string[];
+	verificationResults?: VerificationResult[];
 	readBreakdown?: ReadBreakdownEntry[];
 	bootstrapBreakdown?: BootstrapBreakdownEntry[];
 	turnBreakdown?: TurnTokenUsage[];
@@ -215,11 +239,25 @@ export type JudgeVariantVerdict = {
 	rationale: string;
 };
 
+export type JudgeProcessFinding = {
+	tag: string;
+	score: number;
+	traceEvidence: string;
+	compilerEvidence: string;
+	timingEvidence: string;
+	gaps: string;
+};
+
 export type JudgeBundleVerdict = {
 	bundleId: string;
 	variantTags: string[];
 	pass: boolean;
 	verdict: string;
+	evidenceSummary: string;
+	processSummary: string;
+	processFindings: JudgeProcessFinding[];
+	commandsRun: string[];
+	acceptanceCriteria: string[];
 	dimensions: JudgeDimensionScore[];
 	variantVerdicts: JudgeVariantVerdict[];
 	costAnalysis: string;

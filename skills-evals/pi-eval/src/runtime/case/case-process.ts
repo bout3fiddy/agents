@@ -26,13 +26,14 @@ import {
 	mapReadDenyPathsToGuest,
 } from "../sandbox/guest-paths.js";
 import { buildTimeoutDiagnosticsHint, persistRpcDiagnostics } from "../rpc/rpc-diagnostics.js";
+import { createRpcStepTraceCollector } from "../rpc/rpc-step-trace.js";
 import { createRpcState } from "../rpc/rpc-state.js";
 import {
 	createMandatorySandboxEngine,
 	type SandboxEngine,
 } from "../engine/sandbox-engine.js";
 
-const DEFAULT_CASE_TIMEOUT_MS = 300_000;
+const DEFAULT_CASE_TIMEOUT_MS = 600_000;
 const DEFAULT_SHUTDOWN_TIMEOUT_MS = 30_000;
 
 const parsePositiveIntEnv = (name: string, fallback: number): number =>
@@ -221,10 +222,16 @@ export const runCaseProcess = async (params: {
 	const stderrChunks: string[] = [];
 	launch.stderr.on("data", (chunk) => stderrChunks.push(String(chunk)));
 
+	const stepTrace = createRpcStepTraceCollector();
 	const rpcState = createRpcState((line) => {
 		if (!rpcTracePath) return;
 		appendFile(rpcTracePath, `${line}\n`).catch(() => undefined);
 	});
+	const originalOnLine = rpcState.onLine;
+	rpcState.onLine = (line: string) => {
+		stepTrace.onLine(line);
+		originalOnLine(line);
+	};
 	const rl = createInterface({ input: launch.stdout });
 	rl.on("line", rpcState.onLine);
 
@@ -245,6 +252,7 @@ export const runCaseProcess = async (params: {
 			promptError: rpcState.promptError,
 		});
 		const result = await resultPromise;
+		result.sanitizedStepTrace = stepTrace.toSummary();
 		const diagnostics = rpcState.diagnostics();
 		attachRpcDiagnostics(result, diagnostics);
 		await persistRpcDiagnostics(rpcDiagnosticsPath, diagnostics);

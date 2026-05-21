@@ -1,17 +1,23 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 import type { EvalCase } from "../../../src/data/types.js";
 import { fileExists } from "../../../src/data/utils.js";
-import { resolveSandboxExtensionEntry } from "../../../src/runtime/case/case-lifecycle.js";
+import {
+	resolvePersistArtifactTarget,
+	resolveSandboxExtensionEntry,
+} from "../../../src/runtime/case/case-lifecycle.js";
 import {
 	buildProfileReadDenyPaths,
 	collectPolicyDenyProbeErrors,
 	hardenNoPayloadWorkspace,
 } from "../../../src/runtime/policy/case-policy.js";
-import { mirrorBootstrapPayloadToWorkspace } from "../../../src/runtime/case/bootstrap.js";
+import {
+	applySkillSetBootstrapScope,
+	mirrorBootstrapPayloadToWorkspace,
+} from "../../../src/runtime/case/bootstrap.js";
 
 const buildEvalCase = (bootstrapProfile: "full_payload" | "no_payload" = "full_payload"): EvalCase => ({
 	id: "CD-015-NS-UT",
@@ -142,6 +148,50 @@ test("mirrorBootstrapPayloadToWorkspace projects synced bootstrap files into wor
 	}
 });
 
+test("applySkillSetBootstrapScope keeps only requested skills and rewrites AGENTS.md", async () => {
+	const workspaceAgentDir = await mkdtemp(path.join(tmpdir(), "pi-eval-workspace-skillset-"));
+	const homeDir = await mkdtemp(path.join(tmpdir(), "pi-eval-home-skillset-"));
+	try {
+		for (const root of [path.join(homeDir, ".agents"), path.join(homeDir, ".claude")]) {
+			await mkdir(path.join(root, "skills", "zig"), { recursive: true });
+			await mkdir(path.join(root, "skills", "coding"), { recursive: true });
+			await mkdir(path.join(root, "workflows"), { recursive: true });
+			await writeFile(
+				path.join(root, "skills", "zig", "SKILL.md"),
+				"---\nname: zig\ndescription: Performance-first Zig guidance.\n---\n# zig\n",
+				"utf-8",
+			);
+			await writeFile(path.join(root, "skills", "coding", "SKILL.md"), "# coding\n", "utf-8");
+			await writeFile(path.join(root, "workflows", "pr-review.md"), "# pr review\n", "utf-8");
+		}
+		await writeFile(path.join(homeDir, ".agents", "AGENTS.md"), "# original\n", "utf-8");
+
+		await applySkillSetBootstrapScope(homeDir, ["zig"]);
+		await mirrorBootstrapPayloadToWorkspace({
+			workspaceAgentDir,
+			homeDir,
+		});
+
+		assert.equal(await fileExists(path.join(homeDir, ".agents", "skills", "zig", "SKILL.md")), true);
+		assert.equal(await fileExists(path.join(homeDir, ".agents", "skills", "coding")), false);
+		assert.equal(await fileExists(path.join(homeDir, ".agents", "workflows")), false);
+		assert.equal(await fileExists(path.join(homeDir, ".claude", "skills", "coding")), false);
+		assert.equal(
+			await fileExists(path.join(workspaceAgentDir, "skills", "zig", "SKILL.md")),
+			true,
+		);
+		assert.equal(await fileExists(path.join(workspaceAgentDir, "skills", "coding")), false);
+		assert.equal(await fileExists(path.join(workspaceAgentDir, "workflows")), false);
+
+		const agentsMarkdown = await readFile(path.join(workspaceAgentDir, "AGENTS.md"), "utf-8");
+		assert.match(agentsMarkdown, /skills\/zig\/SKILL\.md/);
+		assert.doesNotMatch(agentsMarkdown, /skills\/coding\/SKILL\.md/);
+	} finally {
+		await rm(workspaceAgentDir, { recursive: true, force: true });
+		await rm(homeDir, { recursive: true, force: true });
+	}
+});
+
 test("collectPolicyDenyProbeErrors emits forbidden read evidence for must_trigger_policy_deny assertions", async () => {
 	const cwd = await mkdtemp(path.join(tmpdir(), "pi-eval-probe-"));
 	const denyRoot = path.join(cwd, "skills");
@@ -156,6 +206,26 @@ test("collectPolicyDenyProbeErrors emits forbidden read evidence for must_trigge
 	assert.match(probeErrors[0] ?? "", /skills\/coding\/SKILL\.md$/);
 
 	await rm(cwd, { recursive: true, force: true });
+});
+
+test("resolvePersistArtifactTarget stores concrete case artifacts under generated variant paths", () => {
+	const hostAgentDir = "/tmp/agents";
+	const target = resolvePersistArtifactTarget({
+		evalCase: {
+			...buildEvalCase(),
+			id: "ZG-001:skill",
+			suite: "zigperf",
+			bundleId: "ZG-001",
+			variantTag: "skill",
+		} as EvalCase & { bundleId: string; variantTag: string },
+		hostAgentDir,
+		artifactPath: "src/main.zig",
+	});
+
+	assert.equal(
+		target,
+		path.join(hostAgentDir, "skills-evals", "generated", "zigperf", "zg001", "skill", "src", "main.zig"),
+	);
 });
 
 test("resolveSandboxExtensionEntry remaps host extension paths into sandbox workspace", () => {

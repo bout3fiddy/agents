@@ -4,7 +4,7 @@
  * Handles profile resolution, home setup, auth copying, skill discovery,
  * workspace mirroring, and preflight validation.
  */
-import { chmod, copyFile, cp, mkdir, readdir, stat } from "node:fs/promises";
+import { chmod, copyFile, cp, mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type {
 	BootstrapBreakdownEntry,
@@ -88,6 +88,113 @@ export const listSyncedSkills = async (homeDir: string): Promise<string[]> => {
 		.filter(Boolean)
 		.sort();
 	return names;
+};
+
+// ── Skill-set scoping ──────────────────────────────────────────────────
+
+const normalizeSkillSet = (skillSet: string[] | undefined): string[] => {
+	const names = new Set<string>();
+	for (const rawName of skillSet ?? []) {
+		const name = rawName.trim();
+		if (!name) continue;
+		if (
+			path.isAbsolute(name) ||
+			name.includes("/") ||
+			name.includes("\\") ||
+			name === "." ||
+			name === ".." ||
+			name.startsWith(".")
+		) {
+			throw new Error(`invalid skillSet entry: ${rawName}`);
+		}
+		names.add(name);
+	}
+	return Array.from(names).sort();
+};
+
+const parseSkillDescription = (skillFile: string): string => {
+	if (!skillFile.startsWith("---")) return "";
+	const end = skillFile.indexOf("\n---", 3);
+	if (end === -1) return "";
+	const frontmatter = skillFile.slice(3, end);
+	const line = frontmatter
+		.split("\n")
+		.find((entry) => entry.trimStart().startsWith("description:"));
+	if (!line) return "";
+	return line
+		.replace(/^\s*description:\s*/, "")
+		.trim()
+		.replace(/^['"]|['"]$/g, "");
+};
+
+const readSkillDescription = async (skillsRoot: string, skillName: string): Promise<string> => {
+	try {
+		const skillFile = await readFile(path.join(skillsRoot, skillName, "SKILL.md"), "utf-8");
+		const description = parseSkillDescription(skillFile);
+		if (description) return description;
+	} catch {
+		// Missing skills are reported by the normal bootstrap skill expectation check.
+	}
+	return "Read this skill when the task matches its name.";
+};
+
+const buildScopedAgentsMarkdown = async (
+	skillsRoot: string,
+	skillNames: string[],
+): Promise<string> => {
+	const lines = [
+		"# Eval Instructions",
+		"",
+		"This eval sandbox exposes only the skills listed below.",
+		"Before reading or editing task code, read the matching skill file.",
+		"Do not use skills outside this list.",
+		"",
+		"## Available Skills",
+		"",
+	];
+	for (const skillName of skillNames) {
+		const description = await readSkillDescription(skillsRoot, skillName);
+		lines.push(`- \`${skillName}\`: \`skills/${skillName}/SKILL.md\` - ${description}`);
+	}
+	lines.push("");
+	return `${lines.join("\n")}\n`;
+};
+
+const pruneDirectoryToEntries = async (root: string, keepNames: Set<string>): Promise<void> => {
+	let entries: Awaited<ReturnType<typeof readdir>>;
+	try {
+		entries = await readdir(root, { withFileTypes: true });
+	} catch {
+		return;
+	}
+	for (const entry of entries) {
+		if (!entry.isDirectory()) continue;
+		if (keepNames.has(entry.name)) continue;
+		await rm(path.join(root, entry.name), { recursive: true, force: true });
+	}
+};
+
+export const applySkillSetBootstrapScope = async (
+	homeDir: string,
+	skillSet: string[] | undefined,
+): Promise<void> => {
+	const scopedSkills = normalizeSkillSet(skillSet);
+	if (scopedSkills.length === 0) return;
+
+	const keepSkills = new Set(scopedSkills);
+	const agentsRoot = path.join(homeDir, ".agents");
+	const agentsSkillsRoot = path.join(agentsRoot, "skills");
+	await pruneDirectoryToEntries(agentsSkillsRoot, keepSkills);
+	await rm(path.join(agentsRoot, "workflows"), { recursive: true, force: true });
+	await writeFile(
+		path.join(agentsRoot, "AGENTS.md"),
+		await buildScopedAgentsMarkdown(agentsSkillsRoot, scopedSkills),
+		"utf-8",
+	);
+
+	const claudeRoot = path.join(homeDir, ".claude");
+	await pruneDirectoryToEntries(path.join(claudeRoot, "skills"), keepSkills);
+	await rm(path.join(claudeRoot, "workflows"), { recursive: true, force: true });
 };
 
 export const resolveExpectedRefCandidates = (
@@ -290,6 +397,7 @@ export const setupCaseHome = async (params: {
 		homeDir,
 		authSourcePath,
 	});
+	await applySkillSetBootstrapScope(homeDir, evalCase.skillSet);
 	const bootstrapBreakdown = await mirrorBootstrapPayloadToWorkspace({
 		workspaceAgentDir,
 		homeDir,

@@ -1,0 +1,77 @@
+{
+  "id": "ZG-003",
+  "suite": "zigperf",
+  "prompt": [
+    "Complete this Zig sensor-frame summary module.",
+    "It should decode binary sensor frames, produce useful aggregate summaries, rank important sensors, and include tests plus a benchmark."
+  ],
+  "fixtureMapping": {
+    "build.zig": "skills-evals/fixtures/eval-cases/ZG-003/build.zig",
+    "src/main.zig": "skills-evals/fixtures/eval-cases/ZG-003/src/main.zig"
+  },
+  "expectedSkills": [],
+  "disallowedSkills": [],
+  "expectedRefs": [],
+  "tools": ["read", "edit", "write", "bash"],
+  "sandbox": true,
+  "fileAssertions": [
+    {
+      "path": "src/main.zig",
+      "mustContain": ["decodeAndSummarize", "ReadingKind", "Summary", "test"],
+      "mustNotContain": ["NotImplemented", "PLACEHOLDER_DO_NOT_KEEP"],
+      "maxNonEmptyLines": 460
+    }
+  ],
+  "verificationCommands": [
+    {
+      "label": "zig tests",
+      "argv": ["zig", "build", "test"],
+      "timeoutMs": 120000,
+      "maxOutputBytes": 12000
+    },
+    {
+      "label": "optimized benchmark",
+      "argv": ["zig", "build", "bench", "-Doptimize=ReleaseFast"],
+      "timeoutMs": 120000,
+      "maxOutputBytes": 12000
+    },
+    {
+      "label": "optimized compiler command listing",
+      "argv": ["zig", "build", "bench", "-Doptimize=ReleaseFast", "--verbose"],
+      "timeoutMs": 120000,
+      "maxOutputBytes": 20000
+    }
+  ],
+  "dryRun": false,
+  "tokenBudget": null,
+  "notes": [
+    "Scratch Zig eval: the agent must create the implementation from stubs rather than tune a prewritten solution.",
+    "The judge should reward dense frame parsing, enum-indexed summaries, bounded allocation, reusable workspace/API choices, and evidence from tests/benchmarks/compiler-output commands. Penalize per-frame heap allocation, string-keyed hot paths, and process traces that skip measurement."
+  ],
+  "persistArtifacts": true,
+  "readDenyPaths": [],
+  "variants": [
+    {
+      "tag": "skill",
+      "bootstrapProfile": "full_payload",
+      "expectedSkills": ["zig"],
+      "expectedRefs": [
+        "skills/zig/references/machine-level-hypotheses.md",
+        "skills/zig/references/benchmarking.md"
+      ],
+      "skillSet": ["zig"],
+      "requireSkillFileRead": true,
+      "readDenyPaths": [
+        "skills/coding/SKILL.md",
+        "skills/housekeeping/SKILL.md",
+        "skills/railway-operations/SKILL.md",
+        "skills/workflows/SKILL.md"
+      ]
+    },
+    {
+      "tag": "noskill",
+      "bootstrapProfile": "no_payload",
+      "disallowedSkills": ["zig", "coding", "housekeeping", "workflows", "railway-operations"]
+    }
+  ]
+}
