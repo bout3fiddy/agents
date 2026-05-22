@@ -20,6 +20,8 @@ Keep units comparable across before/after and alternative implementations. If yo
 
 For machine-level work, the benchmark should be boring. The interesting part is the boundary and checksum, not a clever harness. Prefer deterministic in-memory inputs, a warmup, an iteration loop around the exact boundary, and a checksum or domain invariant that prevents dead-code elimination and catches behavior changes.
 
+Benchmark reports should identify the exact function or public entrypoint under timing. If a change adds `processInto`, `Prepared.process`, or another hot API beside an existing public call, report each relevant boundary separately instead of blending setup, wrapper, and hot call into one ambiguous timing.
+
 Keep benchmark-only bookkeeping outside the timed boundary unless it is part of the user-visible work. Precompute active counts, expected totals, labels, and fixture metadata before timing; keep the timed loop focused on the boundary plus the minimal checksum needed to prove the result was consumed.
 
 ## Build Modes

@@ -56,7 +56,7 @@ The decision card is the first-pass routing layer. It summarizes benchmark signa
 
 Some `next_checks` are source-level probes. They catch patterns such as bounded fast paths with fallback scans or bitset candidate loops, then ask for a rival source-shape comparison. Treat those as design prompts: compiler evidence can show that the current shape compiles cleanly, while same-boundary timing and workload coverage decide whether a direct table, prepared indexes, active list, or uniform fallback-free path is better.
 
-For small project fixes, finish after one useful low-level check once correctness and same-boundary timing are good. If symbol-specific extraction is awkward, keep the optimized `--verbose` compiler command listing as the evidence and report symbol-level disassembly as a follow-up. Deeper compiler browsing is most valuable when timing is still bad, an allocator/copy/call fingerprint remains, or the user asked for assembly-level proof.
+For small project fixes, finish after one useful low-level check once correctness and same-boundary timing are good. Prefer a focused symbol, emitted assembly, codegen-ladder decision card, allocation counter, or no-allocation test over a broad optimized `--verbose` compiler command listing. If symbol-specific extraction is awkward, keep the verbose listing as build provenance and report symbol-level disassembly or allocation evidence as a follow-up. Deeper compiler browsing is most valuable when timing is still bad, an allocator/copy/call fingerprint remains, or the user asked for assembly-level proof.
 
 For before/after comparisons, save both reports and run:
 

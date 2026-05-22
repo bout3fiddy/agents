@@ -55,6 +55,8 @@ When implementing or reviewing a concrete Zig performance change, record:
 
 Microbenchmarks and focused codegen are hypothesis evidence, not proof of a workload speedup. Before claiming an improvement, look for the closest realistic retained benchmark, trace, or public workload that could invalidate the claim, and run it when available. If that realistic boundary regresses, is stale, or is not run, say `leaf improved, workload unproven/regressed` and stop source-shape experiments until there is a new measured hypothesis.
 
+When adding a faster sibling API, such as a caller-owned `Into` function or a prepared-state entrypoint, time the exact API named in the claim. A better-shaped benchmark harness or a cleaner internal helper is not enough if the submitted public or hot API is slower on the same workload.
+
 Correctness failures outrank benchmark and codegen evidence. Do not present generated-code cleanup, allocation removal, or faster microbenchmarks as a win until the public semantics gate passes.
 
 For design or investigation turns, use the same boundary and evidence vocabulary while keeping the response at the requested level of commitment.
@@ -84,6 +86,7 @@ Keep these prompts in mind before reaching for deeper assembly:
 - Diagnostics, formatting, tracing, reports, and final-evaluation artifacts belong outside the steady-state boundary unless the user-visible contract requires them there.
 - Threshold wording, caller-owned output semantics, short-buffer behavior, and missing-control behavior are correctness contracts, not performance details.
 - Caller-owned batch APIs should make written counts observable: return a result struct with counts/slices or document a shape that a caller can validate without guessing from buffer capacity.
+- Caller-owned output should be initialized or reset inside the public call unless accumulation is explicitly part of the API name and contract.
 
 ## Convergence
 
