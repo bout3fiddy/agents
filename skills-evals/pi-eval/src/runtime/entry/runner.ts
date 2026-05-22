@@ -41,14 +41,14 @@ export const registerEvalCommand = (pi: ExtensionAPI) => {
 					config,
 					extensionEntry: workerExtensionEntry,
 				});
-			const verdicts = await runJudge({
+			const judgeVerdict = await runJudge({
 				evaluations,
 				cases,
 				bundles,
 				options,
 				agentDir: options.agentDir,
 			});
-			applyJudgeVerdicts(evaluations, verdicts, cases);
+			applyJudgeVerdicts(evaluations, judgeVerdict, cases);
 
 			const durationMs = Date.now() - runStart;
 			const passed = evaluations.filter((item) => item.status === "pass").length;
@@ -58,7 +58,7 @@ export const registerEvalCommand = (pi: ExtensionAPI) => {
 				options,
 				defaultCases: defaultLoaded.cases,
 				evaluations,
-				bundles,
+				judgeVerdict,
 				durationMs,
 			});
 

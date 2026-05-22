@@ -16,7 +16,11 @@ Before comparing timings, make these identical:
 
 Compare matching optimized timing boundaries: `ReleaseFast` with `ReleaseFast`, warmed multi-iteration runs with warmed multi-iteration runs.
 
+Keep units comparable across before/after and alternative implementations. If you add a derived metric, still report the original raw elapsed time, boundary name, item count, and checksum. Do not replace `ns/item` with a narrower denominator such as `ns/accepted_item`, `ns/scored_item`, or `ns/output` unless the old denominator is still shown beside it.
+
 For machine-level work, the benchmark should be boring. The interesting part is the boundary and checksum, not a clever harness. Prefer deterministic in-memory inputs, a warmup, an iteration loop around the exact boundary, and a checksum or domain invariant that prevents dead-code elimination and catches behavior changes.
+
+Benchmark reports should identify the exact function or public entrypoint under timing. If a change adds a caller-owned entrypoint, prepared entrypoint, or another hot API beside an existing public call, report each relevant boundary separately instead of blending setup, wrapper, and hot call into one ambiguous timing.
 
 Keep benchmark-only bookkeeping outside the timed boundary unless it is part of the user-visible work. Precompute active counts, expected totals, labels, and fixture metadata before timing; keep the timed loop focused on the boundary plus the minimal checksum needed to prove the result was consumed.
 
@@ -37,6 +41,8 @@ zig test src/main.zig -OReleaseFast
 zig run src/main.zig -OReleaseFast -- --bench
 ```
 
+For standalone or small-file tasks, make the benchmark self-comparable: print the workload dimensions, warmup, iterations, elapsed time, per-item rate, checksum, and command. If a previous implementation or comparison point exists, reuse its workload dimensions or print both the inherited and new boundaries so the comparison is not hidden behind different fixture sizes.
+
 Use `ReleaseSafe` for optimized safety validation:
 
 ```sh
@@ -56,10 +62,12 @@ A useful benchmark reports:
 - checksum or domain invariant;
 - build command.
 
+Structured benchmark metadata is reporting hygiene, not a differentiator by itself. The decisive evidence is the measured same-boundary workload with a matching invariant.
+
 Example output shape:
 
 ```text
-bench boundary=evaluateRulesInto records=1000000 iterations=20 warmup=2 elapsed_ns=26600000 ns_per_record=1.33 checksum=27997959000
+bench boundary=processRecordsInto records=1000000 iterations=20 warmup=2 elapsed_ns=26600000 ns_per_record=1.33 checksum=27997959000
 ```
 
 For outer-command timing, use a tool such as `hyperfine` only after the program itself reports a stable internal boundary:
@@ -101,6 +109,10 @@ bench boundary=PreparedWeights.score weights=4 batches=1000 batch_size=64 iterat
 ```
 
 This is a different question from repeating one large full-slice call. Keep both numbers when the public one-shot API remains, but use the many-batch prepared boundary for claims about reused controls.
+
+When a prepared API is introduced, benchmark both the honest one-shot public boundary and the prepared repeated boundary when both are relevant. A prepared-state design is only proven for repeated use when the benchmark times reuse of the prepared object rather than rebuilding it every call.
+
+Size the benchmark so it stresses the cost your source shape claims to remove. If preparation avoids scanning controls, rules, weights, routes, schemas, or model state, include enough of that stable input to make repeated preparation measurable. Tiny fixtures are useful smoke tests, but they are weak evidence for setup-removal claims unless the real workload is also tiny.
 
 ## When No Benchmark Exists
 

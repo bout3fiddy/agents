@@ -20,7 +20,7 @@ Single-file mode:
 ```sh
 skills/zig/scripts/codegen-ladder.sh \
   --source src/main.zig \
-  --symbol evaluateBatchInto \
+  --symbol hotFunction \
   --run-arg --bench \
   --emit-ir \
   --json-out "$perf_scratch/codegen.json" > "$perf_scratch/codegen.stdout.json"
@@ -35,7 +35,7 @@ skills/zig/scripts/codegen-ladder.sh \
   --bench-step bench \
   --build-step default \
   --artifact zig-out/bin/app \
-  --symbol evaluateBatchInto \
+  --symbol hotFunction \
   --json-out "$perf_scratch/codegen.json" > "$perf_scratch/codegen.stdout.json"
 ```
 
@@ -56,7 +56,7 @@ The decision card is the first-pass routing layer. It summarizes benchmark signa
 
 Some `next_checks` are source-level probes. They catch patterns such as bounded fast paths with fallback scans or bitset candidate loops, then ask for a rival source-shape comparison. Treat those as design prompts: compiler evidence can show that the current shape compiles cleanly, while same-boundary timing and workload coverage decide whether a direct table, prepared indexes, active list, or uniform fallback-free path is better.
 
-For small project fixes, finish after one useful low-level check once correctness and same-boundary timing are good. If symbol-specific extraction is awkward, keep the optimized `--verbose` compiler command listing as the evidence and report symbol-level disassembly as a follow-up. Deeper compiler browsing is most valuable when timing is still bad, an allocator/copy/call fingerprint remains, or the user asked for assembly-level proof.
+For small project fixes, finish after one useful low-level check once correctness and same-boundary timing are good. Prefer a focused symbol, emitted assembly, codegen-ladder decision card, allocation counter, or no-allocation test over a broad optimized `--verbose` compiler command listing. If symbol-specific extraction is awkward, keep the verbose listing as build provenance and report symbol-level disassembly or allocation evidence as a follow-up. Deeper compiler browsing is most valuable when timing is still bad, an allocator/copy/call fingerprint remains, or the user asked for assembly-level proof.
 
 For before/after comparisons, save both reports and run:
 
@@ -153,17 +153,19 @@ Emit assembly directly for direct compiler invocations:
 zig build-exe src/main.zig -OReleaseFast -femit-asm="$perf_scratch/full.s" -fno-emit-bin
 ```
 
-For single-file tasks, first find the symbol and then inspect that symbol's body. Whole-file greps often report setup, benchmark, formatting, and allocator code that sits outside the hot boundary:
+For standalone direct-build tasks, first find the symbol and then inspect that symbol's body. Whole-file greps often report setup, benchmark, formatting, and allocator code that sits outside the hot boundary:
 
 ```sh
 zig build-exe src/main.zig -OReleaseFast -femit-bin="$perf_scratch/hot"
-nm -an "$perf_scratch/hot" | grep -Ei 'evaluateRulesInto|decodeAndSummarize|classify|process'
+nm -an "$perf_scratch/hot" | grep -Ei 'hotFunction|decodeAndSummarize|classify|process'
 objdump --disassemble --no-show-raw-insn "$perf_scratch/hot" > "$perf_scratch/full.asm"
-awk '/<main.evaluateRulesInto>:/,/^$/' "$perf_scratch/full.asm" > "$perf_scratch/hot.asm"
+awk '/<main.hotFunction>:/,/^$/' "$perf_scratch/full.asm" > "$perf_scratch/hot.asm"
 grep -nE 'bl|blr|call|alloc|HashMap|memcpy|panic|fdiv|idiv' "$perf_scratch/hot.asm" || true
 ```
 
 Adjust the symbol pattern to the actual public entrypoint. If the target symbol was inlined or folded away, say that and inspect the caller that owns the measured loop.
+
+If you only have a whole-artifact grep, label it as setup-inclusive evidence. Do not use allocator, formatting, or diagnostic hits from benchmark/demo setup as proof that the measured hot function still contains those calls.
 
 Disassemble a built artifact when the real build path matters more than direct assembly emission:
 

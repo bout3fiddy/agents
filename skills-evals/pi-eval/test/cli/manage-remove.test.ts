@@ -58,12 +58,15 @@ test("resolveRemoveTargets: bundle case with variants", async () => {
 		// Create generated dir so it's detected
 		const genDir = path.join(dirs.generatedDir, "core", "cd015");
 		mkdirSync(genDir, { recursive: true });
+		const modelDir = path.join(dirs.reportsDir, "routing-traces", "test-model");
+		mkdirSync(modelDir, { recursive: true });
 
 		const targets = await resolveRemoveTargets("CD-015", dirs);
 
 		assert.equal(targets.isBundle, true);
 		assert.deepStrictEqual(targets.variantTags, ["skill", "noskill"]);
 		assert.ok(targets.dirsToDelete.some((d) => d.includes("cd015")));
+		assert.ok(targets.filesToDelete.some((f) => f.endsWith("CD-015--verdict.json")));
 		assert.ok(targets.purgeArgs.includes("--variants"));
 	} finally {
 		cleanup();
@@ -85,6 +88,7 @@ test("resolveRemoveTargets: includes routing trace files when trace dirs exist",
 		const targets = await resolveRemoveTargets("CD-010", dirs);
 
 		assert.ok(targets.filesToDelete.some((f) => f.includes("routing-traces") && f.endsWith(".json")));
+		assert.ok(targets.filesToDelete.some((f) => f.endsWith("suite-verdict.json")));
 	} finally {
 		cleanup();
 	}

@@ -120,8 +120,8 @@ Scoring model:
 - Skill expectations are satisfied either by direct `SKILL.md` reads or by routed reference reads under `skills/<name>/references/` (skill inferred from path).
 - Checks expected references.
 - Produces routing scorecards per case: read skills, read skill files, read refs, missing refs, unexpected refs.
-- Passes sanitized model steps and harness-run verification output to the judge for bundled cases.
-- Bundle reports include explicit process findings so trace quality is evaluated separately from final code quality. The judge should say whether each agent used targeted tests, optimized builds, compiler command listings, filtered compiler output, symbol/disassembly checks, allocation checks, or timing runs.
+- Passes sanitized model steps and harness-run verification output to the suite-level judge for bundled cases.
+- Judge reports are evidence-first: they compare all selected bundled cases together, avoid abstract scorecards, and cite concrete verification, routing, process, performance, or code facts.
 - Runs text assertions and file assertions.
 - Enforces optional token budgets.
 
@@ -138,8 +138,7 @@ Cases source of truth:
 
 - `skills-evals/fixtures/eval-cases/` (one JSONL per case)
 - Zig performance cases include bundled comparisons and standalone skill-tool probes:
-  - `ZG-001` and `ZG-002`: refactor existing reasonably structured but slow Zig code.
-  - `ZG-003` and `ZG-004`: implement more complex Zig modules from starter stubs.
+  - `ZG-001`: refactor existing slow Zig code from an explicit optimization prompt.
   - `ZG-005` and `ZG-006`: create single-file Zig modules from blank workspaces (`src/main.zig` only).
   - `ZG-007`: optimize a caller-owned alert engine while using the JSON codegen ladder.
   - `ZG-008` and `ZG-009`: anti-overfit cases for multi-module repeated-batch work and source-level algorithmic improvement when obvious allocator/call smells are absent.

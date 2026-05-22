@@ -227,41 +227,43 @@ export type RoutingScorecard = {
 	unexpectedRefs: string[];
 };
 
-export type JudgeDimensionScore = {
-	name: string;
-	scores: Record<string, number>;
-	rationale: string;
-};
-
 export type JudgeVariantVerdict = {
 	tag: string;
-	pass: boolean;
+	taskPass: boolean;
 	rationale: string;
 };
 
-export type JudgeProcessFinding = {
-	tag: string;
-	score: number;
-	traceEvidence: string;
-	compilerEvidence: string;
-	timingEvidence: string;
-	gaps: string;
+export type JudgeSkillBenefit = "clear" | "none" | "worse" | "inconclusive";
+
+export type JudgeEvidenceKind =
+	| "verification"
+	| "correctness"
+	| "performance"
+	| "routing"
+	| "process"
+	| "code-fact"
+	| "inconclusive";
+
+export type JudgeEvidenceItem = {
+	kind: JudgeEvidenceKind;
+	claim: string;
+	source: string;
 };
 
-export type JudgeBundleVerdict = {
-	bundleId: string;
-	variantTags: string[];
+export type JudgeCaseVerdict = {
+	caseId: string;
+	bundlePass: boolean;
+	skillBenefit: JudgeSkillBenefit;
+	variants: JudgeVariantVerdict[];
+	decisiveEvidence: JudgeEvidenceItem[];
+	skillFeedback: string[];
+};
+
+export type JudgeSuiteVerdict = {
 	pass: boolean;
-	verdict: string;
-	evidenceSummary: string;
-	processSummary: string;
-	processFindings: JudgeProcessFinding[];
-	commandsRun: string[];
-	acceptanceCriteria: string[];
-	dimensions: JudgeDimensionScore[];
-	variantVerdicts: JudgeVariantVerdict[];
-	costAnalysis: string;
-	recommendation: string;
+	reportMarkdown: string;
+	cases: JudgeCaseVerdict[];
+	skillFeedback: string[];
 	rawResponse: string;
 	judgeTokens: TokenUsage;
 };
@@ -280,7 +282,8 @@ export type CaseEvaluation = {
 	routing: RoutingScorecard;
 	assertions: string[];
 	tokenBudget?: number | null;
-	judgeVerdict?: JudgeBundleVerdict;
+	judgeVerdict?: JudgeCaseVerdict;
+	judgeSuiteVerdict?: JudgeSuiteVerdict;
 };
 
 export type EvalRunOptions = {

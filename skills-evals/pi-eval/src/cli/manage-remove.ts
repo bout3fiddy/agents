@@ -93,7 +93,7 @@ export const resolveRemoveTargets = async (
 		filesToDelete.push(jsonlPath);
 	}
 
-	// 2. Routing traces
+	// 2. Routing traces and suite-level judge verdicts
 	const modelDirs = await discoverTraceDirs(dirs.reportsDir);
 	if (isBundle) {
 		for (const modelDir of modelDirs) {
@@ -101,10 +101,12 @@ export const resolveRemoveTargets = async (
 				filesToDelete.push(path.join(modelDir, `${traceFileName(`${caseId}:${tag}`)}.json`));
 			}
 			filesToDelete.push(path.join(modelDir, `${traceFileName(caseId)}--verdict.json`));
+			filesToDelete.push(path.join(modelDir, "suite-verdict.json"));
 		}
 	} else {
 		for (const modelDir of modelDirs) {
 			filesToDelete.push(path.join(modelDir, `${traceFileName(caseId)}.json`));
+			filesToDelete.push(path.join(modelDir, "suite-verdict.json"));
 		}
 	}
 

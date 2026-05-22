@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
-import type { CaseEvaluation, EvalRunOptions, ModelSpec, ResolvedEvalCase } from "../../src/data/types.js";
+import type { CaseEvaluation, EvalRunOptions, JudgeSuiteVerdict, ModelSpec, ResolvedEvalCase } from "../../src/data/types.js";
 import { fileExists } from "../../src/data/utils.js";
 import { persistRunReport } from "../../src/reporting/report-persistence.js";
 
@@ -93,6 +93,58 @@ const buildEvaluation = (caseId: string, status: "pass" | "fail"): CaseEvaluatio
 	tokenBudget: null,
 });
 
+const buildJudgeVerdict = (): JudgeSuiteVerdict => ({
+	pass: true,
+	reportMarkdown: [
+		"## Executive Summary",
+		"",
+		"Skill evidence is concrete.",
+		"",
+		"## Case Outcomes",
+		"",
+		"| Case | Outcome |",
+		"| --- | --- |",
+		"| CD-001 | clear skill win |",
+		"",
+		"## Clear Skill Wins",
+		"",
+		"- CD-001: verification output supports the verdict.",
+		"",
+		"## No Clear Win or Regressions",
+		"",
+		"- None.",
+		"",
+		"## Evidence Notes",
+		"",
+		"- Source: verification-output.md.",
+		"",
+		"## Routing and Process Issues",
+		"",
+		"- None.",
+		"",
+		"## Artifact Pointers",
+		"",
+		"- routing-traces/openai-gpt-5/CD-001.json",
+	].join("\n"),
+	cases: [{
+		caseId: "CD-001",
+		bundlePass: true,
+		skillBenefit: "inconclusive",
+		variants: [
+			{ tag: "single", taskPass: true, rationale: "Concrete standalone pass" },
+		],
+		decisiveEvidence: [{
+			kind: "verification",
+			claim: "required command passed",
+			source: "verification-output.md",
+		}],
+		skillFeedback: ["Keep the benchmark guidance."],
+	}],
+	skillFeedback: ["The skill helped because verification output supports the verdict."],
+	rawResponse: "{}",
+	judgeTokens: { input: 10, output: 5, cacheRead: 0, cacheWrite: 0, totalTokens: 15 },
+});
+
 test("persistRunReport merges with previous report rows and updates index on full runs", async () => {
 	const agentDir = await mkdtemp(path.join(tmpdir(), "pi-eval-report-full-"));
 	try {
@@ -118,7 +170,6 @@ test("persistRunReport merges with previous report rows and updates index on ful
 			options,
 			defaultCases,
 			evaluations: [buildEvaluation("../../CD-TRACE", "pass")],
-			bundles: new Map(),
 			durationMs: 500,
 		});
 
@@ -165,12 +216,51 @@ test("persistRunReport skips index updates on partial runs", async () => {
 			options,
 			defaultCases,
 			evaluations: [buildEvaluation("CD-001", "pass")],
-			bundles: new Map(),
 			durationMs: 200,
 		});
 
 		assert.equal(await fileExists(reportPath), true);
 		assert.equal(await fileExists(indexPath), false);
+	} finally {
+		await rm(agentDir, { recursive: true, force: true });
+	}
+});
+
+test("persistRunReport writes judge-authored suite report and verdict trace", async () => {
+	const agentDir = await mkdtemp(path.join(tmpdir(), "pi-eval-report-judge-"));
+	try {
+		const options = buildOptions(agentDir, false);
+		const defaultCases = [buildEvalCase("CD-001")];
+		const judgeVerdict = buildJudgeVerdict();
+		const evaluation = buildEvaluation("CD-001", "pass");
+		evaluation.judgeVerdict = judgeVerdict.cases[0];
+		evaluation.judgeSuiteVerdict = judgeVerdict;
+
+		const { reportPath } = await persistRunReport({
+			options,
+			defaultCases,
+			evaluations: [evaluation],
+			judgeVerdict,
+			durationMs: 200,
+		});
+
+		const reportContent = await readFile(reportPath, "utf-8");
+		assert.equal(reportContent.includes("## Judge Report"), true);
+		assert.equal(reportContent.includes("## Executive Summary"), true);
+		assert.equal(reportContent.includes("## Case Rows"), true);
+		assert.equal(reportContent.includes("| Case | Mode | Task | Judge |"), true);
+		assert.equal(reportContent.includes("## Bundle Evaluations"), false);
+		assert.equal(reportContent.includes("| CD-001 | single | PASS | STANDALONE OK |"), true);
+
+		const suiteVerdictPath = path.join(
+			agentDir,
+			"skills-evals",
+			"reports",
+			"routing-traces",
+			"openai-gpt-5",
+			"suite-verdict.json",
+		);
+		assert.equal(await fileExists(suiteVerdictPath), true);
 	} finally {
 		await rm(agentDir, { recursive: true, force: true });
 	}
