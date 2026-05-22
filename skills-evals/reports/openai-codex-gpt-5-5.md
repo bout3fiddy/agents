@@ -3,78 +3,72 @@ NOTICE: This is auto-generated on each run of the evals framework. Do not edit t
 # Pi Eval Report
 
 - Model: openai-codex/gpt-5.5
-- Commit: 8640dd5
+- Commit: be17526
 - Cases path: skills-evals/fixtures/eval-cases
-- Run: 2026-05-22T14:56:21.563Z
+- Run: 2026-05-22T15:10:39.256Z
 - Run scope: full
 - Runs executed: 11 (11 rows)
 - Task rows: 11 (pass 10, fail 1, skip 0)
 - Runs in spec: 11
-- Duration: 13m 13s
-- Token stats (this run): cost max 73619, cost median 27437, cost p95 73619
+- Duration: 13m 18s
+- Token stats (this run): cost max 66394, cost median 30781, cost p95 66394
 - Suite verdict: FAIL
-- Judge comparison: clear 1, none 3, worse 1, inconclusive 1
+- Judge comparison: clear 1, none 4, worse 0, inconclusive 1
 
 <!-- JUDGE_REPORT_START -->
 ## Judge Report
 
 - Suite verdict: FAIL
-- Judge token cost: 1137547
+- Judge token cost: 1494754
 
 ## Executive Summary
-
-The suite does not show reliable overall skill benefit. All skill-routed comparative variants passed their own task verification, and the single ZG-007 run passed, but only ZG-006 is a clear skill win over its no-skill baseline. ZG-001, ZG-005, and ZG-008 were broadly equivalent to the baseline, while ZG-009 favored the no-skill implementation on the reported benchmark boundary.
+- Overall suite verdict: no clear suite-level skill benefit. Only ZG-005 is a clear paired skill win.
+- ZG-001, ZG-006, ZG-008, and ZG-009 had passing skill variants, but the no-skill variants also passed and matched or exceeded the decisive behavior/performance evidence.
+- ZG-007 passed as a single full-payload run, but without a baseline it is task evidence only, not skill-vs-baseline evidence.
 
 ## Case Outcomes
-
-| Case | Outcome | Skill Benefit | Key Evidence |
-|---|---|---:|---|
-| ZG-001 | both variants passed | none | both tests/bench passed; benchmark evidence did not show a clear skill lead |
-| ZG-005 | both variants passed | none | both produced exactly `src/main.zig` and passed black-box tests |
-| ZG-006 | skill passed, no-skill failed | clear | no-skill black-box sample test crashed; skill passed same tests |
-| ZG-008 | both variants passed | none | both implemented reusable dense weight preparation and passed semantics tests |
-| ZG-009 | both variants passed | worse | no-skill reported faster same-sized access benchmark and used direct level lookup |
-| ZG-007 | single variant passed | inconclusive | no baseline; codegen ladder and caller-owned semantics passed |
+| Case | Bundle pass | Skill benefit | Variant task outcome | Decisive evidence |
+| --- | --- | --- | --- | --- |
+| ZG-001 | No | none | skill pass; noskill pass | Both tests/bench/listing exited 0. Skill verification: processBatch 32.853 ms and processBatchInto 37.117 ms; noskill one-shot 31.567 ms. |
+| ZG-005 | Yes | clear | skill pass; noskill fail | Skill passed shape, black-box tests, unit tests, optimized bench, and assembly probe. Noskill optimized bench and assembly failed on Zig 0.15 `std.io.getStdOut`. |
+| ZG-006 | No | none | skill pass; noskill pass | Both variants passed shape, black-box tests, unit tests, optimized bench, and assembly probe; both use enum-indexed threshold tables. |
+| ZG-008 | No | none | skill pass; noskill pass | Both variants preserve semantics and add reusable prepared weights. Noskill benchmark exposed a larger repeated-prep gap with 4096 weights; skill benchmark used 4 weights and showed only a small prepared delta. |
+| ZG-009 | No | none | skill pass; noskill pass | Both variants preserve ordered semantics and build dense lookup/decision tables; same-boundary benchmark was similar, with noskill slightly faster in verification. |
+| ZG-007 | Yes | inconclusive | single pass | Single run passed black-box semantics, tests, optimized bench, and codegen ladder; no baseline exists for skill benefit. |
 
 ## Clear Skill Wins
-
-- **ZG-006**: skill variant passed single-file shape, black-box sample semantics, unit tests, and benchmark. The no-skill variant failed the required black-box sample test with exit 1. Source inspection matches the failure: skill resets caller stats and prepares thresholds by enum; no-skill accumulates into caller stats and the harness passed undefined stats storage.
+- ZG-005: skill is the only paired variant that satisfied the full executable task. The no-skill source still had `std.io.getStdOut` and failed both optimized `--bench` and assembly build; the skill source used Zig 0.15-compatible stdout handling and passed all checks.
 
 ## No Clear Win or Regressions
-
-- **ZG-001**: both variants preserved tests and benchmark. The skill added `processBatchInto`, but reported `processBatch` elapsed was not clearly better than no-skill.
-- **ZG-005**: both variants met the single-file API and black-box behavior. Benchmark workloads differed, so no clear skill edge.
-- **ZG-008**: both variants moved route weights into reusable dense state and kept the one-shot API. Skill had cleaner named benchmark boundaries, but the submitted source improvement was essentially matched by no-skill.
-- **ZG-009**: regression/no win for skill. Both passed ordered-rule tests, but no-skill used a role/action/level lookup and reported `elapsed_ns=8916000`, while skill used a candidate table and reported `elapsed_ns=13799000` for 35 iterations of 160k events.
-- **ZG-007**: pass as a single run only; no skill-vs-baseline claim is available.
+- ZG-001: both variants passed. The skill added caller-owned `processBatchInto`, but final verification did not show a faster boundary; `processBatchInto` was slower than `processBatch` in the evaluator run.
+- ZG-006: both variants implemented the same key source shape, prepared per-kind thresholds, caller-owned stats/alerts, and passed all executable checks. Benchmark workloads differed, so there is no decisive timing win.
+- ZG-008: both variants moved stable weights into reusable prepared state while keeping one-shot scoring. The no-skill benchmark was at least as informative for repeated preparation.
+- ZG-009: both variants replaced ordered scans with lookup preparation and passed black-box ordered-rule tests; benchmark timings do not show a skill advantage.
+- ZG-007: the submitted run passed, but no no-skill baseline was selected.
 
 ## Skill Feedback
-
-- Keep the guidance that pushes caller-owned outputs and reset-before-write semantics; it directly aligns with the ZG-006 and ZG-007 passes.
-- Strengthen guidance on comparing identical benchmark boundaries. ZG-005 and ZG-008 had useful benchmarks but not enough same-boundary separation to prove a skill win.
-- Add a source-level lookup-pattern hint for ordered rule evaluators: when rule keys and levels are bounded, pre-expanding first-match decisions can beat scanning per-key candidates, as shown by ZG-009 no-skill.
-- Generated-code/assembly checks should isolate the hot symbol. Several probes included allocator or formatting calls from demo/bench setup, which weakened the evidence.
+- Keep the Zig version/build-mode guidance that encourages optimized `--bench` runs; it avoided the ZG-005 stdout API failure seen in no-skill.
+- Strengthen same-boundary performance guidance: adding a caller-owned or prepared API should be backed by final evaluator-style timings that show it wins, not just by source shape.
+- For repeated-preparation cases, tell agents to make benchmarks stress the stable preparation cost; ZG-008 skill used only 4 weights and therefore under-demonstrated the benefit.
+- Keep allocation/codegen evidence guidance for prompts that request it; ZG-007 produced a passing codegen ladder with zero allocator/hash/copy/diagnostic hits in the hot boundary.
 
 ## Evidence Notes
-
-- Verification output was the primary correctness source.
-- Benchmark elapsed values were used only when the boundary was comparable enough to support a claim.
-- Code facts were used to explain observed verification differences, not as standalone proof of task success.
+- Verdicts use verification outputs first. Raw elapsed values are only compared when the benchmark boundary is comparable.
+- Some benchmark outputs are not same-boundary across variants, especially ZG-006 and ZG-008; those are treated as no clear timing win instead of inferred superiority.
+- Code facts are from submitted project files, not judge-created instrumentation.
 
 ## Routing and Process Issues
-
-- All full-payload runs read the Zig skill and both expected references: `benchmarking.md` and `machine-level-hypotheses.md`.
-- The skill runs generally executed tests and ReleaseFast benchmarks.
-- ZG-007 had the strongest process evidence: the codegen ladder found `evaluateBatchInto` and reported zero allocator/hash/cache, copy-helper, diagnostic, and division checks.
-- ZG-009 shows that reading the machine-level references did not guarantee the best source-level optimization.
+- All full-payload skill variants routed to the Zig skill and expected benchmarking/machine-level references; ZG-007 additionally read allocation/compiler evidence references.
+- No-payload variants read no skills, as expected.
+- Process evidence was strongest in ZG-007 because verification included the codegen ladder. In ZG-001, ZG-008, and ZG-009, some low-level checks appear in sanitized traces or agent output, but paired verification mostly records tests, benchmarks, and compiler command listings.
+- ZG-005 no-skill process stopped after unit tests in the trace and missed the optimized `--bench` compile failure.
 
 ## Artifact Pointers
-
 - Manifest: `suite-manifest.json`
-- Verification files: `cases/*/*/verification-output.md`
-- Routing files: `cases/*/*/routing.md`
+- Verification outputs: `cases/*/*/verification-output.md`
+- Routing traces: `cases/*/*/routing.md`
 - Process traces: `cases/*/*/sanitized-steps.md`
-- Submitted Zig sources: `cases/*/*/project/src/main.zig`, `cases/ZG-008/*/project/src/route.zig`
+- Submitted sources: `cases/*/*/project/src/*.zig`
 
 <!-- JUDGE_REPORT_END -->
 
@@ -82,25 +76,25 @@ The suite does not show reliable overall skill benefit. All skill-routed compara
 <!-- UNPAIRED_TABLE_START -->
 | Case | Mode | Task | Judge | Cost | Cached | Turns | Skills Read | Skill Files Read | Refs Read | Missing Refs | Unexpected Refs | Notes | Run |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| ZG-001:noskill | single | PASS | BASELINE OK | 29161 | 50176 | 1 | 0 | 0 | 0 | - | - |  | 2026-05-22 |
-| ZG-001:skill | single | PASS | NO CLEAR WIN | 47563 | 293888 | 1 | 1 | 1 | 2 | - | - |  | 2026-05-22 |
-| ZG-005:noskill | single | PASS | BASELINE OK | 10597 | 11264 | 1 | 0 | 0 | 0 | - | - |  | 2026-05-22 |
-| ZG-005:skill | single | PASS | NO CLEAR WIN | 27437 | 69632 | 1 | 1 | 1 | 2 | - | - |  | 2026-05-22 |
-| ZG-006:noskill | single | FAIL | BASELINE FAIL | 22129 | 24064 | 1 | 0 | 0 | 0 | - | - | TASK_FAILURE: verification 'harness black-box sample tests' failed: exit 1 | 2026-05-22 |
-| ZG-006:skill | single | PASS | SKILL WIN | 21811 | 80896 | 1 | 1 | 1 | 2 | - | - |  | 2026-05-22 |
-| ZG-007 | single | PASS | STANDALONE OK | 34676 | 317440 | 1 | 1 | 1 | 2 | - | - |  | 2026-05-22 |
-| ZG-008:noskill | single | PASS | BASELINE OK | 27154 | 57344 | 1 | 0 | 0 | 0 | - | - |  | 2026-05-22 |
-| ZG-008:skill | single | PASS | NO CLEAR WIN | 72364 | 466944 | 1 | 1 | 1 | 2 | - | - |  | 2026-05-22 |
-| ZG-009:noskill | single | PASS | BASELINE OK | 11218 | 30208 | 1 | 0 | 0 | 0 | - | - |  | 2026-05-22 |
-| ZG-009:skill | single | PASS | SKILL WORSE | 73619 | 275968 | 1 | 1 | 1 | 2 | - | - |  | 2026-05-22 |
+| ZG-001:noskill | single | PASS | BASELINE OK | 20753 | 43520 | 1 | 0 | 0 | 0 | - | - |  | 2026-05-22 |
+| ZG-001:skill | single | PASS | NO CLEAR WIN | 47333 | 254464 | 1 | 1 | 1 | 2 | - | - |  | 2026-05-22 |
+| ZG-005:noskill | single | FAIL | BASELINE FAIL | 12620 | 31232 | 1 | 0 | 0 | 0 | - | - | TASK_FAILURE: verification 'optimized benchmark' failed: exit 1; TASK_FAILURE: verification 'filtered assembly probe' failed: exit 1 | 2026-05-22 |
+| ZG-005:skill | single | PASS | SKILL WIN | 15812 | 58368 | 1 | 1 | 1 | 2 | - | - |  | 2026-05-22 |
+| ZG-006:noskill | single | PASS | BASELINE OK | 14310 | 11776 | 1 | 0 | 0 | 0 | - | - |  | 2026-05-22 |
+| ZG-006:skill | single | PASS | NO CLEAR WIN | 38611 | 216064 | 1 | 1 | 1 | 2 | - | - |  | 2026-05-22 |
+| ZG-007 | single | PASS | STANDALONE OK | 66394 | 468480 | 1 | 1 | 1 | 4 | - | skills/zig/references/allocation-evidence.md, skills/zig/references/compiler-evidence.md |  | 2026-05-22 |
+| ZG-008:noskill | single | PASS | BASELINE OK | 42328 | 151040 | 1 | 0 | 0 | 0 | - | - |  | 2026-05-22 |
+| ZG-008:skill | single | PASS | NO CLEAR WIN | 30781 | 205312 | 1 | 1 | 1 | 2 | - | - |  | 2026-05-22 |
+| ZG-009:noskill | single | PASS | BASELINE OK | 19641 | 14336 | 1 | 0 | 0 | 0 | - | - |  | 2026-05-22 |
+| ZG-009:skill | single | PASS | NO CLEAR WIN | 32052 | 209920 | 1 | 1 | 1 | 2 | - | - |  | 2026-05-22 |
 
 ## Comparison Outcomes
-- **ZG-001**: none; bundle fail. skill: task pass (The skill run passed `zig build test` and ReleaseFast benchmark verification with preserved checksum output.); noskill: task pass (The no-skill run also passed `zig build test` and ReleaseFast benchmark verification with the same checksum.)
-- **ZG-005**: none; bundle fail. skill: task pass (The skill run passed the single-file shape check, harness black-box rule tests, unit tests, benchmark, and assembly probe.); noskill: task pass (The no-skill run passed the same shape check, black-box rule tests, unit tests, benchmark, and assembly probe.)
-- **ZG-006**: clear; bundle pass. skill: task pass (The skill run passed the single-file shape check, black-box sample tests, unit tests, ReleaseFast benchmark, and assembly probe.); noskill: task fail (The no-skill run failed the required harness black-box sample tests with exit 1 despite passing its own unit tests.)
-- **ZG-008**: none; bundle fail. skill: task pass (The skill run passed black-box route scoring semantics, project tests, optimized benchmark, and compiler command listing.); noskill: task pass (The no-skill run also passed black-box route semantics, project tests, optimized benchmark, and compiler command listing.)
-- **ZG-009**: worse; bundle fail. skill: task pass (The skill run passed black-box ordered-rule semantics, project tests, benchmark, and compiler command listing.); noskill: task pass (The no-skill run passed black-box ordered-rule semantics, project tests, benchmark, and compiler command listing.)
-- **ZG-007**: inconclusive; bundle pass. single: task pass (The run passed black-box caller-owned semantics, project tests, optimized benchmark, and JSON codegen ladder checks.)
+- **ZG-001**: none; bundle fail. skill: task pass (`zig build test`, optimized bench, and compiler command listing all exited 0 in `cases/ZG-001/skill/verification-output.md`.); noskill: task pass (`zig build test`, optimized bench, and compiler command listing all exited 0 in `cases/ZG-001/noskill/verification-output.md`.)
+- **ZG-005**: clear; bundle pass. skill: task pass (Shape check, black-box rule tests, unit tests, optimized benchmark, and assembly probe all exited 0.); noskill: task fail (Although shape and tests passed, the required optimized benchmark and assembly probe exited 1 because main used the removed `std.io.getStdOut` API.)
+- **ZG-006**: none; bundle fail. skill: task pass (Single-file shape, black-box sample tests, unit tests, optimized benchmark, and assembly probe all exited 0.); noskill: task pass (Single-file shape, black-box sample tests, unit tests, optimized benchmark, and assembly probe all exited 0.)
+- **ZG-008**: none; bundle fail. skill: task pass (Black-box route semantics, Zig tests, optimized benchmark, and compiler listing all exited 0.); noskill: task pass (Black-box route semantics, Zig tests, optimized benchmark, and compiler listing all exited 0.)
+- **ZG-009**: none; bundle fail. skill: task pass (Black-box ordered-rule semantics, Zig tests, optimized benchmark, and compiler listing all exited 0.); noskill: task pass (Black-box ordered-rule semantics, Zig tests, optimized benchmark, and compiler listing all exited 0.)
+- **ZG-007**: inconclusive; bundle pass. single: task pass (Black-box caller-owned semantics, Zig tests, optimized benchmark, and json codegen ladder all exited 0.)
 
 ## Task Failures
-- **ZG-006:noskill** (single): TASK_FAILURE: verification 'harness black-box sample tests' failed: exit 1
+- **ZG-005:noskill** (single): TASK_FAILURE: verification 'optimized benchmark' failed: exit 1; TASK_FAILURE: verification 'filtered assembly probe' failed: exit 1

@@ -165,6 +165,8 @@ grep -nE 'bl|blr|call|alloc|HashMap|memcpy|panic|fdiv|idiv' "$perf_scratch/hot.a
 
 Adjust the symbol pattern to the actual public entrypoint. If the target symbol was inlined or folded away, say that and inspect the caller that owns the measured loop.
 
+If you only have a whole-artifact grep, label it as setup-inclusive evidence. Do not use allocator, formatting, or diagnostic hits from benchmark/demo setup as proof that the measured hot function still contains those calls.
+
 Disassemble a built artifact when the real build path matters more than direct assembly emission:
 
 ```sh

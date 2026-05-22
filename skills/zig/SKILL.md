@@ -81,6 +81,7 @@ Keep these prompts in mind before reaching for deeper assembly:
 
 - Stable controls, rules, weights, plans, caches, or models across many batches usually deserve a prepared boundary and a many-batch benchmark.
 - Ordered rule or policy evaluators often want a direct table or prepared first-match index rather than per-item candidate scans.
+- When ordered rules use bounded categorical keys or small finite levels, compare a pre-expanded direct lookup that preserves first-match priority against candidate-list scans.
 - Caller-owned output or retained workspaces should remove allocation calls, cleanup edges, and capacity growth from repeated boundaries.
 - Wide records with cold labels, provenance, diagnostics, or payloads are often better walked by pointer or index when the loop reads only hot fields.
 - Diagnostics, formatting, tracing, reports, and final-evaluation artifacts belong outside the steady-state boundary unless the user-visible contract requires them there.

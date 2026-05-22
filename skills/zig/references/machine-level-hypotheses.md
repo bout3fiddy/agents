@@ -24,6 +24,7 @@ Good hypotheses name both source and machine symptoms. "Use a cache" is vague. "
 | Caller-owned output | Allocator-free hot symbol with clean ownership edges | `alloc`, `free`, `munmap`, `ensureTotalCapacity`, or error-cleanup branches |
 | Prepared dense table | Direct indexed loads or active list walk | Hash-map probe, sort, string compare, repeated linear scan |
 | Ordered rule/control table | One keyed load to the selected rule or control | Candidate scan per item, private rule-count cap, or slow fallback above the cap |
+| Bounded ordered lookup | Pre-expanded winner table preserving priority | Per-item candidate scan across bounded key combinations |
 | Reusable prepared state | Small public wrapper around private dense storage | Public API exposes bit-packed or encoded table details without a semantic name |
 | Large item iteration | Pointer or index walk over only consumed fields | By-value copies of wide records carrying labels/provenance/cold fields |
 | Mode-specialized function | Smaller hot symbol or one branch-free loop body | A large combined symbol with both rare and common paths |
@@ -42,6 +43,7 @@ Use these as prompts for what to check; benchmark claims still come from the cur
 
 - A dense prepared lookup can remove an inner dynamic scan, but the resulting symbol can be larger because LLVM may unroll or specialize the direct-index loop. Check both timing and code size when the hot binary footprint matters.
 - For ordered rule, threshold, or policy evaluators, compare the source-level choices before polishing one path: a direct table keyed by consumed fields, per-key candidate lists or bitsets, and a fallback scan. A bitset can compile neatly and still lose when each item keeps scanning candidates or when a private cap sends larger rule sets to a slower path.
+- If the key domain is bounded enough to enumerate, precompute the winning rule/control for each key tuple during preparation and make the hot loop a direct lookup. Preserve ordered semantics by filling only unset slots or by comparing explicit priority during preparation, not by scanning candidates per item.
 - For repeated scoring with stable weights or controls, a benchmark over many small batches can reveal setup and per-call overhead that one repeated full-slice call hides. Match the benchmark to the user's reuse shape before deciding which implementation is better.
 - Copying a wide record by value is easy to miss in source review. If the struct includes labels, provenance, diagnostics, or padding and the loop reads only numeric fields, iterate by pointer or index and confirm the benchmark still solves the same problem.
 - An invariant boolean may already compile into separated loop bodies. Specialization can still reduce symbol size, while the branch itself may be less central than it first appears.
