@@ -89,7 +89,11 @@ Summary words carry ordering semantics. A `latest_tick` or `max_timestamp` field
 
 Caller-owned slices usually mean "write the result here." For batch analyzers, initialize returned stats inside the public API and validate stats/output lengths with typed errors before relying on the storage. Accumulation across batches is a different contract and deserves a distinct function name or explicit option.
 
+Make caller-owned output counts part of the semantic shape. Returning only a capacity-sized buffer or an unqualified slice can make it ambiguous whether the caller should read all slots, accepted slots, alert slots, or a derived count. Prefer a small result struct such as counts plus narrowed output slices when the function writes variable-length results.
+
 Variable-length outputs need a capacity story. When every accepted item can produce an alert or match, a worst-case preflight is often the simplest correctness shape. When the exact count is much smaller and the API needs all-or-nothing writes, use a count/prepare pass and measure whether the extra pass is worth the cleaner contract.
+
+Heap formatting in a repeated scoring or diagnostic path is both a semantics and machine-level question. If the string is part of the contract, prefer bounded caller-owned or stack formatting with explicit truncation/error behavior; if it is only benchmark reporting, keep it outside the timed boundary.
 
 For grid and stencil kernels, boundary checks can be the remaining machine problem after allocation and calls disappear. A split interior loop removes edge branches from most cells; a single loop can still win for small images or simple kernels. Treat the split as a hypothesis and keep the faster same-boundary version.
 

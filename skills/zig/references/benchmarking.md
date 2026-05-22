@@ -16,6 +16,8 @@ Before comparing timings, make these identical:
 
 Compare matching optimized timing boundaries: `ReleaseFast` with `ReleaseFast`, warmed multi-iteration runs with warmed multi-iteration runs.
 
+Keep units comparable across before/after and alternative implementations. If you add a derived metric, still report the original raw elapsed time, boundary name, item count, and checksum. Do not replace `ns/item` with a narrower denominator such as `ns/accepted_item`, `ns/scored_item`, or `ns/output` unless the old denominator is still shown beside it.
+
 For machine-level work, the benchmark should be boring. The interesting part is the boundary and checksum, not a clever harness. Prefer deterministic in-memory inputs, a warmup, an iteration loop around the exact boundary, and a checksum or domain invariant that prevents dead-code elimination and catches behavior changes.
 
 Keep benchmark-only bookkeeping outside the timed boundary unless it is part of the user-visible work. Precompute active counts, expected totals, labels, and fixture metadata before timing; keep the timed loop focused on the boundary plus the minimal checksum needed to prove the result was consumed.
@@ -101,6 +103,8 @@ bench boundary=PreparedWeights.score weights=4 batches=1000 batch_size=64 iterat
 ```
 
 This is a different question from repeating one large full-slice call. Keep both numbers when the public one-shot API remains, but use the many-batch prepared boundary for claims about reused controls.
+
+When a prepared API is introduced, benchmark both the honest one-shot public boundary and the prepared repeated boundary when both are relevant. A prepared-state design is only proven for repeated use when the benchmark times reuse of the prepared object rather than rebuilding it every call.
 
 ## When No Benchmark Exists
 

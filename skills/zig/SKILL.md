@@ -34,13 +34,13 @@ Use this loop for concrete Zig performance changes, reviews, benchmark design, o
 1. Name the repeated boundary: records, rows, samples, packets, pixels, events, states, buffers, or batches.
 2. Name the hot loop and the fields it reads or writes.
 3. Separate setup, preparation, steady-state execution, diagnostics, formatting, and final evaluation.
-4. Define the correctness gate, measured workload, build mode, and checksum or invariant.
+4. Define the correctness gate, measured workload, build mode, and checksum or invariant. Prefer a public or import-style gate that exercises the same entrypoint a caller will use.
 5. Sketch the source-shape choices: direct table, prepared indexes, active list, fused pass, workspace, or narrow hot struct.
 6. State the machine-level hypothesis: which allocation, lookup, branch, copy, call, division, conversion, or scattered load should disappear?
 7. Run correctness, same-boundary timing, and one targeted compiler/allocation check when the task reaches implementation or review.
 8. Change one thing at a time; use timing for speed claims and compiler/allocation output to validate the source hypothesis.
 
-Fast wrong code is a different program. Preserve observable semantics before claiming performance.
+Fast wrong code is a different program. Preserve observable semantics before claiming performance. If local tests cover only a wrapper, build step, or default module set, add the smallest black-box caller check that imports the public module or calls the public API directly.
 
 ## Evidence Gate
 
@@ -54,6 +54,8 @@ When implementing or reviewing a concrete Zig performance change, record:
 - exact commands, measured result, and remaining unmeasured risk.
 
 Microbenchmarks and focused codegen are hypothesis evidence, not proof of a workload speedup. Before claiming an improvement, look for the closest realistic retained benchmark, trace, or public workload that could invalidate the claim, and run it when available. If that realistic boundary regresses, is stale, or is not run, say `leaf improved, workload unproven/regressed` and stop source-shape experiments until there is a new measured hypothesis.
+
+Correctness failures outrank benchmark and codegen evidence. Do not present generated-code cleanup, allocation removal, or faster microbenchmarks as a win until the public semantics gate passes.
 
 For design or investigation turns, use the same boundary and evidence vocabulary while keeping the response at the requested level of commitment.
 
@@ -81,6 +83,7 @@ Keep these prompts in mind before reaching for deeper assembly:
 - Wide records with cold labels, provenance, diagnostics, or payloads are often better walked by pointer or index when the loop reads only hot fields.
 - Diagnostics, formatting, tracing, reports, and final-evaluation artifacts belong outside the steady-state boundary unless the user-visible contract requires them there.
 - Threshold wording, caller-owned output semantics, short-buffer behavior, and missing-control behavior are correctness contracts, not performance details.
+- Caller-owned batch APIs should make written counts observable: return a result struct with counts/slices or document a shape that a caller can validate without guessing from buffer capacity.
 
 ## Convergence
 
