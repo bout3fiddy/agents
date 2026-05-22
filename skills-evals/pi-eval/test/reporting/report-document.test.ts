@@ -162,6 +162,22 @@ test("parseStandaloneTable parses new-format (Cost/Cached columns) rows", () => 
 	assert.equal(row2.cached, 500);
 });
 
+test("parseStandaloneTable parses Task/Judge columns", () => {
+	const rows = parseStandaloneTable([
+		"## Case Rows",
+		UNPAIRED_TABLE_SENTINEL,
+		"| Case | Mode | Task | Judge | Cost | Cached | Turns | Skills Read | Skill Files Read | Refs Read | Missing Refs | Unexpected Refs | Notes | Run |",
+		"| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+		"| CD-010 | single | PASS | SKILL WIN | 80 | 200 | 1 | 0 | 0 | 0 | - | - |  | 2026-03-03 |",
+	]);
+	const row = rows.get("CD-010::single");
+	assert.ok(row);
+	assert.equal(row.status, "PASS");
+	assert.equal(row.judge, "SKILL WIN");
+	assert.equal(row.apiCost, 80);
+});
+
+
 test("parseStandaloneTable returns empty map for missing table", () => {
 	const rows = parseStandaloneTable(["# No table"]);
 	assert.equal(rows.size, 0);
@@ -171,24 +187,24 @@ test("parseStandaloneTable returns empty map for missing table", () => {
 
 test("recalculateHeaderStats updates header lines in place", () => {
 	const lines = [
-		"- Case rows: 999 (pass 999, fail 999, skip 999)",
-		"- Cases in spec: 999",
+		"- Task rows: 999 (pass 999, fail 999, skip 999)",
+		"- Runs in spec: 999",
 		"",
 		UNPAIRED_TABLE_SENTINEL,
-		"| Case | Mode | Status | Cost | Cached | Turns | Skills Read | Skill Files Read | Refs Read | Missing Refs | Unexpected Refs | Notes | Run |",
-		"| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
-		"| CD-010 | single | PASS | 80 | 200 | 1 | 0 | 0 | 0 | - | - |  | 2026-03-03 |",
-		"| CD-020 | single | FAIL | 150 | 500 | 2 | 0 | 0 | 0 | - | - | timeout | 2026-03-03 |",
+		"| Case | Mode | Task | Judge | Cost | Cached | Turns | Skills Read | Skill Files Read | Refs Read | Missing Refs | Unexpected Refs | Notes | Run |",
+		"| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+		"| CD-010 | single | PASS | SKILL WIN | 80 | 200 | 1 | 0 | 0 | 0 | - | - |  | 2026-03-03 |",
+		"| CD-020 | single | FAIL | BASELINE FAIL | 150 | 500 | 2 | 0 | 0 | 0 | - | - | timeout | 2026-03-03 |",
 	];
 	recalculateHeaderStats(lines);
-	assert.equal(lines[0], "- Case rows: 2 (pass 1, fail 1, skip 0)");
-	assert.equal(lines[1], "- Cases in spec: 2");
+	assert.equal(lines[0], "- Task rows: 2 (pass 1, fail 1, skip 0)");
+	assert.equal(lines[1], "- Runs in spec: 2");
 });
 
 test("recalculateHeaderStats counts bundle variant rows", () => {
 	const lines = [
-		"- Case rows: 0 (pass 0, fail 0, skip 0)",
-		"- Cases in spec: 0",
+		"- Task rows: 0 (pass 0, fail 0, skip 0)",
+		"- Runs in spec: 0",
 		"",
 		"| Variant | Status | Cost | Cached | Turns | Skills Read | Refs Read |",
 		"| --- | --- | --- | --- | --- | --- | --- |",
@@ -201,6 +217,6 @@ test("recalculateHeaderStats counts bundle variant rows", () => {
 		"| CD-010 | single | PASS | 80 | 200 | 1 | 0 | 0 | 0 | - | - |  | 2026-03-03 |",
 	];
 	recalculateHeaderStats(lines);
-	assert.equal(lines[0], "- Case rows: 3 (pass 2, fail 1, skip 0)");
-	assert.equal(lines[1], "- Cases in spec: 3");
+	assert.equal(lines[0], "- Task rows: 3 (pass 2, fail 1, skip 0)");
+	assert.equal(lines[1], "- Runs in spec: 3");
 });

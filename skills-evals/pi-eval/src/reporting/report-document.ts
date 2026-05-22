@@ -8,6 +8,8 @@
  */
 
 export const UNPAIRED_TABLE_SENTINEL = "<!-- UNPAIRED_TABLE_START -->";
+export const JUDGE_REPORT_START = "<!-- JUDGE_REPORT_START -->";
+export const JUDGE_REPORT_END = "<!-- JUDGE_REPORT_END -->";
 
 export const normalizeStatus = (value: string): string => value.trim().toUpperCase();
 
@@ -71,6 +73,7 @@ export type ReportRow = {
 	caseId: string;
 	mode: string;
 	status: string;
+	judge: string;
 	apiCost: number;
 	cached: number;
 	turns: number;
@@ -102,7 +105,8 @@ export const parseStandaloneTable = (lines: string[]): Map<string, ReportRow> =>
 
 	const caseIdx = col("Case");
 	const modeIdx = col("Mode");
-	const statusIdx = col("Status");
+	const statusIdx = col("Status") >= 0 ? col("Status") : col("Task");
+	const judgeIdx = col("Judge");
 	const costIdx = col("Cost");
 	const cachedIdx = col("Cached");
 	const tokensIdx = col("Tokens"); // backward compat: old reports use "Tokens"
@@ -131,6 +135,7 @@ export const parseStandaloneTable = (lines: string[]): Map<string, ReportRow> =>
 			caseId,
 			mode,
 			status: cells[statusIdx] ?? "",
+			judge: cellStr(cells, judgeIdx, "-"),
 			apiCost: parsedCost,
 			cached: safeParseInt(cellStr(cells, cachedIdx, "0")),
 			turns: safeParseInt(cellStr(cells, turnsIdx, "0")),
@@ -150,7 +155,7 @@ export const parseStandaloneTable = (lines: string[]): Map<string, ReportRow> =>
 // ── Header-stats recalculation ──────────────────────────────────────────
 
 /**
- * Recalculate `Case rows:` and `Cases in spec:` header lines in-place
+ * Recalculate `Task rows:` and `Runs in spec:` header lines in-place
  * based on remaining table rows (both standalone and bundle variant tables).
  */
 export const recalculateHeaderStats = (lines: string[]): void => {
@@ -164,7 +169,7 @@ export const recalculateHeaderStats = (lines: string[]): void => {
 	if (headerIndex >= 0) {
 		const col = buildColumnIndex(extractRowCells(lines[headerIndex]));
 		const caseIdx = col("Case");
-		const statusIdx = col("Status");
+		const statusIdx = col("Status") >= 0 ? col("Status") : col("Task");
 		for (let i = headerIndex + 2; i < lines.length; i++) {
 			const line = lines[i];
 			if (!line.trim().startsWith("|")) break;
@@ -206,10 +211,10 @@ export const recalculateHeaderStats = (lines: string[]): void => {
 	const totalCases = caseIds.size;
 
 	for (let i = 0; i < Math.min(lines.length, 20); i++) {
-		if (lines[i].startsWith("- Case rows:")) {
-			lines[i] = `- Case rows: ${totalRows} (pass ${rowPass}, fail ${rowFail}, skip ${rowSkip})`;
-		} else if (lines[i].startsWith("- Cases in spec:")) {
-			lines[i] = `- Cases in spec: ${totalCases}`;
+		if (lines[i].startsWith("- Task rows:") || lines[i].startsWith("- Case rows:")) {
+			lines[i] = `- Task rows: ${totalRows} (pass ${rowPass}, fail ${rowFail}, skip ${rowSkip})`;
+		} else if (lines[i].startsWith("- Runs in spec:") || lines[i].startsWith("- Cases in spec:")) {
+			lines[i] = `- Runs in spec: ${totalCases}`;
 		}
 	}
 };

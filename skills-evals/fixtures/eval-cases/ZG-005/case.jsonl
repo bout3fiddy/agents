@@ -2,7 +2,7 @@
   "id": "ZG-005",
   "suite": "zigperf",
   "prompt": [
-    "Create one Zig source file at src/main.zig. Do not create build.zig or split the solution across extra files; the evaluator will import and run this one file directly.",
+    "Start from scratch in an empty task workspace: create exactly one Zig source file at src/main.zig. Do not create build.zig or split the solution across extra files; the evaluator will import and run this one file directly.",
     "Implement a reusable record rule evaluator for batches of numeric records. Rules choose one of a few typed fields, transform the value, check an inclusive range, and may require flags. A record matches only when every rule passes.",
     "Expose this public shape: Field has temperature, pressure, vibration, voltage. Record has id, temperature, pressure, vibration, voltage, flags. Rule has field, min, max, scale, offset, required_flags. MatchStats has matched, rejected, id_checksum.",
     "evaluateRulesInto should accept rule and record slices plus a caller-owned output byte slice, return !MatchStats, write 1 for matches and 0 for rejects, and return error.OutputTooSmall if the output slice is too short.",

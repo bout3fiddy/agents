@@ -2,7 +2,7 @@
   "id": "ZG-006",
   "suite": "zigperf",
   "prompt": [
-    "Create one Zig source file at src/main.zig. Do not create build.zig or split the solution across extra files; the evaluator will import and run this one file directly.",
+    "Start from scratch in an empty task workspace: create exactly one Zig source file at src/main.zig. Do not create build.zig or split the solution across extra files; the evaluator will import and run this one file directly.",
     "Implement a reusable sensor sample alert analyzer. It should process batches of samples, apply per-kind thresholds, update per-kind stats, and write alerts into caller-owned output storage.",
     "Expose this public shape: SampleKind has temperature, pressure, vibration, voltage. Sample has sensor_id, kind, tick, value, quality, flags. Threshold has kind, min_quality, limit, required_flags. KindStats has count, alert_count, total, min, max. Alert has sensor_id, kind, tick, value. AnalyzeStats has accepted, rejected, alert_count.",
     "analyzeSamplesInto should accept threshold and sample slices plus caller-owned stats and alert buffers, return !AnalyzeStats, and return error.OutputTooSmall when either output buffer is too short.",

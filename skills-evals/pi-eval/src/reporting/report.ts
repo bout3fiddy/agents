@@ -1,8 +1,10 @@
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { apiCostFromTokens, type CaseEvaluation, type EvalBundle, type JudgeBundleVerdict, type ModelSpec, type ResolvedEvalCase } from "../data/types.js";
+import { apiCostFromTokens, type CaseEvaluation, type JudgeSuiteVerdict, type ModelSpec, type ResolvedEvalCase } from "../data/types.js";
 import { ensureDir, fileExists, formatDuration, median, percentile } from "../data/utils.js";
 import {
+	JUDGE_REPORT_END,
+	JUDGE_REPORT_START,
 	UNPAIRED_TABLE_SENTINEL,
 	buildRowKey,
 	normalizeStatus,
@@ -22,6 +24,65 @@ const formatCostStats = (costs: number[]) => ({
 	p95: percentile(costs, 95),
 });
 
+const variantTagFor = (evalCase: ResolvedEvalCase | undefined): string =>
+	evalCase?.variantTag ?? "single";
+
+const findVariantVerdict = (evaluation: CaseEvaluation, evalCase: ResolvedEvalCase | undefined) => {
+	const tag = variantTagFor(evalCase);
+	return evaluation.judgeVerdict?.variants.find((variant) => variant.tag === tag) ?? null;
+};
+
+const taskStatusFor = (
+	evaluation: CaseEvaluation,
+	evalCase: ResolvedEvalCase | undefined,
+): "pass" | "fail" => {
+	const variantVerdict = findVariantVerdict(evaluation, evalCase);
+	if (evaluation.status === "fail") return "fail";
+	if (variantVerdict && !variantVerdict.taskPass) return "fail";
+	return "pass";
+};
+
+const judgeLabelFor = (
+	evaluation: CaseEvaluation,
+	evalCase: ResolvedEvalCase | undefined,
+): string => {
+	const caseVerdict = evaluation.judgeVerdict;
+	if (!caseVerdict) return "-";
+	const variantVerdict = findVariantVerdict(evaluation, evalCase);
+	if (!variantVerdict) return "JUDGE MISSING";
+	if (!evalCase?.bundleId) return variantVerdict.taskPass ? "STANDALONE OK" : "STANDALONE FAIL";
+	const tag = variantTagFor(evalCase);
+	if (tag === "skill") {
+		if (caseVerdict.skillBenefit === "clear") return "SKILL WIN";
+		if (caseVerdict.skillBenefit === "none") return "NO CLEAR WIN";
+		if (caseVerdict.skillBenefit === "worse") return "SKILL WORSE";
+		return "INCONCLUSIVE";
+	}
+	if (tag === "noskill") return variantVerdict.taskPass ? "BASELINE OK" : "BASELINE FAIL";
+	return variantVerdict.taskPass ? "TASK OK" : "TASK FAIL";
+};
+
+const taskNotesFor = (
+	evaluation: CaseEvaluation,
+	evalCase: ResolvedEvalCase | undefined,
+): string => {
+	const notes = [...evaluation.reasons];
+	const variantVerdict = findVariantVerdict(evaluation, evalCase);
+	if (evaluation.status === "pass" && variantVerdict && !variantVerdict.taskPass) {
+		notes.push(`JUDGE_TASK: ${variantVerdict.rationale}`);
+	}
+	return notes.join("; ");
+};
+
+const formatComparisonStats = (judgeVerdict: JudgeSuiteVerdict | null | undefined): string | null => {
+	if (!judgeVerdict) return null;
+	const counts = new Map([["clear", 0], ["none", 0], ["worse", 0], ["inconclusive", 0]]);
+	for (const item of judgeVerdict.cases) {
+		counts.set(item.skillBenefit, (counts.get(item.skillBenefit) ?? 0) + 1);
+	}
+	return `clear ${counts.get("clear") ?? 0}, none ${counts.get("none") ?? 0}, worse ${counts.get("worse") ?? 0}, inconclusive ${counts.get("inconclusive") ?? 0}`;
+};
+
 export const readReportRows = async (filePath: string): Promise<Map<string, ReportRow>> => {
 	if (!(await fileExists(filePath))) return new Map();
 	const raw = await readFile(filePath, "utf-8");
@@ -37,6 +98,7 @@ const mergeReportRows = (params: {
 	const { evaluations, allCases, previousRows, runTimestamp } = params;
 	const runDate = runDateFromTimestamp(runTimestamp);
 	const updatedRows = new Map<string, ReportRow>();
+	const caseById = new Map(allCases.map((evalCase) => [evalCase.id, evalCase]));
 	const addMode = (map: Map<string, Set<string>>, caseId: string, mode: string) => {
 		let set = map.get(caseId);
 		if (!set) { set = new Set(); map.set(caseId, set); }
@@ -48,12 +110,15 @@ const mergeReportRows = (params: {
 	for (const row of previousRows.values()) addMode(previousModes, row.caseId, row.mode);
 
 	for (const evaluation of evaluations) {
+		const evalCase = caseById.get(evaluation.caseId);
+		const taskStatus = taskStatusFor(evaluation, evalCase);
 		const key = buildRowKey(evaluation.caseId, evaluation.mode);
 		const tok = evaluation.result.tokens;
 		const row: ReportRow = {
 			caseId: evaluation.caseId,
 			mode: evaluation.mode,
-			status: evaluation.status === "pass" ? "PASS" : "FAIL",
+			status: taskStatus === "pass" ? "PASS" : "FAIL",
+			judge: judgeLabelFor(evaluation, evalCase),
 			apiCost: apiCostFromTokens(tok),
 			cached: tok.cacheRead,
 			turns: evaluation.result.turnBreakdown?.length ?? 0,
@@ -62,7 +127,7 @@ const mergeReportRows = (params: {
 			refsRead: evaluation.routing.readRefs.length,
 			missingRefs: joinRoutingList(evaluation.routing.missingRefs),
 			unexpectedRefs: joinRoutingList(evaluation.routing.unexpectedRefs),
-			notes: evaluation.reasons.join("; "),
+			notes: taskNotesFor(evaluation, evalCase),
 			run: runDate,
 		};
 		updatedRows.set(key, row);
@@ -91,9 +156,10 @@ const mergeReportRows = (params: {
 				previousRows.get(key) ??
 				({
 					caseId,
-					mode,
-					status: "SKIP",
-					apiCost: 0,
+						mode,
+						status: "SKIP",
+						judge: "-",
+						apiCost: 0,
 					cached: 0,
 					turns: 0,
 					skillsRead: 0,
@@ -111,185 +177,54 @@ const mergeReportRows = (params: {
 	return rows;
 };
 
-type BundleSection = {
-	bundleId: string;
-	variantRows: ReportRow[];
-	verdict: JudgeBundleVerdict;
-	notes: string;
-	verificationLines: string[];
-};
-
-const renderBundleVariantTable = (variantRows: ReportRow[]): string => {
-	const header = "| Variant | Status | Cost | Cached | Turns | Skills Read | Refs Read |";
-	const separator = "| --- | --- | --- | --- | --- | --- | --- |";
-	const lines = variantRows.map(
-		(row) => `| ${row.caseId} | ${normalizeStatus(row.status)} | ${row.apiCost} | ${row.cached} | ${row.turns} | ${row.skillsRead} | ${row.refsRead} |`,
-	);
-	return [header, separator, ...lines].join("\n");
-};
-
-const renderDimensionsTable = (verdict: JudgeBundleVerdict): string => {
-	const tags = verdict.variantTags;
-	const header = `| Dimension | ${tags.join(" | ")} | Rationale |`;
-	const separator = `| --- | ${tags.map(() => "---").join(" | ")} | --- |`;
-	const rows = verdict.dimensions.map((d) => {
-		const scores = tags.map((tag) => String(d.scores[tag] ?? 0));
-		return `| ${d.name} | ${scores.join(" | ")} | ${d.rationale} |`;
-	});
-	return [header, separator, ...rows].join("\n");
-};
-
-const renderVariantVerdicts = (verdict: JudgeBundleVerdict): string => {
-	const lines = verdict.variantVerdicts.map((v) => {
-		const status = v.pass ? "PASS" : "FAIL";
-		return `- **${v.tag}**: ${status} — ${v.rationale}`;
-	});
-	return lines.join("\n");
-};
-
-const renderProcessFindings = (verdict: JudgeBundleVerdict): string => {
-	if (verdict.processFindings.length === 0) return "";
-	const lines = ["**Process Findings**", ""];
-	if (verdict.processSummary) {
-		lines.push(`> ${verdict.processSummary}`);
-		lines.push("");
-	}
-	for (const finding of verdict.processFindings) {
-		const score = Number.isFinite(finding.score) ? finding.score : 0;
-		lines.push(`- **${finding.tag}** (${score}/10): ${finding.traceEvidence}`);
-		if (finding.compilerEvidence) lines.push(`  Compiler: ${finding.compilerEvidence}`);
-		if (finding.timingEvidence) lines.push(`  Timing: ${finding.timingEvidence}`);
-		if (finding.gaps) lines.push(`  Gaps: ${finding.gaps}`);
-	}
-	lines.push("");
-	return lines.join("\n");
-};
-
-const oneLine = (value: string): string =>
-	value.replace(/\s+/g, " ").trim();
-
-const renderVerificationLines = (lines: string[]): string => {
-	if (lines.length === 0) return "";
-	return ["**Verification Output**", "", ...lines.map((line) => `- ${line}`), ""].join("\n");
-};
-
-const renderBundleSections = (sections: BundleSection[]): string => {
-	if (sections.length === 0) return "";
-	const parts: string[] = ["## Bundle Evaluations", ""];
-	for (const section of sections) {
-		const bundleStatus = section.verdict.pass ? "PASS" : "FAIL";
-		parts.push(`### ${section.bundleId}: ${bundleStatus} — ${section.verdict.verdict || "bundle comparison"}`);
-		parts.push(renderBundleVariantTable(section.variantRows));
-		parts.push("");
-		const verificationBlock = renderVerificationLines(section.verificationLines);
-		if (verificationBlock) parts.push(verificationBlock);
-		parts.push(`**Judge Verdict** (token cost: ${section.verdict.judgeTokens.totalTokens})`);
-		parts.push("");
-		parts.push(renderVariantVerdicts(section.verdict));
-		parts.push("");
-		if (section.verdict.evidenceSummary) {
-			parts.push(`> **Evidence**: ${section.verdict.evidenceSummary}`);
-			parts.push("");
-		}
-		const processBlock = renderProcessFindings(section.verdict);
-		if (processBlock) parts.push(processBlock);
-		if (section.verdict.commandsRun.length > 0) {
-			parts.push("**Judge Commands**");
-			parts.push("");
-			for (const command of section.verdict.commandsRun) parts.push(`- \`${command}\``);
-			parts.push("");
-		}
-		if (section.verdict.acceptanceCriteria.length > 0) {
-			parts.push("**Acceptance Criteria**");
-			parts.push("");
-			for (const criterion of section.verdict.acceptanceCriteria) parts.push(`- ${criterion}`);
-			parts.push("");
-		}
-		parts.push(renderDimensionsTable(section.verdict));
-		parts.push("");
-		if (section.verdict.costAnalysis) {
-			parts.push(`> **Cost Analysis**: ${section.verdict.costAnalysis}`);
-			parts.push("");
-		}
-		if (section.verdict.recommendation) {
-			parts.push(`> **Recommendation**: ${section.verdict.recommendation}`);
-			parts.push("");
-		}
-		parts.push("---");
-		parts.push("");
-	}
-	return parts.join("\n");
-};
-
 const renderCaseTable = (rows: ReportRow[]): string => {
 	const outputRows = rows.map((row) => {
 		const status = normalizeStatus(row.status) || "";
 		const cost = row.apiCost || 0;
 		const cached = row.cached || 0;
 		const turnCount = row.turns || 0;
-		return `| ${row.caseId} | ${row.mode} | ${status} | ${cost} | ${cached} | ${turnCount} | ${row.skillsRead} | ${row.skillFilesRead} | ${row.refsRead} | ${row.missingRefs} | ${row.unexpectedRefs} | ${row.notes} | ${row.run} |`;
-	});
+			return `| ${row.caseId} | ${row.mode} | ${status} | ${row.judge} | ${cost} | ${cached} | ${turnCount} | ${row.skillsRead} | ${row.skillFilesRead} | ${row.refsRead} | ${row.missingRefs} | ${row.unexpectedRefs} | ${row.notes} | ${row.run} |`;
+		});
 	return [
-		"| Case | Mode | Status | Cost | Cached | Turns | Skills Read | Skill Files Read | Refs Read | Missing Refs | Unexpected Refs | Notes | Run |",
-		"| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+		"| Case | Mode | Task | Judge | Cost | Cached | Turns | Skills Read | Skill Files Read | Refs Read | Missing Refs | Unexpected Refs | Notes | Run |",
+		"| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
 		...outputRows,
 	].join("\n");
 };
 
-const renderFailures = (rows: ReportRow[]): string => {
+const renderTaskFailures = (rows: ReportRow[]): string => {
 	const failures = rows.filter((item) => normalizeStatus(item.status) === "FAIL");
-	if (failures.length === 0) return "All cases passed.";
+	if (failures.length === 0) return "No task failures.";
 	return failures
 		.map((item) => `- **${item.caseId}** (${item.mode}): ${item.notes || "failed"}`)
 		.join("\n");
 };
 
-const collectBundleSections = (
-	evaluations: CaseEvaluation[],
-	allRows: ReportRow[],
-	bundles: Map<string, EvalBundle>,
-): { sections: BundleSection[]; bundleCaseIds: Set<string> } => {
-	const bundleCaseIds = new Set<string>();
-	const sections: BundleSection[] = [];
-	const seenBundles = new Set<string>();
-	const rowByCaseId = new Map(allRows.map((r) => [r.caseId, r]));
-	const evaluationByCaseId = new Map(evaluations.map((evaluation) => [evaluation.caseId, evaluation]));
-
-	for (const evaluation of evaluations) {
-		if (!evaluation.judgeVerdict) continue;
-		const verdict = evaluation.judgeVerdict;
-		const bundleId = verdict.bundleId;
-		if (seenBundles.has(bundleId)) continue;
-		seenBundles.add(bundleId);
-
-		const bundle = bundles.get(bundleId);
-		if (!bundle) continue;
-
-		const variantCaseIds = bundle.variantTags.map((tag) => `${bundleId}:${tag}`);
-		const variantRows = variantCaseIds
-			.map((caseId) => rowByCaseId.get(caseId))
-			.filter((r): r is ReportRow => r !== undefined);
-		if (variantRows.length === 0) continue;
-		const verificationLines = variantCaseIds.flatMap((caseId) => {
-			const evaluation = evaluationByCaseId.get(caseId);
-			return (evaluation?.result.verificationResults ?? []).map((result) => {
-				const status = result.timedOut ? "timed out" : `exit ${result.exitCode ?? "unknown"}`;
-				const stdout = oneLine(result.stdout);
-				const stderr = oneLine(result.stderr);
-				const output = stdout || stderr;
-				const snippet = output.length > 0
-					? ` output: \`${output.length > 180 ? `${output.slice(0, 177)}...` : output}\``
-					: "";
-				return `${caseId} / ${result.label}: ${status}, ${result.durationMs}ms${snippet}`;
-			});
-		});
-
-		const verdictLabel = verdict.pass ? "PASS" : "FAIL";
-		sections.push({ bundleId, variantRows, verdict, notes: `${verdictLabel}: ${verdict.verdict}`, verificationLines });
-		for (const caseId of variantCaseIds) bundleCaseIds.add(caseId);
-	}
-	return { sections, bundleCaseIds };
+const renderComparisonOutcomes = (judgeVerdict: JudgeSuiteVerdict | null | undefined): string => {
+	if (!judgeVerdict) return "No judge comparison verdict was produced.";
+	return judgeVerdict.cases.map((testCase) => {
+		const variants = testCase.variants
+			.map((variant) => `${variant.tag}: ${variant.taskPass ? "task pass" : "task fail"} (${variant.rationale})`)
+			.join("; ");
+		return `- **${testCase.caseId}**: ${testCase.skillBenefit}; bundle ${testCase.bundlePass ? "pass" : "fail"}. ${variants}`;
+	}).join("\n");
 };
+
+const collectSkillFeedback = (judgeVerdict: JudgeSuiteVerdict | null | undefined): string[] => {
+	if (!judgeVerdict) return [];
+	const seen = new Set<string>();
+	const feedback: string[] = [];
+	for (const item of [...judgeVerdict.skillFeedback, ...judgeVerdict.cases.flatMap((testCase) => testCase.skillFeedback)]) {
+		const normalized = item.trim();
+		if (!normalized || seen.has(normalized)) continue;
+		seen.add(normalized);
+		feedback.push(normalized);
+	}
+	return feedback;
+};
+
+const reportAlreadyHasSkillFeedback = (markdown: string): boolean =>
+	/^#{2,3}\s+Skill Feedback\b/im.test(markdown);
 
 export const buildReport = (params: {
 	model: ModelSpec;
@@ -300,7 +235,7 @@ export const buildReport = (params: {
 	allCases: ResolvedEvalCase[];
 	previousRows: Map<string, ReportRow>;
 	runScope: "full" | "partial";
-	bundles: Map<string, EvalBundle>;
+	judgeVerdict?: JudgeSuiteVerdict | null;
 	filter?: string | null;
 	limit?: number | null;
 	casesPathLabel?: string;
@@ -314,7 +249,7 @@ export const buildReport = (params: {
 		allCases,
 		previousRows,
 		runScope,
-		bundles,
+		judgeVerdict,
 		filter,
 		limit,
 		casesPathLabel,
@@ -322,8 +257,6 @@ export const buildReport = (params: {
 	const costs = evaluations.map((item) => apiCostFromTokens(item.result.tokens));
 	const stats = formatCostStats(costs);
 	const rows = mergeReportRows({ evaluations, allCases, previousRows, runTimestamp });
-	const { sections, bundleCaseIds } = collectBundleSections(evaluations, rows, bundles);
-	const standaloneRows = rows.filter((row) => !bundleCaseIds.has(row.caseId));
 	let rowPass = 0;
 	let rowFail = 0;
 	let rowSkip = 0;
@@ -342,7 +275,7 @@ export const buildReport = (params: {
 	if (limit) scopeDetails.push(`limit=${limit}`);
 	const scopeLabel = scopeDetails.length > 0 ? `${runScope} (${scopeDetails.join(", ")})` : runScope;
 
-	const headerLines = [
+		const headerLines = [
 		"NOTICE: This is auto-generated on each run of the evals framework. Do not edit this.",
 		"",
 		"# Pi Eval Report",
@@ -351,26 +284,54 @@ export const buildReport = (params: {
 		`- Commit: ${commitSha}`,
 		`- Run: ${runTimestamp}`,
 		`- Run scope: ${scopeLabel}`,
-		`- Cases executed: ${executedCases} (${executedRows} rows)`,
-		`- Case rows: ${totalRows} (pass ${rowPass}, fail ${rowFail}, skip ${rowSkip})`,
-		`- Cases in spec: ${totalCases}`,
-		`- Duration: ${formatDuration(durationMs)}`,
-		`- Token stats (this run): cost max ${stats.max}, cost median ${stats.median}, cost p95 ${stats.p95}`,
-	];
+			`- Runs executed: ${executedCases} (${executedRows} rows)`,
+			`- Task rows: ${totalRows} (pass ${rowPass}, fail ${rowFail}, skip ${rowSkip})`,
+			`- Runs in spec: ${totalCases}`,
+			`- Duration: ${formatDuration(durationMs)}`,
+			`- Token stats (this run): cost max ${stats.max}, cost median ${stats.median}, cost p95 ${stats.p95}`,
+		];
+		const comparisonStats = formatComparisonStats(judgeVerdict);
+		if (judgeVerdict) {
+			headerLines.push(`- Suite verdict: ${judgeVerdict.pass ? "PASS" : "FAIL"}`);
+		}
+		if (comparisonStats) {
+			headerLines.push(`- Judge comparison: ${comparisonStats}`);
+		}
 	if (casesPathLabel) {
 		headerLines.splice(6, 0, `- Cases path: ${casesPathLabel}`);
 	}
 
 	const reportParts = [...headerLines, ""];
-	if (sections.length > 0) {
-		reportParts.push(renderBundleSections(sections));
-	}
-	reportParts.push("## Standalone Results");
+		if (judgeVerdict) {
+			const feedback = collectSkillFeedback(judgeVerdict);
+			const reportMarkdown = judgeVerdict.reportMarkdown.trim();
+			reportParts.push(JUDGE_REPORT_START);
+			const judgeStatus = judgeVerdict.pass ? "PASS" : "FAIL";
+			reportParts.push("## Judge Report");
+		reportParts.push("");
+		reportParts.push(`- Suite verdict: ${judgeStatus}`);
+		reportParts.push(`- Judge token cost: ${judgeVerdict.judgeTokens.totalTokens}`);
+		reportParts.push("");
+			reportParts.push(reportMarkdown);
+			if (feedback.length > 0 && !reportAlreadyHasSkillFeedback(reportMarkdown)) {
+				reportParts.push("");
+				reportParts.push("## Skill Feedback");
+				reportParts.push("");
+				reportParts.push(feedback.map((item) => `- ${item}`).join("\n"));
+			}
+			reportParts.push("");
+			reportParts.push(JUDGE_REPORT_END);
+			reportParts.push("");
+		}
+	reportParts.push("## Case Rows");
 	reportParts.push(UNPAIRED_TABLE_SENTINEL);
-	reportParts.push(renderCaseTable(standaloneRows));
+	reportParts.push(renderCaseTable(rows));
 	reportParts.push("");
-	reportParts.push("## Failures");
-	reportParts.push(renderFailures(rows));
+		reportParts.push("## Comparison Outcomes");
+		reportParts.push(renderComparisonOutcomes(judgeVerdict));
+		reportParts.push("");
+		reportParts.push("## Task Failures");
+		reportParts.push(renderTaskFailures(rows));
 	reportParts.push("");
 
 	return reportParts.join("\n");

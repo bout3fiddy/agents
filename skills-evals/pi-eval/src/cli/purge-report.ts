@@ -6,6 +6,8 @@
 import { readFile, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import {
+	JUDGE_REPORT_END,
+	JUDGE_REPORT_START,
 	UNPAIRED_TABLE_SENTINEL,
 	extractRowCells,
 	findTableBoundaries,
@@ -20,12 +22,13 @@ import {
 export type PurgeResult = {
 	removedRows: string[];
 	removedBundleSections: string[];
+	removedJudgeReport: boolean;
 	updatedContent: string;
 };
 
 /**
- * Remove rows matching `casePatterns` from the standalone table and bundle
- * subsections matching `bundleId` from the Bundle Evaluations section.
+ * Remove rows matching `casePatterns`, legacy bundle subsections matching
+ * `bundleId`, and the free-form suite judge report when case rows changed.
  * Recalculates header stats after removal.
  */
 export const purgeRowsFromReport = (
@@ -35,6 +38,7 @@ export const purgeRowsFromReport = (
 ): PurgeResult => {
 	const removedRows: string[] = [];
 	const removedBundleSections: string[] = [];
+	let removedJudgeReport = false;
 	const lines = content.split("\n");
 
 	// --- 1. Remove matching rows from the standalone table ---
@@ -113,12 +117,37 @@ export const purgeRowsFromReport = (
 		}
 	}
 
-	// --- 3. Recalculate header stats (re-find sentinel since splices shifted indices) ---
-	recalculateHeaderStats(lines);
+	// --- 3. Remove the free-form suite judge report if a case row changed ---
+	if (removedRows.length > 0 || removedBundleSections.length > 0) {
+		const markerStart = lines.findIndex((line) => line.trim() === JUDGE_REPORT_START);
+		const markerEnd = lines.findIndex((line) => line.trim() === JUDGE_REPORT_END);
+		if (markerStart >= 0 && markerEnd >= markerStart) {
+			lines.splice(markerStart, markerEnd - markerStart + 1);
+			removedJudgeReport = true;
+		} else {
+			const headingStart = lines.findIndex((line) => line.trim() === "## Judge Report");
+			if (headingStart >= 0) {
+				let headingEnd = headingStart + 1;
+				while (headingEnd < lines.length) {
+					const line = lines[headingEnd];
+					if (line.trim() === UNPAIRED_TABLE_SENTINEL || line.trim() === "## Case Rows") break;
+					headingEnd++;
+				}
+				lines.splice(headingStart, headingEnd - headingStart);
+				removedJudgeReport = true;
+			}
+		}
+	}
+
+	// --- 4. Recalculate header stats when content changed ---
+	if (removedRows.length > 0 || removedBundleSections.length > 0) {
+		recalculateHeaderStats(lines);
+	}
 
 	return {
 		removedRows,
 		removedBundleSections,
+		removedJudgeReport,
 		updatedContent: lines.join("\n"),
 	};
 };
@@ -176,9 +205,10 @@ if (import.meta.main) {
 			console.log(`[dry-run] ${file}:`);
 			for (const row of result.removedRows) console.log(`  remove row: ${row}`);
 			for (const sec of result.removedBundleSections) console.log(`  remove bundle section: ${sec}`);
+			if (result.removedJudgeReport) console.log("  remove suite judge report");
 		} else {
 			await writeFile(filePath, result.updatedContent);
-			console.log(`Updated ${file}: removed ${result.removedRows.length} row(s), ${result.removedBundleSections.length} bundle section(s)`);
+			console.log(`Updated ${file}: removed ${result.removedRows.length} row(s), ${result.removedBundleSections.length} bundle section(s), judge report: ${result.removedJudgeReport ? "removed" : "unchanged"}`);
 		}
 	}
 }

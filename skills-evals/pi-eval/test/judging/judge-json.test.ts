@@ -8,22 +8,20 @@ test("extractJson chooses the final judge-shaped object from noisy output", () =
 		"Here is the final verdict:",
 		JSON.stringify({
 			pass: true,
-			verdict: "ok",
-			dimensions: [],
-			variantVerdicts: [],
+			reportMarkdown: "ok",
+			cases: [],
 		}),
 	].join("\n");
 
-	assert.equal(JSON.parse(extractJson(raw)).verdict, "ok");
+	assert.equal(JSON.parse(extractJson(raw)).reportMarkdown, "ok");
 });
 
 test("extractJson handles braces inside strings", () => {
 	const raw = JSON.stringify({
 		pass: false,
-		verdict: "contains { brace } text",
-		dimensions: [],
-		variantVerdicts: [],
+		reportMarkdown: "contains { brace } text",
+		cases: [],
 	});
 
-	assert.equal(JSON.parse(extractJson(raw)).verdict, "contains { brace } text");
+	assert.equal(JSON.parse(extractJson(raw)).reportMarkdown, "contains { brace } text");
 });

@@ -53,6 +53,8 @@ When implementing or reviewing a concrete Zig performance change, record:
 - one targeted low-level check tied to the hypothesis: `--verbose`, emitted assembly, `nm`, `objdump`, allocation counters, or a no-allocation test;
 - exact commands, measured result, and remaining unmeasured risk.
 
+Microbenchmarks and focused codegen are hypothesis evidence, not proof of a workload speedup. Before claiming an improvement, look for the closest realistic retained benchmark, trace, or public workload that could invalidate the claim, and run it when available. If that realistic boundary regresses, is stale, or is not run, say `leaf improved, workload unproven/regressed` and stop source-shape experiments until there is a new measured hypothesis.
+
 For design or investigation turns, use the same boundary and evidence vocabulary while keeping the response at the requested level of commitment.
 
 ## Codegen Ladder

@@ -2,8 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type {
 	CaseEvaluation,
-	CaseRunResult,
-	JudgeBundleVerdict,
+	JudgeSuiteVerdict,
 	ResolvedEvalCase,
 	TokenUsage,
 } from "../../src/data/types.js";
@@ -57,61 +56,76 @@ const buildEvaluation = (caseId: string): CaseEvaluation => ({
 	assertions: [],
 });
 
-const buildVerdict = (overrides: Partial<JudgeBundleVerdict> = {}): JudgeBundleVerdict => ({
-	bundleId: "CD-TEST",
-	variantTags: ["skill", "noskill"],
+const buildVerdict = (overrides: Partial<JudgeSuiteVerdict> = {}): JudgeSuiteVerdict => ({
 	pass: true,
-	verdict: "Skill knowledge helped",
-	dimensions: [],
-	variantVerdicts: [
-		{ tag: "skill", pass: true, rationale: "Clear improvement" },
-		{ tag: "noskill", pass: true, rationale: "Baseline works" },
-	],
-	costAnalysis: "",
-	recommendation: "",
+	reportMarkdown: "## Executive Summary\nSkill knowledge helped.",
+	cases: [{
+		caseId: "CD-TEST",
+		bundlePass: true,
+		skillBenefit: "clear",
+		variants: [
+			{ tag: "skill", taskPass: true, rationale: "Clear improvement" },
+			{ tag: "noskill", taskPass: true, rationale: "Baseline works" },
+		],
+		decisiveEvidence: [{
+			kind: "verification",
+			claim: "both variants completed",
+			source: "verification-output.md",
+		}],
+		skillFeedback: ["Skill guidance helped on the measured boundary."],
+	}],
+	skillFeedback: ["Keep benchmark guidance concrete."],
 	rawResponse: "{}",
 	judgeTokens: zeroTokens,
 	...overrides,
 });
 
-test("applyJudgeVerdicts sets pass status from judge", () => {
+test("applyJudgeVerdicts preserves task status when judge passes variants", () => {
 	const cases = [
 		buildEvalCase({ id: "CD-TEST:skill", variantTag: "skill" }),
 		buildEvalCase({ id: "CD-TEST:noskill", variantTag: "noskill" }),
 	];
 	const evaluations = [buildEvaluation("CD-TEST:skill"), buildEvaluation("CD-TEST:noskill")];
-	const verdicts = new Map([["CD-TEST", buildVerdict()]]);
+	const verdict = buildVerdict();
 
-	applyJudgeVerdicts(evaluations, verdicts, cases);
+	applyJudgeVerdicts(evaluations, verdict, cases);
 
 	assert.equal(evaluations[0].status, "pass");
 	assert.equal(evaluations[1].status, "pass");
 	assert.deepEqual(evaluations[0].failureReasons, []);
 });
 
-test("applyJudgeVerdicts sets fail status when judge fails a variant", () => {
+test("applyJudgeVerdicts does not turn a no-clear-win comparison into a task failure", () => {
 	const cases = [
 		buildEvalCase({ id: "CD-TEST:skill", variantTag: "skill" }),
 		buildEvalCase({ id: "CD-TEST:noskill", variantTag: "noskill" }),
 	];
 	const evaluations = [buildEvaluation("CD-TEST:skill"), buildEvaluation("CD-TEST:noskill")];
-	const verdicts = new Map([
-		["CD-TEST", buildVerdict({
-			pass: false,
-			verdict: "No benefit from skills",
-			variantVerdicts: [
-				{ tag: "skill", pass: false, rationale: "Equivalent to baseline" },
-				{ tag: "noskill", pass: true, rationale: "Baseline works fine" },
+	const verdict = buildVerdict({
+		pass: false,
+		cases: [{
+			caseId: "CD-TEST",
+			bundlePass: false,
+			skillBenefit: "none",
+			variants: [
+				{ tag: "skill", taskPass: true, rationale: "Equivalent to baseline" },
+				{ tag: "noskill", taskPass: true, rationale: "Baseline works fine" },
 			],
-		})],
-	]);
+			decisiveEvidence: [{
+				kind: "code-fact",
+				claim: "outputs are equivalent",
+				source: "cases/CD-TEST",
+			}],
+			skillFeedback: ["The skill did not change the final output."],
+		}],
+	});
 
-	applyJudgeVerdicts(evaluations, verdicts, cases);
+	applyJudgeVerdicts(evaluations, verdict, cases);
 
-	assert.equal(evaluations[0].status, "fail");
-	assert.equal(evaluations[0].reasons[0], "JUDGE: Equivalent to baseline");
-	assert.equal(evaluations[0].failureReasons[0].category, "TASK_FAILURE");
+	assert.equal(evaluations[0].status, "pass");
+	assert.deepEqual(evaluations[0].reasons, []);
 	assert.equal(evaluations[1].status, "pass");
+	assert.equal(evaluations[0].judgeVerdict?.skillBenefit, "none");
 });
 
 test("applyJudgeVerdicts preserves existing failures when judge marks variant pass", () => {
@@ -125,13 +139,24 @@ test("applyJudgeVerdicts preserves existing failures when judge marks variant pa
 		category: "TASK_FAILURE",
 		message: "verification failed",
 	}];
-	const verdicts = new Map([["CD-TEST", buildVerdict({
-		variantVerdicts: [
-			{ tag: "skill", pass: true, rationale: "Looks fine" },
-		],
-	})]]);
+	const verdict = buildVerdict({
+		cases: [{
+			caseId: "CD-TEST",
+			bundlePass: true,
+			skillBenefit: "clear",
+			variants: [
+				{ tag: "skill", taskPass: true, rationale: "Looks fine" },
+			],
+			decisiveEvidence: [{
+				kind: "verification",
+				claim: "verification passed",
+				source: "verification-output.md",
+			}],
+			skillFeedback: [],
+		}],
+	});
 
-	applyJudgeVerdicts([failedEvaluation], verdicts, cases);
+	applyJudgeVerdicts([failedEvaluation], verdict, cases);
 
 	assert.equal(failedEvaluation.status, "fail");
 	assert.equal(failedEvaluation.failureReasons[0].message, "verification failed");
@@ -144,36 +169,66 @@ test("applyJudgeVerdicts attaches verdict to evaluations", () => {
 	];
 	const evaluations = [buildEvaluation("CD-TEST:skill"), buildEvaluation("CD-TEST:noskill")];
 	const verdict = buildVerdict();
-	const verdicts = new Map([["CD-TEST", verdict]]);
 
-	applyJudgeVerdicts(evaluations, verdicts, cases);
+	applyJudgeVerdicts(evaluations, verdict, cases);
 
-	assert.equal(evaluations[0].judgeVerdict, verdict);
-	assert.equal(evaluations[1].judgeVerdict, verdict);
+	assert.equal(evaluations[0].judgeVerdict, verdict.cases[0]);
+	assert.equal(evaluations[1].judgeVerdict, verdict.cases[0]);
+	assert.equal(evaluations[0].judgeSuiteVerdict, verdict);
+	assert.equal(evaluations[1].judgeSuiteVerdict, verdict);
 });
 
-test("applyJudgeVerdicts skips standalone cases without bundles", () => {
+test("applyJudgeVerdicts leaves standalone cases alone when no judge ran", () => {
 	const cases = [
 		buildEvalCase({ id: "CD-STANDALONE", bundleId: null, variantTag: null }),
 	];
 	const evaluations = [buildEvaluation("CD-STANDALONE")];
-	const verdicts = new Map<string, JudgeBundleVerdict>();
 
-	applyJudgeVerdicts(evaluations, verdicts, cases);
+	applyJudgeVerdicts(evaluations, null, cases);
 
 	assert.equal(evaluations[0].status, "pass");
 	assert.equal(evaluations[0].judgeVerdict, undefined);
 });
 
-test("applyJudgeVerdicts handles missing verdict for bundle gracefully", () => {
+test("applyJudgeVerdicts attaches standalone verdicts without overwriting task status", () => {
+	const cases = [
+		buildEvalCase({ id: "CD-STANDALONE", bundleId: null, variantTag: null }),
+	];
+	const evaluations = [buildEvaluation("CD-STANDALONE")];
+	const verdict = buildVerdict({
+		cases: [{
+			caseId: "CD-STANDALONE",
+			bundlePass: false,
+			skillBenefit: "inconclusive",
+			variants: [
+				{ tag: "single", taskPass: false, rationale: "black-box verification failed" },
+			],
+			decisiveEvidence: [{
+				kind: "verification",
+				claim: "verification exited 1",
+				source: "cases/CD-STANDALONE/single/verification-output.md",
+			}],
+			skillFeedback: [],
+		}],
+	});
+
+	applyJudgeVerdicts(evaluations, verdict, cases);
+
+	assert.equal(evaluations[0].status, "pass");
+	assert.equal(evaluations[0].judgeVerdict, verdict.cases[0]);
+	assert.deepEqual(evaluations[0].reasons, []);
+});
+
+test("applyJudgeVerdicts leaves task status alone when suite verdict omits a bundle", () => {
 	const cases = [
 		buildEvalCase({ id: "CD-TEST:skill", variantTag: "skill" }),
 	];
 	const evaluations = [buildEvaluation("CD-TEST:skill")];
-	const verdicts = new Map<string, JudgeBundleVerdict>();
+	const verdict = buildVerdict({ cases: [] });
 
-	applyJudgeVerdicts(evaluations, verdicts, cases);
+	applyJudgeVerdicts(evaluations, verdict, cases);
 
 	assert.equal(evaluations[0].status, "pass");
 	assert.equal(evaluations[0].judgeVerdict, undefined);
+	assert.equal(evaluations[0].judgeSuiteVerdict, verdict);
 });

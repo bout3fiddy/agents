@@ -1,7 +1,7 @@
 # Judging Scripts
 
-- `judge.ts`: bundle-level judge orchestrator — assembles variant inputs (code, routing traces, errors, case notes), launches sandboxed `pi` judge via Gondolin, parses JSON verdicts. The judge is the **sole evaluator** — its verdict determines pass/fail for all bundled cases. Exports `applyJudgeVerdicts` to propagate verdicts to evaluation status.
+- `judge.ts`: suite-level judge orchestrator — assembles all selected bundled and standalone cases into one judge workspace, launches sandboxed `pi` judge via Gondolin, parses the evidence-first JSON verdict, structured skill feedback, and judge-authored markdown report. The judge owns comparison verdicts; per-run task status remains separate. Exports `applyJudgeVerdicts` to attach verdicts without overwriting task status.
 - `judge-sandbox.ts`: judge sandbox lifecycle — creates workspace (judge AGENTS.md + CLAUDE.md), home (auth only), and output dirs under `/tmp/pi-eval-judge/<uuid>/`; cleans up via `assertManagedTempPath`.
-- Judge directives live in `config/judge/AGENTS.md` (evaluation criteria, verdict schema, JSON-only output, no tool use).
+- Judge directives live in `config/judge/AGENTS.md` (evidence-only criteria, minimum report sections, skill feedback, verdict schema, JSON-only output).
 - Judge sandbox intentionally has no `.codex` mount — full isolation from host config.
-- There are no deterministic pass/fail checks — scoring.ts (`assembleEvaluation`) builds routing scorecards and defaults all cases to pass; the judge overrides status for bundled cases.
+- There are deterministic task checks from verification results and file assertions before judging. The judge adds taskPass evidence and comparison outcomes, but report rows must not conflate baseline task failures with skill comparison failures.

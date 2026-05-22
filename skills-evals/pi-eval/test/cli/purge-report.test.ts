@@ -73,6 +73,33 @@ const BUNDLE_REPORT = [
 	"",
 ].join("\n");
 
+const SUITE_JUDGE_REPORT = [
+	"NOTICE: This is auto-generated on each run of the evals framework. Do not edit this.",
+	"",
+	"# Pi Eval Report",
+	"",
+	"- Case rows: 2 (pass 2, fail 0, skip 0)",
+	"- Cases in spec: 2",
+	"",
+	"<!-- JUDGE_REPORT_START -->",
+	"## Judge Report",
+	"",
+	"## Executive Summary",
+	"CD-015 is mentioned in free-form prose.",
+	"",
+	"<!-- JUDGE_REPORT_END -->",
+	"",
+	"## Case Rows",
+	"<!-- UNPAIRED_TABLE_START -->",
+	"| Case | Mode | Status | Tokens | Turns | Skills Read | Skill Files Read | Refs Read | Missing Refs | Unexpected Refs | Notes | Run |",
+	"| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+	"| CD-015:skill | single | PASS | 100 | 1 | 1 | 1 | 0 | - | - |  | 2026-03-03 |",
+	"| CD-015:noskill | single | PASS | 100 | 1 | 0 | 0 | 0 | - | - |  | 2026-03-03 |",
+	"",
+	"## Failures",
+	"All cases passed.",
+].join("\n");
+
 test("purge standalone case row", () => {
 	const result = purgeRowsFromReport(
 		STANDALONE_REPORT,
@@ -82,6 +109,7 @@ test("purge standalone case row", () => {
 
 	assert.deepStrictEqual(result.removedRows, ["CD-015-NS-PROBE"]);
 	assert.deepStrictEqual(result.removedBundleSections, []);
+	assert.equal(result.removedJudgeReport, false);
 	assert.ok(!result.updatedContent.includes("CD-015-NS-PROBE"));
 	// Other rows preserved
 	assert.ok(result.updatedContent.includes("CD-010"));
@@ -96,8 +124,8 @@ test("purge standalone case updates header stats", () => {
 	);
 
 	// After removing 1 PASS row: 2 rows total (pass 1, fail 1, skip 0)
-	assert.ok(result.updatedContent.includes("- Case rows: 2 (pass 1, fail 1, skip 0)"));
-	assert.ok(result.updatedContent.includes("- Cases in spec: 2"));
+	assert.ok(result.updatedContent.includes("- Task rows: 2 (pass 1, fail 1, skip 0)"));
+	assert.ok(result.updatedContent.includes("- Runs in spec: 2"));
 });
 
 test("purge bundle variant rows and section", () => {
@@ -118,6 +146,20 @@ test("purge bundle variant rows and section", () => {
 	assert.ok(!result.updatedContent.includes("## Bundle Evaluations"));
 });
 
+test("purge removes suite judge report when removing case rows", () => {
+	const result = purgeRowsFromReport(
+		SUITE_JUDGE_REPORT,
+		new Set(["CD-015:skill", "CD-015:noskill"]),
+		"CD-015",
+	);
+
+	assert.deepStrictEqual(result.removedRows, ["CD-015:skill", "CD-015:noskill"]);
+	assert.equal(result.removedJudgeReport, true);
+	assert.ok(!result.updatedContent.includes("JUDGE_REPORT_START"));
+	assert.ok(!result.updatedContent.includes("CD-015 is mentioned in free-form prose."));
+	assert.ok(result.updatedContent.includes("## Case Rows"));
+});
+
 test("purge bundle updates header stats", () => {
 	const result = purgeRowsFromReport(
 		BUNDLE_REPORT,
@@ -126,8 +168,8 @@ test("purge bundle updates header stats", () => {
 	);
 
 	// After removing bundle rows: only standalone table has CD-010 (PASS) and CD-020 (PASS) = 2 rows
-	assert.ok(result.updatedContent.includes("- Case rows: 2 (pass 2, fail 0, skip 0)"));
-	assert.ok(result.updatedContent.includes("- Cases in spec: 2"));
+	assert.ok(result.updatedContent.includes("- Task rows: 2 (pass 2, fail 0, skip 0)"));
+	assert.ok(result.updatedContent.includes("- Runs in spec: 2"));
 });
 
 test("no-op when case not found", () => {
@@ -139,5 +181,6 @@ test("no-op when case not found", () => {
 
 	assert.deepStrictEqual(result.removedRows, []);
 	assert.deepStrictEqual(result.removedBundleSections, []);
+	assert.equal(result.removedJudgeReport, false);
 	assert.strictEqual(result.updatedContent, STANDALONE_REPORT);
 });
