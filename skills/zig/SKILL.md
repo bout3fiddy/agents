@@ -33,7 +33,7 @@ Use this loop for concrete Zig performance changes, reviews, benchmark design, o
 
 1. Name the repeated boundary: records, rows, samples, packets, pixels, events, states, buffers, or batches.
 2. Name the hot loop and the fields it reads or writes.
-3. Separate setup, preparation, steady-state execution, diagnostics, formatting, and final evaluation.
+3. Separate setup, preparation, steady-state execution, diagnostics, formatting, and final evaluation. Choose a workload that makes the claimed removed cost visible.
 4. Define the correctness gate, measured workload, build mode, and checksum or invariant. Prefer a public or import-style gate that exercises the same entrypoint a caller will use.
 5. Sketch the source-shape choices: direct table, prepared indexes, active list, fused pass, workspace, or narrow hot struct.
 6. State the machine-level hypothesis: which allocation, lookup, branch, copy, call, division, conversion, or scattered load should disappear?

@@ -60,6 +60,8 @@ A useful benchmark reports:
 - checksum or domain invariant;
 - build command.
 
+Structured benchmark metadata is reporting hygiene, not a differentiator by itself. The decisive evidence is the measured same-boundary workload with a matching invariant.
+
 Example output shape:
 
 ```text
@@ -107,6 +109,8 @@ bench boundary=PreparedWeights.score weights=4 batches=1000 batch_size=64 iterat
 This is a different question from repeating one large full-slice call. Keep both numbers when the public one-shot API remains, but use the many-batch prepared boundary for claims about reused controls.
 
 When a prepared API is introduced, benchmark both the honest one-shot public boundary and the prepared repeated boundary when both are relevant. A prepared-state design is only proven for repeated use when the benchmark times reuse of the prepared object rather than rebuilding it every call.
+
+Size the benchmark so it stresses the cost your source shape claims to remove. If preparation avoids scanning controls, rules, weights, routes, schemas, or model state, include enough of that stable input to make repeated preparation measurable. Tiny fixtures are useful smoke tests, but they are weak evidence for setup-removal claims unless the real workload is also tiny.
 
 ## When No Benchmark Exists
 
