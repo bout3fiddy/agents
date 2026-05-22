@@ -40,7 +40,7 @@ Use this loop for concrete Zig performance changes, reviews, benchmark design, o
 7. Run correctness, same-boundary timing, and one targeted compiler/allocation check when the task reaches implementation or review.
 8. Change one thing at a time; use timing for speed claims and compiler/allocation output to validate the source hypothesis.
 
-Fast wrong code is a different program. Preserve observable semantics before claiming performance. If local tests cover only a wrapper, build step, or default module set, add the smallest black-box caller check that imports the public module or calls the public API directly.
+Fast wrong code is a different program. Preserve observable semantics before claiming performance. If local tests cover only a wrapper, build step, or default module set, add the smallest caller-visible check that imports the public module or calls the public API directly.
 
 ## Evidence Gate
 
@@ -56,7 +56,7 @@ When implementing or reviewing a concrete Zig performance change, record:
 
 Microbenchmarks and focused codegen are hypothesis evidence, not proof of a workload speedup. Before claiming an improvement, look for the closest realistic retained benchmark, trace, or public workload that could invalidate the claim, and run it when available. If that realistic boundary regresses, is stale, or is not run, say `leaf improved, workload unproven/regressed` and stop source-shape experiments until there is a new measured hypothesis.
 
-When adding a faster sibling API, such as a caller-owned `Into` function or a prepared-state entrypoint, time the exact API named in the claim. A better-shaped benchmark harness or a cleaner internal helper is not enough if the submitted public or hot API is slower on the same workload.
+When adding a new reuse-oriented or caller-owned entrypoint, time the exact boundary named in the claim. A better-shaped benchmark harness or a cleaner internal helper is not enough if the submitted public or hot boundary is slower on the same workload.
 
 Correctness failures outrank benchmark and codegen evidence. Do not present generated-code cleanup, allocation removal, or faster microbenchmarks as a win until the public semantics gate passes.
 
@@ -82,7 +82,6 @@ Keep these prompts in mind before reaching for deeper assembly:
 
 - Stable controls, rules, weights, plans, caches, or models across many batches usually deserve a prepared boundary and a many-batch benchmark.
 - Ordered rule or policy evaluators often want a direct table or prepared first-match index rather than per-item candidate scans.
-- When ordered rules use bounded categorical keys or small finite levels, compare a pre-expanded direct lookup that preserves first-match priority against candidate-list scans.
 - Caller-owned output or retained workspaces should remove allocation calls, cleanup edges, and capacity growth from repeated boundaries.
 - Wide records with cold labels, provenance, diagnostics, or payloads are often better walked by pointer or index when the loop reads only hot fields.
 - Diagnostics, formatting, tracing, reports, and final-evaluation artifacts belong outside the steady-state boundary unless the user-visible contract requires them there.

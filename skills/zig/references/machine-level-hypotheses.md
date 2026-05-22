@@ -10,7 +10,7 @@ Before editing, write a short hypothesis:
 Boundary: analyzeSamplesInto, one batch after setup
 Source change: prepare thresholds into enum-indexed dense storage
 Expected machine symptom: hash-map and threshold-scan calls absent from the hot symbol; direct indexed loads by kind
-Correctness gate: existing tests plus black-box threshold cases
+Correctness gate: existing tests plus caller-visible threshold cases
 Timing gate: ReleaseFast same-boundary benchmark with checksum
 Risk: code size may grow from unrolling or specialization
 ```
@@ -91,7 +91,7 @@ Summary words carry ordering semantics. A `latest_tick` or `max_timestamp` field
 
 Caller-owned slices usually mean "write the result here." For batch analyzers, initialize returned stats inside the public API and validate stats/output lengths with typed errors before relying on the storage. Accumulation across batches is a different contract and deserves a distinct function name or explicit option.
 
-Never read, increment, or summarize caller-owned result storage before establishing its initial value for this call. Undefined or stale caller memory can make benchmarks look fast while black-box callers observe accumulated counts, arbitrary totals, or old output slots.
+Never read, increment, or summarize caller-owned result storage before establishing its initial value for this call. Undefined or stale caller memory can make benchmarks look fast while external callers observe accumulated counts, arbitrary totals, or old output slots.
 
 Make caller-owned output counts part of the semantic shape. Returning only a capacity-sized buffer or an unqualified slice can make it ambiguous whether the caller should read all slots, accepted slots, alert slots, or a derived count. Prefer a small result struct such as counts plus narrowed output slices when the function writes variable-length results.
 

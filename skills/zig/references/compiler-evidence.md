@@ -20,7 +20,7 @@ Single-file mode:
 ```sh
 skills/zig/scripts/codegen-ladder.sh \
   --source src/main.zig \
-  --symbol evaluateBatchInto \
+  --symbol hotFunction \
   --run-arg --bench \
   --emit-ir \
   --json-out "$perf_scratch/codegen.json" > "$perf_scratch/codegen.stdout.json"
@@ -35,7 +35,7 @@ skills/zig/scripts/codegen-ladder.sh \
   --bench-step bench \
   --build-step default \
   --artifact zig-out/bin/app \
-  --symbol evaluateBatchInto \
+  --symbol hotFunction \
   --json-out "$perf_scratch/codegen.json" > "$perf_scratch/codegen.stdout.json"
 ```
 
@@ -153,13 +153,13 @@ Emit assembly directly for direct compiler invocations:
 zig build-exe src/main.zig -OReleaseFast -femit-asm="$perf_scratch/full.s" -fno-emit-bin
 ```
 
-For single-file tasks, first find the symbol and then inspect that symbol's body. Whole-file greps often report setup, benchmark, formatting, and allocator code that sits outside the hot boundary:
+For standalone direct-build tasks, first find the symbol and then inspect that symbol's body. Whole-file greps often report setup, benchmark, formatting, and allocator code that sits outside the hot boundary:
 
 ```sh
 zig build-exe src/main.zig -OReleaseFast -femit-bin="$perf_scratch/hot"
-nm -an "$perf_scratch/hot" | grep -Ei 'evaluateRulesInto|decodeAndSummarize|classify|process'
+nm -an "$perf_scratch/hot" | grep -Ei 'hotFunction|decodeAndSummarize|classify|process'
 objdump --disassemble --no-show-raw-insn "$perf_scratch/hot" > "$perf_scratch/full.asm"
-awk '/<main.evaluateRulesInto>:/,/^$/' "$perf_scratch/full.asm" > "$perf_scratch/hot.asm"
+awk '/<main.hotFunction>:/,/^$/' "$perf_scratch/full.asm" > "$perf_scratch/hot.asm"
 grep -nE 'bl|blr|call|alloc|HashMap|memcpy|panic|fdiv|idiv' "$perf_scratch/hot.asm" || true
 ```
 
