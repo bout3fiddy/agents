@@ -41,6 +41,8 @@ zig test src/main.zig -OReleaseFast
 zig run src/main.zig -OReleaseFast -- --bench
 ```
 
+For scratch single-file submissions, make the benchmark self-comparable: print the workload dimensions, warmup, iterations, elapsed time, per-item rate, checksum, and command. If a baseline or previous implementation exists, reuse its workload dimensions or print both the inherited and new boundaries so the comparison is not hidden behind different fixture sizes.
+
 Use `ReleaseSafe` for optimized safety validation:
 
 ```sh

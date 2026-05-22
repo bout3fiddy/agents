@@ -50,6 +50,7 @@ When implementing or reviewing a concrete Zig performance change, record:
 - correctness command covering the public entrypoint;
 - optimized timing command when speed, throughput, allocation, or hot-loop behavior is part of the task;
 - executable/demo command when required behavior lives outside lazy-analyzed tests;
+- optimized benchmark or demo run before final when the submitted program exposes one, even if unit tests already pass;
 - one targeted low-level check tied to the hypothesis: `--verbose`, emitted assembly, `nm`, `objdump`, allocation counters, or a no-allocation test;
 - exact commands, measured result, and remaining unmeasured risk.
 
