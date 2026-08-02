@@ -276,10 +276,6 @@ export const mirrorBootstrapPayloadToWorkspace = async (params: {
 			source: path.join(params.homeDir, ".agents", "skills"),
 			target: path.join(params.workspaceAgentDir, "skills"),
 		},
-		{
-			source: path.join(params.homeDir, ".agents", "workflows"),
-			target: path.join(params.workspaceAgentDir, "workflows"),
-		},
 	];
 
 	const breakdown: BootstrapBreakdownEntry[] = [];

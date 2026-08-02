@@ -1,4 +1,4 @@
-# Example Platform Cutover Workpackages
+# Example Platform Cutover Work Packages
 
 ## Overview
 

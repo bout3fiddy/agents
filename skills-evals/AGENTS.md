@@ -1,54 +1,25 @@
-# AGENTS: `skills-evals`
+# Skill Evaluation Guardrails
 
-Scope: applies to all files under `skills-evals/`.
+Scope: `skills-evals/**`.
 
-## Purpose
+- Eval cases are behavioral evidence. When a skill, reference, or instruction
+  fails, improve the payload or harness; do not weaken a case solely to pass.
+- Case definitions live under `fixtures/eval-cases/<CASE_ID>/case.jsonl`. Keep
+  case IDs stable and update every referenced fixture when moving files.
+- Skill-driven cases should declare focused `expectedRefs`; no-skill controls
+  and skills without references should keep that list empty.
+- Each case runs in its own Gondolin-backed workspace and home. Sandbox launch
+  failure is fatal; do not add a plain host-process fallback.
+- Worker behavior activates only with `PI_EVAL_WORKER=1`. Keep
+  `pi-eval/index.ts` as the command entrypoint and `pi-eval/worker.ts` as the
+  sandbox worker entrypoint.
+- The runner must execute only fixture-provided prompts. Do not inject routing
+  hints into case prompts at runtime.
+- Full runs update the report index; filtered or limited runs do not.
+- Keep `gondolin/pi-eval-image.json`, `gondolin/guest-source.lock.json`,
+  `gondolin/image.lock.json`, and `gondolin/scripts/build-image.sh` aligned when
+  image expectations change.
+- Skill files use Agent Skills YAML frontmatter with `name` and `description`.
 
-`skills-evals` owns the eval framework assets for this repo (extension code, cases/specs, fixtures, reports).
-
-## Coding Guardrails
-
-- Prefer the lowest-LOC solution that preserves behavior.
-- Reuse existing helpers/components/modules before adding new files or abstractions.
-- Remove dead code, stale flags, and unused modes instead of preserving compatibility layers.
-- Keep changes non-destructive unless explicitly requested.
-- Avoid speculative generality. Add complexity only when there is a concrete requirement.
-- Speculative generality rule: do not add “future-proof” modes/hooks/config unless a real current caller needs them.
-
-## pi-eval Guardrails
-
-- Keep command surface minimal (`run`, `manage`).
-- Keep process isolation per case; do not reintroduce reuse/matrix/jobs modes unless explicitly requested.
-- Worker behavior must only activate when `PI_EVAL_WORKER=1`.
-- Keep split entrypoints intact: `skills-evals/pi-eval/index.ts` registers eval commands, while `skills-evals/pi-eval/worker.ts` is the sandbox worker extension entry.
-- Keep report index behavior unchanged: full runs update index, partial runs do not.
-- Repo-local Gondolin image contract lives under `skills-evals/gondolin/`; keep `pi-eval-image.json`, `guest-source.lock.json`, `scripts/build-image.sh`, and `image.lock.json` aligned when changing sandbox runtime/image expectations.
-- Default runtime image location is `skills-evals/gondolin/image/current` unless `PI_EVAL_GONDOLIN_IMAGE_PATH` overrides it.
-
-## Path/Structure Guardrails
-
-When moving files or changing paths, update all affected scripts, specs, and docs in the same change.
-- `skills-evals/pi-eval/src` is organized by domain folders: `cli/`, `runtime/`, `data/`, `reporting/`, `judging/` (each includes a local `AGENTS.md` explainer).
-- Judge directives and sandbox config live under `config/judge/` (includes local `AGENTS.md`).
-
-## Shared Schema
-
-- `skills-evals/schemas/skill-metadata.schema.json` defines skill directory naming constraints (used by the validate tool).
-- Skill files no longer carry YAML frontmatter metadata; routing uses the inline table in `instructions/global.md`.
-
-## Cases and Fixtures
-
-- Source of truth for cases: `skills-evals/fixtures/eval-cases/` (one JSONL per case).
-- `skills-evals/fixtures/` is referenced by eval cases; do not remove fixture files without updating all case references.
-- Keep case IDs stable to preserve report history.
-
-## Validation Checklist
-
-Run from repo root after functional changes to eval logic:
-
-```bash
-bun test skills-evals/pi-eval/src/cli/validation.test.ts
-PI_EVAL_LOG=off ./skills-evals/run.sh
-```
-
-If eval runs update report artifacts unintentionally, restore them before finishing.
+For functional harness changes, run `bun test` from `skills-evals/pi-eval/`.
+Use `./skills-evals/run.sh --case <CASE_ID>` when behavior or routing changes.

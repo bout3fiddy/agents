@@ -1,75 +1,25 @@
 ---
 name: housekeeping
-description: Organize and modernize AGENTS.md and CLAUDE.md context systems. Use when the user works on structuring, migrating, or curating agent instruction files and repo context architecture.
+description: Organize and modernize AGENTS.md and CLAUDE.md context systems. Use when the user works on structuring, migrating, or curating agent instruction files and repository context architecture.
 ---
 
-# Housekeeping
+# Instruction Housekeeping
 
-Use when work is about organizing or modernizing `AGENTS.md`/`CLAUDE.md` context systems.
+Keep always-loaded context small, durable, and scoped to where it applies.
 
-## Key rules
+1. Classify each instruction as personal/global, repository-wide, path-specific,
+   reusable workflow, deep documentation, or volatile operational detail.
+2. Keep the root `AGENTS.md` to critical guardrails, canonical commands, and
+   links. Put domain rules in the nearest nested instruction file and reusable
+   procedures in skills.
+3. Move discoverable inventories, implementation notes, examples, and volatile
+   defaults into canonical documentation before removing them from instructions.
+4. Deduplicate guidance and resolve contradictions against source code, tests,
+   and current commands. Do not preserve stale behavior merely because it was
+   documented.
+5. Keep `AGENTS.md` and `CLAUDE.md` reference chains aligned when both exist.
+6. Verify links, instruction discovery, skill metadata, and affected validation
+   commands after restructuring.
 
-- Root `AGENTS.md` stays concise: critical guardrails, task router, canonical commands, and links.
-- Domain-heavy guidance lives in nearest scope (`apps/frontend/AGENTS.md`, `infra/AGENTS.md`, etc.).
-- Deep or volatile details go in `.agents/repo-context/*`, not root `AGENTS.md`.
-- Curate continuously: deduplicate, resolve contradictions, remove stale guidance.
-- Preserve behavior intent during migrations; change structure first, then tighten wording.
-- Keep `AGENTS.md` and `CLAUDE.md` aligned when both exist.
-
-## Workflow
-
-1. Assess current state (concise router vs mixed/legacy monolith).
-2. Migrate content into scoped `AGENTS.md` files and deep docs.
-3. Rewrite root `AGENTS.md` as a short router.
-4. Add freshness metadata for volatile facts where feasible.
-5. Verify links/routes and remove conflicting duplicate rules.
-
-## Target file tree
-
-```text
-repo/
-  AGENTS.md                     # concise router + critical guardrails only
-  .agents/
-    repo-context/
-      index.md                  # map of deep guidance
-      frontend.md               # detailed frontend runbooks
-      infra.md                  # deploy/terraform/release details
-      backend.md                # service/runtime/data details
-      volatile/
-        YYYY-MM-DD-<topic>.md   # time-bounded operational notes
-  apps/
-    frontend/
-      AGENTS.md                 # path-scoped frontend instructions
-    agent/
-      AGENTS.md                 # path-scoped agent runtime instructions
-  infra/
-    AGENTS.md                   # path-scoped infra/deploy instructions
-```
-
-## Root AGENTS template
-
-```text
-# Repo Notes
-- What this repo is and major boundaries.
-- 5-10 critical guardrails only.
-- Task router: where to look for frontend/infra/agent/backend work.
-- Canonical commands (build/test/deploy).
-- Links to `.agents/repo-context/index.md` and scoped AGENTS files.
-```
-
-## Design rules
-
-- Root file stays short and high-signal.
-- Domain-heavy guidance lives in nearest scope.
-- Volatile operations notes live in `.agents/repo-context`, not root.
-- Prefer links over repeated copy.
-- Resolve contradictions immediately when touched.
-
-## Freshness metadata (for volatile notes)
-
-When feasible, add metadata so stale facts are easy to prune:
-
-```yaml
-owner: <team-or-person>
-last_verified: YYYY-MM-DD
-```
+For volatile runbooks, record an owner or source and `last_verified` date when
+that materially improves maintenance.

@@ -121,8 +121,8 @@ test("createToolUsageCapture initializes from tool set", () => {
 
 test("buildReadBreakdown categorizes paths correctly", () => {
 	const capture = makeReadCapture([
-		{ path: "/workspace/skills/coding/SKILL.md", bytes: 400 },
-		{ path: "/workspace/skills/coding/references/guide.md", bytes: 200 },
+		{ path: "/workspace/skills/example-skill/SKILL.md", bytes: 400 },
+		{ path: "/workspace/skills/example-skill/references/guide.md", bytes: 200 },
 		{ path: "/workspace/src/main.ts", bytes: 100 },
 	]);
 

@@ -1,191 +1,137 @@
-# skills-evals
+# Skill Evaluation Harness
 
-`skills-evals` contains the eval harness, eval inputs, and eval artifacts used to validate agent behavior in this repo.
+`skills-evals` compares skill-guided agent behavior with no-skill baselines in
+isolated Gondolin virtual machines. It records routing telemetry, deterministic
+verification output, model traces, and an evidence-first suite verdict.
 
 ## Layout
 
-- `pi-eval/`: Pi extension that runs eval audits and eval cases.
-- `run.sh`: wrapper to run `pi eval` against one or many models.
-- `fixtures/`: deterministic fixture files used by eval prompts and file assertions.
-- `fixtures/eval-cases/`: source-of-truth eval case directory (one JSONL per case).
-- `fixtures/models.jsonl`: models matrix consumed by `run.sh` when `--model` is omitted.
-- `gondolin/`: repo-local custom image recipe, build scripts, and lock metadata.
-- `reports/`: primary model-specific eval reports and `index.json`.
-- `reports/routing-traces/`: per-case routing telemetry artifacts by model.
-- `validate/`: TypeScript port of `agentskills validate`.
+```text
+skills-evals/
+├── fixtures/
+│   ├── eval-cases/<CASE_ID>/case.jsonl
+│   └── models.jsonl
+├── gondolin/                   # image recipe, locks, and build script
+├── pi-eval/
+│   ├── index.ts               # /eval command entrypoint
+│   ├── worker.ts              # isolated case worker entrypoint
+│   ├── config/
+│   ├── src/
+│   └── test/
+├── reports/                   # model reports and routing traces
+├── run.sh                     # canonical runner
+└── manage.sh                  # list/remove case artifacts
+```
 
-## pi-eval Extension
+## Prerequisites
 
-Location:
+- `pi` on the host `PATH`
+- `qemu-system-aarch64` on the host `PATH`
+- `qemu-img` when the image uses copy-on-write or checkpoint disks
+- a built Gondolin image at `gondolin/image/current`, or an explicit
+  `PI_EVAL_GONDOLIN_IMAGE_PATH`
 
-- `skills-evals/pi-eval/`
-- Command entrypoint: `skills-evals/pi-eval/index.ts`
-- Worker entrypoint (sandbox case process): `skills-evals/pi-eval/worker.ts`
-- Config: `skills-evals/pi-eval/config/eval.config.json`
-
-Wrapper commands (from repo root):
+Build the image when its manifest is missing or stale:
 
 ```bash
+./skills-evals/gondolin/scripts/build-image.sh
+```
+
+The guest image must provide `pi` on `PATH`. Mutable cases, skills, and global
+instructions are staged per run rather than baked into the image.
+
+## Run evaluations
+
+```bash
+# All cases and configured models
 ./skills-evals/run.sh
+
+# One case across configured models
+./skills-evals/run.sh --case ZG-001
+
+# Bound concurrent cases/variants; the runner caps this at six
+./skills-evals/run.sh --parallelism 2
 ```
 
-Host requirements for Gondolin sandbox runtime:
+`run.sh` reads `fixtures/models.jsonl` unless `PI_EVAL_MODELS_FILE` overrides it.
+Model entries may specify separate eval and judge models and thinking levels.
+Configured models run in parallel up to `PI_EVAL_MAX_PARALLEL`.
 
-- QEMU binaries must be installed and on `PATH`.
-- Required binaries:
-  - `qemu-system-aarch64` (VM launch)
-  - `qemu-img` (rootfs `cow` mode + checkpoint flow)
-- macOS install:
-  - `brew install qemu`
-- Debian/Ubuntu install:
-  - `sudo apt install qemu-system-arm qemu-utils`
-- Docker daemon must be running to build the repo-local image via `skills-evals/gondolin/scripts/build-image.sh`.
-- Quick verification:
-  - `qemu-system-aarch64 --version`
-  - `qemu-img --version`
-  - `./skills-evals/gondolin/scripts/build-image.sh`
+The underlying extension supports only `/eval run`:
 
-Custom Gondolin image expectations:
-
-- Must include `pi` on guest `PATH` (runtime preflight hard-fails if `pi` is missing).
-- Should include stable runtime dependencies required by `pi` and provider API calls.
-- Should not bake mutable eval fixtures or skill payload; those are mounted/synced per run.
-- Repo-local image recipe and lock metadata live under `skills-evals/gondolin/`.
-- Default runtime image path is `skills-evals/gondolin/image/current`.
-- Override image path only when needed via `PI_EVAL_GONDOLIN_IMAGE_PATH=/abs/path`.
-
-`run.sh` behavior:
-
-- Executes `/eval run` for every model listed in `skills-evals/fixtures/models.jsonl` (or `PI_EVAL_MODELS_FILE`).
-- Supports `--case <CASE_ID>` for a targeted single-case run.
-- `models.jsonl` entry shape is `{"model":"provider/model","thinking":"low"}`.
-- Uses `PI_EVAL_GONDOLIN_IMAGE_PATH` when set, otherwise defaults to `skills-evals/gondolin/image/current`.
-- Runs models in parallel; parallelism defaults to number of models and can be capped with `PI_EVAL_MAX_PARALLEL`.
-- Thinking mode is read per model from `models.jsonl`; if omitted, fallback is `PI_EVAL_THINKING` (default `low`).
-- Per-case prompt timeout is configurable via `PI_EVAL_CASE_TIMEOUT_MS` (default `600000`).
-- Worker shutdown wait timeout is configurable via `PI_EVAL_CASE_SHUTDOWN_TIMEOUT_MS` (default `30000`).
-- Within each model run, eval cases execute in a case worker pool by default with `PI_EVAL_CASE_PARALLELISM=10` (can be overridden via env).
-- Shared case sandbox mode (default on):
-  - Shared sandboxing is enabled by default; set `PI_EVAL_SHARED_CASE_SANDBOX=0` to disable it.
-  - With it enabled, sandbox-safe cases are batched by `suite` and executed in suite-specific shared workspaces.
-  - Cases inside each suite batch can run in parallel with `PI_EVAL_BATCH_CASE_PARALLELISM` (defaults to `PI_EVAL_CASE_PARALLELISM`).
-  - Plan-level parallelism is auto-bounded to keep total concurrent cases near `PI_EVAL_CASE_PARALLELISM` (avoids over-subscribing sync/bootstrap work).
-  - Set `PI_EVAL_SHARED_CASE_MUTABLE_PATHS` (comma-separated) to define writable case overlays (default: `skills-evals/fixtures,instructions`).
-  - Any paths outside mutable overlays are read via the shared workspace, so writes there can contaminate across cases; keep overlays covering all mutable targets.
-- Worker routing hint:
-  - Runner passes `PI_EVAL_SKILL_PATHS` to worker mode so the worker can enforce concise, deterministic skill-onboarding hints during each case.
-- Cases can declare trusted `verificationCommands`. These run in the sandbox workspace after
-  the agent finishes, and their exit codes/stdout/stderr are passed to the judge and summarized
-  in the report.
-- The runtime derives a compact sanitized model-step trace from RPC events. Raw traces can still
-  be written with `PI_EVAL_RPC_TRACE_DIR`, but judge input excludes encrypted reasoning and large
-  file contents.
-
-Direct invocation:
-
-```bash
-pi --no-session --no-extensions -e skills-evals/pi-eval/index.ts -p "/eval audit --model openai-codex/gpt-5.5"
+```text
+/eval run [--model provider/model] [--cases path] [--filter id-or-suite]
+          [--limit n] [--parallelism n] [--thinking level]
+          [--agent-dir path] [--dry-run]
 ```
 
-Supported command surface:
+## Isolation and lifecycle
 
-- `audit --model <provider/model> [--agent-dir <path>]`
-- `run --cases <path> [--model <provider/model>] [--dry-run] [--thinking <level>] [--filter <id|suite>] [--limit <n>] [--agent-dir <path>]`
+- Selected cases execute concurrently, but each case gets a distinct sandbox
+  workspace and home.
+- The Gondolin engine is mandatory and fails closed when launch or guest
+  preflight fails.
+- Full-payload cases stage a temporary sync-source snapshot, run `bin/sync.sh`
+  against the sandbox home, then scope installed skills to the case's `skillSet`.
+- No-payload baselines remove global instructions, skills, and workflows and
+  enforce read-deny probes before execution.
+- The worker receives only fixture prompts and captures skill/reference reads,
+  sanitized model steps, usage, and result state.
+- Trusted `verificationCommands` run after the model and feed exit status plus
+  bounded output into deterministic task checks and the judge.
 
-Hard-fail unsupported flags:
+The case prompt timeout defaults to 600 seconds through
+`PI_EVAL_CASE_TIMEOUT_MS`. Post-run worker shutdown defaults to 30 seconds
+through `PI_EVAL_CASE_SHUTDOWN_TIMEOUT_MS`. Set `PI_EVAL_RPC_TRACE_DIR` to
+persist raw RPC JSONL and lifecycle diagnostics for debugging.
 
-- `--reuse`, `--reuse-process`
-- `--matrix`
-- `--jobs`
-- `--profile`, `--trace`, `--verbose`
+## Cases
 
-Runtime model:
+Each `case.jsonl` defines the prompt, optional turns, available tools, bootstrap
+profile, skill payload, expected or disallowed routing, file assertions, and
+trusted verification commands. Bundled cases normally contain paired `skill`
+and `noskill` variants; standalone cases can probe a skill tool or invariant.
 
-- Batches of similar cases (suite + safe tool usage) share one workspace instance each.
-- In batch mode, each workspace is reused for all cases in that suite batch and torn down after the batch.
-- Worker path enabled only with `PI_EVAL_WORKER=1`.
-- Worker captures skill/reference read attempts/invocations and returns JSON results for scoring.
-
-Sandbox model:
-
-- Workspace copy under `/tmp/pi-eval-sandbox/<batch-id>/<uuid>`.
-- HOME under `/tmp/pi-eval-home/<batch-id>/<uuid>`.
-- Each plan/batch/singleton gets a fresh workspace and `bin/sync.sh` bootstrap via `HOME` in sandbox home.
-- Excludes heavy/transient dirs like `.git`, `node_modules`, `.venv`, `dist`, `build`, `coverage`, `.cache`.
-
-Scoring model:
-
-- Checks expected/disallowed skills.
-- When a full-payload variant sets `skillSet`, the bootstrap payload is scoped to that set before mirroring into the sandbox: unrelated skills are removed and the sandbox `AGENTS.md` references only the selected skills.
-- Skill expectations are satisfied either by direct `SKILL.md` reads or by routed reference reads under `skills/<name>/references/` (skill inferred from path).
-- Checks expected references.
-- Produces routing scorecards per case: read skills, read skill files, read refs, missing refs, unexpected refs.
-- Passes sanitized model steps and harness-run verification output to the suite-level judge for bundled cases.
-- Judge reports are evidence-first: they compare all selected bundled cases together, avoid abstract scorecards, and cite concrete verification, routing, process, performance, or code facts.
-- Runs text assertions and file assertions.
-- Enforces optional token budgets.
-
-Routing assertions (optional per case):
+Routing assertions include:
 
 - `must_read_ref:<path>`
 - `must_not_read_ref:<path>`
 - `must_read_refs_count_at_least:<n>`
 - `must_read_exact_refs:<comma-separated-paths>`
 
-## Cases And Reports
-
-Cases source of truth:
-
-- `skills-evals/fixtures/eval-cases/` (one JSONL per case)
-- Zig performance cases include bundled comparisons and standalone skill-tool probes:
-  - `ZG-001`: refactor existing slow Zig code from an explicit optimization prompt.
-  - `ZG-005` and `ZG-006`: create single-file Zig modules from blank workspaces (`src/main.zig` only).
-  - `ZG-007`: optimize a caller-owned alert engine while using the JSON codegen ladder.
-  - `ZG-008` and `ZG-009`: anti-overfit cases for multi-module repeated-batch work and source-level algorithmic improvement when obvious allocator/call smells are absent.
-
-Primary reports:
-
-- `skills-evals/reports/<provider>-<model>.md`
-- `skills-evals/reports/index.json`
-- Report table includes routing columns:
-  - `Skills Read`
-  - `Skill Files Read`
-  - `Refs Read`
-  - `Missing Refs`
-  - `Unexpected Refs`
-
-Routing trace artifacts:
-
-- `skills-evals/reports/routing-traces/<provider>-<model>/<case-id>.json`
-- Each artifact includes `expectedSkills`, `expectedRefs`, routing scorecard fields, and failure reasons for that case.
-
-Mirrored reports:
-
-- `docs/specs/pi-eval/reports/`
-
-## validate (agentskills port)
-
-`skills-evals/validate` is a TypeScript port of `agentskills validate`.
-
-Usage:
+Manage cases with:
 
 ```bash
-bun run skills-evals/validate/index.ts validate skills/coding
+./skills-evals/manage.sh list
+./skills-evals/manage.sh remove --case CASE_ID --dry-run
 ```
 
-Validated behavior:
+Removal target resolution is implemented in
+`pi-eval/src/cli/manage-remove.ts`; the shell wrapper retains confirmation and
+deletion execution.
 
-- `SKILL.md` discovery (`SKILL.md` preferred, `skill.md` accepted)
-- Directory name conventions (lowercase, no consecutive hyphens, valid chars)
-- Unicode-aware name validation with NFKC normalization
-- CLI output contract:
-  - `Valid skill: <path>`
-  - `Validation failed for <path>:` with bullet error lines
+## Reports and judging
 
-## Fixtures
+Primary reports live at `reports/<provider>-<model>.md`; per-case routing traces
+live under `reports/routing-traces/<provider>-<model>/`. Full runs update
+`reports/index.json`; partial runs preserve the index.
 
-`fixtures/` is active test data, not dead content. Eval sandbox cases reference these files directly (including `fixtures/docs/README.md` content fixtures where required by tests/prompts).
+The judge receives submitted artifacts, deterministic verification results,
+routing evidence, and sanitized process traces. It separates individual task
+success from skill-versus-baseline benefit and must cite observable evidence
+for its conclusions.
 
-## Maintenance Notes
+## Tests and validation
 
-- Keep case-path references aligned to `skills-evals/fixtures/eval-cases/`.
+```bash
+cd skills-evals/pi-eval
+bun test
+
+cd ../..
+bun run skills-evals/validate/index.ts validate skills/zig
+python3 bin/build_agents_index.py
+```
+
+Run a targeted behavioral eval after changing skill routing, reference
+requirements, bootstrap behavior, or judge semantics. Generated reports may be
+updated by eval runs; include them only when they are intended evidence.

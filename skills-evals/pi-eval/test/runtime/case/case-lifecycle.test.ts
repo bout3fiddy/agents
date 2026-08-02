@@ -122,11 +122,9 @@ test("mirrorBootstrapPayloadToWorkspace projects synced bootstrap files into wor
 	const workspaceAgentDir = await mkdtemp(path.join(tmpdir(), "pi-eval-workspace-bootstrap-"));
 	const homeDir = await mkdtemp(path.join(tmpdir(), "pi-eval-home-bootstrap-"));
 	try {
-		await mkdir(path.join(homeDir, ".agents", "skills", "coding"), { recursive: true });
-		await mkdir(path.join(homeDir, ".agents", "workflows"), { recursive: true });
+		await mkdir(path.join(homeDir, ".agents", "skills", "example-skill"), { recursive: true });
 		await writeFile(path.join(homeDir, ".agents", "AGENTS.md"), "# sandbox instructions\n", "utf-8");
-		await writeFile(path.join(homeDir, ".agents", "skills", "coding", "SKILL.md"), "# coding skill\n", "utf-8");
-		await writeFile(path.join(homeDir, ".agents", "workflows", "pr-review.md"), "# pr review\n", "utf-8");
+		await writeFile(path.join(homeDir, ".agents", "skills", "example-skill", "SKILL.md"), "# example-skill skill\n", "utf-8");
 
 		await mirrorBootstrapPayloadToWorkspace({
 			workspaceAgentDir,
@@ -135,11 +133,7 @@ test("mirrorBootstrapPayloadToWorkspace projects synced bootstrap files into wor
 
 		assert.equal(await fileExists(path.join(workspaceAgentDir, "AGENTS.md")), true);
 		assert.equal(
-			await fileExists(path.join(workspaceAgentDir, "skills", "coding", "SKILL.md")),
-			true,
-		);
-		assert.equal(
-			await fileExists(path.join(workspaceAgentDir, "workflows", "pr-review.md")),
+			await fileExists(path.join(workspaceAgentDir, "skills", "example-skill", "SKILL.md")),
 			true,
 		);
 	} finally {
@@ -154,14 +148,14 @@ test("applySkillSetBootstrapScope keeps only requested skills and rewrites AGENT
 	try {
 		for (const root of [path.join(homeDir, ".agents"), path.join(homeDir, ".claude")]) {
 			await mkdir(path.join(root, "skills", "zig"), { recursive: true });
-			await mkdir(path.join(root, "skills", "coding"), { recursive: true });
+			await mkdir(path.join(root, "skills", "example-skill"), { recursive: true });
 			await mkdir(path.join(root, "workflows"), { recursive: true });
 			await writeFile(
 				path.join(root, "skills", "zig", "SKILL.md"),
 				"---\nname: zig\ndescription: Performance-first Zig guidance.\n---\n# zig\n",
 				"utf-8",
 			);
-			await writeFile(path.join(root, "skills", "coding", "SKILL.md"), "# coding\n", "utf-8");
+			await writeFile(path.join(root, "skills", "example-skill", "SKILL.md"), "# example-skill\n", "utf-8");
 			await writeFile(path.join(root, "workflows", "pr-review.md"), "# pr review\n", "utf-8");
 		}
 		await writeFile(path.join(homeDir, ".agents", "AGENTS.md"), "# original\n", "utf-8");
@@ -173,19 +167,19 @@ test("applySkillSetBootstrapScope keeps only requested skills and rewrites AGENT
 		});
 
 		assert.equal(await fileExists(path.join(homeDir, ".agents", "skills", "zig", "SKILL.md")), true);
-		assert.equal(await fileExists(path.join(homeDir, ".agents", "skills", "coding")), false);
+		assert.equal(await fileExists(path.join(homeDir, ".agents", "skills", "example-skill")), false);
 		assert.equal(await fileExists(path.join(homeDir, ".agents", "workflows")), false);
-		assert.equal(await fileExists(path.join(homeDir, ".claude", "skills", "coding")), false);
+		assert.equal(await fileExists(path.join(homeDir, ".claude", "skills", "example-skill")), false);
 		assert.equal(
 			await fileExists(path.join(workspaceAgentDir, "skills", "zig", "SKILL.md")),
 			true,
 		);
-		assert.equal(await fileExists(path.join(workspaceAgentDir, "skills", "coding")), false);
+		assert.equal(await fileExists(path.join(workspaceAgentDir, "skills", "example-skill")), false);
 		assert.equal(await fileExists(path.join(workspaceAgentDir, "workflows")), false);
 
 		const agentsMarkdown = await readFile(path.join(workspaceAgentDir, "AGENTS.md"), "utf-8");
 		assert.match(agentsMarkdown, /skills\/zig\/SKILL\.md/);
-		assert.doesNotMatch(agentsMarkdown, /skills\/coding\/SKILL\.md/);
+		assert.doesNotMatch(agentsMarkdown, /skills\/example-skill\/SKILL\.md/);
 	} finally {
 		await rm(workspaceAgentDir, { recursive: true, force: true });
 		await rm(homeDir, { recursive: true, force: true });
@@ -198,12 +192,12 @@ test("collectPolicyDenyProbeErrors emits forbidden read evidence for must_trigge
 	const probeErrors = await collectPolicyDenyProbeErrors({
 		cwd,
 		readDenyPaths: [denyRoot],
-		assertions: ["must_trigger_policy_deny:skills/coding/SKILL.md"],
+		assertions: ["must_trigger_policy_deny:skills/example-skill/SKILL.md"],
 	});
 
 	assert.equal(probeErrors.length, 1);
 	assert.match(probeErrors[0] ?? "", /forbidden read:/);
-	assert.match(probeErrors[0] ?? "", /skills\/coding\/SKILL\.md$/);
+	assert.match(probeErrors[0] ?? "", /skills\/example-skill\/SKILL\.md$/);
 
 	await rm(cwd, { recursive: true, force: true });
 });

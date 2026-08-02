@@ -4,10 +4,8 @@ set -euo pipefail
 SOURCE_DIR="${AGENTS_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 TARGET_ROOT="$HOME/.agents"
 TARGET_SKILLS_DIR="$TARGET_ROOT/skills"
-TARGET_WORKFLOWS_DIR="$TARGET_ROOT/workflows"
 TARGET_INSTRUCTIONS_FILE="$TARGET_ROOT/AGENTS.md"
 SOURCE_SKILLS_DIR="$SOURCE_DIR/skills"
-SOURCE_WORKFLOWS_DIR="$SOURCE_DIR/workflows"
 SOURCE_INSTRUCTIONS_FILE="$SOURCE_DIR/instructions/global.md"
 BUILD_AGENT_INDEX_SCRIPT="$SOURCE_DIR/bin/build_agents_index.py"
 
@@ -17,8 +15,8 @@ CLAUDE_MD_FILE="$CLAUDE_DIR/CLAUDE.md"
 usage() {
     cat <<'USAGE'
 Usage: bin/sync.sh
-Performs a hard one-way sync from this repo to ~/.agents and mirrors
-skills and instructions into ~/.claude for native Claude Code discovery.
+Performs a hard one-way sync from this repo to ~/.agents and mirrors skills and
+instructions into ~/.claude for native Claude Code discovery.
 USAGE
 }
 
@@ -82,7 +80,6 @@ mirror_file() {
 echo "Hard syncing from $SOURCE_DIR to $TARGET_ROOT..."
 
 mirror_dir "$SOURCE_SKILLS_DIR" "$TARGET_SKILLS_DIR"
-mirror_dir "$SOURCE_WORKFLOWS_DIR" "$TARGET_WORKFLOWS_DIR"
 mirror_file "$SOURCE_INSTRUCTIONS_FILE" "$TARGET_INSTRUCTIONS_FILE"
 
 # --- Clean up legacy artifacts ---
@@ -92,14 +89,22 @@ if [[ -f "$TARGET_ROOT/skills.router.min.json" ]]; then
     echo "Removed legacy $TARGET_ROOT/skills.router.min.json"
 fi
 
+# Workflows are now ordinary Agent Skills. Remove the former parallel workflow
+# trees so stale copies cannot bypass skill discovery and progressive disclosure.
+for legacy_workflows_dir in "$TARGET_ROOT/workflows" "$CLAUDE_DIR/workflows"; do
+    if [[ -e "$legacy_workflows_dir" || -L "$legacy_workflows_dir" ]]; then
+        rm -rf -- "$legacy_workflows_dir"
+        echo "Removed legacy $legacy_workflows_dir"
+    fi
+done
+
 # --- Claude Code integration ---
-# Full mirror into ~/.claude so Claude Code can natively discover skills,
-# workflows, and instructions without relying on @ pointers or ~/.agents.
+# Full mirror into ~/.claude so Claude Code can natively discover skills and
+# instructions without relying on @ pointers or ~/.agents.
 mkdir -p "$CLAUDE_DIR"
 mirror_file "$SOURCE_INSTRUCTIONS_FILE" "$CLAUDE_MD_FILE"
 mirror_dir "$SOURCE_SKILLS_DIR" "$CLAUDE_DIR/skills"
-mirror_dir "$SOURCE_WORKFLOWS_DIR" "$CLAUDE_DIR/workflows"
-echo "Mirrored instructions, skills, and workflows to $CLAUDE_DIR"
+echo "Mirrored instructions and skills to $CLAUDE_DIR"
 
 # --- Codex integration ---
 # Write a thin AGENTS.md that references ~/.agents/AGENTS.md so Codex

@@ -1,4 +1,4 @@
-# WP-03 Intake Artifactization
+# Example WP-03 Intake Artifactization
 
 ## Metadata
 

@@ -72,9 +72,10 @@
   ],
   "persistArtifacts": true,
   "readDenyPaths": [
-    "skills/coding/SKILL.md",
+    "skills/performance-engineering/SKILL.md",
     "skills/housekeeping/SKILL.md",
     "skills/railway-operations/SKILL.md",
-    "skills/workflows/SKILL.md"
+    "skills/pr-review/SKILL.md",
+    "skills/workpackages/SKILL.md"
   ]
 }

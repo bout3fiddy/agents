@@ -7,9 +7,9 @@ const buildEvalCase = (overrides: Partial<EvalCase> = {}): EvalCase => ({
 	id: "CD-SCORE-001",
 	suite: "pi-eval",
 	prompt: "Evaluate scoring flow",
-	expectedSkills: ["coding"],
+	expectedSkills: ["example-skill"],
 	disallowedSkills: [],
-	expectedRefs: ["skills/coding/references/index.md"],
+	expectedRefs: ["skills/example-skill/references/index.md"],
 	requireSkillFileRead: true,
 	assertions: [],
 	bootstrapProfile: "full_payload",
@@ -20,17 +20,17 @@ const buildResult = (evalCase: EvalCase, overrides: Partial<CaseRunResult> = {})
 	caseId: evalCase.id,
 	dryRun: false,
 	model: null,
-	skillInvocations: ["coding"],
-	skillAttempts: ["coding"],
-	skillFileInvocations: ["coding"],
-	skillFileAttempts: ["coding"],
-	refInvocations: ["skills/coding/references/index.md"],
-	refAttempts: ["skills/coding/references/index.md"],
+	skillInvocations: ["example-skill"],
+	skillAttempts: ["example-skill"],
+	skillFileInvocations: ["example-skill"],
+	skillFileAttempts: ["example-skill"],
+	refInvocations: ["skills/example-skill/references/index.md"],
+	refAttempts: ["skills/example-skill/references/index.md"],
 	outputText: "done",
 	tokens: { input: 1, output: 2, cacheRead: 0, cacheWrite: 0, totalTokens: 3 },
 	durationMs: 100,
 	errors: [],
-	availableSkills: ["coding"],
+	availableSkills: ["example-skill"],
 	bootstrapProfile: "full_payload",
 	workspaceDir: null,
 	...overrides,
@@ -50,11 +50,11 @@ test("assembleEvaluation populates routing scorecard from result", () => {
 	const result = buildResult(evalCase);
 	const evaluation = assembleEvaluation(evalCase, result);
 
-	assert.deepEqual(evaluation.routing.readSkills, ["coding"]);
-	assert.deepEqual(evaluation.routing.readSkillFiles, ["coding"]);
-	assert.deepEqual(evaluation.routing.readRefs, ["skills/coding/references/index.md"]);
-	assert.deepEqual(evaluation.routing.attemptedRefs, ["skills/coding/references/index.md"]);
-	assert.deepEqual(evaluation.routing.successfulRefs, ["skills/coding/references/index.md"]);
+	assert.deepEqual(evaluation.routing.readSkills, ["example-skill"]);
+	assert.deepEqual(evaluation.routing.readSkillFiles, ["example-skill"]);
+	assert.deepEqual(evaluation.routing.readRefs, ["skills/example-skill/references/index.md"]);
+	assert.deepEqual(evaluation.routing.attemptedRefs, ["skills/example-skill/references/index.md"]);
+	assert.deepEqual(evaluation.routing.successfulRefs, ["skills/example-skill/references/index.md"]);
 	assert.deepEqual(evaluation.routing.deniedRefs, []);
 	assert.deepEqual(evaluation.routing.missingRefs, []);
 	assert.deepEqual(evaluation.routing.unexpectedRefs, []);
@@ -63,32 +63,32 @@ test("assembleEvaluation populates routing scorecard from result", () => {
 test("assembleEvaluation reports missing and unexpected reference reads", () => {
 	const evalCase = buildEvalCase({
 		expectedRefs: [
-			"./skills/coding/references/index.md",
-			"skills/coding/references/performance.md",
+			"./skills/example-skill/references/index.md",
+			"skills/example-skill/references/performance.md",
 		],
 	});
 	const result = buildResult(evalCase, {
 		refInvocations: [
-			"skills/coding/references/index.md",
-			"skills/coding/references/comments.md",
+			"skills/example-skill/references/index.md",
+			"skills/example-skill/references/comments.md",
 		],
 		refAttempts: [
-			"skills/coding/references/index.md",
-			"skills/coding/references/comments.md",
+			"skills/example-skill/references/index.md",
+			"skills/example-skill/references/comments.md",
 		],
 	});
 
 	const evaluation = assembleEvaluation(evalCase, result);
 
 	assert.deepEqual(evaluation.routing.readRefs, [
-		"skills/coding/references/comments.md",
-		"skills/coding/references/index.md",
+		"skills/example-skill/references/comments.md",
+		"skills/example-skill/references/index.md",
 	]);
 	assert.deepEqual(evaluation.routing.missingRefs, [
-		"skills/coding/references/performance.md",
+		"skills/example-skill/references/performance.md",
 	]);
 	assert.deepEqual(evaluation.routing.unexpectedRefs, [
-		"skills/coding/references/comments.md",
+		"skills/example-skill/references/comments.md",
 	]);
 });
 
@@ -99,18 +99,18 @@ test("assembleEvaluation uses attempts in dry-run mode", () => {
 		skillInvocations: [],
 		skillFileInvocations: [],
 		refInvocations: [],
-		skillAttempts: ["coding"],
-		skillFileAttempts: ["coding"],
-		refAttempts: ["skills/coding/references/index.md"],
+		skillAttempts: ["example-skill"],
+		skillFileAttempts: ["example-skill"],
+		refAttempts: ["skills/example-skill/references/index.md"],
 	});
 
 	const evaluation = assembleEvaluation(evalCase, result);
 
 	assert.equal(evaluation.status, "pass");
-	assert.deepEqual(evaluation.routing.readSkills, ["coding"]);
-	assert.deepEqual(evaluation.routing.readSkillFiles, ["coding"]);
-	assert.deepEqual(evaluation.routing.readRefs, ["skills/coding/references/index.md"]);
-	assert.deepEqual(evaluation.routing.attemptedRefs, ["skills/coding/references/index.md"]);
+	assert.deepEqual(evaluation.routing.readSkills, ["example-skill"]);
+	assert.deepEqual(evaluation.routing.readSkillFiles, ["example-skill"]);
+	assert.deepEqual(evaluation.routing.readRefs, ["skills/example-skill/references/index.md"]);
+	assert.deepEqual(evaluation.routing.attemptedRefs, ["skills/example-skill/references/index.md"]);
 	assert.deepEqual(evaluation.routing.successfulRefs, []);
 });
 
@@ -133,15 +133,15 @@ test("assembleEvaluation preserves errors without failing", () => {
 
 test("assembleEvaluation preserves case metadata", () => {
 	const evalCase = buildEvalCase({
-		expectedSkills: ["coding"],
-		expectedRefs: ["skills/coding/references/index.md"],
+		expectedSkills: ["example-skill"],
+		expectedRefs: ["skills/example-skill/references/index.md"],
 		disallowedSkills: ["design"],
 	});
 	const result = buildResult(evalCase);
 	const evaluation = assembleEvaluation(evalCase, result);
 
-	assert.deepEqual(evaluation.expectedSkills, ["coding"]);
-	assert.deepEqual(evaluation.expectedRefs, ["skills/coding/references/index.md"]);
+	assert.deepEqual(evaluation.expectedSkills, ["example-skill"]);
+	assert.deepEqual(evaluation.expectedRefs, ["skills/example-skill/references/index.md"]);
 	assert.deepEqual(evaluation.disallowedSkills, ["design"]);
 	assert.equal(evaluation.suite, "pi-eval");
 	assert.equal(evaluation.caseId, "CD-SCORE-001");

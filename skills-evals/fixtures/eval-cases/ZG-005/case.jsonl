@@ -86,16 +86,17 @@
       "skillSet": ["zig"],
       "requireSkillFileRead": true,
       "readDenyPaths": [
-        "skills/coding/SKILL.md",
+        "skills/performance-engineering/SKILL.md",
         "skills/housekeeping/SKILL.md",
         "skills/railway-operations/SKILL.md",
-        "skills/workflows/SKILL.md"
+        "skills/pr-review/SKILL.md",
+        "skills/workpackages/SKILL.md"
       ]
     },
     {
       "tag": "noskill",
       "bootstrapProfile": "no_payload",
-      "disallowedSkills": ["zig", "coding", "housekeeping", "workflows", "railway-operations"]
+      "disallowedSkills": ["zig", "performance-engineering", "housekeeping", "pr-review", "workpackages", "railway-operations"]
     }
   ]
 }

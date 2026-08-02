@@ -1,47 +1,21 @@
 # Repo Notes
 
-- This repo is the global workflow/template source; prefer changes here over per-repo tweaks.
-- Rollout flow: update `devcontainer/`, run `./devcontainer/install.sh self-install`, then in the target repo remove `.devcontainer`, run `devc install .`, and finally `devc rebuild .`.
-- `./bin/sync.sh` hard-syncs skills, workflows, and `instructions/global.md` into `~/.agents`, and writes a thin `~/.claude/CLAUDE.md` (`@../.agents/AGENTS.md`) so Claude Code picks up the global instructions via file reference. It does not update devcontainer templates. Use `./devcontainer/install.sh self-install` + `devc install .` to propagate template changes.
-- Devcontainer post-install ensures `ruff`, `pytest`, `mypy`, `prek`, and `takopi` are installed via `uv tool install` using Python 3.14 (takopi uses `-U`).
-- Devcontainer bind-mounts host config dirs (currently `~/.claude`, `~/.codex`, `~/.takopi`) into `/home/node`.
-- Only run `uv run prek run --all-files` when changes include code (source/tests) or executable build/lint/tooling config. Skip `prek` for docs/planning-only edits (for example `docs/specs/**`, prose docs, or AGENTS/CLAUDE instruction updates) unless explicitly requested.
-- `devc install` injects `node_modules` mounts by reading workspace globs from root `package.json` and/or `pnpm-workspace.yaml`; repos without workspaces won't get extra directories created.
-- Devcontainer bun installs now scan workspace globs (package.json workspaces / pnpm-workspace) instead of assuming `apps/` or `packages/`.
-- Devcontainer sets `UV_PROJECT_ENVIRONMENT` to `/home/node/.venv` and mounts the venv volume there to keep it out of the repo.
-- `python3 bin/build_agents_index.py` validates skills/reference routing metadata; use it before sync to catch schema or linkage issues.
-- Skill validation in this repo uses the `agentskills` executable from `skills-ref` (`uvx --from skills-ref agentskills validate skills/<name>`).
-- In-house TypeScript port of `agentskills validate` lives at `skills-evals/validate/` (`bun run skills-evals/validate/index.ts validate skills/<name>`).
-- `bin/sync.sh` hard-syncs this repo into `~/.agents` and fully mirrors skills, workflows, and instructions into `~/.claude/` so Claude Code can natively discover everything without depending on `~/.agents`.
-- To make pi load only `~/.agents` skills, point `~/.pi/agent/skills` at `~/.agents/skills` (symlink works; keep a timestamped backup for rollback).
-- Runtime routing is handled by the inline routing table in `instructions/global.md` — no separate router artifact.
-- `bin/sync.sh` does not run sync-time gates; it only syncs files.
-- Eval cases source of truth is `skills-evals/fixtures/eval-cases/` (one JSONL per case); reports mirror to `docs/specs/pi-eval/reports/`.
-- Eval fixture convention: skill-driven baseline cases in `skills-evals/fixtures/eval-cases/` should declare targeted `expectedRefs` when the skill has task-relevant reference files; skills without references, explicit no-skill/no-payload controls, and pure assertion probes should keep `expectedRefs` empty.
-- Per-case routing/read telemetry traces are written to `skills-evals/reports/routing-traces/<provider-model>/<case-id>.json` on each eval run.
-- `pi-eval` runtime now treats case IDs as data only: filesystem path segments are sanitized, and sandbox/home recursive cleanup is restricted to managed tmp roots (`/tmp/pi-eval-sandbox`, `/tmp/pi-eval-home`) with depth checks.
-- `pi-eval` case worker launches are mandatory-sandboxed via Gondolin VM runtime; there is no runtime toggle to disable sandboxing, and launch failures fail closed (no plain host `spawn` fallback).
-- Running `pi-eval` with Gondolin requires host QEMU binaries on PATH (`qemu-system-aarch64`; `qemu-img` when rootfs mode is `cow`/checkpoint-enabled); missing binaries now surface explicit install guidance in runtime errors.
-- `pi-eval` Gondolin launches resolve image path from `PI_EVAL_GONDOLIN_IMAGE_PATH` or fallback `skills-evals/gondolin/image/current`, and runtime preflights guest `command -v pi` before case execution.
-- Repo-local custom image recipe/lock live under `skills-evals/gondolin/` (`pi-eval-image.json`, `guest-source.lock.json`, `image.lock.json`, and `scripts/build-image.sh`).
-- `pi-eval` depends on the published npm package `@earendil-works/gondolin` (see `skills-evals/pi-eval/package.json` / `bun.lock`), not a vendored subtree.
-- `skills-evals/gondolin/scripts/build-image.sh` prefers the installed package's bundled guest sources and falls back to the repo-pinned `guest-source.lock.json` only when needed.
-- Current Gondolin runtime wiring in `skills-evals/pi-eval/src/runtime/engine/gondolin-engine.ts` uses `VmCheckpoint` disk snapshots (create + resume) with lock-guarded checkpoint creation and cache-backed storage (default: `$XDG_CACHE_HOME` or `~/.cache/pi-eval/gondolin-checkpoints`; override via `PI_EVAL_GONDOLIN_CHECKPOINT_DIR`).
-- `pi-eval` full-payload bootstrap now stages a temporary sync-source snapshot under `/tmp/pi-eval-sync-source/<uuid>` before invoking `bin/sync.sh`, so router/index generation happens on the staged copy (not the host repo) while output still lands in sandbox home (`$HOME/.agents`).
-- `pi-eval` workspace staging is allowlist-based and currently copies `skills-evals/fixtures`, `skills-evals/pi-eval/index.ts`, `skills-evals/pi-eval/worker.ts`, `skills-evals/pi-eval/src`, and `skills-evals/pi-eval/config` into the sandbox (plus an empty `skills-evals/generated` output root).
-- Guardrail: when evals fail on skill/ref/global-instruction behavior, improve `skills/`, `skills/*/references/`, and `instructions/global.md` first; do not weaken eval expectations just to pass.
-- Canonical eval wrapper is `skills-evals/run.sh`.
-- `skills-evals/run.sh` supports optional `--case <CASE_ID>`, which maps to `/eval run --filter <CASE_ID> --limit 1` for targeted case runs.
-- `skills-evals/manage.sh` delegates target resolution for `remove` to `skills-evals/pi-eval/src/cli/manage-remove.ts` (canonical `slugFromId` and `traceFileName` from TS data layer); shell retains argument parsing, confirmation prompt, and deletion execution.
-- Skill files carry YAML frontmatter with `name` and `description` per the Agent Skills spec; routing uses the inline table in `instructions/global.md`.
-- `pi-eval` case timing controls: `PI_EVAL_CASE_TIMEOUT_MS` governs prompt/turn completion wait (default `300000`), and `PI_EVAL_CASE_SHUTDOWN_TIMEOUT_MS` governs post-run worker exit wait (default `30000`).
-- When `PI_EVAL_RPC_TRACE_DIR` is set, `runCaseProcess` now writes both `<case-id>.jsonl` raw RPC traces and `<case-id>.diagnostics.json` lifecycle summaries; timeout errors include a compact RPC diagnostics hint (`raw/parsed/last_stop/events`).
-- `pi-eval` tests live in `skills-evals/pi-eval/test/`; run all with `bun test` from `skills-evals/pi-eval/`.
-- `DEVC_DISABLE_MCP_SERVERS` in `devcontainer/devcontainer.json` can disable MCP startup in containers (comma/space/semi-colon separated list); use it to skip auth-heavy servers (e.g. `sentry` and/or `linear`) on non-interactive session starts.
-- Third-party skill installers may land content in `~/.agents/skills/<name>`; to vendor into this repo, copy into `skills/<name>/`, ensure progressive disclosure (`SKILL.md` + `references/`), then run:
-  - `python3 bin/build_agents_index.py`
-  - `./bin/sync.sh`
-- Global policy now requires AGENTS docs to be curated and progressive-disclosure based (concise root router + scoped/nested AGENTS + deep docs), and to migrate legacy monolithic AGENTS files instead of appending indefinitely.
-- Workflows (work packages, PR review) live in `skills/workflows/references/`. The `workflows/` directory at repo root is kept for backward compatibility but `skills/workflows/` is the canonical source. The global directive (`instructions/global.md`) uses an inline routing table — no separate router artifact.
-- Skills are flat peers (5 skills total): coding, housekeeping, railway-operations, workflows, zig. The `workflows` skill has three reference procedures: `pr-review.md`, `work-packages.md`, `workpackage-execution.md`.
-- Coding SKILL.md is the unified performance-grounded code quality skill: hard cutovers, instrumentation, data layout, simple state objects, structured comments, and anti-pattern detection. No separate smell detection skill.
+- This repository is the canonical source for shared agent instructions, skills,
+  evaluation tooling, and the devcontainer template. Make global
+  changes here instead of patching synced copies under home directories.
+- Start with [README.md](README.md). For scoped work, use
+  [devcontainer/README.md](devcontainer/README.md) or
+  [skills-evals/AGENTS.md](skills-evals/AGENTS.md) and
+  [skills-evals/README.md](skills-evals/README.md).
+- `./bin/sync.sh` validates skill metadata, hard-syncs skills and global
+  instructions into `~/.agents`, mirrors native Claude assets into `~/.claude`,
+  and writes the Codex global pointer. It does not deploy devcontainer changes.
+- Validate a changed skill with
+  `uvx --from skills-ref agentskills validate skills/<name>` or
+  `bun run skills-evals/validate/index.ts validate skills/<name>`.
+- Run `./skills-evals/run.sh --case <CASE_ID>` for a targeted skill eval and
+  `./skills-evals/run.sh` for the configured suite. Improve skills, references,
+  or instructions when behavior fails; do not weaken fixtures to obtain a pass.
+- Devcontainer rollout is separate: update `devcontainer/`, run
+  `./devcontainer/install.sh self-install`, then run `devc install .` and
+  `devc rebuild .` in each target repository.

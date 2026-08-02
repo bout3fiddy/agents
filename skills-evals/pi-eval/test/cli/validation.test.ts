@@ -21,7 +21,7 @@ test("assertAllowedFlags rejects unknown flags", () => {
 		)
 	);
 	assert.throws(
-		() => assertAllowedFlags({ "--model": "gpt-5", "--skill": "coding" }, ["--model"]),
+		() => assertAllowedFlags({ "--model": "gpt-5", "--skill": "example-skill" }, ["--model"]),
 		/Unknown flag\(s\): --skill/,
 	);
 });

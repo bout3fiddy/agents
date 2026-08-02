@@ -1,107 +1,114 @@
-# Agents Workflow Template
+# Agents Workflow Source
 
-Canonical source for shared agent skills and global instructions used by Claude/Codex-style setups.
+Canonical source for personal agent instructions, reusable skills, evaluation
+tooling, and the autonomous devcontainer template used across Codex, Claude, and
+compatible agents.
 
-Repo-specific operating notes live in `AGENTS.md`.
-
-## What this repo manages
-
-- Skills under `skills/<name>/` (`SKILL.md` plus optional `references/`)
-- Domain workflows under `workflows/` (loaded on trigger, not always in context)
-- Global instruction source at `instructions/global.md`
-- Sync tooling in `bin/` (`sync.sh`)
-- Skills metadata validation in `bin/build_agents_index.py`
-
-## Repository layout
+## Layout
 
 ```text
 agents/
-├── skills/                    # Skill packages: <name>/SKILL.md (+ references/)
-├── workflows/                 # Domain workflows (work-packages, pr-review)
-├── instructions/
-│   └── global.md              # Source copied to ~/.agents/AGENTS.md
+├── instructions/global.md     # always-loaded personal defaults
+├── skills/                    # progressively disclosed Agent Skills
 ├── bin/
-│   ├── sync.sh                # Hard sync to ~/.agents
-│   └── build_agents_index.py  # Validate skill/routing metadata
-├── skills-evals/
-│   ├── run.sh                 # Eval runner wrapper (supports --case CASE_ID)
-│   └── fixtures/
-│       ├── eval-cases.jsonl   # Source-of-truth eval cases
-│       └── models.jsonl       # Models + thinking config
-├── devcontainer/              # Devcontainer template and installer
-└── AGENTS.md                  # Repo-specific durable notes
+│   ├── sync.sh                # validate and hard-sync global assets
+│   └── build_agents_index.py  # skill/reference metadata audit
+├── skills-evals/              # Gondolin-backed skill evaluation harness
+├── devcontainer/              # reusable autonomous coding container
+└── AGENTS.md                  # concise repository router and guardrails
 ```
 
-## Quick start
+Detailed instructions live near their scope:
+
+- [Devcontainer operations](devcontainer/README.md)
+- [Skill evaluation harness](skills-evals/README.md)
+- [Evaluation guardrails](skills-evals/AGENTS.md)
+- Individual workflow and domain guidance under `skills/<name>/`
+
+## Sync global assets
+
+Run from the repository root:
 
 ```bash
-# Recommended location
-cd ~
-git clone https://github.com/bout3fiddy/agents.git .agents
-cd ~/.agents
-
-# Hard sync skills + workflows + instructions to ~/.agents
 ./bin/sync.sh
 ```
 
-If this repo is not at `~/.agents`, set:
+The sync command first runs `python3 bin/build_agents_index.py --no-warnings`,
+then mirrors:
 
-```bash
-export AGENTS_DIR="/absolute/path/to/agents"
+- `skills/` to `~/.agents/skills/` and `~/.claude/skills/`
+- `instructions/global.md` to `~/.agents/AGENTS.md` and `~/.claude/CLAUDE.md`
+- a thin `~/.codex/AGENTS.md` pointer to `~/.agents/AGENTS.md`
+
+Sync also removes the retired `~/.agents/workflows/` and
+`~/.claude/workflows/` trees; reusable procedures now live only as skills.
+
+If the checkout is not the intended source directory, set `AGENTS_DIR` to its
+absolute path before syncing. Sync does not deploy devcontainer template
+changes.
+
+## Create or update a skill
+
+Every `skills/<name>/SKILL.md` uses Agent Skills frontmatter:
+
+```yaml
+---
+name: skill-name
+description: State the user goal, trigger boundary, and important exclusions.
+---
 ```
 
-## Sync behavior
+Keep the entrypoint focused. Put conditional procedures, examples, schemas, or
+deep technical material in `references/`; use scripts only for deterministic
+work that instructions cannot perform reliably.
 
-`bin/sync.sh` performs hard sync from this repo to:
-
-- `~/.agents/skills/`
-- `~/.agents/workflows/`
-- `~/.agents/AGENTS.md` (from `instructions/global.md`)
-- Sync runs `build_agents_index.py` metadata validation before copy.
-
-### Metadata validation
-
-Run when you need to check skill metadata locally:
-- `python3 bin/build_agents_index.py` (source validation)
-
-## Creating or updating a skill
-
-1. Create/update `skills/<name>/SKILL.md`.
-2. Keep `SKILL.md` concise; place longer material in `skills/<name>/references/`.
-3. Validate:
+Validate changed skills before sync:
 
 ```bash
+python3 bin/build_agents_index.py
 uvx --from skills-ref agentskills validate skills/<name>
-# or use the in-repo TypeScript port:
 bun run skills-evals/validate/index.ts validate skills/<name>
 ```
 
-4. Sync:
+## Evaluate skill behavior
+
+The source of truth for cases is `skills-evals/fixtures/eval-cases/`, with one
+`case.jsonl` per case directory.
 
 ```bash
-./bin/sync.sh
-```
+# One case across configured models
+./skills-evals/run.sh --case ZG-001
 
-## Useful commands
-
-```bash
-# Validate skill metadata
-python3 bin/build_agents_index.py
-
-# Run evals for all configured models/cases
+# Full configured suite
 ./skills-evals/run.sh
-
-# Run a single eval case id across configured models
-./skills-evals/run.sh --case CD-015
 ```
 
-## Devcontainer rollout note
+Reports are written under `skills-evals/reports/` and mirrored into
+`docs/specs/pi-eval/reports/`. Eval failures are evidence about the skill,
+router, harness, or model; do not weaken fixtures solely to produce a pass.
 
-`./bin/sync.sh` only syncs skills, workflows, and global instructions. It does not roll out devcontainer template changes.
+## Railway integration
 
-For devcontainer template rollout:
+`skills/railway-operations` remains a compatibility skill for installations
+whose Railway CLI does not yet provide maintained agent setup. Once the local
+CLI exposes `railway setup agent`, prefer Railway's maintained skill and MCP
+configuration and remove the compatibility skill after equivalent behavior is
+verified.
 
-1. Update files under `devcontainer/` in this repo
-2. Run `./devcontainer/install.sh self-install`
-3. In target repo: `devc install .`
-4. Rebuild container: `devc rebuild .`
+## Devcontainer rollout
+
+Devcontainer templates have a separate installation path:
+
+```bash
+./devcontainer/install.sh self-install
+```
+
+Then, in each target repository:
+
+```bash
+devc install .
+devc rebuild .
+```
+
+See [devcontainer/README.md](devcontainer/README.md) for mounts, toolchains, and
+runtime behavior.

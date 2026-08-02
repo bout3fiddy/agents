@@ -27,7 +27,7 @@ test("captureRead tracks attempted, successful, and denied reference reads separ
 	const refPath = path.join(
 		agentDir,
 		"skills",
-		"coding",
+		"example-skill",
 		"references",
 		"code-smells",
 		"index.md",
@@ -39,24 +39,24 @@ test("captureRead tracks attempted, successful, and denied reference reads separ
 	captureReadDenied(refPath, agentDir, capture);
 
 	const serialized = serializeReadCapture(capture);
-	assert.deepEqual(serialized.skillAttempts, ["coding"]);
-	assert.deepEqual(serialized.skillInvocations, ["coding"]);
-	assert.deepEqual(serialized.skillDenied, ["coding"]);
-	assert.deepEqual(serialized.refAttempts, ["skills/coding/references/code-smells/index.md"]);
-	assert.deepEqual(serialized.refInvocations, ["skills/coding/references/code-smells/index.md"]);
-	assert.deepEqual(serialized.refDenied, ["skills/coding/references/code-smells/index.md"]);
+	assert.deepEqual(serialized.skillAttempts, ["example-skill"]);
+	assert.deepEqual(serialized.skillInvocations, ["example-skill"]);
+	assert.deepEqual(serialized.skillDenied, ["example-skill"]);
+	assert.deepEqual(serialized.refAttempts, ["skills/example-skill/references/code-smells/index.md"]);
+	assert.deepEqual(serialized.refInvocations, ["skills/example-skill/references/code-smells/index.md"]);
+	assert.deepEqual(serialized.refDenied, ["skills/example-skill/references/code-smells/index.md"]);
 });
 
 test("captureRead normalizes host .agents skill references to canonical skills paths", () => {
 	const agentDir = path.join(path.sep, "tmp", "pi-eval-agent");
-	const hostRef = path.join(path.sep, "Users", "example-user", ".agents", "skills", "coding", "references", "bun.md");
+	const hostRef = path.join(path.sep, "Users", "example-user", ".agents", "skills", "example-skill", "references", "bun.md");
 	const capture = createReadCapture();
 
 	captureReadDenied(hostRef, agentDir, capture);
 
 	const serialized = serializeReadCapture(capture);
-	assert.deepEqual(serialized.refDenied, ["skills/coding/references/bun.md"]);
-	assert.deepEqual(serialized.skillDenied, ["coding"]);
+	assert.deepEqual(serialized.refDenied, ["skills/example-skill/references/bun.md"]);
+	assert.deepEqual(serialized.skillDenied, ["example-skill"]);
 });
 
 test("captureRead preserves absolute host paths that are not skill references", () => {

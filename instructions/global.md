@@ -1,32 +1,19 @@
 # Global Instructions
 
-<routing-gate>
-Before your first tool call that reads or modifies repo code, match the user's
-intent to a skill and read its SKILL.md. Skills contain domain guardrails
-(security patterns, smell detection, design systems) that prevent common mistakes.
-
-| Intent | Skill | Read |
-|--------|-------|------|
-| code, implement, bugfix, refactor, code review, smell audit | `coding` | `skills/coding/SKILL.md` |
-| AGENTS/CLAUDE architecture, housekeeping | `housekeeping` | `skills/housekeeping/SKILL.md` |
-| Railway, deployments, services, environments, build failures | `railway-operations` | `skills/railway-operations/SKILL.md` |
-| PR review, work packages | `workflows` | `skills/workflows/SKILL.md` |
-| Zig, performance-sensitive systems code, hot loops, data-oriented layout, allocation removal, comptime | `zig` | `skills/zig/SKILL.md` |
-
-- Match by intent, not exact keywords. Load multiple skills if ambiguous.
-- If no clear match, ask one clarifying question and retry.
-</routing-gate>
-
-## Cross-cutting rules
-
-- Toolchain: `uv` for Python (if `uv.lock`/`pyproject.toml` exists), `bun` for JS/TS when repo supports it.
-- Quality: if `.pre-commit-config.yaml` exists and you changed code, run `uv run prek run --all-files`.
-- Git hygiene: stage exact paths only; never `git add .`, `git add -A`, or `git add -f`. Respect `.gitignore`, inspect ignored state before committing (`git status --short --ignored`, `git check-ignore <path>` when unsure), and verify the staged set with `git diff --cached --name-only`. Treat work-package docs, scratch notes, and generated artifacts as non-shipping unless the user explicitly asks to version them or repo instructions explicitly require that exact content to ship.
-- Commands: don't run shell for discussion-only requests. Run safe, routine commands by default; ask only when destructive or touching secrets.
-- Bugfix testing: every bugfix must include a regression test that fails without the fix and passes with it. Add boundary probes if the bug is an edge case; add an integration test if the bug crosses module boundaries.
-
-## Repo-specific context
-
-- If a repo has `AGENTS.md` or `CLAUDE.md`, read it first — repo conventions override generic assumptions.
-- Keep `AGENTS.md` curated: deduplicate, remove stale/conflicting notes, use progressive disclosure (concise root + scoped nested files + deep docs).
-- When you discover durable structural repo knowledge, add a concise bullet to the nearest-scope `AGENTS.md`.
+- Use a task-specific skill only when the request matches its description. Read
+  supporting references only when they are relevant; proceed without a skill
+  when none applies.
+- Follow the repository's lockfiles and documented commands. When the choice is
+  otherwise ambiguous, prefer `uv` for Python and `bun` for JavaScript or
+  TypeScript.
+- Verify changes at the narrowest meaningful boundary. For a reproducible bug,
+  add or update focused regression coverage when the repository supports it.
+- Stage exact paths only. Do not use `git add .`, `git add -A`, or `git add -f`.
+  Inspect ignored state when unsure and review the staged file list before a
+  commit. Treat scratch notes, generated output, and execution-status churn as
+  non-shipping unless the user or repository explicitly requires them.
+- Prefer direct cutovers. Add compatibility paths or fallbacks only when a
+  current contract requires them and make their removal conditions explicit.
+- Do not introduce leading-underscore names unless an external interface,
+  generated code, or the touched area's established convention requires them.
+  Preserve user-authored `Feedback:` comments unless asked to remove them.
