@@ -27,25 +27,66 @@ const parseArgs = (argv: string[]): CliArgs => {
 	for (let index = 0; index < argv.length; index += 1) {
 		const token = argv[index];
 		const value = argv[index + 1];
-		if (!token.startsWith("--")) continue;
+
+		if (!token.startsWith("--")) {
+			continue;
+		}
+
 		if (value === undefined || value.startsWith("--")) {
 			throw new Error(`missing value for ${token}`);
 		}
-		if (token === "--image-dir") defaults.imageDir = value;
-		if (token === "--lock-file") defaults.lockFile = value;
-		if (token === "--config-file") defaults.configFile = value;
-		if (token === "--version") defaults.version = value;
-		if (token === "--pi-package-name") defaults.piPackageName = value;
-		if (token === "--pi-package-version") defaults.piPackageVersion = value;
-		if (token === "--project-root") defaults.projectRoot = value;
+
+		if (token === "--image-dir") {
+			defaults.imageDir = value;
+		}
+
+		if (token === "--lock-file") {
+			defaults.lockFile = value;
+		}
+
+		if (token === "--config-file") {
+			defaults.configFile = value;
+		}
+
+		if (token === "--version") {
+			defaults.version = value;
+		}
+
+		if (token === "--pi-package-name") {
+			defaults.piPackageName = value;
+		}
+
+		if (token === "--pi-package-version") {
+			defaults.piPackageVersion = value;
+		}
+
+		if (token === "--project-root") {
+			defaults.projectRoot = value;
+		}
+
 		index += 1;
 	}
 
-	if (defaults.imageDir.length === 0) throw new Error("--image-dir is required");
-	if (defaults.lockFile.length === 0) throw new Error("--lock-file is required");
-	if (defaults.configFile.length === 0) throw new Error("--config-file is required");
-	if (defaults.version.length === 0) throw new Error("--version is required");
-	if (defaults.projectRoot.length === 0) defaults.projectRoot = process.cwd();
+	if (defaults.imageDir.length === 0) {
+		throw new Error("--image-dir is required");
+	}
+
+	if (defaults.lockFile.length === 0) {
+		throw new Error("--lock-file is required");
+	}
+
+	if (defaults.configFile.length === 0) {
+		throw new Error("--config-file is required");
+	}
+
+	if (defaults.version.length === 0) {
+		throw new Error("--version is required");
+	}
+
+	if (defaults.projectRoot.length === 0) {
+		defaults.projectRoot = process.cwd();
+	}
+
 	return defaults;
 };
 
@@ -60,7 +101,7 @@ const sha256File = async (targetPath: string): Promise<string> => {
 	return hasher.digest("hex");
 };
 
-const loadJson = async (targetPath: string): Promise<any> => {
+const loadJson = async (targetPath: string): Promise<Record<string, unknown>> => {
 	const raw = await readFile(targetPath, "utf-8");
 	return JSON.parse(raw);
 };
@@ -76,17 +117,21 @@ const main = async (): Promise<void> => {
 
 	const toLockPath = (targetPath: string): string => {
 		const relative = path.relative(projectRoot, targetPath);
+
 		if (relative.length > 0 && !relative.startsWith("..") && !path.isAbsolute(relative)) {
 			return relative.split(path.sep).join("/");
 		}
+
 		return targetPath;
 	};
 
 	const resolveAssetPath = (key: "kernel" | "initramfs" | "rootfs"): string => {
 		const fileName = manifest?.assets?.[key];
+
 		if (typeof fileName !== "string" || fileName.trim().length === 0) {
 			throw new Error(`manifest missing assets.${key}`);
 		}
+
 		return path.join(imageDir, fileName);
 	};
 

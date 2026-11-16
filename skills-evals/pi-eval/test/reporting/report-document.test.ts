@@ -76,11 +76,7 @@ test("findTableBoundaries locates sentinel and header", () => {
 });
 
 test("findTableBoundaries works without sentinel", () => {
-	const lines = [
-		"# Report",
-		"| Case | Mode |",
-		"| --- | --- |",
-	];
+	const lines = ["# Report", "| Case | Mode |", "| --- | --- |"];
 	const result = findTableBoundaries(lines);
 	assert.equal(result.sentinelIndex, -1);
 	assert.equal(result.headerIndex, 1);
@@ -112,10 +108,11 @@ test("normalizeStatus uppercases and trims", () => {
 const TABLE_LINES = [
 	"## Standalone Results",
 	UNPAIRED_TABLE_SENTINEL,
-	"| Case | Mode | Status | Tokens | Turns | Skills Read | Skill Files Read | Refs Read | Missing Refs | Unexpected Refs | Notes | Run |",
+	"| Case | Mode | Status | Tokens | Turns | Skills Read | Skill Files " +
+		"Read | Refs Read | Missing Refs | Unexpected Refs | Notes | Run |",
 	"| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
 	"| CD-010 | single | PASS | 100 | 1 | 0 | 0 | 0 | - | - |  | 2026-03-03 |",
-	"| CD-020 | single | FAIL | 300 | 2 | 0 | 0 | 0 | - | - | timeout | 2026-03-03 |",
+	"| CD-020 | single | FAIL | 300 | 2 | 0 | 0 | 0 | - | - | timeout | 2" + "026-03-03 |",
 	"",
 ];
 
@@ -140,10 +137,12 @@ test("parseStandaloneTable parses old-format (Tokens column) rows correctly", ()
 const NEW_FORMAT_TABLE_LINES = [
 	"## Standalone Results",
 	UNPAIRED_TABLE_SENTINEL,
-	"| Case | Mode | Status | Cost | Cached | Turns | Skills Read | Skill Files Read | Refs Read | Missing Refs | Unexpected Refs | Notes | Run |",
-	"| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
-	"| CD-010 | single | PASS | 80 | 200 | 1 | 0 | 0 | 0 | - | - |  | 2026-03-03 |",
-	"| CD-020 | single | FAIL | 150 | 500 | 2 | 0 | 0 | 0 | - | - | timeout | 2026-03-03 |",
+	"| Case | Mode | Status | Cost | Cached | Turns | Skills Read | Skill" +
+		" Files Read | Refs Read | Missing Refs | Unexpected Refs | Notes | R" +
+		"un |",
+	"| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | " + "--- | --- |",
+	"| CD-010 | single | PASS | 80 | 200 | 1 | 0 | 0 | 0 | - | - |  | 202" + "6-03-03 |",
+	"| CD-020 | single | FAIL | 150 | 500 | 2 | 0 | 0 | 0 | - | - | timeo" + "ut | 2026-03-03 |",
 	"",
 ];
 
@@ -166,9 +165,12 @@ test("parseStandaloneTable parses Task/Judge columns", () => {
 	const rows = parseStandaloneTable([
 		"## Case Rows",
 		UNPAIRED_TABLE_SENTINEL,
-		"| Case | Mode | Task | Judge | Cost | Cached | Turns | Skills Read | Skill Files Read | Refs Read | Missing Refs | Unexpected Refs | Notes | Run |",
-		"| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
-		"| CD-010 | single | PASS | SKILL WIN | 80 | 200 | 1 | 0 | 0 | 0 | - | - |  | 2026-03-03 |",
+		"| Case | Mode | Task | Judge | Cost | Cached | Turns | Skills Read |" +
+			" Skill Files Read | Refs Read | Missing Refs | Unexpected Refs | Not" +
+			"es | Run |",
+		"| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | " + "--- | --- | --- |",
+		"| CD-010 | single | PASS | SKILL WIN | 80 | 200 | 1 | 0 | 0 | 0 | - " +
+			"| - |  | 2026-03-03 |",
 	]);
 	const row = rows.get("CD-010::single");
 	assert.ok(row);
@@ -176,7 +178,6 @@ test("parseStandaloneTable parses Task/Judge columns", () => {
 	assert.equal(row.judge, "SKILL WIN");
 	assert.equal(row.apiCost, 80);
 });
-
 
 test("parseStandaloneTable returns empty map for missing table", () => {
 	const rows = parseStandaloneTable(["# No table"]);
@@ -191,10 +192,14 @@ test("recalculateHeaderStats updates header lines in place", () => {
 		"- Runs in spec: 999",
 		"",
 		UNPAIRED_TABLE_SENTINEL,
-		"| Case | Mode | Task | Judge | Cost | Cached | Turns | Skills Read | Skill Files Read | Refs Read | Missing Refs | Unexpected Refs | Notes | Run |",
-		"| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
-		"| CD-010 | single | PASS | SKILL WIN | 80 | 200 | 1 | 0 | 0 | 0 | - | - |  | 2026-03-03 |",
-		"| CD-020 | single | FAIL | BASELINE FAIL | 150 | 500 | 2 | 0 | 0 | 0 | - | - | timeout | 2026-03-03 |",
+		"| Case | Mode | Task | Judge | Cost | Cached | Turns | Skills Read |" +
+			" Skill Files Read | Refs Read | Missing Refs | Unexpected Refs | Not" +
+			"es | Run |",
+		"| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | " + "--- | --- | --- |",
+		"| CD-010 | single | PASS | SKILL WIN | 80 | 200 | 1 | 0 | 0 | 0 | - " +
+			"| - |  | 2026-03-03 |",
+		"| CD-020 | single | FAIL | BASELINE FAIL | 150 | 500 | 2 | 0 | 0 | 0" +
+			" | - | - | timeout | 2026-03-03 |",
 	];
 	recalculateHeaderStats(lines);
 	assert.equal(lines[0], "- Task rows: 2 (pass 1, fail 1, skip 0)");
@@ -212,9 +217,11 @@ test("recalculateHeaderStats counts bundle variant rows", () => {
 		"| CD-015:noskill | FAIL | 200 | 400 | 2 | 0 | 0 |",
 		"",
 		UNPAIRED_TABLE_SENTINEL,
-		"| Case | Mode | Status | Cost | Cached | Turns | Skills Read | Skill Files Read | Refs Read | Missing Refs | Unexpected Refs | Notes | Run |",
-		"| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
-		"| CD-010 | single | PASS | 80 | 200 | 1 | 0 | 0 | 0 | - | - |  | 2026-03-03 |",
+		"| Case | Mode | Status | Cost | Cached | Turns | Skills Read | Skill" +
+			" Files Read | Refs Read | Missing Refs | Unexpected Refs | Notes | R" +
+			"un |",
+		"| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | " + "--- | --- |",
+		"| CD-010 | single | PASS | 80 | 200 | 1 | 0 | 0 | 0 | - | - |  | 202" + "6-03-03 |",
 	];
 	recalculateHeaderStats(lines);
 	assert.equal(lines[0], "- Task rows: 3 (pass 2, fail 1, skip 0)");

@@ -16,7 +16,10 @@ const buildEvalCase = (overrides: Partial<EvalCase> = {}): EvalCase => ({
 	...overrides,
 });
 
-const buildResult = (evalCase: EvalCase, overrides: Partial<CaseRunResult> = {}): CaseRunResult => ({
+const buildResult = (
+	evalCase: EvalCase,
+	overrides: Partial<CaseRunResult> = {},
+): CaseRunResult => ({
 	caseId: evalCase.id,
 	dryRun: false,
 	model: null,
@@ -117,10 +120,7 @@ test("assembleEvaluation uses attempts in dry-run mode", () => {
 test("assembleEvaluation preserves errors without failing", () => {
 	const evalCase = buildEvalCase();
 	const result = buildResult(evalCase, {
-		errors: [
-			"forbidden read: /tmp/work/skills/private/SKILL.md",
-			"non-policy error",
-		],
+		errors: ["forbidden read: /tmp/work/skills/private/SKILL.md", "non-policy error"],
 	});
 
 	const evaluation = assembleEvaluation(evalCase, result);
@@ -150,12 +150,9 @@ test("assembleEvaluation preserves case metadata", () => {
 test("buildCaseResult with failures produces fail status", () => {
 	const evalCase = buildEvalCase();
 	const result = buildResult(evalCase);
-	const evaluation = buildCaseResult(
-		evalCase.id,
-		result,
-		evalCase,
-		[{ category: "TASK_FAILURE", message: "something broke" }],
-	);
+	const evaluation = buildCaseResult(evalCase.id, result, evalCase, [
+		{ category: "TASK_FAILURE", message: "something broke" },
+	]);
 
 	assert.equal(evaluation.status, "fail");
 	assert.equal(evaluation.failureReasons.length, 1);

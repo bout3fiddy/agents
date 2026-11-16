@@ -55,8 +55,10 @@ class NextCheckRule:
 
     def evaluate(self, report: JsonObject) -> JsonObject | None:
         evidence = self.trigger(report)
+
         if not evidence:
             return None
+
         return {
             "id": self.id,
             "category": self.category,
@@ -71,48 +73,66 @@ class NextCheckRule:
 
 def object_at(report: JsonObject, path: tuple[str, ...]) -> JsonObject:
     current: object = report
+
     for part in path:
         current_object = as_json_object(current)
+
         if current_object is None:
             return {}
+
         current = current_object.get(part)
+
     return as_json_object(current) or {}
 
 
 def list_at(report: JsonObject, path: tuple[str, ...]) -> JsonArray:
     current: object = report
+
     for part in path:
         current_object = as_json_object(current)
+
         if current_object is None:
             return []
+
         current = current_object.get(part)
+
     return as_json_array(current) or []
 
 
 def int_at(report: JsonObject, path: tuple[str, ...]) -> int:
     current: object = report
+
     for part in path:
         current_object = as_json_object(current)
+
         if current_object is None:
             return 0
+
         current = current_object.get(part)
+
     return current if isinstance(current, int) else 0
 
 
 def str_at(report: JsonObject, path: tuple[str, ...]) -> str:
     current: object = report
+
     for part in path:
         current_object = as_json_object(current)
+
         if current_object is None:
             return ""
+
         current = current_object.get(part)
+
     return current if isinstance(current, str) else ""
 
 
 def source_text(report: JsonObject) -> str:
     source = str_at(report, ("inputs", "source"))
+
     if not source:
         return ""
+
     try:
         return Path(source).read_text(encoding="utf-8", errors="replace")
     except OSError:
@@ -122,10 +142,13 @@ def source_text(report: JsonObject) -> str:
 def check_count(report: JsonObject, key: str) -> int:
     for check_value in list_at(report, ("checks",)):
         check = as_json_object(check_value)
+
         if check is None or check.get("key") != key:
             continue
+
         count = check.get("count")
         return count if isinstance(count, int) else 0
+
     return 0
 
 
@@ -137,11 +160,10 @@ def allocation_report_status(report: JsonObject) -> str:
     return str_at(report, ("allocation", "status"))
 
 
-def evidence_when(
-    condition: bool, path: str, value: object, label: str
-) -> list[EvidencePoint]:
+def evidence_when(condition: bool, path: str, value: object, label: str) -> list[EvidencePoint]:
     if not condition:
         return []
+
     return [EvidencePoint(path=path, value=value, condition=label)]
 
 
@@ -213,8 +235,10 @@ def missing_symbol_evidence(report: JsonObject) -> list[EvidencePoint]:
 def allocation_report_needed_evidence(report: JsonObject) -> list[EvidencePoint]:
     allocator_evidence = hot_allocator_evidence(report)
     status = allocation_report_status(report)
+
     if not allocator_evidence or status not in {"skip", "missing"}:
         return []
+
     return [
         *allocator_evidence,
         EvidencePoint(
@@ -228,8 +252,10 @@ def allocation_report_needed_evidence(report: JsonObject) -> list[EvidencePoint]
 def benchmark_signal_evidence(report: JsonObject) -> list[EvidencePoint]:
     elapsed = object_at(report, ("runtime", "benchmark", "parsed")).get("elapsed_ns")
     status = str_at(report, ("runtime", "benchmark", "status"))
+
     if isinstance(elapsed, int) and elapsed > 0:
         return []
+
     return [
         EvidencePoint(
             path=".runtime.benchmark.status",
@@ -244,10 +270,13 @@ def llvm_mca_candidate_evidence(report: JsonObject) -> list[EvidencePoint]:
     llvm_status = str_at(report, ("llvm_mca", "status"))
     call_total = int_at(report, ("calls", "count"))
     division_count = check_count(report, "division")
+
     if hot_found is not True or llvm_status != "skip":
         return []
+
     if call_total == 0 and division_count == 0:
         return []
+
     return [
         EvidencePoint(
             path=".llvm_mca.status",
@@ -267,10 +296,13 @@ def clean_hot_boundary_ceiling_evidence(report: JsonObject) -> list[EvidencePoin
         check_count(report, "diagnostics"),
         check_count(report, "division"),
     )
+
     if hot_found is not True or not isinstance(elapsed, int):
         return []
+
     if call_total != 0 or any(count != 0 for count in check_counts):
         return []
+
     return [
         EvidencePoint(
             path=".hot_boundary.symbol_found",
@@ -287,12 +319,11 @@ def clean_hot_boundary_ceiling_evidence(report: JsonObject) -> list[EvidencePoin
 
 def bounded_fast_path_evidence(report: JsonObject) -> list[EvidencePoint]:
     source = source_text(report)
+
     if not source:
         return []
 
-    has_private_limit = (
-        re.search(r"\b(?:max|limit)_[A-Za-z0-9_]*\s*=", source) is not None
-    )
+    has_private_limit = re.search(r"\b(?:max|limit)_[A-Za-z0-9_]*\s*=", source) is not None
     has_len_guard = (
         re.search(
             r"\bif\s*\([^)]*\.len\s*(?:>|>=)\s*[A-Za-z_][A-Za-z0-9_]*",
@@ -310,9 +341,7 @@ def bounded_fast_path_evidence(report: JsonObject) -> list[EvidencePoint]:
     )
 
     if not (
-        has_private_limit
-        and has_len_guard
-        and (has_fallback_shape or has_null_or_error_escape)
+        has_private_limit and has_len_guard and (has_fallback_shape or has_null_or_error_escape)
     ):
         return []
 
@@ -327,6 +356,7 @@ def bounded_fast_path_evidence(report: JsonObject) -> list[EvidencePoint]:
 
 def candidate_scan_evidence(report: JsonObject) -> list[EvidencePoint]:
     source = source_text(report)
+
     if not source:
         return []
 
@@ -338,9 +368,7 @@ def candidate_scan_evidence(report: JsonObject) -> list[EvidencePoint]:
         )
         is not None
     )
-    has_lookup_context = (
-        re.search(r"\b(?:lookup|match|rule|policy|control)\b", source) is not None
-    )
+    has_lookup_context = re.search(r"\b(?:lookup|match|rule|policy|control)\b", source) is not None
 
     if not (has_bit_scan and has_candidate_loop and has_lookup_context):
         return []
@@ -356,6 +384,7 @@ def candidate_scan_evidence(report: JsonObject) -> list[EvidencePoint]:
 
 def wide_record_by_value_evidence(report: JsonObject) -> list[EvidencePoint]:
     source = source_text(report)
+
     if not source:
         return []
 
@@ -396,10 +425,7 @@ NEXT_CHECK_RULES: tuple[NextCheckRule, ...] = (
         confidence="high",
         interpretation="Allocator-related work appears inside the hot boundary.",
         next_checks=(
-            (
-                "classify whether allocation is output growth, cache growth, "
-                "or temporary storage"
-            ),
+            ("classify whether allocation is output growth, cache growth, or temporary storage"),
             "measure allocation count inside the same boundary",
             "try caller-owned buffers or a retained workspace for repeated calls",
         ),
@@ -420,8 +446,7 @@ NEXT_CHECK_RULES: tuple[NextCheckRule, ...] = (
         severity="high",
         confidence="medium",
         interpretation=(
-            "Hash-map or cache-growth fingerprints suggest dynamic lookup in "
-            "the measured boundary."
+            "Hash-map or cache-growth fingerprints suggest dynamic lookup in the measured boundary."
         ),
         next_checks=(
             "identify whether the lookup key set is stable across repeated calls",
@@ -446,10 +471,7 @@ NEXT_CHECK_RULES: tuple[NextCheckRule, ...] = (
         confidence="high",
         interpretation="Copy helpers survived in the hot boundary.",
         next_checks=(
-            (
-                "check whether the copy is avoidable output movement or "
-                "required semantic movement"
-            ),
+            ("check whether the copy is avoidable output movement or required semantic movement"),
             "try writing directly into caller-owned output",
             "measure bytes copied per unit if the benchmark can expose it",
         ),
@@ -486,10 +508,7 @@ NEXT_CHECK_RULES: tuple[NextCheckRule, ...] = (
             purpose="inspect diagnostic fingerprints and call categories",
             jq=(
                 '.checks[] | select(.key == "diagnostics")',
-                (
-                    '.calls.calls[]? | select(.category == "diagnostic" '
-                    'or .category == "panic")'
-                ),
+                ('.calls.calls[]? | select(.category == "diagnostic" or .category == "panic")'),
             ),
         ),
         trigger=diagnostics_evidence,
@@ -531,19 +550,13 @@ NEXT_CHECK_RULES: tuple[NextCheckRule, ...] = (
                 "check whether call targets should inline after build flags "
                 "and symbol choice are confirmed"
             ),
-            (
-                "inspect the focused assembly around each call before "
-                "changing source shape"
-            ),
+            ("inspect the focused assembly around each call before changing source shape"),
         ),
         tool_call=ToolCall(
             tool=CODEGEN_INSPECT,
             purpose="inspect unresolved hot-boundary calls",
             jq=(
-                (
-                    '.calls.calls[]? | select(.category == "unknown" '
-                    'or .category == "indirect")'
-                ),
+                ('.calls.calls[]? | select(.category == "unknown" or .category == "indirect")'),
                 ".source_map.entries[]?",
             ),
         ),
@@ -555,16 +568,12 @@ NEXT_CHECK_RULES: tuple[NextCheckRule, ...] = (
         severity="high",
         confidence="high",
         interpretation=(
-            "The requested hot symbol was not extracted, so codegen checks "
-            "may be incomplete."
+            "The requested hot symbol was not extracted, so codegen checks may be incomplete."
         ),
         next_checks=(
             "confirm the symbol name with nm output",
             "check whether the function was inlined or stripped",
-            (
-                "use the nearest public boundary or an address range for "
-                "focused inspection"
-            ),
+            ("use the nearest public boundary or an address range for focused inspection"),
         ),
         tool_call=ToolCall(
             tool=CODEGEN_INSPECT,
@@ -583,8 +592,7 @@ NEXT_CHECK_RULES: tuple[NextCheckRule, ...] = (
         severity="medium",
         confidence="high",
         interpretation=(
-            "Codegen shows allocator-related work, but no runtime allocation "
-            "report was attached."
+            "Codegen shows allocator-related work, but no runtime allocation report was attached."
         ),
         next_checks=(
             "add a counting allocator around exactly the measured boundary",
@@ -598,9 +606,7 @@ NEXT_CHECK_RULES: tuple[NextCheckRule, ...] = (
                 ".allocation",
                 '.checks[] | select(.key == "allocator_hash_cache")',
             ),
-            command_hint=(
-                "rerun with --alloc-report <path> and optionally --expect-allocs 0"
-            ),
+            command_hint=("rerun with --alloc-report <path> and optionally --expect-allocs 0"),
         ),
         trigger=allocation_report_needed_evidence,
     ),
@@ -620,10 +626,7 @@ NEXT_CHECK_RULES: tuple[NextCheckRule, ...] = (
             purpose="confirm benchmark command and parsed timing field",
             jq=(
                 ".runtime.benchmark",
-                (
-                    '.commands[] | select(.name == "zig-run" '
-                    'or .name == "zig-build-bench-step")'
-                ),
+                ('.commands[] | select(.name == "zig-run" or .name == "zig-build-bench-step")'),
             ),
         ),
         trigger=benchmark_signal_evidence,
@@ -650,9 +653,7 @@ NEXT_CHECK_RULES: tuple[NextCheckRule, ...] = (
                 ".runtime.benchmark.parsed",
                 ".decision_card",
             ),
-            command_hint=(
-                "add a scratch benchmark that exercises the cap and cap-plus-one"
-            ),
+            command_hint=("add a scratch benchmark that exercises the cap and cap-plus-one"),
         ),
         trigger=bounded_fast_path_evidence,
     ),
@@ -733,8 +734,7 @@ NEXT_CHECK_RULES: tuple[NextCheckRule, ...] = (
         tool_call=ToolCall(
             tool=CODEGEN_INSPECT,
             purpose=(
-                "decide whether more low-level inspection or a higher-level "
-                "comparison is useful"
+                "decide whether more low-level inspection or a higher-level comparison is useful"
             ),
             jq=(
                 ".runtime.benchmark.parsed",
@@ -750,16 +750,12 @@ NEXT_CHECK_RULES: tuple[NextCheckRule, ...] = (
         severity="low",
         confidence="medium",
         interpretation=(
-            "Focused assembly has calls or divisions and can benefit from a "
-            "throughput model."
+            "Focused assembly has calls or divisions and can benefit from a throughput model."
         ),
         next_checks=(
             "run llvm-mca on the focused assembly when the host tool is available",
             "compare predicted throughput with measured cycles per unit",
-            (
-                "use the result to distinguish arithmetic throughput from "
-                "memory or call overhead"
-            ),
+            ("use the result to distinguish arithmetic throughput from memory or call overhead"),
         ),
         tool_call=ToolCall(
             tool=CODEGEN_INSPECT,
@@ -778,9 +774,7 @@ NEXT_CHECK_RULES: tuple[NextCheckRule, ...] = (
 
 def build_next_checks(report: JsonObject) -> JsonObject:
     suggestions = [
-        suggestion
-        for rule in NEXT_CHECK_RULES
-        if (suggestion := rule.evaluate(report)) is not None
+        suggestion for rule in NEXT_CHECK_RULES if (suggestion := rule.evaluate(report)) is not None
     ]
     return {
         "schema_version": 1,

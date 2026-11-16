@@ -38,9 +38,13 @@ export type WorkerLaunchConfig = {
 
 export const mergeReadDenyPaths = (extraPaths?: string[]): string[] => {
 	const merged = new Set<string>(DEFAULT_READ_DENY_PATHS);
+
 	for (const item of extraPaths ?? []) {
-		if (typeof item === "string" && item.trim().length > 0) merged.add(item);
+		if (typeof item === "string" && item.trim().length > 0) {
+			merged.add(item);
+		}
 	}
+
 	return Array.from(merged);
 };
 
@@ -62,16 +66,23 @@ export const buildWorkerEnv = (
 	[WORKER_ENV_KEYS.bootstrapManifestHash]: config.bootstrapManifestHash ?? "",
 	...(config.homeDir
 		? {
-			HOME: config.homeDir,
-			PI_CODING_AGENT_DIR: `${config.homeDir}/.agents`,
-		}
+				HOME: config.homeDir,
+				PI_CODING_AGENT_DIR: `${config.homeDir}/.agents`,
+			}
 		: {}),
 });
 
 const parseJsonArray = (raw: string | undefined): string[] => {
-	if (!raw) return [];
+	if (!raw) {
+		return [];
+	}
+
 	const parsed = JSON.parse(raw) as unknown;
-	if (!Array.isArray(parsed)) return [];
+
+	if (!Array.isArray(parsed)) {
+		return [];
+	}
+
 	return parsed.filter((item): item is string => typeof item === "string");
 };
 
@@ -89,7 +100,10 @@ const parseExpectedTurns = (raw: string | undefined): number => {
 };
 
 const parseBootstrapProfile = (raw: string | undefined): BootstrapProfile => {
-	if (raw === "no_payload") return "no_payload";
+	if (raw === "no_payload") {
+		return "no_payload";
+	}
+
 	return "full_payload";
 };
 
@@ -110,9 +124,16 @@ export const parseWorkerRuntimeConfig = (
 	env: NodeJS.ProcessEnv,
 	cwd: string,
 ): WorkerRuntimeConfig | null => {
-	if (env[WORKER_ENV_KEYS.mode] !== "1") return null;
+	if (env[WORKER_ENV_KEYS.mode] !== "1") {
+		return null;
+	}
+
 	const outputPath = env[WORKER_ENV_KEYS.outputPath];
-	if (!outputPath) throw new Error(`${WORKER_ENV_KEYS.outputPath} is required in worker mode`);
+
+	if (!outputPath) {
+		throw new Error(`${WORKER_ENV_KEYS.outputPath} is required in worker mode`);
+	}
+
 	return {
 		outputPath,
 		caseId: env[WORKER_ENV_KEYS.caseId] ?? "unknown",

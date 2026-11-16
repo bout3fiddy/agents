@@ -1,0 +1,13 @@
+{
+  "name": "orchestrator",
+  "prompt": "orchestrator.md",
+  "model": "inherit",
+  "thinking": "medium",
+  "skills": [],
+  "tools": ["project_read", "project_search", "propose_design", "workflow", "harness_status"],
+  "writes": [],
+  "mayDelegate": true,
+  "timeoutMs": 1800000,
+  "maxTurns": 80,
+  "backend": "pi"
+}

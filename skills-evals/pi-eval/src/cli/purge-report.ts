@@ -1,7 +1,9 @@
 #!/usr/bin/env bun
+
 /**
  * Purges eval case rows/sections from markdown report files.
- * Usage: bun run purge-report.ts --case CASE_ID --reports-dir PATH [--variants tag1,tag2] [--dry-run]
+ * Usage: bun run purge-report.ts --case CASE_ID --reports-dir PATH
+ * Optional flags: --variants tag1,tag2 --dry-run
  */
 import { readFile, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -11,7 +13,6 @@ import {
 	UNPAIRED_TABLE_SENTINEL,
 	extractRowCells,
 	findTableBoundaries,
-	normalizeStatus,
 	recalculateHeaderStats,
 } from "../reporting/report-document.js";
 
@@ -46,17 +47,25 @@ export const purgeRowsFromReport = (
 
 	if (tableHeaderIdx >= 0) {
 		const toRemove: number[] = [];
+
 		for (let i = dataStart; i < lines.length; i++) {
 			const line = lines[i];
-			if (!line.trim().startsWith("|")) break;
+
+			if (!line.trim().startsWith("|")) {
+				break;
+			}
+
 			const cells = extractRowCells(line);
 			const caseCell = cells[0] ?? "";
+
 			if (casePatterns.has(caseCell)) {
 				toRemove.push(i);
 				removedRows.push(caseCell);
 			}
 		}
+
 		// Remove in reverse to preserve indices
+
 		for (let j = toRemove.length - 1; j >= 0; j--) {
 			lines.splice(toRemove[j], 1);
 		}
@@ -65,53 +74,93 @@ export const purgeRowsFromReport = (
 	// --- 2. Remove bundle subsection under ## Bundle Evaluations ---
 	if (bundleId) {
 		const bundleSectionIdx = lines.findIndex((l) => l.trim() === "## Bundle Evaluations");
+
 		if (bundleSectionIdx >= 0) {
 			const bundleHeadingPrefix = `### ${bundleId}:`;
 			let i = bundleSectionIdx + 1;
+
 			while (i < lines.length) {
 				const line = lines[i];
+
 				// Stop if we hit the next ## section (not ###)
-				if (line.startsWith("## ") && !line.startsWith("### ")) break;
+
+				if (line.startsWith("## ") && !line.startsWith("### ")) {
+					break;
+				}
 
 				if (line.startsWith(bundleHeadingPrefix)) {
+
 					// Find extent: from this heading to next ### or --- (exclusive) or next ##
 					const sectionStart = i;
 					let sectionEnd = i + 1;
+
 					while (sectionEnd < lines.length) {
 						const nextLine = lines[sectionEnd];
-						if (nextLine.startsWith("### ") || (nextLine.startsWith("## ") && !nextLine.startsWith("### "))) break;
-						// Include trailing --- separator
-						if (nextLine.trim() === "---") {
-							sectionEnd++;
-							// Also consume blank line after ---
-							while (sectionEnd < lines.length && lines[sectionEnd].trim() === "") sectionEnd++;
+
+						if (
+							nextLine.startsWith("### ") ||
+							(nextLine.startsWith("## ") && !nextLine.startsWith("### "))
+						) {
 							break;
 						}
+
+						// Include trailing --- separator
+
+						if (nextLine.trim() === "---") {
+							sectionEnd++;
+
+							// Also consume blank line after ---
+
+							while (sectionEnd < lines.length && lines[sectionEnd].trim() === "") {
+								sectionEnd++;
+							}
+
+							break;
+						}
+
 						sectionEnd++;
 					}
+
 					removedBundleSections.push(bundleId);
 					lines.splice(sectionStart, sectionEnd - sectionStart);
+
 					// Don't advance i since we spliced
 					continue;
 				}
+
 				i++;
 			}
 
 			// If Bundle Evaluations section is now empty (only heading + blank lines),
 			// remove it entirely
 			let hasContent = false;
+
 			for (let j = bundleSectionIdx + 1; j < lines.length; j++) {
 				const l = lines[j];
-				if (l.startsWith("## ") && !l.startsWith("### ")) break;
-				if (l.trim() !== "") { hasContent = true; break; }
+
+				if (l.startsWith("## ") && !l.startsWith("### ")) {
+					break;
+				}
+
+				if (l.trim() !== "") {
+					hasContent = true;
+					break;
+				}
 			}
+
 			if (!hasContent) {
+
 				// Find extent of empty section
 				let endIdx = bundleSectionIdx + 1;
+
 				while (endIdx < lines.length) {
-					if (lines[endIdx].startsWith("## ") && !lines[endIdx].startsWith("### ")) break;
+					if (lines[endIdx].startsWith("## ") && !lines[endIdx].startsWith("### ")) {
+						break;
+					}
+
 					endIdx++;
 				}
+
 				lines.splice(bundleSectionIdx, endIdx - bundleSectionIdx);
 			}
 		}
@@ -121,18 +170,26 @@ export const purgeRowsFromReport = (
 	if (removedRows.length > 0 || removedBundleSections.length > 0) {
 		const markerStart = lines.findIndex((line) => line.trim() === JUDGE_REPORT_START);
 		const markerEnd = lines.findIndex((line) => line.trim() === JUDGE_REPORT_END);
+
 		if (markerStart >= 0 && markerEnd >= markerStart) {
 			lines.splice(markerStart, markerEnd - markerStart + 1);
 			removedJudgeReport = true;
 		} else {
 			const headingStart = lines.findIndex((line) => line.trim() === "## Judge Report");
+
 			if (headingStart >= 0) {
 				let headingEnd = headingStart + 1;
+
 				while (headingEnd < lines.length) {
 					const line = lines[headingEnd];
-					if (line.trim() === UNPAIRED_TABLE_SENTINEL || line.trim() === "## Case Rows") break;
+
+					if (line.trim() === UNPAIRED_TABLE_SENTINEL || line.trim() === "## Case Rows") {
+						break;
+					}
+
 					headingEnd++;
 				}
+
 				lines.splice(headingStart, headingEnd - headingStart);
 				removedJudgeReport = true;
 			}
@@ -170,7 +227,10 @@ if (import.meta.main) {
 	const dryRun = has("--dry-run");
 
 	if (!caseId || !reportsDir) {
-		console.error("Usage: purge-report.ts --case CASE_ID --reports-dir PATH [--variants t1,t2] [--dry-run]");
+		console.error(
+			"Usage: purge-report.ts --case CASE_ID --reports-dir PATH [--variants" +
+				" t1,t2] [--dry-run]",
+		);
 		process.exit(1);
 	}
 
@@ -179,19 +239,20 @@ if (import.meta.main) {
 	let bundleId: string | null = null;
 
 	if (variantsRaw) {
+
 		// Bundle: match variant case IDs like "CD-015:skill"
 		bundleId = caseId;
+
 		for (const tag of variantsRaw.split(",")) {
 			patterns.add(`${caseId}:${tag.trim()}`);
 		}
 	} else {
+
 		// Standalone: match exact case ID
 		patterns.add(caseId);
 	}
 
-	const mdFiles = (await readdir(reportsDir))
-		.filter((f) => f.endsWith(".md"))
-		.sort();
+	const mdFiles = (await readdir(reportsDir)).filter((f) => f.endsWith(".md")).sort();
 
 	for (const file of mdFiles) {
 		const filePath = path.join(reportsDir, file);
@@ -199,16 +260,38 @@ if (import.meta.main) {
 		const result = purgeRowsFromReport(content, patterns, bundleId);
 
 		const anyChanges = result.removedRows.length > 0 || result.removedBundleSections.length > 0;
-		if (!anyChanges) continue;
+
+		if (!anyChanges) {
+			continue;
+		}
 
 		if (dryRun) {
 			console.log(`[dry-run] ${file}:`);
-			for (const row of result.removedRows) console.log(`  remove row: ${row}`);
-			for (const sec of result.removedBundleSections) console.log(`  remove bundle section: ${sec}`);
-			if (result.removedJudgeReport) console.log("  remove suite judge report");
+
+			for (const row of result.removedRows) {
+				console.log(`  remove row: ${row}`);
+			}
+
+			for (const sec of result.removedBundleSections) {
+				console.log(`  remove bundle section: ${sec}`);
+			}
+
+			if (result.removedJudgeReport) {
+				console.log("  remove suite judge report");
+			}
 		} else {
 			await writeFile(filePath, result.updatedContent);
-			console.log(`Updated ${file}: removed ${result.removedRows.length} row(s), ${result.removedBundleSections.length} bundle section(s), judge report: ${result.removedJudgeReport ? "removed" : "unchanged"}`);
+			console.log(
+				"Updated " +
+					`${file}` +
+					": removed " +
+					`${result.removedRows.length}` +
+					" row(s), " +
+					`${result.removedBundleSections.length}` +
+					" bundle section(s), judge report: " +
+					`${result.removedJudgeReport ? "removed" : "unchanged"}` +
+					"",
+			);
 		}
 	}
 }

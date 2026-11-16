@@ -40,18 +40,24 @@ export const createRpcDiagnosticsTracker = () => {
 		typeof value === "string" && value.trim().length > 0 ? value.trim() : "unknown";
 
 	const toKnownToolId = (value: unknown, fallbackToolName: string): string => {
-		if (typeof value === "string" && value.trim().length > 0) return value.trim();
+		if (typeof value === "string" && value.trim().length > 0) {
+			return value.trim();
+		}
+
 		return `${fallbackToolName}:unknown`;
 	};
 
 	const resolveToolCall = (params: { id: string; toolName: string }): RpcToolCallState => {
 		const existing = toolCalls.get(params.id);
+
 		if (existing) {
 			if (existing.toolName === "unknown" && params.toolName !== "unknown") {
 				existing.toolName = params.toolName;
 			}
+
 			return existing;
 		}
+
 		const created: RpcToolCallState = {
 			id: params.id,
 			toolName: params.toolName,
@@ -78,25 +84,47 @@ export const createRpcDiagnosticsTracker = () => {
 		const state = resolveToolCall({ id: toolId, toolName });
 		state.deltaCount += 1;
 		const partialLen = typeof params.partialJson === "string" ? params.partialJson.length : 0;
-		if (partialLen > state.maxPartialJsonLength) state.maxPartialJsonLength = partialLen;
+
+		if (partialLen > state.maxPartialJsonLength) {
+			state.maxPartialJsonLength = partialLen;
+		}
 	};
 
 	const markToolCallsFromMessages = (messages: unknown) => {
-		if (!Array.isArray(messages)) return;
+		if (!Array.isArray(messages)) {
+			return;
+		}
+
 		for (const message of messages) {
-			if (!message || typeof message !== "object") continue;
+			if (!message || typeof message !== "object") {
+				continue;
+			}
+
 			const record = message as Record<string, unknown>;
-			if (record.role !== "assistant") continue;
+
+			if (record.role !== "assistant") {
+				continue;
+			}
+
 			const content = Array.isArray(record.content) ? record.content : [];
+
 			for (const block of content) {
-				if (!block || typeof block !== "object") continue;
+				if (!block || typeof block !== "object") {
+					continue;
+				}
+
 				const blockRecord = block as Record<string, unknown>;
-				if (blockRecord.type !== "toolCall") continue;
+
+				if (blockRecord.type !== "toolCall") {
+					continue;
+				}
+
 				const toolName = toKnownToolName(blockRecord.name);
 				const toolId = toKnownToolId(blockRecord.id, toolName);
 				const state = resolveToolCall({ id: toolId, toolName });
 				const argumentsRecord = blockRecord.arguments as Record<string, unknown> | undefined;
 				const contentValue = argumentsRecord?.content;
+
 				if (typeof contentValue === "string" && contentValue.length > state.maxPartialJsonLength) {
 					state.maxPartialJsonLength = contentValue.length;
 				}
@@ -108,8 +136,14 @@ export const createRpcDiagnosticsTracker = () => {
 		const type = typeof event.type === "string" ? event.type : "unknown";
 		parsedEventCount += 1;
 		incrementEventCount(type);
-		if (type === "auto_retry_start") autoRetryStartCount += 1;
-		if (type === "auto_retry_end") autoRetryEndCount += 1;
+
+		if (type === "auto_retry_start") {
+			autoRetryStartCount += 1;
+		}
+
+		if (type === "auto_retry_end") {
+			autoRetryEndCount += 1;
+		}
 
 		if (type === "toolcall_start") {
 			const toolCall = event.toolCall as Record<string, unknown> | undefined;
@@ -118,6 +152,7 @@ export const createRpcDiagnosticsTracker = () => {
 			const state = resolveToolCall({ id: toolId, toolName });
 			state.startCount += 1;
 		}
+
 		if (type === "toolcall_delta") {
 			const toolCall = event.toolCall as Record<string, unknown> | undefined;
 			markToolCallDelta({
@@ -126,6 +161,7 @@ export const createRpcDiagnosticsTracker = () => {
 				partialJson: event.partialJson,
 			});
 		}
+
 		if (type === "toolcall_end") {
 			const toolCall = event.toolCall as Record<string, unknown> | undefined;
 			const toolName = toKnownToolName(toolCall?.name);
@@ -133,29 +169,45 @@ export const createRpcDiagnosticsTracker = () => {
 			const state = resolveToolCall({ id: toolId, toolName });
 			state.endCount += 1;
 		}
+
 		if (type === "tool_execution_start") {
 			const toolName = toKnownToolName(event.toolName);
 			const toolId = toKnownToolId(event.toolCallId, toolName);
 			const state = resolveToolCall({ id: toolId, toolName });
 			state.executionStartCount += 1;
 		}
+
 		if (type === "tool_execution_end") {
 			const toolName = toKnownToolName(event.toolName);
 			const toolId = toKnownToolId(event.toolCallId, toolName);
 			const state = resolveToolCall({ id: toolId, toolName });
 			state.executionEndCount += 1;
-			if (event.success === false) state.executionFailureCount += 1;
-			else state.executionSuccessCount += 1;
+
+			if (event.success === false) {
+				state.executionFailureCount += 1;
+			} else {
+				state.executionSuccessCount += 1;
+			}
 		}
+
 		if (type === "message_update") {
 			const assistantEvent = event.assistantMessageEvent as Record<string, unknown> | undefined;
+
 			if (assistantEvent?.type === "toolcall_delta") {
 				const partial = assistantEvent.partial as Record<string, unknown> | undefined;
 				const content = Array.isArray(partial?.content) ? partial.content : [];
+
 				for (const block of content) {
-					if (!block || typeof block !== "object") continue;
+					if (!block || typeof block !== "object") {
+						continue;
+					}
+
 					const blockRecord = block as Record<string, unknown>;
-					if (blockRecord.type !== "toolCall") continue;
+
+					if (blockRecord.type !== "toolCall") {
+						continue;
+					}
+
 					markToolCallDelta({
 						toolName: blockRecord.name,
 						toolId: blockRecord.id,
@@ -164,17 +216,23 @@ export const createRpcDiagnosticsTracker = () => {
 				}
 			}
 		}
+
 		if (type === "agent_end") {
 			const messages = Array.isArray(event.messages) ? event.messages : [];
 			const lastMessage = messages.length > 0 ? messages[messages.length - 1] : null;
+
 			if (lastMessage && typeof lastMessage === "object") {
 				const lastRecord = lastMessage as Record<string, unknown>;
 				lastAgentStopReason =
 					typeof lastRecord.stopReason === "string" ? lastRecord.stopReason : null;
 				lastAgentErrorMessage =
 					typeof lastRecord.errorMessage === "string" ? lastRecord.errorMessage : null;
-				if (lastAgentStopReason === "error") terminalAgentErrorCount += 1;
+
+				if (lastAgentStopReason === "error") {
+					terminalAgentErrorCount += 1;
+				}
 			}
+
 			markToolCallsFromMessages(messages);
 		}
 	};
@@ -188,24 +246,45 @@ export const createRpcDiagnosticsTracker = () => {
 	};
 
 	const toSummary = (): RpcDiagnostics => {
-		const sortedToolCalls: RpcToolCallDiagnostics[] = Array.from(toolCalls.values()).sort((left, right) =>
-			left.id.localeCompare(right.id),
+		const sortedToolCalls: RpcToolCallDiagnostics[] = Array.from(toolCalls.values()).sort(
+			(left, right) => left.id.localeCompare(right.id),
 		);
 		const anomalies: string[] = [];
+
 		for (const call of sortedToolCalls) {
-			const missingCompletion = call.deltaCount > 0 && call.endCount === 0 && call.executionStartCount === 0;
+			const missingCompletion =
+				call.deltaCount > 0 && call.endCount === 0 && call.executionStartCount === 0;
+
 			if (missingCompletion) {
 				anomalies.push(
-					`incomplete tool call '${call.toolName}' (${call.id}): deltas=${call.deltaCount}, toolcall_end=0, execution_start=0, max_partial_json_len=${call.maxPartialJsonLength}`,
+					"incomplete tool call '" +
+						`${call.toolName}` +
+						"' (" +
+						`${call.id}` +
+						"): deltas=" +
+						`${call.deltaCount}` +
+						", toolcall_end=0, execution_start=0, max_partial_json_len=" +
+						`${call.maxPartialJsonLength}` +
+						"",
 				);
 				continue;
 			}
+
 			if (call.executionStartCount > call.executionEndCount) {
 				anomalies.push(
-					`hung tool execution '${call.toolName}' (${call.id}): execution_start=${call.executionStartCount}, execution_end=${call.executionEndCount}`,
+					"hung tool execution '" +
+						`${call.toolName}` +
+						"' (" +
+						`${call.id}` +
+						"): execution_start=" +
+						`${call.executionStartCount}` +
+						", execution_end=" +
+						`${call.executionEndCount}` +
+						"",
 				);
 			}
 		}
+
 		return {
 			rawLineCount,
 			parsedEventCount,
@@ -248,7 +327,11 @@ export const buildTimeoutDiagnosticsHint = (diagnostics: RpcDiagnostics): string
 		`last_error=${diagnostics.lastAgentErrorMessage ?? "none"}`,
 		`events=[${topEvents || "none"}]`,
 	];
-	if (incompleteCalls.length > 0) hintParts.push(`incomplete_calls=[${incompleteCalls}]`);
+
+	if (incompleteCalls.length > 0) {
+		hintParts.push(`incomplete_calls=[${incompleteCalls}]`);
+	}
+
 	return ` rpc diagnostics: ${hintParts.join(" ")}`;
 };
 
@@ -256,6 +339,9 @@ export const persistRpcDiagnostics = async (
 	diagnosticsPath: string | null,
 	diagnostics: RpcDiagnostics,
 ): Promise<void> => {
-	if (!diagnosticsPath) return;
+	if (!diagnosticsPath) {
+		return;
+	}
+
 	await writeFile(diagnosticsPath, JSON.stringify(diagnostics, null, 2)).catch(() => undefined);
 };

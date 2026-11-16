@@ -71,7 +71,9 @@ CODEX_MCP_URL_RE = re.compile(
     r'(?P<host>localhost|127\\.0\\.0\\.1|\\[::1\\]|::1)(?P<rest>[^"]*)(?P<suffix>".*)$'
 )
 CODEX_MCP_SECTION_RE = re.compile(r"^\[(?P<section>[^\]]+)\]\s*$")
-CODEX_WEB_SEARCH_REQUEST_RE = re.compile(r"^(?P<indent>\s*)web_search_request\s*=\s*(?P<value>.+?)\s*$")
+CODEX_WEB_SEARCH_REQUEST_RE = re.compile(
+    r"^(?P<indent>\s*)web_search_request\s*=\s*(?P<value>.+?)\s*$"
+)
 CODEX_MCP_STARTUP_TIMEOUT_SEC = 60
 DEVC_DISABLE_MCP_SERVERS_ENV = "DEVC_DISABLE_MCP_SERVERS"
 
@@ -80,9 +82,7 @@ def log(message: str) -> None:
     print(f"post-install: {message}", file=sys.stderr)
 
 
-def run_git(
-    args: list[str], cwd: Path, check: bool = False
-) -> subprocess.CompletedProcess[str]:
+def run_git(args: list[str], cwd: Path, check: bool = False) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         ["git", "-C", str(cwd), *args],
         check=check,
@@ -102,12 +102,15 @@ def run_sudo(args: list[str]) -> subprocess.CompletedProcess[str]:
 
 def resolve_workspace() -> Path:
     env_workspace = os.environ.get("WORKSPACE_FOLDER")
+
     if env_workspace:
         workspace = Path(env_workspace)
     else:
         workspace = Path("/workspace")
+
     if workspace.exists():
         return workspace
+
     return Path.cwd()
 
 
@@ -118,16 +121,19 @@ def is_git_repo(cwd: Path) -> bool:
 
 def ensure_global_gitignore(workspace: Path) -> None:
     result = run_git(["config", "--global", "--path", "core.excludesfile"], workspace)
+
     if result.returncode != 0:
         log("no global core.excludesfile configured")
         return
 
     raw_path = result.stdout.strip()
+
     if not raw_path:
         log("no global core.excludesfile configured")
         return
 
     excludes_path = Path(raw_path).expanduser()
+
     if not excludes_path.is_absolute():
         excludes_path = (Path.home() / excludes_path).resolve()
 
@@ -136,10 +142,9 @@ def ensure_global_gitignore(workspace: Path) -> None:
         return
 
     source = workspace / ".devcontainer" / ".gitignore_global"
+
     if not source.exists():
-        log(
-            f"global core.excludesfile missing at {excludes_path} and no template copy found"
-        )
+        log(f"global core.excludesfile missing at {excludes_path} and no template copy found")
         return
 
     excludes_path.parent.mkdir(parents=True, exist_ok=True)
@@ -150,19 +155,24 @@ def ensure_global_gitignore(workspace: Path) -> None:
 def upsert_root_key(text: str, key: str, value: str) -> tuple[str, bool]:
     lines = text.splitlines()
     pattern = re.compile(rf"^\s*{re.escape(key)}\s*=")
+
     for i, line in enumerate(lines):
         if pattern.match(line):
             new_line = f'{key} = "{value}"'
+
             if line.strip() == new_line:
                 return text, False
+
             lines[i] = new_line
             return "\n".join(lines).rstrip() + "\n", True
 
     insert_at = len(lines)
+
     for i, line in enumerate(lines):
         if line.strip().startswith("["):
             insert_at = i
             break
+
     lines.insert(insert_at, f'{key} = "{value}"')
     return "\n".join(lines).rstrip() + "\n", True
 
@@ -170,20 +180,26 @@ def upsert_root_key(text: str, key: str, value: str) -> tuple[str, bool]:
 def rewrite_mcp_urls(text: str) -> tuple[str, bool]:
     changed = False
     out_lines: list[str] = []
+
     for line in text.splitlines():
         match = CODEX_MCP_URL_RE.match(line)
+
         if match:
             new_line = (
-                f'{match.group("prefix")}{match.group("scheme")}://'
+                f"{match.group('prefix')}{match.group('scheme')}://"
                 f"{CODEX_MCP_HOST}{match.group('rest')}{match.group('suffix')}"
             )
+
             if new_line != line:
                 changed = True
                 out_lines.append(new_line)
                 continue
+
         out_lines.append(line)
+
     if not changed:
         return text, False
+
     return "\n".join(out_lines).rstrip() + "\n", True
 
 
@@ -191,8 +207,10 @@ def rewrite_web_search_feature(text: str) -> tuple[str, bool]:
     in_features = False
     updated = False
     out_lines: list[str] = []
+
     for line in text.splitlines():
         stripped = line.strip()
+
         if stripped.startswith("["):
             in_features = stripped == "[features]"
             out_lines.append(line)
@@ -200,8 +218,10 @@ def rewrite_web_search_feature(text: str) -> tuple[str, bool]:
 
         if in_features:
             match = CODEX_WEB_SEARCH_REQUEST_RE.match(line)
+
             if match:
                 value = match.group("value").strip().strip('"').strip().lower()
+
                 if value in {"true", "1", "yes", "on"}:
                     replacement = "live"
                 elif value in {"false", "0", "no", "off"}:
@@ -219,6 +239,7 @@ def rewrite_web_search_feature(text: str) -> tuple[str, bool]:
 
     if not updated:
         return text, False
+
     return "\n".join(out_lines).rstrip() + "\n", True
 
 
@@ -227,41 +248,54 @@ def _parse_toml_array(value: str) -> list[str] | None:
         parsed = json.loads(value)
     except json.JSONDecodeError:
         return None
+
     if not isinstance(parsed, list):
         return None
+
     return [str(item) for item in parsed]
 
 
 def _find_section_range(lines: list[str], section_name: str) -> tuple[int | None, int]:
     section_header = f"[{section_name}]"
     start = None
+
     for i, line in enumerate(lines):
         if line.strip() == section_header:
             start = i
             break
+
     if start is None:
         return None, -1
+
     end = len(lines)
+
     for j in range(start + 1, len(lines)):
         if CODEX_MCP_SECTION_RE.match(lines[j]) and lines[j].strip() != section_header:
             end = j
             break
+
     return start, end
 
 
 def _get_disabled_mcp_servers() -> set[str]:
     raw = os.environ.get(DEVC_DISABLE_MCP_SERVERS_ENV, "")
+
     if not raw:
         return set()
 
     disabled: set[str] = set()
+
     for item in raw.replace(";", ",").replace(" ", ",").split(","):
         name = item.strip().lower()
+
         if not name:
             continue
+
         if name.startswith("mcp_servers."):
             name = name.removeprefix("mcp_servers.")
+
         disabled.add(name)
+
     return disabled
 
 
@@ -270,10 +304,13 @@ def _is_disabled_mcp_section(section_name: str, disabled: set[str]) -> bool:
         return False
 
     normalized = section_name.strip().lower()
+
     if normalized in disabled:
         return True
+
     if normalized.startswith("mcp_servers."):
         return normalized.removeprefix("mcp_servers.") in disabled
+
     return False
 
 
@@ -284,15 +321,20 @@ def _filter_disabled_mcp_sections(lines: list[str], disabled: set[str]) -> tuple
     out: list[str] = []
     removed = False
     i = 0
+
     while i < len(lines):
         line = lines[i]
         match = CODEX_MCP_SECTION_RE.match(line)
+
         if match and _is_disabled_mcp_section(match.group("section"), disabled):
             removed = True
             i += 1
+
             while i < len(lines) and not CODEX_MCP_SECTION_RE.match(lines[i]):
                 i += 1
+
             continue
+
         out.append(line)
         i += 1
 
@@ -303,8 +345,10 @@ def _ensure_section_key_int(lines: list[str], start: int, end: int, key: str, va
     for i in range(start + 1, end):
         if re.match(rf"^\s*{re.escape(key)}\s*=", lines[i]):
             new_line = f"{key} = {value}"
+
             if lines[i].strip() == new_line:
                 return False
+
             lines[i] = new_line
             return True
 
@@ -314,15 +358,19 @@ def _ensure_section_key_int(lines: list[str], start: int, end: int, key: str, va
 
 def _ensure_sentry_section_settings(lines: list[str], start: int, end: int) -> bool:
     updated = False
+
     for i in range(start + 1, end):
         if re.match(r"^\s*command\s*=", lines[i]) and "mcp-remote" not in lines[i]:
             lines[i] = 'command = "mcp-remote"'
             updated = True
 
         match = re.match(r"^\s*args\s*=\s*(\[.*\])\s*$", lines[i])
+
         if not match:
             continue
+
         values = _parse_toml_array(match.group(1))
+
         if not values:
             continue
 
@@ -337,7 +385,9 @@ def _ensure_sentry_section_settings(lines: list[str], start: int, end: int) -> b
         updated = True
 
     return (
-        _ensure_section_key_int(lines, start, end, "startup_timeout_sec", CODEX_MCP_STARTUP_TIMEOUT_SEC)
+        _ensure_section_key_int(
+            lines, start, end, "startup_timeout_sec", CODEX_MCP_STARTUP_TIMEOUT_SEC
+        )
         or updated
     )
 
@@ -346,29 +396,37 @@ def rewrite_mcp_server_settings(text: str) -> tuple[str, bool]:
     lines = text.splitlines()
     changed = False
     disabled_mcp_servers = _get_disabled_mcp_servers()
+
     if disabled_mcp_servers:
         lines, removed = _filter_disabled_mcp_sections(lines, disabled_mcp_servers)
         changed = changed or removed
 
     for section_name in ("mcp_servers.linear", "mcp_servers.sentry"):
         start, end = _find_section_range(lines, section_name)
+
         if start is None:
             continue
+
         if section_name == "mcp_servers.sentry":
             changed = _ensure_sentry_section_settings(lines, start, end) or changed
             continue
+
         changed = (
-            _ensure_section_key_int(lines, start, end, "startup_timeout_sec", CODEX_MCP_STARTUP_TIMEOUT_SEC)
+            _ensure_section_key_int(
+                lines, start, end, "startup_timeout_sec", CODEX_MCP_STARTUP_TIMEOUT_SEC
+            )
             or changed
         )
 
     if not changed:
         return text, False
+
     return "\n".join(lines).rstrip() + "\n", True
 
 
 def build_container_codex_config(source_text: str) -> tuple[str, bool]:
     text = source_text
+
     if text.lstrip().startswith(CODEX_CONFIG_HEADER):
         text = "\n".join(text.splitlines()[1:]).lstrip()
 
@@ -386,6 +444,7 @@ def build_container_codex_config(source_text: str) -> tuple[str, bool]:
         final = CODEX_CONFIG_HEADER + "\n" + text.lstrip()
     else:
         final = CODEX_CONFIG_HEADER + "\n"
+
     return final, updated
 
 
@@ -399,7 +458,9 @@ def ensure_codex_state_links(codex_dir: Path, host_dir: Path) -> None:
         if dest.is_symlink():
             if dest.resolve() == target.resolve():
                 return
+
             dest.unlink()
+
         if dest.exists() and not target.exists():
             try:
                 target.parent.mkdir(parents=True, exist_ok=True)
@@ -410,6 +471,7 @@ def ensure_codex_state_links(codex_dir: Path, host_dir: Path) -> None:
         elif dest.exists() and target.exists():
             log(f"skipping {dest.name}: exists locally and in host codex dir")
             return
+
         try:
             dest.symlink_to(target)
         except OSError as exc:
@@ -421,6 +483,7 @@ def ensure_codex_state_links(codex_dir: Path, host_dir: Path) -> None:
     for item in host_dir.iterdir():
         if item.name == "config.toml" or item.name in expected:
             continue
+
         link_path(codex_dir / item.name, item)
 
 
@@ -434,32 +497,40 @@ def ensure_codex_config() -> None:
 
     if codex_config.exists():
         existing = codex_config.read_text(encoding="utf-8")
+
         if existing.lstrip().startswith(CODEX_CONFIG_HEADER):
             source_text = host_config.read_text(encoding="utf-8") if host_config.exists() else ""
             new_text, updated = build_container_codex_config(source_text)
+
             if new_text != existing:
                 codex_config.write_text(new_text, encoding="utf-8")
                 log(f"updated container codex config at {codex_config}")
             else:
                 log(f"container codex config already up to date at {codex_config}")
+
             if updated:
                 log("applied container codex overrides (auth store + MCP host rewrite)")
+
             return
 
         new_text, updated = build_container_codex_config(existing)
+
         if new_text != existing:
             codex_config.write_text(new_text, encoding="utf-8")
             log(f"patched codex config at {codex_config}")
+
             if updated:
                 log("applied container codex overrides (auth store + MCP host rewrite)")
         else:
             log(f"codex config already configured at {codex_config}")
+
         return
 
     source_text = host_config.read_text(encoding="utf-8") if host_config.exists() else ""
     new_text, updated = build_container_codex_config(source_text)
     codex_config.write_text(new_text, encoding="utf-8")
     log(f"wrote container codex config to {codex_config}")
+
     if updated:
         log("applied container codex overrides (auth store + MCP host rewrite)")
 
@@ -468,6 +539,7 @@ def ensure_claude_config() -> None:
     claude_dir = Path(os.environ.get("CLAUDE_CONFIG_DIR", str(Path.home() / ".claude")))
     claude_dir.mkdir(parents=True, exist_ok=True)
     claude_config = claude_dir / "settings.json"
+
     if claude_config.exists():
         log(f"skipping claude settings (already exists at {claude_config})")
         return
@@ -489,12 +561,15 @@ def ensure_fish_config() -> None:
     )
     fish_config_dir.mkdir(parents=True, exist_ok=True)
     fish_config = fish_config_dir / "config.fish"
+
     if fish_config.exists():
         existing = fish_config.read_text(encoding="utf-8")
+
         if existing.lstrip().startswith("# default fish config for the devcontainer"):
             fish_config.write_text(FISH_CONFIG, encoding="utf-8")
             log(f"updated default fish config at {fish_config}")
             return
+
         log(f"skipping fish config (already exists at {fish_config})")
         return
 
@@ -505,14 +580,18 @@ def ensure_fish_config() -> None:
 def ensure_shell_aliases() -> None:
     for rc_file in (Path.home() / ".bashrc", Path.home() / ".zshrc"):
         rc_file.parent.mkdir(parents=True, exist_ok=True)
+
         if rc_file.exists():
             existing = rc_file.read_text(encoding="utf-8")
+
             if "agent aliases (devcontainer)" in existing:
                 continue
+
             content = existing.rstrip() + "\n\n" + SHELL_ALIASES
             rc_file.write_text(content, encoding="utf-8")
             log(f"updated aliases in {rc_file}")
             continue
+
         rc_file.write_text(SHELL_ALIASES, encoding="utf-8")
         log(f"wrote aliases to {rc_file}")
 
@@ -528,6 +607,7 @@ def ensure_fish_history() -> None:
     if fish_history.is_symlink():
         if fish_history.resolve() == target:
             return
+
         fish_history.unlink()
         fish_history.symlink_to(target)
         log(f"updated fish history symlink at {fish_history}")
@@ -548,14 +628,18 @@ def ensure_fish_history() -> None:
 def ensure_uv_tools() -> None:
     tools = ("ruff", "pytest", "mypy", "prek")
     missing = [tool for tool in tools if shutil.which(tool) is None]
+
     if not missing:
         log("uv tools already installed")
         return
+
     if shutil.which("uv") is None:
         log("uv not found; skipping uv tool install")
         return
+
     log(f"installing uv tools: {', '.join(missing)}")
     failed: list[str] = []
+
     for tool in missing:
         cmd = ["uv", "tool", "install", tool]
         result = subprocess.run(
@@ -564,10 +648,12 @@ def ensure_uv_tools() -> None:
             capture_output=True,
             text=True,
         )
+
         if result.returncode != 0:
             detail = result.stderr.strip() or result.stdout.strip()
             log(f"uv tool install failed for {tool}: {detail}")
             failed.append(tool)
+
     if failed:
         log(f"uv tool install incomplete (failed: {', '.join(failed)})")
     else:
@@ -579,6 +665,7 @@ def ensure_mcp_remote() -> None:
         return
 
     npm_bin = shutil.which("npm")
+
     if npm_bin is None:
         log("npm not found; skipping mcp-remote install")
         return
@@ -590,6 +677,7 @@ def ensure_mcp_remote() -> None:
         capture_output=True,
         text=True,
     )
+
     if result.returncode != 0:
         detail = result.stderr.strip() or result.stdout.strip()
         log(f"mcp-remote install failed; sentry MCP will rely on existing config: {detail}")
@@ -600,6 +688,7 @@ def ensure_mcp_remote() -> None:
 
 def ensure_latest_codex() -> None:
     npm_bin = shutil.which("npm")
+
     if npm_bin is None:
         log("npm not found; skipping codex update")
         return
@@ -610,6 +699,7 @@ def ensure_latest_codex() -> None:
         capture_output=True,
         text=True,
     )
+
     if result.returncode != 0:
         detail = result.stderr.strip() or result.stdout.strip()
         log(f"codex update check failed: {detail}")
@@ -629,6 +719,7 @@ def ensure_latest_takopi() -> None:
         capture_output=True,
         text=True,
     )
+
     if result.returncode != 0:
         detail = result.stderr.strip() or result.stdout.strip()
         log(f"takopi update check failed: {detail}")
@@ -639,8 +730,10 @@ def ensure_latest_takopi() -> None:
 
 def _node_modules_ready(path: Path) -> bool:
     node_modules = path / "node_modules"
+
     if not node_modules.is_dir():
         return False
+
     try:
         return any(node_modules.iterdir())
     except OSError:
@@ -649,15 +742,20 @@ def _node_modules_ready(path: Path) -> bool:
 
 def _read_package_manager(path: Path) -> str | None:
     package_json = path / "package.json"
+
     if not package_json.exists():
         return None
+
     try:
         data = json.loads(package_json.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return None
+
     package_manager = data.get("packageManager")
+
     if isinstance(package_manager, str):
         return package_manager
+
     return None
 
 
@@ -668,6 +766,7 @@ def _bun_lock_present(path: Path) -> bool:
 def _uses_bun(path: Path) -> bool:
     if _bun_lock_present(path):
         return True
+
     package_manager = _read_package_manager(path)
     return bool(package_manager and package_manager.startswith("bun@"))
 
@@ -675,29 +774,39 @@ def _uses_bun(path: Path) -> bool:
 def _bun_install_args(path: Path) -> list[str]:
     if _bun_lock_present(path):
         return ["--frozen-lockfile"]
+
     return []
+
 
 def _read_workspaces_from_package_json(workspace: Path) -> list[str]:
     package_json = workspace / "package.json"
+
     if not package_json.exists():
         return []
+
     try:
         data = json.loads(package_json.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return []
+
     workspaces = data.get("workspaces")
+
     if isinstance(workspaces, list):
         return [item for item in workspaces if isinstance(item, str)]
+
     if isinstance(workspaces, dict):
         packages = workspaces.get("packages")
+
         if isinstance(packages, list):
             return [item for item in packages if isinstance(item, str)]
+
     return []
 
 
 def _read_workspaces_from_pnpm(path: Path) -> list[str]:
     if not path.exists():
         return []
+
     try:
         lines = path.read_text(encoding="utf-8").splitlines()
     except OSError:
@@ -709,19 +818,23 @@ def _read_workspaces_from_pnpm(path: Path) -> list[str]:
 
     for line in lines:
         stripped = line.strip()
+
         if not stripped or stripped.startswith("#"):
             continue
+
         if not in_packages:
             if stripped.startswith("packages:"):
                 in_packages = True
                 base_indent = len(line) - len(line.lstrip())
-                inline = stripped[len("packages:"):].strip()
+                inline = stripped[len("packages:") :].strip()
+
                 if inline:
                     if inline.startswith("[") and inline.endswith("]"):
                         try:
                             value = ast.literal_eval(inline)
                         except Exception:
                             value = None
+
                         if isinstance(value, list):
                             for item in value:
                                 if isinstance(item, str):
@@ -731,19 +844,25 @@ def _read_workspaces_from_pnpm(path: Path) -> list[str]:
                             inline.startswith('"') and inline.endswith('"')
                         ):
                             inline = inline[1:-1]
+
                         patterns.append(inline)
+
                 continue
         else:
             indent = len(line) - len(line.lstrip())
+
             if indent <= base_indent:
                 in_packages = False
                 continue
+
             if stripped.startswith("-"):
                 item = stripped[1:].strip()
+
                 if (item.startswith("'") and item.endswith("'")) or (
                     item.startswith('"') and item.endswith('"')
                 ):
                     item = item[1:-1]
+
                 if item:
                     patterns.append(item)
 
@@ -752,8 +871,10 @@ def _read_workspaces_from_pnpm(path: Path) -> list[str]:
 
 def _normalize_workspace_pattern(pattern: str) -> str:
     normalized = pattern.strip()
+
     if normalized.startswith("./"):
         normalized = normalized[2:]
+
     return normalized
 
 
@@ -763,10 +884,13 @@ def _collect_workspace_targets(workspace: Path, patterns: list[str]) -> list[Pat
 
     for raw in patterns:
         normalized = _normalize_workspace_pattern(raw)
+
         if not normalized:
             continue
+
         if normalized.startswith("!"):
             excluded = normalized[1:].strip()
+
             if excluded:
                 excludes.append(excluded)
         else:
@@ -776,35 +900,45 @@ def _collect_workspace_targets(workspace: Path, patterns: list[str]) -> list[Pat
         return []
 
     candidates: set[Path] = set()
+
     for pattern in includes:
         for match in workspace.glob(pattern):
             if match.is_file() and match.name == "package.json":
                 match = match.parent
+
             if match.is_dir():
                 candidates.add(match)
 
     if excludes:
         excluded_paths: set[Path] = set()
+
         for pattern in excludes:
             for match in workspace.glob(pattern):
                 if match.is_file() and match.name == "package.json":
                     match = match.parent
+
                 if match.is_dir():
                     excluded_paths.add(match)
+
         candidates -= excluded_paths
 
     results: list[Path] = []
+
     for path in candidates:
         if "node_modules" in path.parts:
             continue
+
         if not (path / "package.json").exists():
             continue
+
         try:
             relative = path.relative_to(workspace)
         except ValueError:
             continue
+
         if relative.as_posix() == ".":
             continue
+
         results.append(path)
 
     return sorted(results, key=lambda item: item.as_posix())
@@ -812,6 +946,7 @@ def _collect_workspace_targets(workspace: Path, patterns: list[str]) -> list[Pat
 
 def _iter_bun_targets(workspace: Path) -> list[Path]:
     targets: list[Path] = []
+
     if (workspace / "package.json").exists():
         targets.append(workspace)
 
@@ -825,12 +960,16 @@ def _iter_bun_targets(workspace: Path) -> list[Path]:
 
     seen: set[Path] = set()
     deduped: list[Path] = []
+
     for path in targets:
         resolved = path.resolve()
+
         if resolved in seen:
             continue
+
         seen.add(resolved)
         deduped.append(path)
+
     return deduped
 
 
@@ -838,22 +977,28 @@ def ensure_bun_deps(workspace: Path) -> None:
     if os.environ.get("DEVCONTAINER_SKIP_BUN_INSTALL", "").lower() in ("1", "true", "yes"):
         log("skipping bun install (DEVCONTAINER_SKIP_BUN_INSTALL set)")
         return
+
     if shutil.which("bun") is None:
         log("bun not found; skipping bun installs")
         return
 
     for path in _iter_bun_targets(workspace):
         label = str(path.relative_to(workspace)) if path != workspace else "workspace root"
+
         if not _uses_bun(path):
             log(f"skipping bun install in {label} (no bun lock or packageManager)")
             continue
+
         if not _bun_lock_present(path):
             log(f"skipping bun install in {label} (missing bun lockfile)")
             continue
+
         ensure_dir_ownership(path / "node_modules")
+
         if _node_modules_ready(path):
             log(f"skipping bun install in {label} (node_modules exists)")
             continue
+
         cmd = ["bun", "install", *_bun_install_args(path)]
         log(f"installing bun deps in {label}")
         result = subprocess.run(
@@ -863,6 +1008,7 @@ def ensure_bun_deps(workspace: Path) -> None:
             capture_output=True,
             text=True,
         )
+
         if result.returncode != 0:
             detail = result.stderr.strip() or result.stdout.strip()
             log(f"bun install failed in {label}: {detail}")
@@ -870,6 +1016,7 @@ def ensure_bun_deps(workspace: Path) -> None:
 
 def ensure_dir_ownership(path: Path) -> None:
     path.mkdir(parents=True, exist_ok=True)
+
     try:
         stat = path.stat()
     except OSError as exc:
@@ -878,18 +1025,22 @@ def ensure_dir_ownership(path: Path) -> None:
 
     uid = os.getuid()
     gid = os.getgid()
+
     if stat.st_uid == uid and stat.st_gid == gid:
         return
 
     result = run_sudo(["chown", "-R", f"{uid}:{gid}", str(path)])
+
     if result.returncode != 0:
         log(f"failed to chown {path}: {result.stderr.strip()}")
         return
+
     log(f"fixed ownership for {path}")
 
 
 def install_tmux_config() -> None:
     tmux_dest = Path.home() / ".tmux.conf"
+
     if tmux_dest.exists():
         log(f"skipping tmux config (already exists at {tmux_dest})")
         return
@@ -900,6 +1051,7 @@ def install_tmux_config() -> None:
 
 def main() -> None:
     workspace = resolve_workspace()
+
     if not is_git_repo(workspace):
         log(f"skipping git repo checks (no repo at {workspace})")
 
@@ -910,13 +1062,17 @@ def main() -> None:
     ensure_dir_ownership(Path.home() / ".takopi")
     ensure_dir_ownership(Path.home() / ".config" / "gh")
     uv_env = os.environ.get("UV_PROJECT_ENVIRONMENT")
+
     if uv_env:
         ensure_dir_ownership(Path(uv_env))
+
     ensure_fish_history()
     ensure_global_gitignore(workspace)
     disabled_mcp_servers = _get_disabled_mcp_servers()
+
     if "sentry" not in disabled_mcp_servers:
         ensure_mcp_remote()
+
     ensure_codex_config()
     ensure_latest_codex()
     ensure_codex_state_links(

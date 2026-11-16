@@ -18,7 +18,7 @@ test("assertAllowedFlags rejects unknown flags", () => {
 				"--dry-run": true,
 			},
 			["--model", "--dry-run"],
-		)
+		),
 	);
 	assert.throws(
 		() => assertAllowedFlags({ "--model": "gpt-5", "--skill": "example-skill" }, ["--model"]),
@@ -39,10 +39,7 @@ test("resolveCasesPath checks for existing files", async () => {
 		() => resolveCasesPath(dir, "missing.jsonl", "default.jsonl"),
 		/Cases path not found/,
 	);
-	await assert.rejects(
-		() => resolveCasesPath(dir, true, "default.jsonl"),
-		/--cases/,
-	);
+	await assert.rejects(() => resolveCasesPath(dir, true, "default.jsonl"), /--cases/);
 
 	await rm(dir, { recursive: true, force: true });
 });

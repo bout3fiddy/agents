@@ -6,14 +6,27 @@ import type { VerificationCommand, VerificationResult } from "../../data/types.j
 const DEFAULT_TIMEOUT_MS = 120_000;
 const DEFAULT_MAX_OUTPUT_BYTES = 16_000;
 
-const appendLimited = (current: string, chunk: string, maxBytes: number): { value: string; truncated: boolean } => {
-	if (Buffer.byteLength(current, "utf-8") >= maxBytes) return { value: current, truncated: true };
+const appendLimited = (
+	current: string,
+	chunk: string,
+	maxBytes: number,
+): { value: string; truncated: boolean } => {
+	if (Buffer.byteLength(current, "utf-8") >= maxBytes) {
+		return { value: current, truncated: true };
+	}
+
 	const combined = `${current}${chunk}`;
-	if (Buffer.byteLength(combined, "utf-8") <= maxBytes) return { value: combined, truncated: false };
+
+	if (Buffer.byteLength(combined, "utf-8") <= maxBytes) {
+		return { value: combined, truncated: false };
+	}
+
 	let value = combined;
+
 	while (Buffer.byteLength(value, "utf-8") > maxBytes && value.length > 0) {
 		value = value.slice(0, -1);
 	}
+
 	return { value: `${value}\n[output truncated]\n`, truncated: true };
 };
 
@@ -23,11 +36,13 @@ export const runVerificationCommands = async (
 ): Promise<{ results: VerificationResult[]; errors: string[] }> => {
 	const results: VerificationResult[] = [];
 	const errors: string[] = [];
+
 	for (const command of commands ?? []) {
 		if (!Array.isArray(command.argv) || command.argv.length === 0) {
 			errors.push(`verification '${command.label}' has empty argv`);
 			continue;
 		}
+
 		const maxOutputBytes = command.maxOutputBytes ?? DEFAULT_MAX_OUTPUT_BYTES;
 		const timeoutMs = command.timeoutMs ?? DEFAULT_TIMEOUT_MS;
 		const startedAt = Date.now();
@@ -85,10 +100,14 @@ export const runVerificationCommands = async (
 		results.push(result);
 
 		const failed = timedOut || exitCode !== 0;
+
 		if (failed && command.allowFailure !== true) {
-			const exitText = timedOut ? `timed out after ${timeoutMs}ms` : `exit ${exitCode ?? "unknown"}`;
+			const exitText = timedOut
+				? `timed out after ${timeoutMs}ms`
+				: `exit ${exitCode ?? "unknown"}`;
 			errors.push(`verification '${command.label}' failed: ${exitText}`);
 		}
 	}
+
 	return { results, errors };
 };

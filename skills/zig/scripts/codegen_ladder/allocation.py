@@ -18,20 +18,18 @@ def allocation_expectation(
 ) -> JsonObject | None:
     if expected_allocs is None:
         return None
+
     if missing_reason:
         return {
             "expected_allocations": expected_allocs,
             "status": "unknown",
             "reason": missing_reason,
         }
+
     return {
         "expected_allocations": expected_allocs,
         "actual_allocations": count,
-        "status": "unknown"
-        if count is None
-        else "pass"
-        if count == expected_allocs
-        else "review",
+        "status": "unknown" if count is None else "pass" if count == expected_allocs else "review",
     }
 
 
@@ -40,15 +38,19 @@ def parse_allocation_text(text: str) -> JsonValue:
         return load_json_value(text)
     except json.JSONDecodeError:
         parsed: JsonObject = {}
+
         for match in re.finditer(r"([A-Za-z_][A-Za-z0-9_]*)=(\d+)", text):
             parsed[match.group(1)] = int(match.group(2))
+
         return parsed or {"raw": text}
 
 
 def allocation_count(data: JsonValue) -> int | None:
     data_object = as_json_object(data)
+
     if data_object is None:
         return None
+
     for key in (
         "allocations",
         "allocation_count",
@@ -56,8 +58,10 @@ def allocation_count(data: JsonValue) -> int | None:
         "total_allocations",
     ):
         value = data_object.get(key)
+
         if isinstance(value, int):
             return value
+
     return None
 
 
@@ -73,9 +77,12 @@ def read_allocation_report(
                 None, expect_allocs, "no allocation report path supplied"
             ),
         }
+
     path = Path(path_value)
+
     if not path.is_absolute():
         path = cwd / path
+
     if not path.exists():
         return {
             "status": "missing",

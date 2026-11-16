@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 import path from "node:path";
 import test from "node:test";
 import { tmpdir } from "node:os";
-import { assertManagedTempPath, resolveCanonicalPath, toSafePathSegment } from "../../../src/runtime/policy/path-policy.js";
+import {
+	assertManagedTempPath,
+	resolveCanonicalPath,
+	toSafePathSegment,
+} from "../../../src/runtime/policy/path-policy.js";
 
 test("toSafePathSegment strips traversal and absolute-path characters", () => {
 	assert.equal(toSafePathSegment("../../etc/passwd"), "etc-passwd");
@@ -48,6 +52,7 @@ test("resolveCanonicalPath uses cache on second call", async () => {
 test("resolveCanonicalPath parent-walks for non-existent paths", async () => {
 	const nonExistent = path.join(tmpdir(), "does-not-exist-" + Date.now(), "child");
 	const result = await resolveCanonicalPath(nonExistent);
+
 	// Should resolve to something based on the existing parent (tmpdir)
 	assert.ok(result);
 	assert.ok(result.includes("does-not-exist"));

@@ -10,12 +10,7 @@ import type {
 	ModelSpec,
 	RpcDiagnostics,
 } from "../../data/types.js";
-import {
-	fileExists,
-	parsePositiveInt,
-	sleep,
-	withTimeout,
-} from "../../data/utils.js";
+import { fileExists, parsePositiveInt, sleep, withTimeout } from "../../data/utils.js";
 import { buildWorkerEnv } from "../worker/worker-contract.js";
 import { toSafePathSegment } from "../policy/path-policy.js";
 import {
@@ -28,10 +23,7 @@ import {
 import { buildTimeoutDiagnosticsHint, persistRpcDiagnostics } from "../rpc/rpc-diagnostics.js";
 import { createRpcStepTraceCollector } from "../rpc/rpc-step-trace.js";
 import { createRpcState } from "../rpc/rpc-state.js";
-import {
-	createMandatorySandboxEngine,
-	type SandboxEngine,
-} from "../engine/sandbox-engine.js";
+import { createMandatorySandboxEngine, type SandboxEngine } from "../engine/sandbox-engine.js";
 
 const DEFAULT_CASE_TIMEOUT_MS = 600_000;
 const DEFAULT_SHUTDOWN_TIMEOUT_MS = 30_000;
@@ -39,12 +31,21 @@ const DEFAULT_SHUTDOWN_TIMEOUT_MS = 30_000;
 const parsePositiveIntEnv = (name: string, fallback: number): number =>
 	parsePositiveInt(process.env[name], fallback);
 
-const waitForFile = async (filePath: string, timeoutMs = 10_000, intervalMs = 250): Promise<boolean> => {
+const waitForFile = async (
+	filePath: string,
+	timeoutMs = 10_000,
+	intervalMs = 250,
+): Promise<boolean> => {
 	const startedAt = Date.now();
+
 	while (Date.now() - startedAt < timeoutMs) {
-		if (await fileExists(filePath)) return true;
+		if (await fileExists(filePath)) {
+			return true;
+		}
+
 		await sleep(intervalMs);
 	}
+
 	return false;
 };
 
@@ -54,23 +55,27 @@ const buildWorkerArgs = (
 	tools: string[],
 	extensionEntry: string,
 ): string[] => [
-		"--mode",
-		"rpc",
-		"--no-session",
-		"--no-extensions",
-		"-e",
-		extensionEntry,
-		"--tools",
-		tools.join(","),
-		"--provider",
-		model.provider,
-		"--model",
-		model.id,
-		"--thinking",
-		thinkingLevel,
-	];
+	"--mode",
+	"rpc",
+	"--no-session",
+	"--no-extensions",
+	"-e",
+	extensionEntry,
+	"--tools",
+	tools.join(","),
+	"--provider",
+	model.provider,
+	"--model",
+	model.id,
+	"--thinking",
+	thinkingLevel,
+];
 
-export const buildStubResult = (caseId: string, dryRun: boolean, errors: string[]): CaseRunResult => ({
+export const buildStubResult = (
+	caseId: string,
+	dryRun: boolean,
+	errors: string[],
+): CaseRunResult => ({
 	caseId,
 	dryRun,
 	model: null,
@@ -95,42 +100,63 @@ const collectWorkerResult = async (params: {
 	const { outputPath, evalCase, dryRun, stderrChunks, promptError } = params;
 	const outputReady = await waitForFile(outputPath, 15_000);
 	const stderrLines = stderrChunks.map((line) => line.trim()).filter(Boolean);
+
 	if (!outputReady) {
-		return buildStubResult(evalCase.id, dryRun, [promptError ?? "no output from worker", ...stderrLines]);
+		return buildStubResult(evalCase.id, dryRun, [
+			promptError ?? "no output from worker",
+			...stderrLines,
+		]);
 	}
+
 	const raw = await readFile(outputPath, "utf-8");
 	const result = JSON.parse(raw) as CaseRunResult;
+
 	if (result.workerReady !== true) {
 		return buildStubResult(evalCase.id, dryRun, [
 			"eval worker extension handshake missing",
 			...stderrLines,
 		]);
 	}
-	if (promptError) result.errors.push(promptError);
-	if (stderrLines.length > 0) result.errors.push(...stderrLines);
+
+	if (promptError) {
+		result.errors.push(promptError);
+	}
+
+	if (stderrLines.length > 0) {
+		result.errors.push(...stderrLines);
+	}
+
 	return result;
 };
 
 const pushUniqueError = (errors: string[], message: string) => {
-	if (!errors.includes(message)) errors.push(message);
+	if (!errors.includes(message)) {
+		errors.push(message);
+	}
 };
 
 const attachRpcDiagnostics = (result: CaseRunResult, diagnostics: RpcDiagnostics) => {
 	result.rpcDiagnostics = diagnostics;
+
 	if (diagnostics.parseErrorCount > 0) {
 		pushUniqueError(
 			result.errors,
-			`rpc diagnostics: ${diagnostics.parseErrorCount} non-JSON line(s) in RPC stream`,
+			"rpc diagnostics: " + `${diagnostics.parseErrorCount}` + " non-JSON line(s) in RPC stream",
 		);
 	}
+
 	const maxDetailedAnomalies = 3;
+
 	for (const anomaly of diagnostics.anomalies.slice(0, maxDetailedAnomalies)) {
 		pushUniqueError(result.errors, `rpc diagnostics: ${anomaly}`);
 	}
+
 	if (diagnostics.anomalies.length > maxDetailedAnomalies) {
 		pushUniqueError(
 			result.errors,
-			`rpc diagnostics: ${diagnostics.anomalies.length - maxDetailedAnomalies} additional anomaly/anomalies omitted`,
+			"rpc diagnostics: " +
+				`${diagnostics.anomalies.length - maxDetailedAnomalies}` +
+				" additional anomaly/anomalies omitted",
 		);
 	}
 };
@@ -175,11 +201,15 @@ export const runCaseProcess = async (params: {
 	const outputFile = `${toSafePathSegment(evalCase.id, "case")}.json`;
 	const outputPath = path.join(outputDir, outputFile);
 	const rpcTraceDir = process.env.PI_EVAL_RPC_TRACE_DIR?.trim() || "";
-	const rpcTracePath = rpcTraceDir.length > 0
-		? path.join(path.resolve(rpcTraceDir), `${toSafePathSegment(evalCase.id, "case")}.jsonl`)
-		: null;
+	const rpcTracePath =
+		rpcTraceDir.length > 0
+			? path.join(path.resolve(rpcTraceDir), `${toSafePathSegment(evalCase.id, "case")}.jsonl`)
+			: null;
 	const rpcDiagnosticsPath = rpcTracePath
-		? path.join(path.dirname(rpcTracePath), `${toSafePathSegment(evalCase.id, "case")}.diagnostics.json`)
+		? path.join(
+				path.dirname(rpcTracePath),
+				`${toSafePathSegment(evalCase.id, "case")}.diagnostics.json`,
+			)
 		: null;
 	const guestOutputPath = `${GUEST_OUTPUT_DIR}/${outputFile}`;
 	const guestExtensionEntry = hostPathToGuest(extensionEntry, cwd, GUEST_WORKSPACE_DIR);
@@ -205,7 +235,10 @@ export const runCaseProcess = async (params: {
 		process.env,
 	);
 	await mkdir(outputDir, { recursive: true });
-	if (rpcTracePath) await mkdir(path.dirname(rpcTracePath), { recursive: true });
+
+	if (rpcTracePath) {
+		await mkdir(path.dirname(rpcTracePath), { recursive: true });
+	}
 
 	const engine = sandboxEngine ?? createMandatorySandboxEngine();
 	const launch = await engine.launchWorker({
@@ -224,7 +257,10 @@ export const runCaseProcess = async (params: {
 
 	const stepTrace = createRpcStepTraceCollector();
 	const rpcState = createRpcState((line) => {
-		if (!rpcTracePath) return;
+		if (!rpcTracePath) {
+			return;
+		}
+
 		appendFile(rpcTracePath, `${line}\n`).catch(() => undefined);
 	});
 	const originalOnLine = rpcState.onLine;
@@ -239,8 +275,12 @@ export const runCaseProcess = async (params: {
 		for (const prompt of prompts) {
 			launch.stdin.write(`${JSON.stringify({ type: "prompt", message: prompt })}\n`);
 			await withTimeout(rpcState.waitForAgentEnd(), caseTimeoutMs, `Case ${evalCase.id}`);
-			if (rpcState.promptError) break;
+
+			if (rpcState.promptError) {
+				break;
+			}
 		}
+
 		launch.stdin.end();
 		const closePromise = launch.waitForExit();
 
@@ -256,6 +296,7 @@ export const runCaseProcess = async (params: {
 		const diagnostics = rpcState.diagnostics();
 		attachRpcDiagnostics(result, diagnostics);
 		await persistRpcDiagnostics(rpcDiagnosticsPath, diagnostics);
+
 		try {
 			await withTimeout(closePromise, shutdownTimeoutMs, `Case ${evalCase.id} shutdown`);
 		} catch (error) {
@@ -264,17 +305,22 @@ export const runCaseProcess = async (params: {
 			launch.kill();
 			await closePromise.catch(() => undefined);
 		}
+
 		return result;
 	} catch (error) {
 		const diagnostics = rpcState.diagnostics();
 		await persistRpcDiagnostics(rpcDiagnosticsPath, diagnostics);
+
 		if (
 			error instanceof Error &&
 			error.message.includes(`Case ${evalCase.id}`) &&
 			error.message.includes("timed out")
 		) {
-			throw new Error(`${error.message}${buildTimeoutDiagnosticsHint(diagnostics)}`, { cause: error });
+			throw new Error(`${error.message}${buildTimeoutDiagnosticsHint(diagnostics)}`, {
+				cause: error,
+			});
 		}
+
 		throw error;
 	} finally {
 		rpcState.dispose();

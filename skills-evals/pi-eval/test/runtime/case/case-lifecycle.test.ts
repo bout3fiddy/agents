@@ -19,7 +19,9 @@ import {
 	mirrorBootstrapPayloadToWorkspace,
 } from "../../../src/runtime/case/bootstrap.js";
 
-const buildEvalCase = (bootstrapProfile: "full_payload" | "no_payload" = "full_payload"): EvalCase => ({
+const buildEvalCase = (
+	bootstrapProfile: "full_payload" | "no_payload" = "full_payload",
+): EvalCase => ({
 	id: "CD-015-NS-UT",
 	suite: "pi-eval",
 	prompt: "Audit sandbox deny paths.",
@@ -29,67 +31,79 @@ const buildEvalCase = (bootstrapProfile: "full_payload" | "no_payload" = "full_p
 	bootstrapProfile,
 });
 
-test("buildProfileReadDenyPaths hardens no-payload with workspace and sandbox-home skill surfaces", async () => {
-	const workspaceAgentDir = await mkdtemp(path.join(tmpdir(), "pi-eval-workspace-"));
-	const homeDir = await mkdtemp(path.join(tmpdir(), "pi-eval-home-"));
+test(
+	"buildProfileReadDenyPaths hardens no-payload with workspace and sand" +
+		"box-home skill surfaces",
+	async () => {
+		const workspaceAgentDir = await mkdtemp(path.join(tmpdir(), "pi-eval-workspace-"));
+		const homeDir = await mkdtemp(path.join(tmpdir(), "pi-eval-home-"));
 
-	const denyPaths = buildProfileReadDenyPaths({
-		evalCase: buildEvalCase("no_payload"),
-		workspaceAgentDir,
-		homeDir,
-		bootstrapProfile: "no_payload",
-	});
+		const denyPaths = buildProfileReadDenyPaths({
+			evalCase: buildEvalCase("no_payload"),
+			workspaceAgentDir,
+			homeDir,
+			bootstrapProfile: "no_payload",
+		});
 
-	const expected = [
-		path.join(workspaceAgentDir, "skills"),
-		path.join(workspaceAgentDir, "instructions"),
-		path.join(workspaceAgentDir, ".agents"),
-		path.join(workspaceAgentDir, ".codex"),
-		path.join(workspaceAgentDir, ".pi"),
-		path.join(workspaceAgentDir, "AGENTS.md"),
+		const expected = [
+			path.join(workspaceAgentDir, "skills"),
+			path.join(workspaceAgentDir, "instructions"),
+			path.join(workspaceAgentDir, ".agents"),
+			path.join(workspaceAgentDir, ".codex"),
+			path.join(workspaceAgentDir, ".pi"),
+			path.join(workspaceAgentDir, "AGENTS.md"),
 			path.join(homeDir, ".agents"),
 			path.join(homeDir, ".codex"),
 			path.join(homeDir, ".codex", "skills"),
 			path.join(homeDir, ".pi"),
 		];
-	for (const expectedPath of expected) {
-		assert.ok(denyPaths.includes(expectedPath), `missing deny path: ${expectedPath}`);
-	}
 
-	await rm(workspaceAgentDir, { recursive: true, force: true });
-	await rm(homeDir, { recursive: true, force: true });
-});
+		for (const expectedPath of expected) {
+			assert.ok(denyPaths.includes(expectedPath), `missing deny path: ${expectedPath}`);
+		}
 
-test("buildProfileReadDenyPaths does not inject no-payload-specific blocks into full payload", async () => {
-	const workspaceAgentDir = await mkdtemp(path.join(tmpdir(), "pi-eval-workspace-full-"));
-	const homeDir = await mkdtemp(path.join(tmpdir(), "pi-eval-home-full-"));
+		await rm(workspaceAgentDir, { recursive: true, force: true });
+		await rm(homeDir, { recursive: true, force: true });
+	},
+);
 
-	const denyPaths = buildProfileReadDenyPaths({
-		evalCase: buildEvalCase("full_payload"),
-		workspaceAgentDir,
-		homeDir,
-		bootstrapProfile: "full_payload",
-	});
+test(
+	"buildProfileReadDenyPaths does not inject no-payload-specific blocks" + " into full payload",
+	async () => {
+		const workspaceAgentDir = await mkdtemp(path.join(tmpdir(), "pi-eval-workspace-full-"));
+		const homeDir = await mkdtemp(path.join(tmpdir(), "pi-eval-home-full-"));
 
-	const forbiddenForNoPayload = [
-		path.join(workspaceAgentDir, "skills"),
-		path.join(workspaceAgentDir, "instructions"),
-		path.join(workspaceAgentDir, ".agents"),
-		path.join(workspaceAgentDir, ".codex"),
-		path.join(workspaceAgentDir, ".pi"),
-		path.join(workspaceAgentDir, "AGENTS.md"),
-		path.join(homeDir, ".agents"),
-		path.join(homeDir, ".codex"),
-		path.join(homeDir, ".codex", "skills"),
-		path.join(homeDir, ".pi"),
-	];
-	for (const blocked of forbiddenForNoPayload) {
-		assert.ok(!denyPaths.includes(blocked), `unexpected no-payload deny path in full payload: ${blocked}`);
-	}
+		const denyPaths = buildProfileReadDenyPaths({
+			evalCase: buildEvalCase("full_payload"),
+			workspaceAgentDir,
+			homeDir,
+			bootstrapProfile: "full_payload",
+		});
 
-	await rm(workspaceAgentDir, { recursive: true, force: true });
-	await rm(homeDir, { recursive: true, force: true });
-});
+		const forbiddenForNoPayload = [
+			path.join(workspaceAgentDir, "skills"),
+			path.join(workspaceAgentDir, "instructions"),
+			path.join(workspaceAgentDir, ".agents"),
+			path.join(workspaceAgentDir, ".codex"),
+			path.join(workspaceAgentDir, ".pi"),
+			path.join(workspaceAgentDir, "AGENTS.md"),
+			path.join(homeDir, ".agents"),
+			path.join(homeDir, ".codex"),
+			path.join(homeDir, ".codex", "skills"),
+			path.join(homeDir, ".pi"),
+		];
+
+		for (const blocked of forbiddenForNoPayload) {
+			assert.ok(
+				!denyPaths.includes(blocked),
+				`unexpected no-payload deny path in full payload: ${blocked}`,
+			);
+		}
+
+		await rm(workspaceAgentDir, { recursive: true, force: true });
+		await rm(homeDir, { recursive: true, force: true });
+	},
+);
 
 test("hardenNoPayloadWorkspace removes blocklisted skill and directive paths", async () => {
 	const workspaceAgentDir = await mkdtemp(path.join(tmpdir(), "pi-eval-harden-"));
@@ -113,116 +127,167 @@ test("hardenNoPayloadWorkspace removes blocklisted skill and directive paths", a
 	for (const target of blocklisted.slice(0, 6)) {
 		assert.equal(await fileExists(target), false, `expected removed path: ${target}`);
 	}
+
 	assert.equal(await fileExists(blocklisted[6]), true, "non-blocklisted path should remain");
 
 	await rm(workspaceAgentDir, { recursive: true, force: true });
 });
 
-test("mirrorBootstrapPayloadToWorkspace projects synced bootstrap files into workspace root paths", async () => {
-	const workspaceAgentDir = await mkdtemp(path.join(tmpdir(), "pi-eval-workspace-bootstrap-"));
-	const homeDir = await mkdtemp(path.join(tmpdir(), "pi-eval-home-bootstrap-"));
-	try {
-		await mkdir(path.join(homeDir, ".agents", "skills", "example-skill"), { recursive: true });
-		await writeFile(path.join(homeDir, ".agents", "AGENTS.md"), "# sandbox instructions\n", "utf-8");
-		await writeFile(path.join(homeDir, ".agents", "skills", "example-skill", "SKILL.md"), "# example-skill skill\n", "utf-8");
+test(
+	"mirrorBootstrapPayloadToWorkspace projects synced bootstrap files in" +
+		"to workspace root paths",
+	async () => {
+		const workspaceAgentDir = await mkdtemp(path.join(tmpdir(), "pi-eval-workspace-bootstrap-"));
+		const homeDir = await mkdtemp(path.join(tmpdir(), "pi-eval-home-bootstrap-"));
 
-		await mirrorBootstrapPayloadToWorkspace({
-			workspaceAgentDir,
-			homeDir,
-		});
-
-		assert.equal(await fileExists(path.join(workspaceAgentDir, "AGENTS.md")), true);
-		assert.equal(
-			await fileExists(path.join(workspaceAgentDir, "skills", "example-skill", "SKILL.md")),
-			true,
-		);
-	} finally {
-		await rm(workspaceAgentDir, { recursive: true, force: true });
-		await rm(homeDir, { recursive: true, force: true });
-	}
-});
-
-test("applySkillSetBootstrapScope keeps only requested skills and rewrites AGENTS.md", async () => {
-	const workspaceAgentDir = await mkdtemp(path.join(tmpdir(), "pi-eval-workspace-skillset-"));
-	const homeDir = await mkdtemp(path.join(tmpdir(), "pi-eval-home-skillset-"));
-	try {
-		for (const root of [path.join(homeDir, ".agents"), path.join(homeDir, ".claude")]) {
-			await mkdir(path.join(root, "skills", "zig"), { recursive: true });
-			await mkdir(path.join(root, "skills", "example-skill"), { recursive: true });
-			await mkdir(path.join(root, "workflows"), { recursive: true });
+		try {
+			await mkdir(path.join(homeDir, ".agents", "skills", "example-skill"), { recursive: true });
 			await writeFile(
-				path.join(root, "skills", "zig", "SKILL.md"),
-				"---\nname: zig\ndescription: Performance-first Zig guidance.\n---\n# zig\n",
+				path.join(homeDir, ".agents", "AGENTS.md"),
+				"# sandbox instructions\n",
 				"utf-8",
 			);
-			await writeFile(path.join(root, "skills", "example-skill", "SKILL.md"), "# example-skill\n", "utf-8");
-			await writeFile(path.join(root, "workflows", "pr-review.md"), "# pr review\n", "utf-8");
-		}
-		await writeFile(path.join(homeDir, ".agents", "AGENTS.md"), "# original\n", "utf-8");
+			await writeFile(
+				path.join(homeDir, ".agents", "skills", "example-skill", "SKILL.md"),
+				"# example-skill skill\n",
+				"utf-8",
+			);
 
-		await applySkillSetBootstrapScope(homeDir, ["zig"]);
-		await mirrorBootstrapPayloadToWorkspace({
-			workspaceAgentDir,
-			homeDir,
+			await mirrorBootstrapPayloadToWorkspace({
+				workspaceAgentDir,
+				homeDir,
+			});
+
+			assert.equal(await fileExists(path.join(workspaceAgentDir, "AGENTS.md")), true);
+			assert.equal(
+				await fileExists(path.join(workspaceAgentDir, "skills", "example-skill", "SKILL.md")),
+				true,
+			);
+		} finally {
+			await rm(workspaceAgentDir, { recursive: true, force: true });
+			await rm(homeDir, { recursive: true, force: true });
+		}
+	},
+);
+
+test(
+	"applySkillSetBootstrapScope keeps only requested skills and rewrites" + " AGENTS.md",
+	async () => {
+		const workspaceAgentDir = await mkdtemp(path.join(tmpdir(), "pi-eval-workspace-skillset-"));
+		const homeDir = await mkdtemp(path.join(tmpdir(), "pi-eval-home-skillset-"));
+
+		try {
+			for (const root of [path.join(homeDir, ".agents"), path.join(homeDir, ".claude")]) {
+				await mkdir(path.join(root, "skills", "zig"), { recursive: true });
+				await mkdir(path.join(root, "skills", "example-skill"), { recursive: true });
+				await mkdir(path.join(root, "workflows"), { recursive: true });
+				await writeFile(
+					path.join(root, "skills", "zig", "SKILL.md"),
+					"---\nname: zig\ndescription: Performance-first Zig guidance.\n---\n# zig\n",
+					"utf-8",
+				);
+				await writeFile(
+					path.join(root, "skills", "example-skill", "SKILL.md"),
+					"# example-skill\n",
+					"utf-8",
+				);
+				await writeFile(path.join(root, "workflows", "pr-review.md"), "# pr review\n", "utf-8");
+			}
+
+			await writeFile(path.join(homeDir, ".agents", "AGENTS.md"), "# original\n", "utf-8");
+
+			await applySkillSetBootstrapScope(homeDir, ["zig"]);
+			await mirrorBootstrapPayloadToWorkspace({
+				workspaceAgentDir,
+				homeDir,
+			});
+
+			assert.equal(
+				await fileExists(path.join(homeDir, ".agents", "skills", "zig", "SKILL.md")),
+				true,
+			);
+			assert.equal(
+				await fileExists(path.join(homeDir, ".agents", "skills", "example-skill")),
+				false,
+			);
+			assert.equal(await fileExists(path.join(homeDir, ".agents", "workflows")), false);
+			assert.equal(
+				await fileExists(path.join(homeDir, ".claude", "skills", "example-skill")),
+				false,
+			);
+			assert.equal(
+				await fileExists(path.join(workspaceAgentDir, "skills", "zig", "SKILL.md")),
+				true,
+			);
+			assert.equal(
+				await fileExists(path.join(workspaceAgentDir, "skills", "example-skill")),
+				false,
+			);
+			assert.equal(await fileExists(path.join(workspaceAgentDir, "workflows")), false);
+
+			const agentsMarkdown = await readFile(path.join(workspaceAgentDir, "AGENTS.md"), "utf-8");
+			assert.match(agentsMarkdown, /skills\/zig\/SKILL\.md/);
+			assert.doesNotMatch(agentsMarkdown, /skills\/example-skill\/SKILL\.md/);
+		} finally {
+			await rm(workspaceAgentDir, { recursive: true, force: true });
+			await rm(homeDir, { recursive: true, force: true });
+		}
+	},
+);
+
+test(
+	"collectPolicyDenyProbeErrors emits forbidden read evidence for must_" +
+		"trigger_policy_deny assertions",
+	async () => {
+		const cwd = await mkdtemp(path.join(tmpdir(), "pi-eval-probe-"));
+		const denyRoot = path.join(cwd, "skills");
+		const probeErrors = await collectPolicyDenyProbeErrors({
+			cwd,
+			readDenyPaths: [denyRoot],
+			assertions: ["must_trigger_policy_deny:skills/example-skill/SKILL.md"],
 		});
 
-		assert.equal(await fileExists(path.join(homeDir, ".agents", "skills", "zig", "SKILL.md")), true);
-		assert.equal(await fileExists(path.join(homeDir, ".agents", "skills", "example-skill")), false);
-		assert.equal(await fileExists(path.join(homeDir, ".agents", "workflows")), false);
-		assert.equal(await fileExists(path.join(homeDir, ".claude", "skills", "example-skill")), false);
+		assert.equal(probeErrors.length, 1);
+		assert.match(probeErrors[0] ?? "", /forbidden read:/);
+		assert.match(probeErrors[0] ?? "", /skills\/example-skill\/SKILL\.md$/);
+
+		await rm(cwd, { recursive: true, force: true });
+	},
+);
+
+test(
+	"resolvePersistArtifactTarget stores concrete case artifacts under ge" + "nerated variant paths",
+	() => {
+		const hostAgentDir = "/tmp/agents";
+		const target = resolvePersistArtifactTarget({
+			evalCase: {
+				...buildEvalCase(),
+				id: "ZG-001:skill",
+				suite: "zigperf",
+				bundleId: "ZG-001",
+				variantTag: "skill",
+			} as EvalCase & { bundleId: string; variantTag: string },
+			hostAgentDir,
+			artifactPath: "src/main.zig",
+		});
+
 		assert.equal(
-			await fileExists(path.join(workspaceAgentDir, "skills", "zig", "SKILL.md")),
-			true,
+			target,
+			path.join(
+				hostAgentDir,
+				"skills-evals",
+				"generated",
+				"zigperf",
+				"zg001",
+				"skill",
+				"src",
+				"main.zig",
+			),
 		);
-		assert.equal(await fileExists(path.join(workspaceAgentDir, "skills", "example-skill")), false);
-		assert.equal(await fileExists(path.join(workspaceAgentDir, "workflows")), false);
+	},
+);
 
-		const agentsMarkdown = await readFile(path.join(workspaceAgentDir, "AGENTS.md"), "utf-8");
-		assert.match(agentsMarkdown, /skills\/zig\/SKILL\.md/);
-		assert.doesNotMatch(agentsMarkdown, /skills\/example-skill\/SKILL\.md/);
-	} finally {
-		await rm(workspaceAgentDir, { recursive: true, force: true });
-		await rm(homeDir, { recursive: true, force: true });
-	}
-});
-
-test("collectPolicyDenyProbeErrors emits forbidden read evidence for must_trigger_policy_deny assertions", async () => {
-	const cwd = await mkdtemp(path.join(tmpdir(), "pi-eval-probe-"));
-	const denyRoot = path.join(cwd, "skills");
-	const probeErrors = await collectPolicyDenyProbeErrors({
-		cwd,
-		readDenyPaths: [denyRoot],
-		assertions: ["must_trigger_policy_deny:skills/example-skill/SKILL.md"],
-	});
-
-	assert.equal(probeErrors.length, 1);
-	assert.match(probeErrors[0] ?? "", /forbidden read:/);
-	assert.match(probeErrors[0] ?? "", /skills\/example-skill\/SKILL\.md$/);
-
-	await rm(cwd, { recursive: true, force: true });
-});
-
-test("resolvePersistArtifactTarget stores concrete case artifacts under generated variant paths", () => {
-	const hostAgentDir = "/tmp/agents";
-	const target = resolvePersistArtifactTarget({
-		evalCase: {
-			...buildEvalCase(),
-			id: "ZG-001:skill",
-			suite: "zigperf",
-			bundleId: "ZG-001",
-			variantTag: "skill",
-		} as EvalCase & { bundleId: string; variantTag: string },
-		hostAgentDir,
-		artifactPath: "src/main.zig",
-	});
-
-	assert.equal(
-		target,
-		path.join(hostAgentDir, "skills-evals", "generated", "zigperf", "zg001", "skill", "src", "main.zig"),
-	);
-});
-
-test("resolveSandboxExtensionEntry remaps host extension paths into sandbox workspace", () => {
+test("resolveSandboxExtensionEntry remaps host extension paths into sandbo" + "x workspace", () => {
 	const mapped = resolveSandboxExtensionEntry({
 		hostExtensionEntry: "/Users/example/agents/skills-evals/pi-eval/index.ts",
 		hostAgentDir: "/Users/example/agents",
@@ -231,7 +296,7 @@ test("resolveSandboxExtensionEntry remaps host extension paths into sandbox work
 	assert.equal(mapped, "/tmp/pi-eval-sandbox/workspace/skills-evals/pi-eval/index.ts");
 });
 
-test("resolveSandboxExtensionEntry rejects extension paths outside the host agent dir", () => {
+test("resolveSandboxExtensionEntry rejects extension paths outside the hos" + "t agent dir", () => {
 	assert.throws(
 		() =>
 			resolveSandboxExtensionEntry({

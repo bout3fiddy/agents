@@ -3,7 +3,7 @@ import test from "node:test";
 import { purgeRowsFromReport } from "../../src/cli/purge-report.js";
 
 const STANDALONE_REPORT = [
-	"NOTICE: This is auto-generated on each run of the evals framework. Do not edit this.",
+	"NOTICE: This is auto-generated on each run of the evals framework. D" + "o not edit this.",
 	"",
 	"# Pi Eval Report",
 	"",
@@ -18,11 +18,12 @@ const STANDALONE_REPORT = [
 	"",
 	"## Standalone Results",
 	"<!-- UNPAIRED_TABLE_START -->",
-	"| Case | Mode | Status | Tokens | Turns | Skills Read | Skill Files Read | Refs Read | Missing Refs | Unexpected Refs | Notes | Run |",
+	"| Case | Mode | Status | Tokens | Turns | Skills Read | Skill Files " +
+		"Read | Refs Read | Missing Refs | Unexpected Refs | Notes | Run |",
 	"| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
 	"| CD-010 | single | PASS | 100 | 1 | 0 | 0 | 0 | - | - |  | 2026-03-03 |",
-	"| CD-015-NS-PROBE | single | PASS | 200 | 1 | 1 | 1 | 0 | - | - |  | 2026-03-03 |",
-	"| CD-020 | single | FAIL | 300 | 2 | 0 | 0 | 0 | - | - | timeout | 2026-03-03 |",
+	"| CD-015-NS-PROBE | single | PASS | 200 | 1 | 1 | 1 | 0 | - | - |  |" + " 2026-03-03 |",
+	"| CD-020 | single | FAIL | 300 | 2 | 0 | 0 | 0 | - | - | timeout | 2" + "026-03-03 |",
 	"",
 	"## Failures",
 	"- **CD-020** (single): timeout",
@@ -30,7 +31,7 @@ const STANDALONE_REPORT = [
 ].join("\n");
 
 const BUNDLE_REPORT = [
-	"NOTICE: This is auto-generated on each run of the evals framework. Do not edit this.",
+	"NOTICE: This is auto-generated on each run of the evals framework. D" + "o not edit this.",
 	"",
 	"# Pi Eval Report",
 	"",
@@ -63,7 +64,8 @@ const BUNDLE_REPORT = [
 	"",
 	"## Standalone Results",
 	"<!-- UNPAIRED_TABLE_START -->",
-	"| Case | Mode | Status | Tokens | Turns | Skills Read | Skill Files Read | Refs Read | Missing Refs | Unexpected Refs | Notes | Run |",
+	"| Case | Mode | Status | Tokens | Turns | Skills Read | Skill Files " +
+		"Read | Refs Read | Missing Refs | Unexpected Refs | Notes | Run |",
 	"| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
 	"| CD-010 | single | PASS | 100 | 1 | 0 | 0 | 0 | - | - |  | 2026-03-03 |",
 	"| CD-020 | single | PASS | 300 | 2 | 0 | 0 | 0 | - | - |  | 2026-03-03 |",
@@ -74,7 +76,7 @@ const BUNDLE_REPORT = [
 ].join("\n");
 
 const SUITE_JUDGE_REPORT = [
-	"NOTICE: This is auto-generated on each run of the evals framework. Do not edit this.",
+	"NOTICE: This is auto-generated on each run of the evals framework. D" + "o not edit this.",
 	"",
 	"# Pi Eval Report",
 	"",
@@ -91,37 +93,31 @@ const SUITE_JUDGE_REPORT = [
 	"",
 	"## Case Rows",
 	"<!-- UNPAIRED_TABLE_START -->",
-	"| Case | Mode | Status | Tokens | Turns | Skills Read | Skill Files Read | Refs Read | Missing Refs | Unexpected Refs | Notes | Run |",
+	"| Case | Mode | Status | Tokens | Turns | Skills Read | Skill Files " +
+		"Read | Refs Read | Missing Refs | Unexpected Refs | Notes | Run |",
 	"| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
-	"| CD-015:skill | single | PASS | 100 | 1 | 1 | 1 | 0 | - | - |  | 2026-03-03 |",
-	"| CD-015:noskill | single | PASS | 100 | 1 | 0 | 0 | 0 | - | - |  | 2026-03-03 |",
+	"| CD-015:skill | single | PASS | 100 | 1 | 1 | 1 | 0 | - | - |  | 20" + "26-03-03 |",
+	"| CD-015:noskill | single | PASS | 100 | 1 | 0 | 0 | 0 | - | - |  | " + "2026-03-03 |",
 	"",
 	"## Failures",
 	"All cases passed.",
 ].join("\n");
 
 test("purge standalone case row", () => {
-	const result = purgeRowsFromReport(
-		STANDALONE_REPORT,
-		new Set(["CD-015-NS-PROBE"]),
-		null,
-	);
+	const result = purgeRowsFromReport(STANDALONE_REPORT, new Set(["CD-015-NS-PROBE"]), null);
 
 	assert.deepStrictEqual(result.removedRows, ["CD-015-NS-PROBE"]);
 	assert.deepStrictEqual(result.removedBundleSections, []);
 	assert.equal(result.removedJudgeReport, false);
 	assert.ok(!result.updatedContent.includes("CD-015-NS-PROBE"));
+
 	// Other rows preserved
 	assert.ok(result.updatedContent.includes("CD-010"));
 	assert.ok(result.updatedContent.includes("CD-020"));
 });
 
 test("purge standalone case updates header stats", () => {
-	const result = purgeRowsFromReport(
-		STANDALONE_REPORT,
-		new Set(["CD-015-NS-PROBE"]),
-		null,
-	);
+	const result = purgeRowsFromReport(STANDALONE_REPORT, new Set(["CD-015-NS-PROBE"]), null);
 
 	// After removing 1 PASS row: 2 rows total (pass 1, fail 1, skip 0)
 	assert.ok(result.updatedContent.includes("- Task rows: 2 (pass 1, fail 1, skip 0)"));
@@ -136,12 +132,15 @@ test("purge bundle variant rows and section", () => {
 	);
 
 	assert.deepStrictEqual(result.removedBundleSections, ["CD-015"]);
+
 	// Bundle section removed
 	assert.ok(!result.updatedContent.includes("### CD-015:"));
 	assert.ok(!result.updatedContent.includes("Judge Verdict"));
+
 	// Standalone rows preserved
 	assert.ok(result.updatedContent.includes("CD-010"));
 	assert.ok(result.updatedContent.includes("CD-020"));
+
 	// Bundle Evaluations heading removed (section now empty)
 	assert.ok(!result.updatedContent.includes("## Bundle Evaluations"));
 });
@@ -173,11 +172,7 @@ test("purge bundle updates header stats", () => {
 });
 
 test("no-op when case not found", () => {
-	const result = purgeRowsFromReport(
-		STANDALONE_REPORT,
-		new Set(["NONEXISTENT-CASE"]),
-		null,
-	);
+	const result = purgeRowsFromReport(STANDALONE_REPORT, new Set(["NONEXISTENT-CASE"]), null);
 
 	assert.deepStrictEqual(result.removedRows, []);
 	assert.deepStrictEqual(result.removedBundleSections, []);

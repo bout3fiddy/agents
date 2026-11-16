@@ -51,7 +51,10 @@ export const buildProfileReadDenyPaths = (params: {
 }): string[] => {
 	const { evalCase, workspaceAgentDir, homeDir, bootstrapProfile } = params;
 	const merged = mergeReadDenyPaths(evalCase.readDenyPaths);
-	if (bootstrapProfile !== "no_payload") return merged;
+
+	if (bootstrapProfile !== "no_payload") {
+		return merged;
+	}
 
 	return mergeReadDenyPaths([
 		...merged,
@@ -87,22 +90,31 @@ export const collectPolicyDenyProbeErrors = async (params: {
 	assertions: string[];
 }): Promise<string[]> => {
 	const probePaths = extractPolicyProbePaths(params.assertions);
-	if (probePaths.length === 0) return [];
+
+	if (probePaths.length === 0) {
+		return [];
+	}
+
 	const denyPolicy = await createPathDenyPolicy(params.cwd, params.readDenyPaths);
 	const probeErrors: string[] = [];
+
 	for (const probePath of probePaths) {
 		const absoluteProbePath = path.resolve(params.cwd, probePath);
+
 		try {
 			await assertReadablePath(absoluteProbePath, denyPolicy);
 			probeErrors.push(`policy deny missing: ${absoluteProbePath}`);
 		} catch (error) {
 			const message = formatError(error);
+
 			if (message === FORBIDDEN_READ_ERROR) {
 				probeErrors.push(`forbidden read: ${absoluteProbePath}`);
 				continue;
 			}
+
 			probeErrors.push(`policy deny probe error: ${absoluteProbePath}: ${message}`);
 		}
 	}
+
 	return probeErrors;
 };

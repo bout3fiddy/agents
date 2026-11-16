@@ -17,6 +17,7 @@ export const withTimeout = async <T>(
 			timeoutMs,
 		);
 	});
+
 	try {
 		return await Promise.race([promise, timeoutPromise]);
 	} finally {
@@ -24,19 +25,20 @@ export const withTimeout = async <T>(
 	}
 };
 
-export const parsePositiveInt = (
-	value: string | undefined,
-	fallback: number,
-): number => {
+export const parsePositiveInt = (value: string | undefined, fallback: number): number => {
 	const parsed = Number.parseInt(value ?? `${fallback}`, 10);
-	if (!Number.isFinite(parsed) || parsed < 1) return fallback;
+
+	if (!Number.isFinite(parsed) || parsed < 1) {
+		return fallback;
+	}
+
 	return parsed;
 };
 
 export const uniqueSorted = (values: string[]): string[] =>
-	Array.from(
-		new Set(values.map((v) => v.trim()).filter((v) => v.length > 0)),
-	).sort((a, b) => a.localeCompare(b));
+	Array.from(new Set(values.map((v) => v.trim()).filter((v) => v.length > 0))).sort((a, b) =>
+		a.localeCompare(b),
+	);
 
 export const errorMessage = (error: unknown): string =>
 	error instanceof Error ? error.message : String(error);
@@ -45,9 +47,11 @@ const expandHome = (value: string): string => {
 	if (!value.startsWith("~")) {
 		return value;
 	}
+
 	if (value === "~") {
 		return homedir();
 	}
+
 	return path.join(homedir(), value.slice(2));
 };
 
@@ -75,26 +79,41 @@ export const fileExists = async (filePath: string): Promise<boolean> => {
 };
 
 export const formatDuration = (ms: number): string => {
-	if (ms < 1000) return `${ms}ms`;
+	if (ms < 1000) {
+		return `${ms}ms`;
+	}
+
 	const seconds = ms / 1000;
-	if (seconds < 60) return `${seconds.toFixed(1)}s`;
+
+	if (seconds < 60) {
+		return `${seconds.toFixed(1)}s`;
+	}
+
 	const minutes = Math.floor(seconds / 60);
 	const remaining = Math.round(seconds % 60);
 	return `${minutes}m ${remaining}s`;
 };
 
 export const median = (values: number[]): number => {
-	if (values.length === 0) return 0;
+	if (values.length === 0) {
+		return 0;
+	}
+
 	const sorted = [...values].sort((a, b) => a - b);
 	const mid = Math.floor(sorted.length / 2);
+
 	if (sorted.length % 2 === 0) {
 		return (sorted[mid - 1] + sorted[mid]) / 2;
 	}
+
 	return sorted[mid];
 };
 
 export const percentile = (values: number[], pct: number): number => {
-	if (values.length === 0) return 0;
+	if (values.length === 0) {
+		return 0;
+	}
+
 	const sorted = [...values].sort((a, b) => a - b);
 	const index = Math.ceil((pct / 100) * sorted.length) - 1;
 	const safeIndex = Math.min(Math.max(index, 0), sorted.length - 1);

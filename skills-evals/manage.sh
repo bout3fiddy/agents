@@ -22,7 +22,8 @@ EOF
 }
 
 # slug_from_id / trace_file_name are now in pi-eval/src/cli/manage-remove.ts
-# (canonical implementations: slugFromId in data/cases.ts, traceFileName in reporting/report-persistence.ts)
+# Canonical implementations: slugFromId in data/cases.ts and
+# traceFileName in reporting/report-persistence.ts.
 
 cmd_list() {
 	bun run "$LIST_SCRIPT" --cases-dir "$CASES_DIR"
@@ -34,7 +35,10 @@ cmd_remove() {
 	while [[ "$#" -gt 0 ]]; do
 		case "$1" in
 		--case)
-			[[ "$#" -lt 2 || -z "${2//[[:space:]]/}" ]] && { echo "--case requires a non-empty case ID." >&2; exit 1; }
+			if [[ "$#" -lt 2 || -z "${2//[[:space:]]/}" ]]; then
+        echo "--case requires a non-empty case ID." >&2
+        exit 1
+      fi
 			case_id="$2"; shift 2 ;;
 		--dry-run) dry_run=1; shift ;;
 		--yes) skip_confirm=1; shift ;;
@@ -86,19 +90,39 @@ console.log(JSON.stringify(targets));
 ")"
 
 	local is_bundle variant_tags_csv
-	is_bundle="$(echo "$targets_json" | bun -e "const d=JSON.parse(await Bun.stdin.text()); console.log(d.isBundle ? '1' : '0')")"
-	variant_tags_csv="$(echo "$targets_json" | bun -e "const d=JSON.parse(await Bun.stdin.text()); console.log(d.variantTags.join(','))")"
+	is_bundle="$(echo "$targets_json" | bun -e "
+    const d=JSON.parse(await Bun.stdin.text());
+    console.log(d.isBundle ? '1' : '0')")"
+	variant_tags_csv="$(echo "$targets_json" | bun -e "
+    const d=JSON.parse(await Bun.stdin.text());
+    console.log(d.variantTags.join(','))")"
 
 	# Read file/dir lists from JSON
 	local -a files_to_delete=()
 	local -a dirs_to_delete=()
 	local -a purge_args=()
-	while IFS= read -r f; do files_to_delete+=("$f"); done < <(echo "$targets_json" | bun -e "const d=JSON.parse(await Bun.stdin.text()); d.filesToDelete.forEach(f=>console.log(f))")
-	while IFS= read -r d; do dirs_to_delete+=("$d"); done < <(echo "$targets_json" | bun -e "const d=JSON.parse(await Bun.stdin.text()); d.dirsToDelete.forEach(f=>console.log(f))")
-	while IFS= read -r a; do purge_args+=("$a"); done < <(echo "$targets_json" | bun -e "const d=JSON.parse(await Bun.stdin.text()); d.purgeArgs.forEach(a=>console.log(a))")
+	while IFS= read -r f; do
+    files_to_delete+=("$f")
+  done < <(echo "$targets_json" | bun -e "
+    const d=JSON.parse(await Bun.stdin.text());
+    d.filesToDelete.forEach(f=>console.log(f))")
+	while IFS= read -r d; do
+    dirs_to_delete+=("$d")
+  done < <(echo "$targets_json" | bun -e "
+    const d=JSON.parse(await Bun.stdin.text());
+    d.dirsToDelete.forEach(f=>console.log(f))")
+	while IFS= read -r a; do
+    purge_args+=("$a")
+  done < <(echo "$targets_json" | bun -e "
+    const d=JSON.parse(await Bun.stdin.text());
+    d.purgeArgs.forEach(a=>console.log(a))")
 
 	# Display plan
-	echo "Case: $case_id ($([ "$is_bundle" == "1" ] && echo "bundle: $variant_tags_csv" || echo "standalone"))"
+	local case_description="standalone"
+  if [[ "$is_bundle" == "1" ]]; then
+    case_description="bundle: $variant_tags_csv"
+  fi
+  echo "Case: $case_id ($case_description)"
 	echo ""
 	echo "Files to delete:"
 	for f in "${files_to_delete[@]}"; do

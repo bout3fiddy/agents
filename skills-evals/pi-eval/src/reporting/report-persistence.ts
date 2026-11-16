@@ -1,7 +1,13 @@
 import { unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { buildReport, readReportRows, updateIndex, writeReport } from "./report.js";
-import type { CaseEvaluation, EvalRunOptions, JudgeSuiteVerdict, ModelSpec, ResolvedEvalCase } from "../data/types.js";
+import type {
+	CaseEvaluation,
+	EvalRunOptions,
+	JudgeSuiteVerdict,
+	ModelSpec,
+	ResolvedEvalCase,
+} from "../data/types.js";
 import { ensureDir, sleep } from "../data/utils.js";
 import { toSafePathSegment } from "../runtime/policy/path-policy.js";
 
@@ -39,10 +45,15 @@ const withReportWriteLock = async <T>(lockPath: string, handler: () => Promise<T
 			break;
 		} catch (error) {
 			const maybeErrno = error as NodeJS.ErrnoException;
-			if (maybeErrno?.code !== "EEXIST") throw error;
-			if (Date.now() - startedAt > timeoutMs) {
-				throw new Error(`Timed out waiting for report write lock: ${lockPath}`);
+
+			if (maybeErrno?.code !== "EEXIST") {
+				throw error;
 			}
+
+			if (Date.now() - startedAt > timeoutMs) {
+				throw new Error(`Timed out waiting for report write lock: ${lockPath}`, { cause: error });
+			}
+
 			await sleep(200);
 		}
 	}
@@ -56,6 +67,7 @@ const withReportWriteLock = async <T>(lockPath: string, handler: () => Promise<T
 
 /** Convert case IDs with colons to filesystem-safe names using -- separator */
 export const traceFileName = (caseId: string): string => {
+
 	// Replace colon separator (bundle:tag) with double-dash for readability
 	const safeName = caseId.replace(/:/g, "--");
 	return toSafePathSegment(safeName, "case");
@@ -69,33 +81,35 @@ const writeRoutingTraceArtifacts = async (params: {
 }): Promise<void> => {
 	const { traceDir, runTimestamp, model, evaluations } = params;
 	await ensureDir(traceDir);
-	await Promise.all(evaluations.map((evaluation) => {
-		const payload = {
-			caseId: evaluation.caseId,
-			mode: evaluation.mode,
-			status: evaluation.status,
-			runTimestamp,
-			model: model.label,
-			expectedSkills: evaluation.expectedSkills,
-			expectedRefs: evaluation.expectedRefs,
-			tokens: evaluation.result.tokens,
-			turnBreakdown: evaluation.result.turnBreakdown ?? [],
-			toolUsage: evaluation.result.toolUsage ?? null,
-			rpcDiagnostics: evaluation.result.rpcDiagnostics ?? null,
-			sanitizedStepTrace: evaluation.result.sanitizedStepTrace ?? [],
-			verificationResults: evaluation.result.verificationResults ?? [],
-			outputTextPreview: (evaluation.result.outputText ?? "").slice(0, 1200),
-			resultErrors: evaluation.result.errors ?? [],
-			routing: evaluation.routing,
-			reasons: evaluation.reasons,
-			failureReasons: evaluation.failureReasons,
-			readBreakdown: evaluation.result.readBreakdown ?? [],
-			bootstrapBreakdown: evaluation.result.bootstrapBreakdown ?? [],
-			judgeVerdict: evaluation.judgeVerdict ?? null,
-		};
-		const tracePath = path.join(traceDir, `${traceFileName(evaluation.caseId)}.json`);
-		return writeFile(tracePath, JSON.stringify(payload, null, 2));
-	}));
+	await Promise.all(
+		evaluations.map((evaluation) => {
+			const payload = {
+				caseId: evaluation.caseId,
+				mode: evaluation.mode,
+				status: evaluation.status,
+				runTimestamp,
+				model: model.label,
+				expectedSkills: evaluation.expectedSkills,
+				expectedRefs: evaluation.expectedRefs,
+				tokens: evaluation.result.tokens,
+				turnBreakdown: evaluation.result.turnBreakdown ?? [],
+				toolUsage: evaluation.result.toolUsage ?? null,
+				rpcDiagnostics: evaluation.result.rpcDiagnostics ?? null,
+				sanitizedStepTrace: evaluation.result.sanitizedStepTrace ?? [],
+				verificationResults: evaluation.result.verificationResults ?? [],
+				outputTextPreview: (evaluation.result.outputText ?? "").slice(0, 1200),
+				resultErrors: evaluation.result.errors ?? [],
+				routing: evaluation.routing,
+				reasons: evaluation.reasons,
+				failureReasons: evaluation.failureReasons,
+				readBreakdown: evaluation.result.readBreakdown ?? [],
+				bootstrapBreakdown: evaluation.result.bootstrapBreakdown ?? [],
+				judgeVerdict: evaluation.judgeVerdict ?? null,
+			};
+			const tracePath = path.join(traceDir, `${traceFileName(evaluation.caseId)}.json`);
+			return writeFile(tracePath, JSON.stringify(payload, null, 2));
+		}),
+	);
 };
 
 const writeSuiteVerdictTrace = async (params: {
@@ -103,7 +117,11 @@ const writeSuiteVerdictTrace = async (params: {
 	verdict: JudgeSuiteVerdict | null | undefined;
 }): Promise<void> => {
 	const { traceDir, verdict } = params;
-	if (!verdict) return;
+
+	if (!verdict) {
+		return;
+	}
+
 	await ensureDir(traceDir);
 	const tracePath = path.join(traceDir, "suite-verdict.json");
 	await writeFile(tracePath, JSON.stringify(verdict, null, 2));
@@ -142,9 +160,11 @@ export const persistRunReport = async (params: {
 			casesPathLabel: options.casesPathLabel,
 		});
 		await writeReport(reportPath, reportContent);
+
 		if (options.isFullRun) {
 			await updateIndex(indexPath, options.model.key, { sha: commitSha, timestamp: runTimestamp });
 		}
+
 		await writeRoutingTraceArtifacts({
 			traceDir: routingTraceDir,
 			runTimestamp,

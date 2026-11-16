@@ -23,9 +23,11 @@ const toCanonicalRefPath = (absolutePath: string, agentDir: string): string => {
 	const normalizedAbsolute = normalizePath(absolutePath);
 	const skillsMarker = "/skills/";
 	const markerIndex = normalizedAbsolute.lastIndexOf(skillsMarker);
+
 	if (markerIndex >= 0) {
 		return normalizedAbsolute.slice(markerIndex + 1);
 	}
+
 	return toRelativePath(absolutePath, agentDir);
 };
 
@@ -41,17 +43,22 @@ const inferSkillNameFromPath = (filePath: string): string | null => {
 	const normalized = normalizePath(filePath);
 	const marker = "/skills/";
 	const start = normalized.lastIndexOf(marker);
-	if (start === -1) return null;
+
+	if (start === -1) {
+		return null;
+	}
+
 	const suffix = normalized.slice(start + marker.length);
 	const [skillName] = suffix.split("/", 1);
-	if (!skillName) return null;
+
+	if (!skillName) {
+		return null;
+	}
+
 	return skillName;
 };
 
-const resolveCaptureSets = (
-	capture: ReadCapture,
-	mode: "attempt" | "invocation" | "denied",
-) => {
+const resolveCaptureSets = (capture: ReadCapture, mode: "attempt" | "invocation" | "denied") => {
 	if (mode === "attempt") {
 		return {
 			skillSet: capture.skillAttempts,
@@ -59,6 +66,7 @@ const resolveCaptureSets = (
 			refSet: capture.refAttempts,
 		};
 	}
+
 	if (mode === "invocation") {
 		return {
 			skillSet: capture.skillInvocations,
@@ -66,6 +74,7 @@ const resolveCaptureSets = (
 			refSet: capture.refInvocations,
 		};
 	}
+
 	return {
 		skillSet: capture.skillDenied,
 		skillFileSet: capture.skillFileDenied,
@@ -80,15 +89,20 @@ const captureRead = (
 	mode: "attempt" | "invocation" | "denied",
 ) => {
 	const { skillSet, skillFileSet, refSet } = resolveCaptureSets(capture, mode);
+
 	if (isSkillPath(absolutePath)) {
 		const skillName = path.basename(path.dirname(absolutePath));
 		skillSet.add(skillName);
 		skillFileSet.add(skillName);
 	}
+
 	if (isReferencePath(absolutePath)) {
 		refSet.add(toCanonicalRefPath(absolutePath, agentDir));
 		const inferredSkill = inferSkillNameFromPath(absolutePath);
-		if (inferredSkill) skillSet.add(inferredSkill);
+
+		if (inferredSkill) {
+			skillSet.add(inferredSkill);
+		}
 	}
 };
 
@@ -108,11 +122,7 @@ export const captureReadInvocation = (
 	captureRead(capture, absolutePath, agentDir, "invocation");
 };
 
-export const captureReadDenied = (
-	absolutePath: string,
-	agentDir: string,
-	capture: ReadCapture,
-) => {
+export const captureReadDenied = (absolutePath: string, agentDir: string, capture: ReadCapture) => {
 	captureRead(capture, absolutePath, agentDir, "denied");
 };
 

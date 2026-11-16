@@ -10,7 +10,13 @@ const validateDirName = (dirName: string): string[] => {
 
 	if (normalized.length > MAX_SKILL_NAME_LENGTH) {
 		errors.push(
-			`Skill name '${normalized}' exceeds ${MAX_SKILL_NAME_LENGTH} character limit (${normalized.length} chars)`,
+			"Skill name '" +
+				`${normalized}` +
+				"' exceeds " +
+				`${MAX_SKILL_NAME_LENGTH}` +
+				" character limit (" +
+				`${normalized.length}` +
+				" chars)",
 		);
 	}
 
@@ -28,7 +34,10 @@ const validateDirName = (dirName: string): string[] => {
 
 	if (!/^[\p{L}\p{N}-]+$/u.test(normalized)) {
 		errors.push(
-			`Skill name '${normalized}' contains invalid characters. Only letters, digits, and hyphens are allowed.`,
+			"Skill name '" +
+				`${normalized}` +
+				"' contains invalid characters. Only letters, digits, and hyphens are" +
+				" allowed.",
 		);
 	}
 
@@ -37,6 +46,7 @@ const validateDirName = (dirName: string): string[] => {
 
 export const validate = async (skillDirPath: string): Promise<string[]> => {
 	let skillDirStat;
+
 	try {
 		skillDirStat = await stat(skillDirPath);
 	} catch {
@@ -48,6 +58,7 @@ export const validate = async (skillDirPath: string): Promise<string[]> => {
 	}
 
 	const skillMd = await findSkillMd(skillDirPath);
+
 	if (!skillMd) {
 		return ["Missing required file: SKILL.md"];
 	}

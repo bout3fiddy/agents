@@ -10,10 +10,13 @@ INDEX_AUDIT_LABEL = "Skills routing metadata audit"
 
 def normalize_path(skill_name: str, ref_path: str) -> str:
     ref_path = ref_path.strip().strip("`")
+
     if ref_path.startswith("skills/"):
         return ref_path
+
     if ref_path.startswith("./"):
         ref_path = ref_path[2:]
+
     return f"skills/{skill_name}/{ref_path}"
 
 
@@ -32,8 +35,10 @@ def add_result(target: list[Result], kind: str, path: str, detail: str, fix: str
 def first_heading(text: str) -> str:
     for line in text.splitlines():
         line = line.strip()
+
         if line.startswith("#"):
             return line.lstrip("#").strip()
+
     return ""
 
 
@@ -43,23 +48,32 @@ def first_paragraph(text: str) -> str:
 
     for line in text.splitlines():
         stripped = line.strip()
+
         if stripped.startswith("```"):
             in_code = not in_code
             continue
+
         if in_code:
             continue
+
         if stripped.startswith("#"):
             if paragraph:
                 break
+
             continue
+
         if not stripped:
             if paragraph:
                 break
+
             continue
+
         if stripped.startswith("- "):
             if paragraph:
                 break
+
             continue
+
         paragraph.append(stripped)
 
     return " ".join(paragraph)
@@ -67,8 +81,10 @@ def first_paragraph(text: str) -> str:
 
 def normalize_text(value: str, max_len: int = 220) -> str:
     value = re.sub(r"\s+", " ", value or "").strip()
+
     if len(value) > max_len:
         return value[: max_len - 3].rstrip() + "..."
+
     return value
 
 
@@ -82,12 +98,15 @@ def parse_triggers(text: str) -> list[tuple[str, str]]:
 
     for line in text.splitlines():
         stripped = line.strip()
+
         if stripped.startswith("## "):
             header = stripped[3:].strip().lower()
             in_section = header.startswith("reference triggers")
             continue
+
         if in_section and stripped.startswith("- "):
             match = re.match(r"-\s*(.*?)\s*->\s*`([^`]+)`", stripped)
+
             if match:
                 triggers.append((match.group(1).strip(), match.group(2).strip()))
         elif in_section and stripped.startswith("## "):
@@ -102,13 +121,17 @@ def parse_reference_index(text: str) -> list[tuple[str, str]]:
 
     for line in text.splitlines():
         stripped = line.strip()
+
         if stripped.startswith("## "):
             header = stripped[3:].strip().lower()
             in_section = header == "references"
             continue
+
         if not in_section or not stripped.startswith("- "):
             continue
+
         match = re.match(r"-\s*`([^`]+)`\s*(?:[-—–:]\s*(.+))?$", stripped)
+
         if match:
             path = match.group(1).strip()
             desc = (match.group(2) or "").strip()
@@ -133,11 +156,13 @@ def scan_skills(
     ref_count = 0
 
     skills_dir = root / "skills"
+
     for skill_path in sorted(skills_dir.iterdir()):
         if not skill_path.is_dir():
             continue
 
         skill_file = skill_path / "SKILL.md"
+
         if not skill_file.exists():
             continue
 
@@ -152,6 +177,7 @@ def scan_skills(
         for trigger, ref in parse_triggers(text):
             trigger_count += 1
             norm_path = normalize_path(skill_path.name, ref)
+
             if not (root / norm_path).exists():
                 add_result(
                     errors,
@@ -160,16 +186,17 @@ def scan_skills(
                     f"Missing referenced file for trigger '{trigger}'.",
                     "Fix trigger path or add the referenced file.",
                 )
-            trigger_entries.append(
-                f"trigger|{sanitize(name)}|{sanitize(trigger)}|{norm_path}"
-            )
+
+            trigger_entries.append(f"trigger|{sanitize(name)}|{sanitize(trigger)}|{norm_path}")
 
         refs_dir = skill_path / "references"
+
         if not refs_dir.is_dir():
             continue
 
         for index_file in sorted(refs_dir.rglob("index.md")):
             index_text = index_file.read_text(encoding="utf-8", errors="ignore")
+
             for ref_path, desc_text in parse_reference_index(index_text):
                 normalized = normalize_path(skill_path.name, ref_path)
                 index_listed_paths.add(normalized)
@@ -179,6 +206,7 @@ def scan_skills(
                 else:
                     desc_text = normalize_text(desc_text)
                     existing_desc = index_desc_by_path.get(normalized)
+
                     if existing_desc and existing_desc != desc_text:
                         add_result(
                             warnings,
@@ -187,6 +215,7 @@ def scan_skills(
                             "Conflicting descriptions in index files.",
                             "Consolidate to a single description.",
                         )
+
                     index_desc_by_path[normalized] = desc_text
 
                 if not (root / normalized).exists():
@@ -233,8 +262,10 @@ def scan_skills(
                 )
 
             desc = index_desc_by_path.get(rel)
+
             if not desc:
                 paragraph = normalize_text(first_paragraph(ref_text))
+
                 if paragraph:
                     desc = paragraph
 
@@ -248,9 +279,7 @@ def scan_skills(
                 )
                 desc = desc or ""
 
-            ref_entries.append(
-                f"ref|{sanitize(name)}|{rel}|{sanitize(title)}|{sanitize(desc)}"
-            )
+            ref_entries.append(f"ref|{sanitize(name)}|{rel}|{sanitize(title)}|{sanitize(desc)}")
 
     return (
         skill_entries,
@@ -287,7 +316,10 @@ def print_results(
     status = "FAIL" if errors else "OK"
     print(f"{INDEX_AUDIT_LABEL}: {status}")
     print(
-        "Skills: {skills} | Triggers: {triggers} | References: {refs} | Errors: {errors} | Warnings: {warnings}".format(
+        (
+            "Skills: {skills} | Triggers: {triggers} | References: {refs} | "
+            "Errors: {errors} | Warnings: {warnings}"
+        ).format(
             skills=skills_count,
             triggers=trigger_count,
             refs=ref_count,
@@ -298,11 +330,13 @@ def print_results(
 
     if errors:
         print("Errors:")
+
         for row in errors:
             print(f" - [{row.kind}] {row.path} :: {row.detail} | Fix: {row.fix}")
 
     if warnings:
         print("Warnings:")
+
         for row in warnings:
             print(f" - [{row.kind}] {row.path} :: {row.detail} | Fix: {row.fix}")
 

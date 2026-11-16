@@ -28,15 +28,22 @@ export const createRpcState = (onRawLine?: (line: string) => void): RpcState => 
 	const diagnostics = createRpcDiagnosticsTracker();
 
 	const clearRetryableAgentEndTimer = () => {
-		if (!retryableAgentEndTimer) return;
+		if (!retryableAgentEndTimer) {
+			return;
+		}
+
 		clearTimeout(retryableAgentEndTimer);
 		retryableAgentEndTimer = null;
 	};
 
 	const resolveAgentEnd = () => {
 		const resolve = pendingResolvers.shift();
-		if (resolve) resolve();
-		else pendingAgentEnds += 1;
+
+		if (resolve) {
+			resolve();
+		} else {
+			pendingAgentEnds += 1;
+		}
 	};
 
 	const waitForAgentEnd = () =>
@@ -46,6 +53,7 @@ export const createRpcState = (onRawLine?: (line: string) => void): RpcState => 
 				resolve();
 				return;
 			}
+
 			pendingResolvers.push(resolve);
 		});
 
@@ -53,7 +61,11 @@ export const createRpcState = (onRawLine?: (line: string) => void): RpcState => 
 		clearRetryableAgentEndTimer();
 		retryableAgentEndTimer = setTimeout(() => {
 			retryableAgentEndTimer = null;
-			if (!promptError && terminalError) promptError = terminalError;
+
+			if (!promptError && terminalError) {
+				promptError = terminalError;
+			}
+
 			resolveAgentEnd();
 		}, RETRYABLE_AGENT_END_SETTLE_MS);
 	};
@@ -61,33 +73,49 @@ export const createRpcState = (onRawLine?: (line: string) => void): RpcState => 
 	const onLine = (line: string) => {
 		diagnostics.recordRawLine();
 		onRawLine?.(line);
-		let event: any;
+		let event: Record<string, unknown>;
+
 		try {
 			event = JSON.parse(line);
 		} catch {
 			diagnostics.recordParseError();
 			return;
 		}
+
 		diagnostics.recordEvent(event);
+
 		if (event.type === "response" && event.command === "prompt" && event.success === false) {
 			promptError = event.error ?? "prompt rejected";
 		}
+
 		if (event.type === "auto_retry_start") {
 			clearRetryableAgentEndTimer();
 			return;
 		}
+
 		if (event.type === "auto_retry_end") {
 			clearRetryableAgentEndTimer();
+
 			if (event.success === false) {
-				const finalError = typeof event.finalError === "string" && event.finalError.trim().length > 0
-					? event.finalError.trim()
-					: "terminated";
-				if (!promptError) promptError = finalError;
+				const finalError =
+					typeof event.finalError === "string" && event.finalError.trim().length > 0
+						? event.finalError.trim()
+						: "terminated";
+
+				if (!promptError) {
+					promptError = finalError;
+				}
+
 				resolveAgentEnd();
 			}
+
 			return;
 		}
-		if (event.type !== "agent_end") return;
+
+		if (event.type !== "agent_end") {
+			return;
+		}
+
 		const messages = Array.isArray(event.messages) ? event.messages : [];
 		const lastMessage = messages.length > 0 ? messages[messages.length - 1] : null;
 		const terminalError = messages.length > 0 ? extractTerminalErrorFromMessages(messages) : null;
@@ -97,10 +125,12 @@ export const createRpcState = (onRawLine?: (line: string) => void): RpcState => 
 			(lastMessage as Record<string, unknown>).role === "assistant" &&
 			(lastMessage as Record<string, unknown>).stopReason === "error",
 		);
+
 		if (shouldDeferAgentEndForRetryWindow) {
 			scheduleRetryableAgentEnd(terminalError ?? "terminated");
 			return;
 		}
+
 		clearRetryableAgentEndTimer();
 		resolveAgentEnd();
 	};
@@ -114,6 +144,7 @@ export const createRpcState = (onRawLine?: (line: string) => void): RpcState => 
 		diagnostics: () => diagnostics.toSummary(),
 		dispose: () => {
 			clearRetryableAgentEndTimer();
+
 			while (pendingResolvers.length > 0) {
 				const resolve = pendingResolvers.shift();
 				resolve?.();

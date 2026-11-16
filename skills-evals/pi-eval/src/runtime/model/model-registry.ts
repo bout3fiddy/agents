@@ -1,8 +1,8 @@
 import type { ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
-import type { Model } from "@earendil-works/pi-ai";
+import type { Api, Model } from "@earendil-works/pi-ai";
 import type { EvalConfig, ModelSpec } from "../../data/types.js";
 
-export const modelSpecFromModel = (model: Model<any>): ModelSpec => ({
+export const modelSpecFromModel = (model: Model<Api>): ModelSpec => ({
 	provider: model.provider,
 	id: model.id,
 	key: `${model.provider}/${model.id}`,
@@ -12,7 +12,11 @@ export const modelSpecFromModel = (model: Model<any>): ModelSpec => ({
 export const modelSpecFromKey = (modelKey: string): ModelSpec | null => {
 	const [provider, ...idParts] = modelKey.split("/");
 	const id = idParts.join("/");
-	if (!provider || !id) return null;
+
+	if (!provider || !id) {
+		return null;
+	}
+
 	return {
 		provider,
 		id,
@@ -26,9 +30,12 @@ export const resolveModelSpec = async (
 	config: EvalConfig,
 	ctx: ExtensionCommandContext,
 ): Promise<ModelSpec> => {
-	let cached: Model<any>[] | null = null;
-	const getAvailable = async (): Promise<Model<any>[]> => {
-		if (cached) return cached;
+	let cached: Model<Api>[] | null = null;
+	const getAvailable = async (): Promise<Model<Api>[]> => {
+		if (cached) {
+			return cached;
+		}
+
 		cached = await ctx.modelRegistry.getAvailable();
 		return cached;
 	};
@@ -36,10 +43,16 @@ export const resolveModelSpec = async (
 	if (modelArg) {
 		if (modelArg.includes("/")) {
 			const parsed = modelSpecFromKey(modelArg);
-			if (!parsed) throw new Error(`Invalid model format: ${modelArg}. Expected provider/model.`);
+
+			if (!parsed) {
+				throw new Error(`Invalid model format: ${modelArg}. Expected provider/model.`);
+			}
+
 			return parsed;
 		}
+
 		const match = (await getAvailable()).find((item) => item.id === modelArg);
+
 		if (!match) {
 			throw new Error(
 				`Model not found: ${modelArg}. Available: ${(await getAvailable())
@@ -47,26 +60,38 @@ export const resolveModelSpec = async (
 					.join(", ")}`,
 			);
 		}
+
 		return modelSpecFromModel(match);
 	}
 
 	const configuredModel = config.requiredModels?.[0];
+
 	if (typeof configuredModel === "string" && configuredModel.trim().length > 0) {
 		if (configuredModel.includes("/")) {
 			const parsed = modelSpecFromKey(configuredModel);
-			if (parsed) return parsed;
+
+			if (parsed) {
+				return parsed;
+			}
 		} else {
 			const match = (await getAvailable()).find((item) => item.id === configuredModel);
-			if (match) return modelSpecFromModel(match);
+
+			if (match) {
+				return modelSpecFromModel(match);
+			}
 		}
 	}
 
-	if (ctx.model) return modelSpecFromModel(ctx.model);
+	if (ctx.model) {
+		return modelSpecFromModel(ctx.model);
+	}
 
 	const available = await getAvailable();
+
 	if (available.length === 0) {
 		throw new Error("No models available. Configure a provider or login.");
 	}
+
 	return modelSpecFromModel(available[0]);
 };
 
@@ -75,6 +100,7 @@ export const ensureModelAuth = async (
 	ctx: ExtensionCommandContext,
 ): Promise<void> => {
 	const resolved = ctx.modelRegistry.find(model.provider, model.id);
+
 	if (!resolved) {
 		throw new Error(`Model not registered: ${model.provider}/${model.id}`);
 	}
@@ -84,12 +110,17 @@ export const ensureModelAuth = async (
 		hasConfiguredAuth?: (model: typeof resolved) => boolean;
 		getApiKeyAndHeaders?: (
 			model: typeof resolved,
-		) => Promise<{ ok: true; apiKey?: string; headers?: Record<string, string> } | { ok: false; error: string }>;
+		) => Promise<
+			{ ok: true; apiKey?: string; headers?: Record<string, string> } | { ok: false; error: string }
+		>;
 	};
 
 	if (typeof registry.getApiKey === "function") {
 		const apiKey = await registry.getApiKey(resolved);
-		if (apiKey) return;
+
+		if (apiKey) {
+			return;
+		}
 	}
 
 	if (typeof registry.hasConfiguredAuth === "function" && registry.hasConfiguredAuth(resolved)) {
@@ -98,11 +129,21 @@ export const ensureModelAuth = async (
 
 	if (typeof registry.getApiKeyAndHeaders === "function") {
 		const auth = await registry.getApiKeyAndHeaders(resolved);
-		if (auth.ok && (auth.apiKey || auth.headers)) return;
-		if (!auth.ok) throw new Error(auth.error);
+
+		if (auth.ok && (auth.apiKey || auth.headers)) {
+			return;
+		}
+
+		if (!auth.ok) {
+			throw new Error(auth.error);
+		}
 	}
 
 	throw new Error(
-		`Missing credentials for ${model.provider}/${model.id}. Authenticate before running evals.`,
+		"Missing credentials for " +
+			`${model.provider}` +
+			"/" +
+			`${model.id}` +
+			". Authenticate before running evals.",
 	);
 };

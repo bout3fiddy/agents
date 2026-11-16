@@ -1,10 +1,13 @@
 import assert from "node:assert/strict";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
-import { mkdtemp } from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
 import test from "node:test";
-import { resolveRemoveTargets, executeRemove, type RemoveDirs } from "../../src/cli/manage-remove.js";
+import {
+	resolveRemoveTargets,
+	executeRemove,
+	type RemoveDirs,
+} from "../../src/cli/manage-remove.js";
 
 const makeTmpDirs = (): { root: string; dirs: RemoveDirs; cleanup: () => void } => {
 	const root = path.join(os.tmpdir(), `manage-remove-test-${Date.now()}`);
@@ -21,6 +24,7 @@ const makeTmpDirs = (): { root: string; dirs: RemoveDirs; cleanup: () => void } 
 
 test("resolveRemoveTargets: standalone case", async () => {
 	const { dirs, cleanup } = makeTmpDirs();
+
 	try {
 		writeFileSync(
 			path.join(dirs.casesDir, "CD-010.jsonl"),
@@ -34,8 +38,10 @@ test("resolveRemoveTargets: standalone case", async () => {
 		assert.ok(targets.filesToDelete.some((f) => f.endsWith("CD-010.jsonl")));
 		assert.deepStrictEqual(targets.dirsToDelete, []);
 		assert.deepStrictEqual(targets.purgeArgs, [
-			"--case", "CD-010",
-			"--reports-dir", dirs.reportsDir,
+			"--case",
+			"CD-010",
+			"--reports-dir",
+			dirs.reportsDir,
 		]);
 	} finally {
 		cleanup();
@@ -44,6 +50,7 @@ test("resolveRemoveTargets: standalone case", async () => {
 
 test("resolveRemoveTargets: bundle case with variants", async () => {
 	const { dirs, cleanup } = makeTmpDirs();
+
 	try {
 		writeFileSync(
 			path.join(dirs.casesDir, "CD-015.jsonl"),
@@ -75,6 +82,7 @@ test("resolveRemoveTargets: bundle case with variants", async () => {
 
 test("resolveRemoveTargets: includes routing trace files when trace dirs exist", async () => {
 	const { dirs, cleanup } = makeTmpDirs();
+
 	try {
 		writeFileSync(
 			path.join(dirs.casesDir, "CD-010.jsonl"),
@@ -87,7 +95,9 @@ test("resolveRemoveTargets: includes routing trace files when trace dirs exist",
 
 		const targets = await resolveRemoveTargets("CD-010", dirs);
 
-		assert.ok(targets.filesToDelete.some((f) => f.includes("routing-traces") && f.endsWith(".json")));
+		assert.ok(
+			targets.filesToDelete.some((f) => f.includes("routing-traces") && f.endsWith(".json")),
+		);
 		assert.ok(targets.filesToDelete.some((f) => f.endsWith("suite-verdict.json")));
 	} finally {
 		cleanup();
@@ -96,6 +106,7 @@ test("resolveRemoveTargets: includes routing trace files when trace dirs exist",
 
 test("executeRemove: deletes files and dirs within allowed roots", async () => {
 	const { dirs, cleanup } = makeTmpDirs();
+
 	try {
 		const filePath = path.join(dirs.casesDir, "CD-010.jsonl");
 		writeFileSync(filePath, "{}");
@@ -118,6 +129,7 @@ test("executeRemove: deletes files and dirs within allowed roots", async () => {
 
 test("executeRemove: rejects files outside managed dirs", async () => {
 	const { dirs, cleanup } = makeTmpDirs();
+
 	try {
 		const targets = {
 			filesToDelete: ["/tmp/evil-file.json"],
@@ -128,10 +140,7 @@ test("executeRemove: rejects files outside managed dirs", async () => {
 			purgeArgs: [],
 		};
 
-		await assert.rejects(
-			() => executeRemove(targets, dirs),
-			/outside managed dirs/,
-		);
+		await assert.rejects(() => executeRemove(targets, dirs), /outside managed dirs/);
 	} finally {
 		cleanup();
 	}

@@ -5,7 +5,11 @@ import { hasPathPrefix, normalizePath, resolveCanonicalPath } from "../policy/pa
 export const FORBIDDEN_WORKSPACE_VIOLATION = "FORBIDDEN_WORKSPACE_VIOLATION";
 
 export type ToolWithExecute = {
-	execute: (toolCallId: string, args: Record<string, unknown>, ...rest: unknown[]) => Promise<unknown>;
+	execute: (
+		toolCallId: string,
+		args: Record<string, unknown>,
+		...rest: unknown[]
+	) => Promise<unknown>;
 };
 
 export type SandboxBoundary = {
@@ -34,7 +38,13 @@ export const createSandboxBoundary = async (
 const registerSandboxViolation = (boundary: SandboxBoundary, targetPath: string): never => {
 	const normalized = normalizePath(targetPath);
 	boundary.violations.add(normalized);
-	throw new Error(`${FORBIDDEN_WORKSPACE_VIOLATION}: Attempted to access path outside sandbox: ${targetPath}`);
+	throw new Error(
+		"" +
+			`${FORBIDDEN_WORKSPACE_VIOLATION}` +
+			": Attempted to access path outside sandbox: " +
+			`${targetPath}` +
+			"",
+	);
 };
 
 export const assertWithinSandboxBoundary = async (
@@ -42,11 +52,17 @@ export const assertWithinSandboxBoundary = async (
 	boundary: SandboxBoundary,
 ): Promise<void> => {
 	const resolvedPath = path.resolve(boundary.cwd, rawPath);
+
 	if (!hasPathPrefix(resolvedPath, boundary.sandboxRoot)) {
 		registerSandboxViolation(boundary, resolvedPath);
 	}
-	if (!boundary.sandboxRootCanonical) return;
+
+	if (!boundary.sandboxRootCanonical) {
+		return;
+	}
+
 	const canonicalPath = await resolveCanonicalPath(resolvedPath, boundary.canonicalCache);
+
 	if (canonicalPath && !hasPathPrefix(canonicalPath, boundary.sandboxRootCanonical)) {
 		registerSandboxViolation(boundary, canonicalPath);
 	}
@@ -55,17 +71,25 @@ export const assertWithinSandboxBoundary = async (
 const PATH_KEY_PATTERN = /(path|file|dir|cwd|target)/i;
 
 export const extractPathCandidates = (value: unknown, keyHint = "", depth = 0): string[] => {
-	if (depth > 4) return [];
+	if (depth > 4) {
+		return [];
+	}
+
 	if (typeof value === "string") {
 		return PATH_KEY_PATTERN.test(keyHint) ? [value] : [];
 	}
+
 	if (Array.isArray(value)) {
 		return value.flatMap((item) => extractPathCandidates(item, keyHint, depth + 1));
 	}
-	if (!value || typeof value !== "object") return [];
+
+	if (!value || typeof value !== "object") {
+		return [];
+	}
+
 	const objectValue = value as Record<string, unknown>;
 	return Object.entries(objectValue).flatMap(([key, child]) =>
-		extractPathCandidates(child, key, depth + 1)
+		extractPathCandidates(child, key, depth + 1),
 	);
 };
 
@@ -78,6 +102,7 @@ export const wrapToolWithSandboxBoundary = <T extends ToolWithExecute>(
 		for (const targetPath of extractPathCandidates(args)) {
 			await assertWithinSandboxBoundary(targetPath, boundary);
 		}
+
 		return tool.execute(toolCallId, args, undefined);
 	},
 });

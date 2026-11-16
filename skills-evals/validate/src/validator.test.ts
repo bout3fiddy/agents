@@ -12,7 +12,9 @@ const makeSandboxDir = async (): Promise<string> => {
 	return sandboxDir;
 };
 
-const makeSkillDir = async (skillName: string): Promise<{ sandboxDir: string; skillDir: string }> => {
+const makeSkillDir = async (
+	skillName: string,
+): Promise<{ sandboxDir: string; skillDir: string }> => {
 	const sandboxDir = await makeSandboxDir();
 	const skillDir = path.join(sandboxDir, skillName);
 	await mkdir(skillDir, { recursive: true });

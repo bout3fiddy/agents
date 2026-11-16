@@ -17,7 +17,10 @@ export const normalizeStatus = (value: string): string => value.trim().toUpperCa
 
 /** Split a markdown table row into trimmed cell strings (strips outer `|`). */
 export const extractRowCells = (line: string): string[] =>
-	line.split("|").slice(1, -1).map((cell) => cell.trim());
+	line
+		.split("|")
+		.slice(1, -1)
+		.map((cell) => cell.trim());
 
 export const safeParseInt = (value: string): number => {
 	const n = Number.parseInt(value, 10);
@@ -31,8 +34,8 @@ export const cellStr = (cells: string[], idx: number, fallback: string): string 
 
 export type TableBoundaries = {
 	sentinelIndex: number; // -1 when absent
-	headerIndex: number;   // -1 when no table found
-	dataStart: number;     // headerIndex + 2 (first data row)
+	headerIndex: number; // -1 when no table found
+	dataStart: number; // headerIndex + 2 (first data row)
 };
 
 /**
@@ -40,10 +43,7 @@ export type TableBoundaries = {
  * `lines`.  Uses the sentinel (if present) as a search-start fence so
  * tables above it are ignored.
  */
-export const findTableBoundaries = (
-	lines: string[],
-	headerPrefix = "| Case ",
-): TableBoundaries => {
+export const findTableBoundaries = (lines: string[], headerPrefix = "| Case "): TableBoundaries => {
 	const sentinelIndex = lines.findIndex((line) => line.trim() === UNPAIRED_TABLE_SENTINEL);
 	const searchStart = sentinelIndex >= 0 ? sentinelIndex : 0;
 	const headerIndex = lines.findIndex(
@@ -98,7 +98,10 @@ export const buildRowKey = (caseId: string, mode: string): string => `${caseId}:
 export const parseStandaloneTable = (lines: string[]): Map<string, ReportRow> => {
 	const rows = new Map<string, ReportRow>();
 	const { headerIndex, dataStart } = findTableBoundaries(lines);
-	if (headerIndex < 0 || dataStart < 0) return rows;
+
+	if (headerIndex < 0 || dataStart < 0) {
+		return rows;
+	}
 
 	const headerCells = extractRowCells(lines[headerIndex]);
 	const col = buildColumnIndex(headerCells);
@@ -118,18 +121,34 @@ export const parseStandaloneTable = (lines: string[]): Map<string, ReportRow> =>
 	const unexpectedRefsIdx = col("Unexpected Refs");
 	const notesIdx = col("Notes");
 	const runIdx = col("Run");
-	if (caseIdx < 0 || modeIdx < 0) return rows;
+
+	if (caseIdx < 0 || modeIdx < 0) {
+		return rows;
+	}
+
 	const primaryCostIdx = costIdx >= 0 ? costIdx : tokensIdx;
 	const requiredMax = Math.max(caseIdx, modeIdx, statusIdx, primaryCostIdx, notesIdx, runIdx);
 
 	for (let i = dataStart; i < lines.length; i += 1) {
 		const line = lines[i] ?? "";
-		if (!line.trim().startsWith("|")) break;
+
+		if (!line.trim().startsWith("|")) {
+			break;
+		}
+
 		const cells = extractRowCells(line);
-		if (cells.length <= requiredMax) continue;
+
+		if (cells.length <= requiredMax) {
+			continue;
+		}
+
 		const caseId = cells[caseIdx] ?? "";
 		const mode = cells[modeIdx] ?? "";
-		if (!caseId || !mode) continue;
+
+		if (!caseId || !mode) {
+			continue;
+		}
+
 		const parsedCost = safeParseInt(cellStr(cells, primaryCostIdx, "0"));
 		rows.set(buildRowKey(caseId, mode), {
 			caseId,
@@ -166,44 +185,77 @@ export const recalculateHeaderStats = (lines: string[]): void => {
 
 	// Count standalone table rows
 	const { headerIndex } = findTableBoundaries(lines);
+
 	if (headerIndex >= 0) {
 		const col = buildColumnIndex(extractRowCells(lines[headerIndex]));
 		const caseIdx = col("Case");
 		const statusIdx = col("Status") >= 0 ? col("Status") : col("Task");
+
 		for (let i = headerIndex + 2; i < lines.length; i++) {
 			const line = lines[i];
-			if (!line.trim().startsWith("|")) break;
+
+			if (!line.trim().startsWith("|")) {
+				break;
+			}
+
 			const cells = extractRowCells(line);
 			const caseId = cellStr(cells, caseIdx, "");
 			const status = cellStr(cells, statusIdx, "");
-			if (!caseId) continue;
+
+			if (!caseId) {
+				continue;
+			}
+
 			caseIds.add(caseId);
 			const s = normalizeStatus(status);
-			if (s === "PASS") rowPass++;
-			else if (s === "FAIL") rowFail++;
-			else if (s === "SKIP") rowSkip++;
+
+			if (s === "PASS") {
+				rowPass++;
+			} else if (s === "FAIL") {
+				rowFail++;
+			} else if (s === "SKIP") {
+				rowSkip++;
+			}
 		}
 	}
 
 	// Count bundle variant table rows (tables under ### headings)
 	for (let i = 0; i < lines.length; i++) {
 		const line = lines[i];
-		if (!line.startsWith("| Variant ")) continue;
+
+		if (!line.startsWith("| Variant ")) {
+			continue;
+		}
+
 		const varCol = buildColumnIndex(extractRowCells(line));
 		const variantIdx = varCol("Variant");
 		const varStatusIdx = varCol("Status");
+
 		for (let j = i + 2; j < lines.length; j++) {
 			const row = lines[j];
-			if (!row.trim().startsWith("|")) break;
+
+			if (!row.trim().startsWith("|")) {
+				break;
+			}
+
 			const cells = extractRowCells(row);
 			const variantId = cellStr(cells, variantIdx, "");
 			const status = cellStr(cells, varStatusIdx, "");
-			if (!variantId) continue;
+
+			if (!variantId) {
+				continue;
+			}
+
 			caseIds.add(variantId);
 			const s = normalizeStatus(status);
-			if (s === "PASS") rowPass++;
-			else if (s === "FAIL") rowFail++;
-			else if (s === "SKIP") rowSkip++;
+
+			if (s === "PASS") {
+				rowPass++;
+			} else if (s === "FAIL") {
+				rowFail++;
+			} else if (s === "SKIP") {
+				rowSkip++;
+			}
 		}
 	}
 
@@ -212,7 +264,16 @@ export const recalculateHeaderStats = (lines: string[]): void => {
 
 	for (let i = 0; i < Math.min(lines.length, 20); i++) {
 		if (lines[i].startsWith("- Task rows:") || lines[i].startsWith("- Case rows:")) {
-			lines[i] = `- Task rows: ${totalRows} (pass ${rowPass}, fail ${rowFail}, skip ${rowSkip})`;
+			lines[i] =
+				"- Task rows: " +
+				`${totalRows}` +
+				" (pass " +
+				`${rowPass}` +
+				", fail " +
+				`${rowFail}` +
+				", skip " +
+				`${rowSkip}` +
+				")";
 		} else if (lines[i].startsWith("- Runs in spec:") || lines[i].startsWith("- Cases in spec:")) {
 			lines[i] = `- Runs in spec: ${totalCases}`;
 		}

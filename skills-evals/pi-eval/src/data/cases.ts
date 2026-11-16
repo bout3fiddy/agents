@@ -1,6 +1,12 @@
 import { readFile, readdir, stat } from "node:fs/promises";
 import path from "node:path";
-import type { EvalBundle, EvalCase, EvalCaseVariant, LoadedCases, ResolvedEvalCase } from "./types.js";
+import type {
+	EvalBundle,
+	EvalCase,
+	EvalCaseVariant,
+	LoadedCases,
+	ResolvedEvalCase,
+} from "./types.js";
 
 const ARTIFACT_PATH_PLACEHOLDER = "{{artifactPath}}";
 
@@ -9,15 +15,23 @@ const normalizeText = (value: unknown): string | undefined =>
 	Array.isArray(value) ? value.join(" ") : typeof value === "string" ? value : undefined;
 
 /** Coerce string-array shorthand fields on a raw JSON object before casting to EvalCase. */
-// biome-ignore lint/suspicious/noExplicitAny: raw JSON from disk
-const normalizeRawCase = (raw: any): EvalCase => {
-	if (raw.prompt != null) raw.prompt = normalizeText(raw.prompt);
-	if (raw.notes != null) raw.notes = normalizeText(raw.notes);
+const normalizeRawCase = (raw: Record<string, unknown>): EvalCase => {
+	if (raw.prompt != null) {
+		raw.prompt = normalizeText(raw.prompt);
+	}
+
+	if (raw.notes != null) {
+		raw.notes = normalizeText(raw.notes);
+	}
+
 	if (Array.isArray(raw.variants)) {
 		for (const v of raw.variants) {
-			if (v.prompt != null) v.prompt = normalizeText(v.prompt);
+			if (v.prompt != null) {
+				v.prompt = normalizeText(v.prompt);
+			}
 		}
 	}
+
 	return raw as EvalCase;
 };
 
@@ -47,6 +61,7 @@ const flattenBundle = (
 	const variantTags = raw.variants.map((v) => v.tag);
 
 	const variantArtifactPaths = new Map<string, string>();
+
 	for (const variant of raw.variants) {
 		variantArtifactPaths.set(variant.tag, resolveArtifactPath(suite, slug, variant.tag));
 	}
@@ -124,7 +139,11 @@ const addParsedCase = (
 		const { cases: bundleCases, bundle } = flattenBundle(
 			parsed as EvalCase & { variants: EvalCaseVariant[] },
 		);
-		for (const c of bundleCases) cases.push(c);
+
+		for (const c of bundleCases) {
+			cases.push(c);
+		}
+
 		bundles.set(bundle.id, bundle);
 	} else {
 		cases.push(wrapStandalone(parsed));
@@ -141,7 +160,7 @@ const parseSingleCase = (
 	try {
 		addParsedCase(normalizeRawCase(JSON.parse(raw)), cases, bundles);
 	} catch (error) {
-		throw new Error(`Failed to parse case in ${sourceLabel}: ${error}`);
+		throw new Error(`Failed to parse case in ${sourceLabel}: ${error}`, { cause: error });
 	}
 };
 
@@ -155,11 +174,17 @@ const parseJsonlCases = (
 	const lines = raw.split("\n");
 	lines.forEach((line, index) => {
 		const trimmed = line.trim();
-		if (!trimmed.startsWith("{")) return;
+
+		if (!trimmed.startsWith("{")) {
+			return;
+		}
+
 		try {
 			addParsedCase(normalizeRawCase(JSON.parse(trimmed)), cases, bundles);
 		} catch (error) {
-			throw new Error(`Failed to parse case in ${sourceLabel} on line ${index + 1}: ${error}`);
+			throw new Error(`Failed to parse case in ${sourceLabel} on line ${index + 1}: ${error}`, {
+				cause: error,
+			});
 		}
 	});
 };
@@ -169,14 +194,17 @@ export const loadCases = async (casesPath: string): Promise<LoadedCases> => {
 	const bundles = new Map<string, EvalBundle>();
 
 	const info = await stat(casesPath);
+
 	if (info.isDirectory()) {
 		const entries = await readdir(casesPath, { withFileTypes: true });
 
 		// Collect case files: subdirectories containing case.jsonl, or top-level .jsonl files
 		const caseFiles: { label: string; filePath: string }[] = [];
+
 		for (const entry of entries) {
 			if (entry.isDirectory()) {
 				const caseJsonl = path.join(casesPath, entry.name, "case.jsonl");
+
 				try {
 					await stat(caseJsonl);
 					caseFiles.push({ label: `${entry.name}/case.jsonl`, filePath: caseJsonl });
@@ -187,11 +215,11 @@ export const loadCases = async (casesPath: string): Promise<LoadedCases> => {
 				caseFiles.push({ label: entry.name, filePath: path.join(casesPath, entry.name) });
 			}
 		}
+
 		caseFiles.sort((a, b) => a.label.localeCompare(b.label));
 
-		const fileContents = await Promise.all(
-			caseFiles.map((f) => readFile(f.filePath, "utf-8")),
-		);
+		const fileContents = await Promise.all(caseFiles.map((f) => readFile(f.filePath, "utf-8")));
+
 		for (let i = 0; i < caseFiles.length; i++) {
 			parseSingleCase(fileContents[i], caseFiles[i].label, cases, bundles);
 		}
@@ -203,31 +231,36 @@ export const loadCases = async (casesPath: string): Promise<LoadedCases> => {
 	return { cases, bundles };
 };
 
-export const filterCases = (
-	loaded: LoadedCases,
-	filter?: string,
-	limit?: number,
-): LoadedCases => {
+export const filterCases = (loaded: LoadedCases, filter?: string, limit?: number): LoadedCases => {
 	let { cases, bundles } = loaded;
 
 	if (filter) {
 		const token = filter.toLowerCase();
+
 		// Find matching bundle IDs so we include all their variants
 		const matchedBundleIds = new Set<string>();
+
 		for (const [bundleId] of bundles) {
 			if (bundleId.toLowerCase().includes(token)) {
 				matchedBundleIds.add(bundleId);
 			}
 		}
+
 		cases = cases.filter((c) => {
+
 			// Include if bundle matched
-			if (c.bundleId && matchedBundleIds.has(c.bundleId)) return true;
+			if (c.bundleId && matchedBundleIds.has(c.bundleId)) {
+				return true;
+			}
+
 			// Include if case ID or suite matches
+
 			return c.id.toLowerCase().includes(token) || c.suite.toLowerCase().includes(token);
 		});
 	}
 
 	if (limit && Number.isFinite(limit)) {
+
 		// Count bundles and standalones as 1 unit each
 		const result: ResolvedEvalCase[] = [];
 		let unitCount = 0;
@@ -236,27 +269,36 @@ export const filterCases = (
 		for (const c of cases) {
 			if (c.bundleId) {
 				if (!includedBundles.has(c.bundleId)) {
-					if (unitCount >= limit) continue;
+					if (unitCount >= limit) {
+						continue;
+					}
+
 					includedBundles.add(c.bundleId);
 					unitCount++;
 				}
+
 				result.push(c);
 			} else {
-				if (unitCount >= limit) continue;
+				if (unitCount >= limit) {
+					continue;
+				}
+
 				result.push(c);
 				unitCount++;
 			}
 		}
+
 		cases = result;
 	}
 
 	// Filter bundles map to only include bundles that have cases
-	const activeBundleIds = new Set(
-		cases.filter((c) => c.bundleId).map((c) => c.bundleId!),
-	);
+	const activeBundleIds = new Set(cases.filter((c) => c.bundleId).map((c) => c.bundleId!));
 	const filteredBundles = new Map<string, EvalBundle>();
+
 	for (const [id, bundle] of bundles) {
-		if (activeBundleIds.has(id)) filteredBundles.set(id, bundle);
+		if (activeBundleIds.has(id)) {
+			filteredBundles.set(id, bundle);
+		}
 	}
 
 	return { cases, bundles: filteredBundles };

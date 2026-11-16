@@ -4,7 +4,17 @@
  * Handles profile resolution, home setup, auth copying, skill discovery,
  * workspace mirroring, and preflight validation.
  */
-import { chmod, copyFile, cp, mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import {
+	chmod,
+	copyFile,
+	cp,
+	mkdir,
+	readdir,
+	readFile,
+	rm,
+	stat,
+	writeFile,
+} from "node:fs/promises";
 import path from "node:path";
 import type {
 	BootstrapBreakdownEntry,
@@ -14,10 +24,7 @@ import type {
 } from "../../data/types.js";
 import { fileExists } from "../../data/utils.js";
 import { buildStubResult } from "./case-process.js";
-import {
-	createSandboxHome,
-	runEvalSync,
-} from "../sandbox/sandbox.js";
+import { createSandboxHome, runEvalSync } from "../sandbox/sandbox.js";
 import { createHash } from "node:crypto";
 import { buildCaseResult } from "./evaluation.js";
 import { DEFAULT_ALLOWED_TOOLS } from "../worker/worker-contract.js";
@@ -50,7 +57,10 @@ export type HomeSetup = {
 // ── Profile / tool resolution ───────────────────────────────────────────
 
 export const resolveBootstrapProfile = (evalCase: EvalCase): BootstrapProfile => {
-	if (evalCase.bootstrapProfile) return evalCase.bootstrapProfile;
+	if (evalCase.bootstrapProfile) {
+		return evalCase.bootstrapProfile;
+	}
+
 	return evalCase.disableHarness ? "no_payload" : "full_payload";
 };
 
@@ -59,12 +69,19 @@ export const resolveTools = (evalCase: EvalCase): string[] =>
 
 // ── Auth copying ────────────────────────────────────────────────────────
 
-export const copyAuthIfPresent = async (authSourcePath: string | null, sandboxHomeDir: string): Promise<void> => {
-	if (!authSourcePath) return;
+export const copyAuthIfPresent = async (
+	authSourcePath: string | null,
+	sandboxHomeDir: string,
+): Promise<void> => {
+	if (!authSourcePath) {
+		return;
+	}
+
 	const targetAuthPaths = [
 		path.join(sandboxHomeDir, ".pi", "agent", "auth.json"),
 		path.join(sandboxHomeDir, ".agents", "auth.json"),
 	];
+
 	for (const targetAuthPath of targetAuthPaths) {
 		await mkdir(path.dirname(targetAuthPath), { recursive: true });
 		await copyFile(authSourcePath, targetAuthPath);
@@ -77,11 +94,13 @@ export const copyAuthIfPresent = async (authSourcePath: string | null, sandboxHo
 export const listSyncedSkills = async (homeDir: string): Promise<string[]> => {
 	const skillsRoot = path.join(homeDir, ".agents", "skills");
 	let entries: Awaited<ReturnType<typeof readdir>>;
+
 	try {
 		entries = await readdir(skillsRoot, { withFileTypes: true });
 	} catch {
 		return [];
 	}
+
 	const names = entries
 		.filter((entry) => entry.isDirectory())
 		.map((entry) => entry.name)
@@ -94,9 +113,14 @@ export const listSyncedSkills = async (homeDir: string): Promise<string[]> => {
 
 const normalizeSkillSet = (skillSet: string[] | undefined): string[] => {
 	const names = new Set<string>();
+
 	for (const rawName of skillSet ?? []) {
 		const name = rawName.trim();
-		if (!name) continue;
+
+		if (!name) {
+			continue;
+		}
+
 		if (
 			path.isAbsolute(name) ||
 			name.includes("/") ||
@@ -107,20 +131,33 @@ const normalizeSkillSet = (skillSet: string[] | undefined): string[] => {
 		) {
 			throw new Error(`invalid skillSet entry: ${rawName}`);
 		}
+
 		names.add(name);
 	}
+
 	return Array.from(names).sort();
 };
 
 const parseSkillDescription = (skillFile: string): string => {
-	if (!skillFile.startsWith("---")) return "";
+	if (!skillFile.startsWith("---")) {
+		return "";
+	}
+
 	const end = skillFile.indexOf("\n---", 3);
-	if (end === -1) return "";
+
+	if (end === -1) {
+		return "";
+	}
+
 	const frontmatter = skillFile.slice(3, end);
 	const line = frontmatter
 		.split("\n")
 		.find((entry) => entry.trimStart().startsWith("description:"));
-	if (!line) return "";
+
+	if (!line) {
+		return "";
+	}
+
 	return line
 		.replace(/^\s*description:\s*/, "")
 		.trim()
@@ -131,10 +168,14 @@ const readSkillDescription = async (skillsRoot: string, skillName: string): Prom
 	try {
 		const skillFile = await readFile(path.join(skillsRoot, skillName, "SKILL.md"), "utf-8");
 		const description = parseSkillDescription(skillFile);
-		if (description) return description;
+
+		if (description) {
+			return description;
+		}
 	} catch {
 		// Missing skills are reported by the normal bootstrap skill expectation check.
 	}
+
 	return "Read this skill when the task matches its name.";
 };
 
@@ -152,24 +193,34 @@ const buildScopedAgentsMarkdown = async (
 		"## Available Skills",
 		"",
 	];
+
 	for (const skillName of skillNames) {
 		const description = await readSkillDescription(skillsRoot, skillName);
 		lines.push(`- \`${skillName}\`: \`skills/${skillName}/SKILL.md\` - ${description}`);
 	}
+
 	lines.push("");
 	return `${lines.join("\n")}\n`;
 };
 
 const pruneDirectoryToEntries = async (root: string, keepNames: Set<string>): Promise<void> => {
 	let entries: Awaited<ReturnType<typeof readdir>>;
+
 	try {
 		entries = await readdir(root, { withFileTypes: true });
 	} catch {
 		return;
 	}
+
 	for (const entry of entries) {
-		if (!entry.isDirectory()) continue;
-		if (keepNames.has(entry.name)) continue;
+		if (!entry.isDirectory()) {
+			continue;
+		}
+
+		if (keepNames.has(entry.name)) {
+			continue;
+		}
+
 		await rm(path.join(root, entry.name), { recursive: true, force: true });
 	}
 };
@@ -179,7 +230,10 @@ export const applySkillSetBootstrapScope = async (
 	skillSet: string[] | undefined,
 ): Promise<void> => {
 	const scopedSkills = normalizeSkillSet(skillSet);
-	if (scopedSkills.length === 0) return;
+
+	if (scopedSkills.length === 0) {
+		return;
+	}
 
 	const keepSkills = new Set(scopedSkills);
 	const agentsRoot = path.join(homeDir, ".agents");
@@ -202,7 +256,10 @@ export const resolveExpectedRefCandidates = (
 	workspaceAgentDir: string,
 	homeDir: string,
 ): string[] => {
-	if (path.isAbsolute(expectedRef)) return [expectedRef];
+	if (path.isAbsolute(expectedRef)) {
+		return [expectedRef];
+	}
+
 	const normalizedRef = expectedRef.replace(/^\.\/+/, "");
 	return [
 		path.join(workspaceAgentDir, normalizedRef),
@@ -217,6 +274,7 @@ export const collectMissingExpectedRefs = async (params: {
 	homeDir: string;
 }): Promise<string[]> => {
 	const missing: string[] = [];
+
 	for (const expectedRef of params.expectedRefs) {
 		const candidates = resolveExpectedRefCandidates(
 			expectedRef,
@@ -224,8 +282,12 @@ export const collectMissingExpectedRefs = async (params: {
 			params.homeDir,
 		);
 		const found = await Promise.all(candidates.map((candidate) => fileExists(candidate)));
-		if (!found.some(Boolean)) missing.push(expectedRef);
+
+		if (!found.some(Boolean)) {
+			missing.push(expectedRef);
+		}
 	}
+
 	return missing;
 };
 
@@ -235,6 +297,7 @@ export const collectMissingSkillFiles = async (params: {
 	homeDir: string;
 }): Promise<string[]> => {
 	const missing: string[] = [];
+
 	for (const expectedSkill of params.expectedSkills) {
 		const candidates = [
 			path.join(params.workspaceAgentDir, "skills", expectedSkill, "SKILL.md"),
@@ -242,8 +305,12 @@ export const collectMissingSkillFiles = async (params: {
 			path.join(params.homeDir, ".codex", "skills", expectedSkill, "SKILL.md"),
 		];
 		const found = await Promise.all(candidates.map((candidate) => fileExists(candidate)));
-		if (!found.some(Boolean)) missing.push(expectedSkill);
+
+		if (!found.some(Boolean)) {
+			missing.push(expectedSkill);
+		}
 	}
+
 	return missing;
 };
 
@@ -252,14 +319,17 @@ export const collectMissingSkillFiles = async (params: {
 export const measureDirBytes = async (dirPath: string): Promise<number> => {
 	let total = 0;
 	const entries = await readdir(dirPath, { withFileTypes: true });
+
 	for (const entry of entries) {
 		const entryPath = path.join(dirPath, entry.name);
+
 		if (entry.isDirectory()) {
 			total += await measureDirBytes(entryPath);
 		} else {
 			total += (await stat(entryPath)).size;
 		}
 	}
+
 	return total;
 };
 
@@ -279,13 +349,16 @@ export const mirrorBootstrapPayloadToWorkspace = async (params: {
 	];
 
 	const breakdown: BootstrapBreakdownEntry[] = [];
+
 	for (const projection of projections) {
 		let sourceStat: Awaited<ReturnType<typeof stat>>;
+
 		try {
 			sourceStat = await stat(projection.source);
 		} catch {
 			continue;
 		}
+
 		const bytes = sourceStat.isDirectory()
 			? await measureDirBytes(projection.source)
 			: sourceStat.size;
@@ -296,6 +369,7 @@ export const mirrorBootstrapPayloadToWorkspace = async (params: {
 		await mkdir(path.dirname(projection.target), { recursive: true });
 		await cp(projection.source, projection.target, { recursive: true, force: true });
 	}
+
 	return breakdown;
 };
 
@@ -307,14 +381,19 @@ export const collectBootstrapPreflightIssues = async (params: {
 	homeDir: string;
 	bootstrapProfile: BootstrapProfile;
 }): Promise<string[]> => {
-	if (params.bootstrapProfile !== "full_payload") return [];
+	if (params.bootstrapProfile !== "full_payload") {
+		return [];
+	}
 
 	const issues: string[] = [];
-	const homeAgentsPaths = [
-		path.join(params.homeDir, ".agents", "AGENTS.md"),
-	];
-	const homeAgentsChecks = await Promise.all(homeAgentsPaths.map((targetPath) => fileExists(targetPath)));
-	if (!homeAgentsChecks[0]) issues.push("missing bootstrap home AGENTS.md");
+	const homeAgentsPaths = [path.join(params.homeDir, ".agents", "AGENTS.md")];
+	const homeAgentsChecks = await Promise.all(
+		homeAgentsPaths.map((targetPath) => fileExists(targetPath)),
+	);
+
+	if (!homeAgentsChecks[0]) {
+		issues.push("missing bootstrap home AGENTS.md");
+	}
 
 	const workspaceBootstrapPaths = [
 		path.join(params.workspaceAgentDir, "AGENTS.md"),
@@ -323,8 +402,14 @@ export const collectBootstrapPreflightIssues = async (params: {
 	const workspaceChecks = await Promise.all(
 		workspaceBootstrapPaths.map((targetPath) => fileExists(targetPath)),
 	);
-	if (!workspaceChecks[0]) issues.push("missing workspace AGENTS.md");
-	if (!workspaceChecks[1]) issues.push("missing workspace skills directory");
+
+	if (!workspaceChecks[0]) {
+		issues.push("missing workspace AGENTS.md");
+	}
+
+	if (!workspaceChecks[1]) {
+		issues.push("missing workspace skills directory");
+	}
 
 	const [missingSkillFiles, missingExpectedRefs] = await Promise.all([
 		collectMissingSkillFiles({
@@ -338,12 +423,15 @@ export const collectBootstrapPreflightIssues = async (params: {
 			homeDir: params.homeDir,
 		}),
 	]);
+
 	if (missingSkillFiles.length > 0) {
 		issues.push(`missing sandbox skill files: [${missingSkillFiles.join(", ")}]`);
 	}
+
 	if (missingExpectedRefs.length > 0) {
 		issues.push(`missing sandbox refs: [${missingExpectedRefs.join(", ")}]`);
 	}
+
 	return issues;
 };
 
@@ -354,12 +442,9 @@ export const buildBootstrapErrorEvaluation = (
 	dryRun: boolean,
 	errorMessage: string,
 ): CaseEvaluation =>
-	buildCaseResult(
-		evalCase.id,
-		buildStubResult(evalCase.id, dryRun, [errorMessage]),
-		evalCase,
-		[{ category: "BOOTSTRAP_FAILURE", message: errorMessage }],
-	);
+	buildCaseResult(evalCase.id, buildStubResult(evalCase.id, dryRun, [errorMessage]), evalCase, [
+		{ category: "BOOTSTRAP_FAILURE", message: errorMessage },
+	]);
 
 // ── Home setup orchestrator ─────────────────────────────────────────────
 

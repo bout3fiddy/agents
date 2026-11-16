@@ -10,12 +10,11 @@ import { uniqueSorted } from "../../data/utils.js";
 import { normalizePath } from "../policy/path-policy.js";
 
 const normalizeRefPath = (ref: string): string =>
-	normalizePath(ref).trim().replace(/^\.\/+/, "");
+	normalizePath(ref)
+		.trim()
+		.replace(/^\.\/+/, "");
 
-const buildRoutingScorecard = (
-	result: CaseRunResult,
-	expectedRefs: string[],
-): RoutingScorecard => {
+const buildRoutingScorecard = (result: CaseRunResult, expectedRefs: string[]): RoutingScorecard => {
 	const attemptedSkills = uniqueSorted(result.skillAttempts ?? []);
 	const successfulSkills = uniqueSorted(result.skillInvocations ?? []);
 	const deniedSkills = uniqueSorted(result.skillDenied ?? []);
@@ -31,9 +30,8 @@ const buildRoutingScorecard = (
 	const expectedRefSet = new Set(uniqueSorted(expectedRefs.map(normalizeRefPath)));
 	const invokedRefSet = new Set(invokedRefs);
 	const missingRefs = [...expectedRefSet].filter((ref) => !invokedRefSet.has(ref));
-	const unexpectedRefs = expectedRefSet.size === 0
-		? []
-		: invokedRefs.filter((ref) => !expectedRefSet.has(ref));
+	const unexpectedRefs =
+		expectedRefSet.size === 0 ? [] : invokedRefs.filter((ref) => !expectedRefSet.has(ref));
 
 	return {
 		readSkills: invokedSkills,
@@ -75,8 +73,5 @@ export const buildCaseResult = (
 	tokenBudget: evalCase.tokenBudget ?? null,
 });
 
-export const assembleEvaluation = (
-	evalCase: EvalCase,
-	result: CaseRunResult,
-): CaseEvaluation =>
+export const assembleEvaluation = (evalCase: EvalCase, result: CaseRunResult): CaseEvaluation =>
 	buildCaseResult(evalCase.id, result, evalCase, []);

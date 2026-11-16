@@ -1,0 +1,213 @@
+import { mkdtemp, symlink, rm, chmod, stat } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { dirname, join, relative, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
+import {
+  copySnapshot,
+  inventory,
+  safePath,
+  snapshotHash,
+  validateScope,
+  readBoundedFile,
+} from './paths.ts'
+import { readJson } from './state.ts'
+import type { Project, ProjectCheck, Receipt } from './contracts.ts'
+import { runSandboxed } from './sandbox.ts'
+
+export const harnessRoot = fileURLToPath(new URL('../', import.meta.url))
+export const defaultDatabasePaths = [
+  'db/**',
+  'database/**',
+  'migrations/**',
+  'storage/**',
+  'infra/**',
+]
+
+export async function loadProject(root: string): Promise<Project> {
+  const adapter = await readJson<{
+    checks?: ProjectCheck[]
+    instrumentationPaths?: string[]
+    databasePaths?: string[]
+  }>(join(root, '.pi', 'harness.json'))
+  const checks = adapter?.checks ?? []
+
+  if (
+    adapter &&
+    Object.keys(adapter).some(
+      (key) => !['checks', 'instrumentationPaths', 'databasePaths'].includes(key),
+    )
+  ) {
+    throw new Error('Unknown project adapter field')
+  }
+
+  if (!adapter) {
+    const pkg = await readJson<{ scripts?: Record<string, string> }>(join(root, 'package.json'))
+
+    for (const id of ['verify', 'test']) {
+      if (pkg?.scripts?.[id]) {
+        checks.push({
+          id,
+          argv: ['npm', 'run', id],
+          required: true,
+          kind: id === 'test' ? 'test' : 'static',
+          timeoutMs: 120_000,
+        })
+      }
+    }
+  }
+
+  if (checks.length > 20 || new Set(checks.map((check) => check.id)).size !== checks.length) {
+    throw new Error('Project checks must have unique IDs, with a maximum of 20')
+  }
+
+  for (const check of checks) {
+    if (
+      !/^[a-z][a-z0-9-]{0,39}$/.test(check.id) ||
+      !Array.isArray(check.argv) ||
+      !check.argv.length ||
+      check.argv.some((arg) => typeof arg !== 'string') ||
+      typeof check.required !== 'boolean' ||
+      !['test', 'database', 'benchmark', 'static'].includes(check.kind) ||
+      !Number.isSafeInteger(check.timeoutMs) ||
+      check.timeoutMs < 1 ||
+      check.timeoutMs > 900_000
+    ) {
+      throw new Error('Invalid project check')
+    }
+  }
+
+  const instrumentationPaths = adapter?.instrumentationPaths ?? []
+  const databasePaths = adapter?.databasePaths ?? defaultDatabasePaths
+  validateScope(instrumentationPaths)
+  validateScope(databasePaths)
+  return { root: resolve(root), checks, instrumentationPaths, databasePaths }
+}
+
+export async function createWorkspace(root: string): Promise<string> {
+  const workspace = await mkdtemp(join(tmpdir(), 'pi-workspace-'))
+  const files = await inventory(root)
+  await copySnapshot(files, workspace)
+
+  for (const name of files.keys()) {
+    await chmod(join(workspace, name), (await stat(join(root, name))).mode & 0o777)
+  }
+
+  try {
+    await symlink(
+      await import('node:fs/promises').then((fs) => fs.realpath(join(root, 'node_modules'))),
+      join(workspace, 'node_modules'),
+    )
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+      throw error
+    }
+  }
+
+  return workspace
+}
+
+export async function instructions(root: string, paths: string[]): Promise<string> {
+  const names = new Set<string>(['AGENTS.md'])
+
+  for (const name of paths) {
+    let directory = dirname(name.replace(/\/\*\*$/, '/file'))
+
+    while (directory !== '.' && directory !== '/') {
+      names.add(`${directory}/AGENTS.md`)
+      directory = dirname(directory)
+    }
+  }
+
+  const sections: string[] = []
+
+  for (const name of [...names].sort()) {
+    try {
+      const text = (await readBoundedFile(await safePath(root, name), 24000)).toString('utf8')
+
+      if (text.length > 24000) {
+        throw new Error(`Instruction file exceeds 24 KB: ${name}`)
+      }
+
+      sections.push(`Folder instructions ${name}:\n${text}`)
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+        throw error
+      }
+    }
+  }
+
+  return sections.join('\n\n')
+}
+
+export function hasSkippedTests(output: string): boolean {
+  return (
+    /\b[1-9]\d*\s+(?:skip|skipped|ignored|pending)\b/i.test(output) ||
+    /\b(?:skipped|ignored|pending)\s*[:=]?\s*[1-9]\d*\b/i.test(output) ||
+    /#\s*(?:SKIP|TODO)\b|^\s*--- SKIP:|^\s*SKIPPED\s+\[[1-9]\d*\]/im.test(output)
+  )
+}
+
+export async function verifyProject(
+  workspace: string,
+  project: Project,
+  database: boolean,
+  signal?: AbortSignal,
+): Promise<Receipt[]> {
+  const hash = snapshotHash(await inventory(workspace))
+  const checks: ProjectCheck[] = [
+    {
+      id: 'harness-lint',
+      argv: ['node', join(harnessRoot, 'scripts', 'linting', 'check.mjs'), '.'],
+      required: true,
+      kind: 'static',
+      timeoutMs: 120_000,
+    },
+    ...project.checks.filter((check) => check.kind !== 'benchmark'),
+  ]
+  const receipts: Receipt[] = []
+
+  for (const check of checks) {
+
+    // Every command receives a disposable copy, so test code cannot alter the reviewed candidate.
+    const probe = await createWorkspace(workspace)
+    const result = await runSandboxed(probe, check.argv, check.timeoutMs, signal).finally(() =>
+      rm(probe, { recursive: true, force: true }),
+    )
+    const status =
+      result.exitCode !== 0 || result.timedOut || result.aborted || result.truncated
+        ? 'failed'
+        : hasSkippedTests(result.output)
+          ? 'skipped'
+          : 'passed'
+    receipts.push({ snapshot: hash, check: check.id, status, result })
+
+    if (status !== 'passed' && check.required) {
+      return receipts
+    }
+  }
+
+  for (const kind of ['test', ...(database ? ['database'] : [])]) {
+    if (!project.checks.some((check) => check.kind === kind && check.required)) {
+      receipts.push({
+        snapshot: hash,
+        check: `required-${kind}`,
+        status: 'unavailable',
+        result: {
+          argv: [],
+          exitCode: null,
+          output: `Declare a required ${kind} check in .pi/harness.json`,
+          timedOut: false,
+          aborted: false,
+          truncated: false,
+          durationMs: 0,
+        },
+      })
+    }
+  }
+
+  return receipts
+}
+
+export function projectRelative(root: string, path: string): string {
+  return relative(root, path)
+}

@@ -18,6 +18,7 @@ const showUsage = (): void => {
 
 const run = async (): Promise<void> => {
 	const argv = process.argv.slice(2);
+
 	if (argv.includes("--help")) {
 		showUsage();
 		process.exit(0);
@@ -35,16 +36,20 @@ const run = async (): Promise<void> => {
 		}
 
 		let skillPath = argv[1];
+
 		if (await isSkillMdFile(skillPath)) {
 			skillPath = path.dirname(skillPath);
 		}
 
 		const errors = await validate(skillPath);
+
 		if (errors.length > 0) {
 			process.stderr.write(`Validation failed for ${skillPath}:\n`);
+
 			for (const error of errors) {
 				process.stderr.write(`  - ${error}\n`);
 			}
+
 			process.exit(1);
 		}
 

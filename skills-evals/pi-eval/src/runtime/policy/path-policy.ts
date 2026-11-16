@@ -15,8 +15,7 @@ import path from "node:path";
 // ── Path predicates (moved from data/utils.ts) ─────────────────────────
 
 export const hasPathPrefix = (candidate: string, root: string): boolean =>
-	candidate === root ||
-	candidate.startsWith(root.endsWith(path.sep) ? root : `${root}${path.sep}`);
+	candidate === root || candidate.startsWith(root.endsWith(path.sep) ? root : `${root}${path.sep}`);
 
 export const isPathInsideRoot = (targetPath: string, rootPath: string): boolean => {
 	const relative = path.relative(rootPath, targetPath);
@@ -25,9 +24,11 @@ export const isPathInsideRoot = (targetPath: string, rootPath: string): boolean 
 
 export const resolveInsideRoot = (rootPath: string, relativePath: string): string => {
 	const resolved = path.resolve(rootPath, relativePath);
+
 	if (!isPathInsideRoot(resolved, rootPath)) {
 		throw new Error(`path escapes root: ${relativePath} (root=${rootPath})`);
 	}
+
 	return resolved;
 };
 
@@ -57,19 +58,34 @@ export const assertManagedTempPath = (
 ): string => {
 	const resolvedRoot = path.resolve(rootPath);
 	const resolvedTarget = path.resolve(targetPath);
+
 	if (!isPathInsideRoot(resolvedTarget, resolvedRoot)) {
 		throw new Error(
-			`${label} path is outside managed cleanup root: ${resolvedTarget} (root=${resolvedRoot})`,
+			"" +
+				`${label}` +
+				" path is outside managed cleanup root: " +
+				`${resolvedTarget}` +
+				" (root=" +
+				`${resolvedRoot}` +
+				")",
 		);
 	}
 
 	const relative = path.relative(resolvedRoot, resolvedTarget);
 	const segments = relative.split(path.sep).filter(Boolean);
+
 	if (segments.length < 2) {
 		throw new Error(
-			`${label} path is too shallow for recursive cleanup: ${resolvedTarget} (root=${resolvedRoot})`,
+			"" +
+				`${label}` +
+				" path is too shallow for recursive cleanup: " +
+				`${resolvedTarget}` +
+				" (root=" +
+				`${resolvedRoot}` +
+				")",
 		);
 	}
+
 	return resolvedTarget;
 };
 
@@ -94,7 +110,10 @@ export const resolveCanonicalPath = async (
 ): Promise<string | null> => {
 	if (cache) {
 		const cached = cache.get(absolutePath);
-		if (cached !== undefined) return cached;
+
+		if (cached !== undefined) {
+			return cached;
+		}
 	}
 
 	// Fast path: full path exists
@@ -109,15 +128,20 @@ export const resolveCanonicalPath = async (
 	// Parent walk: resolve the nearest existing ancestor
 	let current = absolutePath;
 	const trailingSegments: string[] = [];
+
 	while (true) {
 		const parent = path.dirname(current);
+
 		if (parent === current) {
+
 			// Reached filesystem root without resolving
 			cache?.set(absolutePath, null);
 			return null;
 		}
+
 		trailingSegments.unshift(path.basename(current));
 		current = parent;
+
 		try {
 			const real = await fsRealpath(current);
 			const result = path.join(real, ...trailingSegments);

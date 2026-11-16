@@ -7,11 +7,7 @@ import { loadCases, filterCases } from "../../data/cases.js";
 import { loadEvalConfig } from "../../data/config.js";
 import { persistRunReport } from "../../reporting/report-persistence.js";
 import { formatDuration } from "../../data/utils.js";
-import {
-	isSameResolvedPath,
-	resolveRunOptions,
-	validateRunMode,
-} from "../../cli/run-options.js";
+import { isSameResolvedPath, resolveRunOptions, validateRunMode } from "../../cli/run-options.js";
 import { runJudge, applyJudgeVerdicts } from "../../judging/judge.js";
 
 const extensionRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
@@ -32,15 +28,18 @@ export const registerEvalCommand = (pi: ExtensionAPI) => {
 				: await loadCases(options.casesPath);
 			const filtered = filterCases(selectedLoaded, options.filter, options.limitOverride);
 			const { cases, bundles } = filtered;
-				if (cases.length === 0) return;
 
-				const runStart = Date.now();
-				const evaluations = await evaluateSelectedCases({
-					cases,
-					options,
-					config,
-					extensionEntry: workerExtensionEntry,
-				});
+			if (cases.length === 0) {
+				return;
+			}
+
+			const runStart = Date.now();
+			const evaluations = await evaluateSelectedCases({
+				cases,
+				options,
+				config,
+				extensionEntry: workerExtensionEntry,
+			});
 			const judgeVerdict = await runJudge({
 				evaluations,
 				cases,

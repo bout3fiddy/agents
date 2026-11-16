@@ -1,0 +1,374 @@
+import { randomUUID } from 'node:crypto'
+import { join } from 'node:path'
+import { rm } from 'node:fs/promises'
+import type { Project, Receipt, WorkerEvidence, WorkerRole } from './contracts.ts'
+import { StateStore, atomicJson, type TaskState } from './state.ts'
+import { dispatcher, type Dispatcher } from './dispatch.ts'
+import { createWorkspace, hasSkippedTests, loadProject, verifyProject } from './project.ts'
+import { changes, integrate, recoverIntegration } from './integration.ts'
+import {
+  fileHashes,
+  inventory,
+  matches,
+  snapshotHash,
+  writable,
+  rejectIgnoredAdditions,
+} from './paths.ts'
+import { runSandboxed } from './sandbox.ts'
+import { retainedCandidate } from './resume.ts'
+import { receiptView } from './context.ts'
+
+export function databaseImpact(
+  before: Map<string, Buffer>,
+  after: Map<string, Buffer>,
+  paths: string[],
+): boolean {
+  const databasePattern = new RegExp(
+    [
+      '\\b(?:sqlite|postgres|redis|prisma|drizzle|mongoose|mysql|mongodb|knex)\\b',
+      '\\b(?:CREATE TABLE|INSERT INTO|BEGIN TRANSACTION)\\b',
+    ].join('|'),
+    'i',
+  )
+  return changes(before, after).some(
+    (path) =>
+      paths.some((scope) => matches(path, scope)) ||
+      databasePattern.test((after.get(path) ?? before.get(path))?.toString('utf8') ?? ''),
+  )
+}
+
+function failed(receipts: Receipt[], project: Project): Receipt[] {
+  return receipts.filter(
+    (item) =>
+      item.status !== 'passed' &&
+      (item.check.startsWith('required-') ||
+        item.check === 'harness-lint' ||
+        project.checks.find((check) => check.id === item.check)?.required),
+  )
+}
+
+async function benchmarks(
+  workspace: string,
+  project: Project,
+  signal?: AbortSignal,
+): Promise<Receipt[]> {
+  const snapshot = snapshotHash(await inventory(workspace))
+  const receipts: Receipt[] = []
+
+  for (const check of project.checks.filter((item) => item.kind === 'benchmark')) {
+    const probe = await createWorkspace(workspace)
+    const result = await runSandboxed(probe, check.argv, check.timeoutMs, signal).finally(() =>
+      rm(probe, { recursive: true, force: true }),
+    )
+    receipts.push({
+      snapshot,
+      check: check.id,
+      status:
+        result.exitCode === 0 &&
+        !result.timedOut &&
+        !result.aborted &&
+        !result.truncated &&
+        !hasSkippedTests(result.output)
+          ? 'passed'
+          : 'failed',
+      result,
+    })
+  }
+
+  if (!project.checks.some((check) => check.kind === 'benchmark' && check.required)) {
+    receipts.push({
+      snapshot,
+      check: 'required-benchmark',
+      status: 'unavailable',
+      result: {
+        argv: [],
+        exitCode: null,
+        output: 'Declare a required benchmark check in .pi/harness.json',
+        timedOut: false,
+        aborted: false,
+        truncated: false,
+        durationMs: 0,
+      },
+    })
+  }
+
+  return receipts
+}
+
+export async function runWorkflow(
+  store: StateStore,
+  model: string,
+  signal?: AbortSignal,
+  dispatch: Dispatcher = dispatcher(store),
+): Promise<TaskState> {
+  const release = await store.lock()
+  let task: TaskState | undefined
+
+  try {
+    await recoverIntegration(store)
+    const checkpoint = await store.checkpoint()
+
+    if (!checkpoint) {
+      throw new Error('Propose and accept a design before running implementation')
+    }
+
+    if (checkpoint.unresolved.length) {
+      throw new Error('Resolve design questions before implementation')
+    }
+
+    const project = await loadProject(store.projectRoot)
+    const requiredKinds = [
+      'test',
+      ...(checkpoint.database ? ['database'] : []),
+      ...(checkpoint.performance ? ['benchmark'] : []),
+    ]
+    const missing = requiredKinds.filter(
+      (kind) => !project.checks.some((check) => check.required && check.kind === kind),
+    )
+
+    if (missing.length) {
+      throw new Error(`Configure required ${missing.join(', ')} checks in .pi/harness.json`)
+    }
+
+    const before = await inventory(store.projectRoot)
+    const retained = await retainedCandidate(store, checkpoint, before)
+    const workspace = await createWorkspace(retained?.task.candidate ?? store.projectRoot)
+    const originals = await createWorkspace(store.projectRoot)
+    task = {
+      id: randomUUID(),
+      designHash: checkpoint.hash,
+      designVersion: checkpoint.version,
+      status: 'running',
+      phase: 'implementation',
+      round: 0,
+      candidate: workspace,
+      resumedFrom: retained?.task.id,
+      evidence: retained?.task.evidence ?? [],
+      receipts: [],
+    }
+    await store.saveTask(task)
+    await atomicJson(join(store.directory, 'tasks', `${task.id}.baseline.json`), fileHashes(before))
+    let needsDatabase = checkpoint.database
+    let feedback = retained
+      ? JSON.stringify({
+          assignment:
+            'Continue the retained candidate. Resolve prior findings and preserve valid work.',
+          error: retained.task.error,
+          reviews: retained.task.evidence.slice(-4).map((item) => item.result),
+          checks: retained.task.receipts.map(receiptView),
+        })
+      : 'Implement the accepted design. Preserve unrelated work and ' + 'return concrete evidence.'
+    const baseline = checkpoint.performance ? await benchmarks(originals, project, signal) : []
+    await atomicJson(
+      join(store.directory, 'tasks', `${task.id}.baseline-benchmarks.json`),
+      baseline,
+    )
+
+    async function worker(role: WorkerRole, assignment: string): Promise<WorkerEvidence> {
+      signal?.throwIfAborted()
+      const evidence = await dispatch(
+        {
+          role,
+          task: assignment,
+          workspace,
+          project,
+          checkpoint: checkpoint!,
+          model,
+          baseline: fileHashes(before),
+          originals,
+        },
+        signal,
+      )
+
+      if (
+        evidence.role !== role ||
+        evidence.snapshot !== snapshotHash(await inventory(workspace))
+      ) {
+        throw new Error(`Stale or mismatched ${role} evidence`)
+      }
+
+      task!.evidence.push(evidence)
+      await store.saveTask(task!)
+      return evidence
+    }
+
+    for (let round = 1; round <= 3; round++) {
+      signal?.throwIfAborted()
+      task.round = round
+      task.phase = 'implementation'
+      await store.saveTask(task)
+
+      if (!(round === 1 && retained?.readyForReview)) {
+        const implementation = await worker('implementer', feedback)
+
+        if (implementation.result.verdict === 'blocked') {
+          throw new Error(`Implementation blocked: ${implementation.result.summary}`)
+        }
+
+        needsDatabase ||= implementation.result.databaseImpact
+
+        if (checkpoint.performance) {
+          task.phase = 'performance'
+          await store.saveTask(task)
+          const measurement = await worker(
+            'performance',
+            JSON.stringify({
+              assignment:
+                'Add or improve benchmarks and report measurements. Do not optimize p' +
+                'roduct code.',
+              baselineBenchmarks: baseline.map(receiptView),
+              previousFeedback: feedback,
+            }),
+          )
+
+          if (measurement.result.verdict !== 'pass') {
+            feedback = JSON.stringify(measurement.result)
+            continue
+          }
+        }
+      }
+
+      const candidate = await inventory(workspace)
+      await rejectIgnoredAdditions(store.projectRoot, before, candidate)
+
+      for (const path of changes(before, candidate)) {
+        if (!writable(path, checkpoint.writePaths)) {
+          throw new Error(`Out-of-scope edit: ${path}`)
+        }
+      }
+
+      needsDatabase ||= databaseImpact(before, candidate, project.databasePaths)
+      task.phase = 'verification'
+      task.snapshot = snapshotHash(candidate)
+      task.receipts = await verifyProject(workspace, project, needsDatabase, signal)
+
+      if (checkpoint.performance) {
+        task.receipts.push(...(await benchmarks(workspace, project, signal)))
+      }
+
+      await store.saveTask(task)
+      const failures = failed(task.receipts, project)
+
+      if (failures.length) {
+        if (failures.some((item) => item.status === 'unavailable')) {
+          throw new Error('Configure the missing required checks in .pi/harness.json')
+        }
+
+        feedback = JSON.stringify({ requiredChecks: failures.map(receiptView) })
+        continue
+      }
+
+      task.phase = 'review'
+      await store.saveTask(task)
+      const review = await worker(
+        'reviewer',
+        JSON.stringify({
+          assignment: 'Independently review the complete candidate against the accepted design.',
+          receipts: task.receipts.map(receiptView),
+          changedFiles: changes(before, await inventory(workspace)),
+        }),
+      )
+      needsDatabase ||= review.result.databaseImpact
+
+      // A reviewer can discover database impact after the first verification pass.
+      if (
+        needsDatabase &&
+        !task.receipts.some((item) =>
+          project.checks.some((check) => check.kind === 'database' && check.id === item.check),
+        )
+      ) {
+        task.receipts = await verifyProject(workspace, project, true, signal)
+
+        if (checkpoint.performance) {
+          task.receipts.push(...(await benchmarks(workspace, project, signal)))
+        }
+      }
+
+      const reviews = [review]
+
+      if (needsDatabase) {
+        reviews.push(
+          await worker(
+            'database-reviewer',
+            JSON.stringify({
+              assignment:
+                'Review committed-data recovery, transactions, migration and failure ' +
+                'semantics.',
+              receipts: task.receipts.map(receiptView),
+            }),
+          ),
+        )
+      }
+
+      const issues = reviews.filter((item) => item.result.verdict !== 'pass')
+
+      if (issues.length || failed(task.receipts, project).length) {
+        feedback = JSON.stringify({
+          reviews: issues.map((item) => item.result),
+          checks: task.receipts.map(receiptView),
+        })
+        continue
+      }
+
+      if (snapshotHash(await inventory(workspace)) !== task.snapshot) {
+        throw new Error('Candidate changed after verification')
+      }
+
+      const currentDesign = await store.checkpoint()
+
+      if (currentDesign?.hash !== checkpoint.hash || currentDesign.version !== checkpoint.version) {
+        throw new Error('Accepted design changed during implementation')
+      }
+
+      if (snapshotHash(await inventory(store.projectRoot)) !== snapshotHash(before)) {
+        throw new Error('Project changed during review; preserve both versions and rerun')
+      }
+
+      task.status = 'applying'
+      task.phase = 'integration'
+      await store.saveTask(task)
+      release.assertHeld()
+      await integrate(store, before, candidate, checkpoint.writePaths)
+      task.receipts = await verifyProject(store.projectRoot, project, needsDatabase, signal)
+
+      if (checkpoint.performance) {
+        task.receipts.push(...(await benchmarks(store.projectRoot, project, signal)))
+      }
+
+      if (failed(task.receipts, project).length) {
+        throw new Error('Post-integration checks failed; inspect retained receipts and candidate')
+      }
+
+      const verifiedSnapshot = task.snapshot
+
+      if (
+        snapshotHash(await inventory(store.projectRoot)) !== verifiedSnapshot ||
+        task.receipts.some((receipt) => receipt.snapshot !== verifiedSnapshot)
+      ) {
+        throw new Error('Integrated project changed during verification')
+      }
+
+      task.status = 'complete'
+      task.phase = 'complete'
+      await store.saveTask(task)
+      await rm(workspace, { recursive: true, force: true })
+      await rm(originals, { recursive: true, force: true })
+      return task
+    }
+
+    throw new Error(
+      `Review or verification still needs attention after 3 rounds: ${feedback.slice(0, 4000)}`,
+    )
+  } catch (error) {
+    if (!task) {
+      throw error
+    }
+
+    task.status = signal?.aborted ? 'interrupted' : 'needs_attention'
+    task.error = error instanceof Error ? error.message : String(error)
+    await store.saveTask(task)
+    return task
+  } finally {
+    await release()
+  }
+}

@@ -11,14 +11,17 @@ from .types import DiffOptions, JsonObject, JsonValue, as_json_array, as_json_ob
 def load_report(path: str) -> JsonObject:
     data = cast(JsonValue, json.loads(Path(path).read_text(encoding="utf-8")))
     report = as_json_object(data)
+
     if report is None:
         raise SystemExit(f"expected JSON object report: {path}")
+
     return report
 
 
 def numeric_delta(before: int | float | None, after: int | float | None) -> JsonObject:
     if before is None or after is None:
         return {"before": before, "after": after, "delta": None, "delta_pct": None}
+
     delta = after - before
     return {
         "before": before,
@@ -47,22 +50,24 @@ def int_value(value: JsonValue) -> int | None:
 def number_value(value: JsonValue) -> int | float | None:
     if isinstance(value, bool):
         return None
+
     return value if isinstance(value, (int, float)) else None
 
 
 def primitive_value(value: JsonValue) -> str | int | float | bool | None:
     if isinstance(value, (str, int, float, bool)):
         return value
+
     return None
 
 
-def value_path(
-    report: JsonObject, path: tuple[str, ...]
-) -> str | int | float | bool | None:
+def value_path(report: JsonObject, path: tuple[str, ...]) -> str | int | float | bool | None:
     current: JsonValue = report
+
     for part in path:
         current_object = json_object(current)
         current = current_object.get(part)
+
     return primitive_value(current)
 
 
@@ -73,12 +78,16 @@ def string_path(report: JsonObject, path: tuple[str, ...]) -> str | None:
 def check_count_map(report: JsonObject) -> dict[str, int]:
     checks = json_list(report.get("checks"))
     counts: dict[str, int] = {}
+
     for check_value in checks:
         check = json_object(check_value)
         key = check.get("key")
+
         if not isinstance(key, str):
             continue
+
         counts[key] = int_value(check.get("count")) or 0
+
     return counts
 
 
@@ -92,11 +101,14 @@ def call_target_set(report: JsonObject) -> set[str]:
     calls = json_object(report.get("calls"))
     call_items = json_list(calls.get("calls"))
     targets: set[str] = set()
+
     for call_value in call_items:
         call = json_object(call_value)
         target = call.get("target")
+
         if isinstance(target, str) and target:
             targets.add(target)
+
     return targets
 
 
@@ -104,11 +116,14 @@ def symbol_name_set(report: JsonObject) -> set[str]:
     symbols = json_object(report.get("symbols"))
     matches = json_list(symbols.get("matches"))
     names: set[str] = set()
+
     for match_value in matches:
         match = json_object(match_value)
         name = match.get("name")
+
         if isinstance(name, str) and name:
             names.add(name)
+
     return names
 
 
@@ -147,11 +162,7 @@ BENCHMARK_COMPARE_KEYS = (
 def benchmark_comparisons(before: JsonObject, after: JsonObject) -> list[JsonObject]:
     before_parsed = benchmark_parsed(before)
     after_parsed = benchmark_parsed(after)
-    keys = [
-        key
-        for key in BENCHMARK_COMPARE_KEYS
-        if key in before_parsed or key in after_parsed
-    ]
+    keys = [key for key in BENCHMARK_COMPARE_KEYS if key in before_parsed or key in after_parsed]
     return [
         comparison(
             f"benchmark.{key}",
@@ -281,14 +292,10 @@ def diff_reports(options: DiffOptions) -> JsonObject:
             "comparisons": benchmark_comparisons(before, after),
         },
         "timing": {
-            "elapsed_ns": numeric_delta(
-                benchmark_elapsed(before), benchmark_elapsed(after)
-            ),
+            "elapsed_ns": numeric_delta(benchmark_elapsed(before), benchmark_elapsed(after)),
         },
         "hot_boundary": {
-            "line_count": numeric_delta(
-                hot_boundary_lines(before), hot_boundary_lines(after)
-            ),
+            "line_count": numeric_delta(hot_boundary_lines(before), hot_boundary_lines(after)),
         },
         "checks": {
             key: numeric_delta(before_checks.get(key, 0), after_checks.get(key, 0))
@@ -308,10 +315,7 @@ def diff_reports(options: DiffOptions) -> JsonObject:
         },
         "agent_queries": [
             "jq -r '.comparability.status, .comparability.timing_claim' diff.json",
-            (
-                "jq -r '.comparability.mismatches[]? "
-                "| [.field, .before, .after] | @tsv' diff.json"
-            ),
+            ("jq -r '.comparability.mismatches[]? | [.field, .before, .after] | @tsv' diff.json"),
             (
                 "jq -r '.benchmark.comparisons[]? | select(.match == false) "
                 "| [.field, .before, .after] | @tsv' diff.json"

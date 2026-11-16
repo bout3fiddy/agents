@@ -22,7 +22,7 @@ import {
 	isSkillPath,
 	type ReadCapture,
 } from "./capture.js";
-import { assertReadablePath, createPathDenyPolicy, type PathDenyPolicy } from "../policy/read-policy.js";
+import { assertReadablePath, createPathDenyPolicy } from "../policy/read-policy.js";
 import {
 	assertWithinSandboxBoundary,
 	type SandboxBoundary,
@@ -56,13 +56,16 @@ export const createEvalReadTool = async (
 		operations: {
 			access: async (absolutePath: string) => {
 				captureReadAttempt(absolutePath, agentDir, readCapture);
+
 				try {
 					await assertWithinSandboxBoundary(absolutePath, boundary);
 					await assertReadablePath(absolutePath, denyPolicy);
+
 					if (dryRunEnabled && isSkillPath(absolutePath)) {
 						captureReadInvocation(absolutePath, agentDir, readCapture);
 						return;
 					}
+
 					await fsAccess(absolutePath, constants.R_OK);
 					captureReadInvocation(absolutePath, agentDir, readCapture);
 				} catch (error) {
@@ -72,30 +75,35 @@ export const createEvalReadTool = async (
 			},
 			readFile: async (absolutePath: string) => {
 				captureReadAttempt(absolutePath, agentDir, readCapture);
+
 				try {
 					await assertWithinSandboxBoundary(absolutePath, boundary);
-						await assertReadablePath(absolutePath, denyPolicy);
-						if (dryRunEnabled && isSkillPath(absolutePath)) {
-							captureReadInvocation(absolutePath, agentDir, readCapture);
-							captureReadSize(absolutePath, DRY_RUN_SKILL_STUB_BUF.length, readCapture);
-							return DRY_RUN_SKILL_STUB_BUF;
-						}
-						const stat = await fsStat(absolutePath);
-						if (stat.isDirectory()) {
-							const entries = await fsReadDir(absolutePath, { withFileTypes: true });
-							const listing = entries
-								.map((entry) => `${entry.name}${entry.isDirectory() ? "/" : ""}`)
-								.sort((left, right) => left.localeCompare(right))
-								.join("\n");
-							captureReadInvocation(absolutePath, agentDir, readCapture);
-							const listingBuf = Buffer.from(listing);
-							captureReadSize(absolutePath, listingBuf.length, readCapture);
-							return listingBuf;
-						}
-						const content = await fsReadFile(absolutePath);
+					await assertReadablePath(absolutePath, denyPolicy);
+
+					if (dryRunEnabled && isSkillPath(absolutePath)) {
 						captureReadInvocation(absolutePath, agentDir, readCapture);
-						captureReadSize(absolutePath, content.length, readCapture);
-						return content;
+						captureReadSize(absolutePath, DRY_RUN_SKILL_STUB_BUF.length, readCapture);
+						return DRY_RUN_SKILL_STUB_BUF;
+					}
+
+					const stat = await fsStat(absolutePath);
+
+					if (stat.isDirectory()) {
+						const entries = await fsReadDir(absolutePath, { withFileTypes: true });
+						const listing = entries
+							.map((entry) => `${entry.name}${entry.isDirectory() ? "/" : ""}`)
+							.sort((left, right) => left.localeCompare(right))
+							.join("\n");
+						captureReadInvocation(absolutePath, agentDir, readCapture);
+						const listingBuf = Buffer.from(listing);
+						captureReadSize(absolutePath, listingBuf.length, readCapture);
+						return listingBuf;
+					}
+
+					const content = await fsReadFile(absolutePath);
+					captureReadInvocation(absolutePath, agentDir, readCapture);
+					captureReadSize(absolutePath, content.length, readCapture);
+					return content;
 				} catch (error) {
 					captureReadDenied(absolutePath, agentDir, readCapture);
 					throw error;
@@ -125,18 +133,32 @@ export const createReadCapture = (): ReadCapture => ({
 // ── Tool event helpers ──────────────────────────────────────────────────
 
 export const isSuccessfulToolResultEvent = (event: Record<string, unknown>): boolean => {
-	if (typeof event.success === "boolean") return event.success;
-	if ("error" in event && event.error) return false;
+	if (typeof event.success === "boolean") {
+		return event.success;
+	}
+
+	if ("error" in event && event.error) {
+		return false;
+	}
+
 	return true;
 };
 
 export const extractToolPath = (input: unknown): string | null => {
-	if (!input || typeof input !== "object") return null;
+	if (!input || typeof input !== "object") {
+		return null;
+	}
+
 	const record = input as Record<string, unknown>;
+
 	for (const key of ["path", "filePath", "targetPath", "file", "target"]) {
 		const value = record[key];
-		if (typeof value === "string" && value.trim().length > 0) return value;
+
+		if (typeof value === "string" && value.trim().length > 0) {
+			return value;
+		}
 	}
+
 	return null;
 };
 
@@ -150,43 +172,79 @@ export const registerReadCaptureHooks = (
 	toolUsage: ToolUsageCapture,
 ): void => {
 	pi.on("tool_call", async (event, ctx) => {
-		if (event.toolName !== "read") return undefined;
+		if (event.toolName !== "read") {
+			return undefined;
+		}
+
 		const rawPath = event.input?.path;
-		if (typeof rawPath !== "string") return undefined;
+
+		if (typeof rawPath !== "string") {
+			return undefined;
+		}
+
 		captureReadAttempt(path.resolve(ctx.cwd, rawPath), agentDir, readCapture);
 		return undefined;
 	});
 
 	pi.on("tool_call", async (event) => {
-		if (event.toolName === "write") toolUsage.writeCalls += 1;
-		if (event.toolName === "edit") toolUsage.editCalls += 1;
+		if (event.toolName === "write") {
+			toolUsage.writeCalls += 1;
+		}
+
+		if (event.toolName === "edit") {
+			toolUsage.editCalls += 1;
+		}
+
 		return undefined;
 	});
 
 	pi.on("tool_result", async (event, ctx) => {
-		if (event.toolName !== "read") return undefined;
+		if (event.toolName !== "read") {
+			return undefined;
+		}
+
 		const rawPath = event.input?.path;
-		if (typeof rawPath !== "string") return undefined;
+
+		if (typeof rawPath !== "string") {
+			return undefined;
+		}
+
 		const absolutePath = path.resolve(ctx.cwd, rawPath);
+
 		if (isSuccessfulToolResultEvent(event as unknown as Record<string, unknown>)) {
 			captureReadInvocation(absolutePath, agentDir, readCapture);
 		} else {
 			captureReadDenied(absolutePath, agentDir, readCapture);
 		}
+
 		return undefined;
 	});
 
 	pi.on("tool_result", async (event) => {
-		if (event.toolName !== "write" && event.toolName !== "edit") return undefined;
+		if (event.toolName !== "write" && event.toolName !== "edit") {
+			return undefined;
+		}
+
 		const eventRecord = event as unknown as Record<string, unknown>;
-		if (isSuccessfulToolResultEvent(eventRecord)) return undefined;
-		if (event.toolName === "write") toolUsage.writeFailures += 1;
-		if (event.toolName === "edit") toolUsage.editFailures += 1;
+
+		if (isSuccessfulToolResultEvent(eventRecord)) {
+			return undefined;
+		}
+
+		if (event.toolName === "write") {
+			toolUsage.writeFailures += 1;
+		}
+
+		if (event.toolName === "edit") {
+			toolUsage.editFailures += 1;
+		}
+
 		const toolPath = extractToolPath(event.input);
 		const rawError = eventRecord.error;
-		const message = typeof rawError === "string" && rawError.trim().length > 0
-			? rawError.trim()
-			: "tool returned an unknown error";
+		const message =
+			typeof rawError === "string" && rawError.trim().length > 0
+				? rawError.trim()
+				: "tool returned an unknown error";
 		const location = toolPath ? ` (${toolPath})` : "";
 		toolFailures.add(`${event.toolName} tool failed${location}: ${message}`);
 		return undefined;

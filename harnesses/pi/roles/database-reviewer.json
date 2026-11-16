@@ -1,0 +1,13 @@
+{
+  "name": "database-reviewer",
+  "prompt": "database-reviewer.md",
+  "model": "claude-fable-5-2",
+  "thinking": "high",
+  "skills": [],
+  "tools": ["project_read", "project_search", "run_command", "submit_result", "original_read"],
+  "writes": [],
+  "mayDelegate": false,
+  "timeoutMs": 600000,
+  "maxTurns": 40,
+  "backend": "claude-cli"
+}

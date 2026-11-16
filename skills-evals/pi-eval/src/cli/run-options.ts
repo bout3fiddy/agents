@@ -1,7 +1,11 @@
 import type { ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 import { availableParallelism, homedir } from "node:os";
 import path from "node:path";
-import { ensureModelAuth, modelSpecFromKey, resolveModelSpec } from "../runtime/model/model-registry.js";
+import {
+	ensureModelAuth,
+	modelSpecFromKey,
+	resolveModelSpec,
+} from "../runtime/model/model-registry.js";
 import type { EvalConfig, EvalRunOptions } from "../data/types.js";
 import { fileExists, parsePositiveInt, resolvePath } from "../data/utils.js";
 import { normalizePath } from "../runtime/policy/path-policy.js";
@@ -38,7 +42,10 @@ export const resolveCaseParallelism = (params: {
 	envValue?: string;
 	availableWorkers?: number;
 }): number => {
-	const availableWorkers = Math.max(1, Math.floor(params.availableWorkers ?? availableParallelism()));
+	const availableWorkers = Math.max(
+		1,
+		Math.floor(params.availableWorkers ?? availableParallelism()),
+	);
 	const defaultParallelism = Math.min(availableWorkers, MAX_CASE_PARALLELISM);
 	const fromFlag = parseParallelismFlag(params.flagValue);
 	const requested = fromFlag ?? parsePositiveIntEnv(params.envValue, defaultParallelism);
@@ -49,10 +56,14 @@ export const isSameResolvedPath = (left: string, right: string): boolean =>
 	normalizePath(path.resolve(left)) === normalizePath(path.resolve(right));
 
 export const validateRunMode = (positionals: string[]): void => {
-	if (positionals.length === 0) return;
+	if (positionals.length === 0) {
+		return;
+	}
+
 	if (positionals[0] !== "run") {
 		throw new Error(`Unsupported eval mode: ${positionals[0]}. Only 'run' is supported.`);
 	}
+
 	if (positionals.length > 1) {
 		throw new Error(`Unexpected positional args: ${positionals.slice(1).join(" ")}`);
 	}
@@ -102,6 +113,7 @@ export const resolveRunOptions = async (
 		"judge",
 		"AGENTS.md",
 	);
+
 	if (!judgeDisabled && !(await fileExists(judgeAgentsPath))) {
 		throw new Error(`Judge AGENTS.md not found: ${judgeAgentsPath}`);
 	}

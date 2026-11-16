@@ -11,7 +11,10 @@ import type { ReadCapture } from "../../../src/runtime/worker/capture.js";
 
 // ── Helpers ──────────────────────────────────────────────────────────────
 
-const makeAssistantMessage = (text: string, usage = { input: 10, output: 5, cacheRead: 2, cacheWrite: 1 }) => ({
+const makeAssistantMessage = (
+	text: string,
+	usage = { input: 10, output: 5, cacheRead: 2, cacheWrite: 1 },
+) => ({
 	role: "assistant" as const,
 	content: [{ type: "text" as const, text }],
 	usage,
@@ -30,9 +33,11 @@ const makeReadCapture = (entries: Array<{ path: string; bytes: number }>): ReadC
 		refDenied: new Set(),
 		readSizes: new Map(),
 	};
+
 	for (const entry of entries) {
 		capture.readSizes.set(entry.path, entry.bytes);
 	}
+
 	return capture;
 };
 
@@ -57,7 +62,7 @@ test("appendAgentEnd accumulates output text and token totals", () => {
 	assert.equal(acc.turnBreakdown[1].turn, 2);
 });
 
-test("appendAgentEnd with countTurn=false skips turn increment and breakdown entry", () => {
+test("appendAgentEnd with countTurn=false skips turn increment and breakdo" + "wn entry", () => {
 	const acc = createAccumulator();
 	appendAgentEnd(acc, [makeAssistantMessage("provisional")], false);
 

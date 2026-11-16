@@ -11,7 +11,8 @@ CHECK_PATTERNS: list[tuple[str, str, str]] = [
     (
         "allocator_hash_cache",
         "allocator/hash/cache growth fingerprints",
-        r"SmpAllocator|PageAllocator|GeneralPurposeAllocator|malloc|alloc|free|HashMap|hash_map|ensureTotalCapacity|growIfNeeded",
+        r"SmpAllocator|PageAllocator|GeneralPurposeAllocator|malloc|alloc|free|"
+        r"HashMap|hash_map|ensureTotalCapacity|growIfNeeded",
     ),
     ("copy_helpers", "copy helper calls", r"memcpy|memmove|copyForwards|copyBackwards"),
     (
@@ -23,16 +24,17 @@ CHECK_PATTERNS: list[tuple[str, str, str]] = [
 ]
 
 
-def collect_matches(
-    path: Path, pattern: str, max_matches: int
-) -> tuple[int, JsonArray]:
+def collect_matches(path: Path, pattern: str, max_matches: int) -> tuple[int, JsonArray]:
     regex = re.compile(pattern)
     total = 0
     matches: JsonArray = []
+
     for line_no, line in enumerate(read_text(path).splitlines(), start=1):
         if not regex.search(line):
             continue
+
         total += 1
+
         if len(matches) < max_matches:
             matches.append(
                 {
@@ -41,11 +43,13 @@ def collect_matches(
                     "text": line,
                 }
             )
+
     return total, matches
 
 
 def build_checks(hot_asm_path: Path, hot_found: bool, max_matches: int) -> JsonArray:
     checks: JsonArray = []
+
     for key, label, pattern in CHECK_PATTERNS:
         if not hot_found:
             checks.append(
@@ -58,6 +62,7 @@ def build_checks(hot_asm_path: Path, hot_found: bool, max_matches: int) -> JsonA
                 }
             )
             continue
+
         count, matches = collect_matches(hot_asm_path, pattern, max_matches)
         checks.append(
             {
@@ -68,4 +73,5 @@ def build_checks(hot_asm_path: Path, hot_found: bool, max_matches: int) -> JsonA
                 "matches": matches,
             }
         )
+
     return checks

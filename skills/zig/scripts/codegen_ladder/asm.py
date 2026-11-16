@@ -14,13 +14,13 @@ ASM_SYMBOL_RE = re.compile(r"^_?[A-Za-z0-9_.$]+:$")
 def parse_nm_symbols(symbols_path: Path, symbol_query: str) -> JsonObject:
     matches: JsonArray = []
     query_lower = symbol_query.lower()
+
     for line in read_text(symbols_path).splitlines():
         if query_lower not in line.lower():
             continue
+
         fields = line.split()
-        address = (
-            fields[0] if fields and re.fullmatch(r"[0-9A-Fa-f]+", fields[0]) else None
-        )
+        address = fields[0] if fields and re.fullmatch(r"[0-9A-Fa-f]+", fields[0]) else None
         name = fields[-1] if fields else line
         kind = fields[1] if len(fields) > 1 else None
         matches.append(
@@ -31,6 +31,7 @@ def parse_nm_symbols(symbols_path: Path, symbol_query: str) -> JsonObject:
                 "raw": line,
             }
         )
+
     return {
         "found": len(matches) > 0,
         "matches": matches,
@@ -48,14 +49,19 @@ def is_asm_symbol_line(line: str) -> bool:
 def extract_objdump_symbol(lines: list[str], symbol_query: str) -> list[str]:
     extracted: list[str] = []
     started = False
+
     for line in lines:
         if is_objdump_symbol_line(line) and symbol_query in line:
             started = True
+
         if not started:
             continue
+
         if extracted and is_objdump_symbol_line(line) and symbol_query not in line:
             break
+
         extracted.append(line)
+
     return extracted
 
 
@@ -63,32 +69,37 @@ def extract_emitted_symbol(lines: list[str], symbol_query: str) -> list[str]:
     extracted: list[str] = []
     started = False
     seen_end = False
+
     for line in lines:
         if is_asm_symbol_line(line) and symbol_query in line:
             started = True
+
         if not started:
             continue
+
         extracted.append(line)
+
         if re.match(r"^\s*\.cfi_endproc", line):
             seen_end = True
         elif seen_end and line.strip() == "":
             break
+
     return extracted
 
 
 def focused_asm_lines(
     symbol_query: str, full_asm_path: Path, emitted_asm_path: Path
 ) -> tuple[str, list[str]]:
-    disassembly = extract_objdump_symbol(
-        read_text(full_asm_path).splitlines(), symbol_query
-    )
+    disassembly = extract_objdump_symbol(read_text(full_asm_path).splitlines(), symbol_query)
+
     if disassembly:
         return "disassembly", disassembly
-    emitted = extract_emitted_symbol(
-        read_text(emitted_asm_path).splitlines(), symbol_query
-    )
+
+    emitted = extract_emitted_symbol(read_text(emitted_asm_path).splitlines(), symbol_query)
+
     if emitted:
         return "emitted_assembly", emitted
+
     return "none", []
 
 
@@ -110,9 +121,13 @@ def extract_hot_asm(
 
 def extract_address(text: str) -> str | None:
     match = ADDRESS_RE.search(text)
+
     if match:
         return f"0x{match.group(1)}"
+
     match = re.match(r"^\s*([0-9a-fA-F]+)\s+<", text)
+
     if match:
         return f"0x{match.group(1)}"
+
     return None

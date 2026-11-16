@@ -1,11 +1,7 @@
 import { copyFile, mkdir, readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 import { slugFromId } from "../../data/cases.js";
-import {
-	createSandbox,
-	cleanupSandbox,
-	cleanupSandboxHome,
-} from "../sandbox/sandbox.js";
+import { createSandbox, cleanupSandbox, cleanupSandboxHome } from "../sandbox/sandbox.js";
 import { buildCaseResult } from "./evaluation.js";
 import type { CaseEvaluation, EvalCase, ModelSpec, ResolvedEvalCase } from "../../data/types.js";
 import { resolveInsideRoot } from "../policy/path-policy.js";
@@ -36,11 +32,17 @@ export const resolveSandboxExtensionEntry = (params: {
 	sandboxAgentDir: string;
 }): string => {
 	const relativePath = path.relative(params.hostAgentDir, params.hostExtensionEntry);
+
 	if (relativePath.startsWith("..") || path.isAbsolute(relativePath)) {
 		throw new Error(
-			`extension entry must be inside agent dir: ${params.hostExtensionEntry} (agent dir ${params.hostAgentDir})`,
+			"extension entry must be inside agent dir: " +
+				`${params.hostExtensionEntry}` +
+				" (agent dir " +
+				`${params.hostAgentDir}` +
+				")",
 		);
 	}
+
 	return path.join(params.sandboxAgentDir, relativePath);
 };
 
@@ -49,17 +51,17 @@ export const buildErrorEvaluation = (
 	dryRun: boolean,
 	errorMessage: string,
 ): CaseEvaluation =>
-	buildCaseResult(
-		evalCase.id,
-		buildStubResult(evalCase.id, dryRun, [errorMessage]),
-		evalCase,
-		[{ category: "TASK_FAILURE", message: errorMessage }],
-	);
+	buildCaseResult(evalCase.id, buildStubResult(evalCase.id, dryRun, [errorMessage]), evalCase, [
+		{ category: "TASK_FAILURE", message: errorMessage },
+	]);
 
 const setupCaseWorkspace = async (evalCase: EvalCase, agentDir: string): Promise<CaseWorkspace> => {
 	if (evalCase.sandbox === false) {
-		throw new Error(`sandbox:false is forbidden for ${evalCase.id}; isolated sandbox is required`);
+		throw new Error(
+			"sandbox:false is forbidden for " + `${evalCase.id}` + "; isolated sandbox is required",
+		);
 	}
+
 	const sandboxDir = await createSandbox(agentDir, evalCase.id);
 	return {
 		agentDir: sandboxDir,
@@ -68,7 +70,10 @@ const setupCaseWorkspace = async (evalCase: EvalCase, agentDir: string): Promise
 	};
 };
 
-const stageFixtures = async (sandboxDir: string, mapping: Record<string, string>): Promise<void> => {
+const stageFixtures = async (
+	sandboxDir: string,
+	mapping: Record<string, string>,
+): Promise<void> => {
 	for (const [neutralPath, realPath] of Object.entries(mapping)) {
 		const source = path.join(sandboxDir, realPath);
 		const target = path.join(sandboxDir, neutralPath);
@@ -79,7 +84,11 @@ const stageFixtures = async (sandboxDir: string, mapping: Record<string, string>
 
 const validateCaseSkillExpectations = (evalCase: EvalCase, availableSkills: string[]): string[] => {
 	const expected = evalCase.skillSet ?? [];
-	if (expected.length === 0) return [];
+
+	if (expected.length === 0) {
+		return [];
+	}
+
 	return expected.filter((name) => !availableSkills.includes(name));
 };
 
@@ -91,14 +100,24 @@ const resolveAssertionPaths = (evalCase: EvalCase): string[] => {
 };
 
 const resolvePersistArtifactPaths = (evalCase: EvalCase): string[] => {
-	if (!evalCase.persistArtifacts) return [];
+	if (!evalCase.persistArtifacts) {
+		return [];
+	}
+
 	return resolveAssertionPaths(evalCase);
 };
 
 const shouldCaptureSubmissionPath = (relativePath: string): boolean => {
 	const normalized = relativePath.split(path.sep).join("/");
-	if (normalized === "build.zig" || normalized === "build.zig.zon") return true;
-	if (normalized.startsWith("src/") && normalized.endsWith(".zig")) return true;
+
+	if (normalized === "build.zig" || normalized === "build.zig.zon") {
+		return true;
+	}
+
+	if (normalized.startsWith("src/") && normalized.endsWith(".zig")) {
+		return true;
+	}
+
 	return false;
 };
 
@@ -107,9 +126,11 @@ const listSubmissionPaths = async (root: string): Promise<string[]> => {
 	const walk = async (relativeDir: string): Promise<void> => {
 		const absoluteDir = resolveInsideRoot(root, relativeDir || ".");
 		const entries = await readdir(absoluteDir, { withFileTypes: true });
+
 		for (const entry of entries) {
 			const relativePath = relativeDir ? path.join(relativeDir, entry.name) : entry.name;
 			const normalized = relativePath.split(path.sep).join("/");
+
 			if (
 				normalized.startsWith(".zig-cache/") ||
 				normalized.startsWith("zig-out/") ||
@@ -120,10 +141,12 @@ const listSubmissionPaths = async (root: string): Promise<string[]> => {
 			) {
 				continue;
 			}
+
 			if (entry.isDirectory()) {
 				await walk(relativePath);
 				continue;
 			}
+
 			if (entry.isFile() && shouldCaptureSubmissionPath(relativePath)) {
 				paths.push(normalized);
 			}
@@ -164,6 +187,7 @@ const captureArtifacts = async (
 		...resolveAssertionPaths(evalCase),
 		...(await listSubmissionPaths(sandboxAgentDir)),
 	]);
+
 	for (const artifactPath of [...artifactPaths].sort((a, b) => a.localeCompare(b))) {
 		try {
 			const fullPath = resolveInsideRoot(sandboxAgentDir, artifactPath);
@@ -172,6 +196,7 @@ const captureArtifacts = async (
 			// file may not exist if agent didn't create/modify it
 		}
 	}
+
 	return captured;
 };
 
@@ -181,6 +206,7 @@ const persistCaseArtifacts = async (params: {
 	sandboxAgentDir: string;
 }): Promise<void> => {
 	const artifactPaths = resolvePersistArtifactPaths(params.evalCase);
+
 	for (const artifactPath of artifactPaths) {
 		try {
 			const sourcePath = resolveInsideRoot(params.sandboxAgentDir, artifactPath);
@@ -206,19 +232,24 @@ export const runCase = async (params: {
 	authSourcePath: string | null;
 	extensionEntry: string;
 }): Promise<CaseEvaluation> => {
-	const { evalCase, model, agentDir, dryRun, thinkingLevel, authSourcePath, extensionEntry } = params;
+	const { evalCase, model, agentDir, dryRun, thinkingLevel, authSourcePath, extensionEntry } =
+		params;
 	const bootstrapProfile = resolveBootstrapProfile(evalCase);
 
 	let workspace: CaseWorkspace | null = null;
 	let homeDir: string | null = null;
+
 	try {
 		workspace = await setupCaseWorkspace(evalCase, agentDir);
+
 		if (evalCase.fixtureMapping) {
 			await stageFixtures(workspace.sandboxDir, evalCase.fixtureMapping);
 		}
+
 		if (bootstrapProfile === "no_payload") {
 			await hardenNoPayloadWorkspace(workspace.agentDir);
 		}
+
 		const homeSetup = await setupCaseHome({
 			evalCase,
 			workspaceAgentDir: workspace.agentDir,
@@ -228,6 +259,7 @@ export const runCase = async (params: {
 		homeDir = homeSetup.homeDir;
 
 		const missingSkills = validateCaseSkillExpectations(evalCase, homeSetup.availableSkills);
+
 		if (missingSkills.length > 0) {
 			return buildBootstrapErrorEvaluation(
 				evalCase,
@@ -242,6 +274,7 @@ export const runCase = async (params: {
 			homeDir: homeSetup.homeDir,
 			bootstrapProfile: homeSetup.bootstrapProfile,
 		});
+
 		if (preflightIssues.length > 0) {
 			return buildBootstrapErrorEvaluation(
 				evalCase,
@@ -282,7 +315,10 @@ export const runCase = async (params: {
 				assertions: evalCase.assertions ?? [],
 			})),
 		);
-		const verification = await runVerificationCommands(evalCase.verificationCommands, workspace.cwd);
+		const verification = await runVerificationCommands(
+			evalCase.verificationCommands,
+			workspace.cwd,
+		);
 		result.verificationResults = verification.results;
 		result.errors.push(...verification.errors);
 		const verificationFailures = verification.errors.map((message) => ({

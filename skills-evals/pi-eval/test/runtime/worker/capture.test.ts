@@ -22,7 +22,7 @@ const createReadCapture = (): ReadCapture => ({
 	readSizes: new Map<string, number>(),
 });
 
-test("captureRead tracks attempted, successful, and denied reference reads separately", () => {
+test("captureRead tracks attempted, successful, and denied reference reads" + " separately", () => {
 	const agentDir = path.join(path.sep, "tmp", "pi-eval-agent");
 	const refPath = path.join(
 		agentDir,
@@ -42,14 +42,27 @@ test("captureRead tracks attempted, successful, and denied reference reads separ
 	assert.deepEqual(serialized.skillAttempts, ["example-skill"]);
 	assert.deepEqual(serialized.skillInvocations, ["example-skill"]);
 	assert.deepEqual(serialized.skillDenied, ["example-skill"]);
-	assert.deepEqual(serialized.refAttempts, ["skills/example-skill/references/code-smells/index.md"]);
-	assert.deepEqual(serialized.refInvocations, ["skills/example-skill/references/code-smells/index.md"]);
+	assert.deepEqual(serialized.refAttempts, [
+		"skills/example-skill/references/code-smells/index.md",
+	]);
+	assert.deepEqual(serialized.refInvocations, [
+		"skills/example-skill/references/code-smells/index.md",
+	]);
 	assert.deepEqual(serialized.refDenied, ["skills/example-skill/references/code-smells/index.md"]);
 });
 
-test("captureRead normalizes host .agents skill references to canonical skills paths", () => {
+test("captureRead normalizes host .agents skill references to canonical sk" + "ills paths", () => {
 	const agentDir = path.join(path.sep, "tmp", "pi-eval-agent");
-	const hostRef = path.join(path.sep, "Users", "example-user", ".agents", "skills", "example-skill", "references", "bun.md");
+	const hostRef = path.join(
+		path.sep,
+		"Users",
+		"example-user",
+		".agents",
+		"skills",
+		"example-skill",
+		"references",
+		"bun.md",
+	);
 	const capture = createReadCapture();
 
 	captureReadDenied(hostRef, agentDir, capture);

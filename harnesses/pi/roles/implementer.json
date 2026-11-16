@@ -1,0 +1,23 @@
+{
+  "name": "implementer",
+  "prompt": "implementer.md",
+  "model": "inherit",
+  "thinking": "medium",
+  "skills": ["housekeeping"],
+  "tools": [
+    "project_read",
+    "project_search",
+    "project_write",
+    "project_delete",
+    "run_command",
+    "submit_result",
+    "read_reference",
+    "project_format",
+    "original_read"
+  ],
+  "writes": ["**"],
+  "mayDelegate": false,
+  "timeoutMs": 900000,
+  "maxTurns": 60,
+  "backend": "pi"
+}

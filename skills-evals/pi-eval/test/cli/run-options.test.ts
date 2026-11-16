@@ -7,7 +7,7 @@ test("resolveCaseParallelism defaults to available workers capped at six", () =>
 	assert.equal(resolveCaseParallelism({ availableWorkers: 4 }), 4);
 });
 
-test("resolveCaseParallelism accepts env or flag values while keeping the hard cap", () => {
+test("resolveCaseParallelism accepts env or flag values while keeping the " + "hard cap", () => {
 	assert.equal(resolveCaseParallelism({ envValue: "3", availableWorkers: 12 }), 3);
 	assert.equal(resolveCaseParallelism({ envValue: "20", availableWorkers: 12 }), 6);
 	assert.equal(resolveCaseParallelism({ flagValue: "2", envValue: "5", availableWorkers: 12 }), 2);

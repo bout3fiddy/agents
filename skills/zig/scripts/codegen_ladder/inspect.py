@@ -85,12 +85,16 @@ def build_context(options: InspectOptions) -> InspectContext:
     source_mode = source is not None
     build_step_mode = bool(options.build_step)
     artifact = infer_artifact(cwd, options.build_step, options.artifact)
+
     if source_mode and artifact is None:
         artifact = out_dir / "app"
+
     if options.symbol.strip() == "":
         raise SystemExit("--symbol is required")
+
     if not source_mode and artifact is None:
         raise SystemExit("provide --source, --artifact, or --build-step")
+
     return InspectContext(
         cwd=cwd,
         source=source,
@@ -111,10 +115,9 @@ def build_context(options: InspectOptions) -> InspectContext:
     )
 
 
-def run_correctness(
-    options: InspectOptions, context: InspectContext
-) -> list[CommandResult]:
+def run_correctness(options: InspectOptions, context: InspectContext) -> list[CommandResult]:
     commands: list[CommandResult] = []
+
     if options.test_step:
         commands.append(
             run_context_command(
@@ -133,13 +136,13 @@ def run_correctness(
                 argv=["zig", "test", str(context.source), "-OReleaseFast"],
             )
         )
+
     return commands
 
 
-def run_benchmark(
-    options: InspectOptions, context: InspectContext
-) -> list[CommandResult]:
+def run_benchmark(options: InspectOptions, context: InspectContext) -> list[CommandResult]:
     commands: list[CommandResult] = []
+
     if options.bench_step:
         commands.append(
             run_context_command(
@@ -169,11 +172,13 @@ def run_benchmark(
                 env_extra=context.run_env,
             )
         )
+
     return commands
 
 
 def run_build(options: InspectOptions, context: InspectContext) -> list[CommandResult]:
     commands: list[CommandResult] = []
+
     if context.build_step_mode:
         commands.append(
             run_context_command(
@@ -199,6 +204,7 @@ def run_build(options: InspectOptions, context: InspectContext) -> list[CommandR
                 ],
             )
         )
+
     return commands
 
 
@@ -211,6 +217,7 @@ def emit_source_artifacts(
         or command_status(commands, "build-exe") != "pass"
     ):
         return []
+
     emitted = [
         run_context_command(
             options,
@@ -226,6 +233,7 @@ def emit_source_artifacts(
             ],
         )
     ]
+
     if options.emit_ir:
         emitted.append(
             run_context_command(
@@ -242,6 +250,7 @@ def emit_source_artifacts(
                 ],
             )
         )
+
     return emitted
 
 
@@ -250,8 +259,10 @@ def collect_binary_artifacts(
 ) -> list[CommandResult]:
     if context.artifact is None or not context.artifact.exists():
         return []
+
     commands: list[CommandResult] = []
     nm_tool = shutil.which("nm")
+
     if nm_tool:
         nm_result = run_context_command(
             options,
@@ -261,12 +272,14 @@ def collect_binary_artifacts(
         )
         commands.append(nm_result)
         copy_if_exists(Path(nm_result.stdout_path), context.paths.symbols)
+
     commands.extend(run_disassemblers(options, context))
     return commands
 
 
 def disassembly_commands(artifact: Path) -> list[list[str]]:
     commands: list[list[str]] = []
+
     if shutil.which("objdump"):
         commands.extend(
             [
@@ -280,17 +293,19 @@ def disassembly_commands(artifact: Path) -> list[list[str]]:
                 ],
             ]
         )
+
     if shutil.which("otool"):
         commands.append(["otool", "-tvV", str(artifact)])
+
     return commands
 
 
-def run_disassemblers(
-    options: InspectOptions, context: InspectContext
-) -> list[CommandResult]:
+def run_disassemblers(options: InspectOptions, context: InspectContext) -> list[CommandResult]:
     if context.artifact is None:
         return []
+
     commands: list[CommandResult] = []
+
     for index, argv in enumerate(disassembly_commands(context.artifact)):
         result = run_context_command(
             options,
@@ -299,9 +314,11 @@ def run_disassemblers(
             argv=argv,
         )
         commands.append(result)
+
         if result.status == "pass":
             copy_if_exists(Path(result.stdout_path), context.paths.full_asm)
             break
+
     return commands
 
 
@@ -313,8 +330,10 @@ def benchmark_output(commands: list[CommandResult]) -> str:
     run_command_result = command_by_name(commands, "zig-run") or command_by_name(
         commands, "zig-build-bench-step"
     )
+
     if run_command_result is None:
         return ""
+
     return "\n".join(
         [
             read_text(Path(run_command_result.stdout_path)),
@@ -324,16 +343,16 @@ def benchmark_output(commands: list[CommandResult]) -> str:
 
 
 def selected_benchmark_command(commands: list[CommandResult]) -> CommandResult | None:
-    return command_by_name(commands, "zig-run") or command_by_name(
-        commands, "zig-build-bench-step"
-    )
+    return command_by_name(commands, "zig-run") or command_by_name(commands, "zig-build-bench-step")
 
 
 def build_strategy(context: InspectContext) -> str:
     if context.build_step_mode:
         return "build-step"
+
     if context.source_mode:
         return "direct-source"
+
     return "artifact"
 
 
@@ -343,18 +362,10 @@ def artifact_report(context: InspectContext) -> JsonObject:
         "emitted_asm": str(context.paths.emitted_asm)
         if context.paths.emitted_asm.exists()
         else None,
-        "llvm_ir": str(context.paths.llvm_ir)
-        if context.paths.llvm_ir.exists()
-        else None,
-        "full_asm": str(context.paths.full_asm)
-        if context.paths.full_asm.exists()
-        else None,
-        "hot_asm": str(context.paths.hot_asm)
-        if context.paths.hot_asm.exists()
-        else None,
-        "symbols": str(context.paths.symbols)
-        if context.paths.symbols.exists()
-        else None,
+        "llvm_ir": str(context.paths.llvm_ir) if context.paths.llvm_ir.exists() else None,
+        "full_asm": str(context.paths.full_asm) if context.paths.full_asm.exists() else None,
+        "hot_asm": str(context.paths.hot_asm) if context.paths.hot_asm.exists() else None,
+        "symbols": str(context.paths.symbols) if context.paths.symbols.exists() else None,
     }
 
 
@@ -396,9 +407,7 @@ def inspect(options: InspectOptions) -> JsonObject:
         "calls": [],
     }
     calls: JsonObject = (
-        parse_calls(context.paths.hot_asm, options.max_matches)
-        if hot_found
-        else empty_calls
+        parse_calls(context.paths.hot_asm, options.max_matches) if hot_found else empty_calls
     )
     empty_symbols: JsonObject = {"found": False, "matches": []}
     symbols: JsonObject = (
@@ -457,18 +466,13 @@ def inspect(options: InspectOptions) -> JsonObject:
             options.alloc_report, context.cwd, options.expect_allocs
         ),
         "profiler": run_profiler(options, context.source, context.cwd, context.out_dir),
-        "llvm_mca": run_llvm_mca(
-            options, context.paths.hot_asm, context.cwd, context.out_dir
-        ),
+        "llvm_mca": run_llvm_mca(options, context.paths.hot_asm, context.cwd, context.out_dir),
         "agent_queries": [
             (
                 "jq -r '.next_checks.suggestions[]? "
                 "| [.id, .severity, .confidence] | @tsv' report.json"
             ),
-            (
-                'jq -r \'.checks[] | select(.status=="review") '
-                "| [.key, .count] | @tsv' report.json"
-            ),
+            ("jq -r '.checks[] | select(.status==\"review\") | [.key, .count] | @tsv' report.json"),
             "jq -r '.artifacts.hot_asm' report.json | xargs sed -n '1,160p'",
             "jq '.runtime.benchmark.parsed' report.json",
             "jq '.decision_card' report.json",

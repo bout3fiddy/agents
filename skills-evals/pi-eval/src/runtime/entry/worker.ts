@@ -7,10 +7,7 @@ import type { PathDenyPolicy } from "../policy/read-policy.js";
 import { ensureDir } from "../../data/utils.js";
 import { extractTerminalErrorFromMessages } from "../rpc/rpc-messages.js";
 import { parseWorkerRuntimeConfig } from "../worker/worker-contract.js";
-import {
-	createSandboxBoundary,
-	wrapToolWithSandboxBoundary,
-} from "../sandbox/sandbox-boundary.js";
+import { createSandboxBoundary, wrapToolWithSandboxBoundary } from "../sandbox/sandbox-boundary.js";
 import {
 	createAccumulator,
 	createToolUsageCapture,
@@ -36,14 +33,16 @@ const getLastAssistantMessage = (
 ): AssistantMessage | null => {
 	for (let index = messages.length - 1; index >= 0; index -= 1) {
 		const message = messages[index];
-		if (message.role === "assistant") return message;
+
+		if (message.role === "assistant") {
+			return message;
+		}
 	}
+
 	return null;
 };
 
-const isRetryableTermination = (
-	messages: Array<AssistantMessage | ToolResultMessage>,
-): boolean => {
+const isRetryableTermination = (messages: Array<AssistantMessage | ToolResultMessage>): boolean => {
 	const lastAssistant = getLastAssistantMessage(messages);
 	return Boolean(
 		lastAssistant &&
@@ -61,11 +60,15 @@ const extractTerminalError = (messages: Array<AssistantMessage | ToolResultMessa
 export const registerEvalWorker = async (pi: ExtensionAPI): Promise<boolean> => {
 	const cwd = process.cwd();
 	const config = parseWorkerRuntimeConfig(process.env, cwd);
-	if (!config) return false;
+
+	if (!config) {
+		return false;
+	}
 
 	const sandboxBoundary = await createSandboxBoundary(cwd, config.agentDir);
 	const readCapture = createReadCapture();
 	let denyPolicy: PathDenyPolicy | null = null;
+
 	if (config.allowedTools.has("read")) {
 		const readSetup = await createEvalReadTool(
 			cwd,
@@ -78,11 +81,13 @@ export const registerEvalWorker = async (pi: ExtensionAPI): Promise<boolean> => 
 		denyPolicy = readSetup.denyPolicy;
 		pi.registerTool(readSetup.tool);
 	}
+
 	if (config.allowedTools.has("edit")) {
 		pi.registerTool(
 			wrapToolWithSandboxBoundary(adaptToolExecute(createEditTool(cwd)), sandboxBoundary),
 		);
 	}
+
 	if (config.allowedTools.has("write")) {
 		pi.registerTool(
 			wrapToolWithSandboxBoundary(adaptToolExecute(createWriteTool(cwd)), sandboxBoundary),
@@ -103,7 +108,10 @@ export const registerEvalWorker = async (pi: ExtensionAPI): Promise<boolean> => 
 	};
 	let retryableFinalizeTimer: NodeJS.Timeout | null = null;
 	const clearRetryableFinalizeTimer = () => {
-		if (!retryableFinalizeTimer) return;
+		if (!retryableFinalizeTimer) {
+			return;
+		}
+
 		clearTimeout(retryableFinalizeTimer);
 		retryableFinalizeTimer = null;
 	};
@@ -125,9 +133,11 @@ export const registerEvalWorker = async (pi: ExtensionAPI): Promise<boolean> => 
 			startedAt,
 			model: ctx.model,
 		});
+
 		if (terminalError && terminalError.trim().length > 0) {
 			result.errors.push(`worker terminal error: ${terminalError.trim()}`);
 		}
+
 		await ensureDir(path.dirname(config.outputPath));
 		await writeFile(config.outputPath, JSON.stringify(result, null, 2));
 		ctx.shutdown();
@@ -137,7 +147,11 @@ export const registerEvalWorker = async (pi: ExtensionAPI): Promise<boolean> => 
 		clearRetryableFinalizeTimer();
 		retryableFinalizeTimer = setTimeout(() => {
 			retryableFinalizeTimer = null;
-			if (!shouldFinalize(acc, config.expectedTurns, true)) return;
+
+			if (!shouldFinalize(acc, config.expectedTurns, true)) {
+				return;
+			}
+
 			void persistResult(ctx, terminalError).catch(() => undefined);
 		}, RETRYABLE_TERMINATION_SETTLE_MS);
 	};
@@ -148,12 +162,18 @@ export const registerEvalWorker = async (pi: ExtensionAPI): Promise<boolean> => 
 			: [];
 		const retryableTermination = isRetryableTermination(messages);
 		appendAgentEnd(acc, messages, !retryableTermination);
+
 		if (retryableTermination) {
 			scheduleRetryableFinalize(ctx, extractTerminalError(messages));
 			return;
 		}
+
 		clearRetryableFinalizeTimer();
-		if (!shouldFinalize(acc, config.expectedTurns)) return;
+
+		if (!shouldFinalize(acc, config.expectedTurns)) {
+			return;
+		}
+
 		await persistResult(ctx);
 	});
 
@@ -167,12 +187,24 @@ export const registerEvalWorker = async (pi: ExtensionAPI): Promise<boolean> => 
 
 	extensionPi.on("auto_retry_end", async (event, ctx) => {
 		clearRetryableFinalizeTimer();
-		if (event.success === true) return;
-		if (event.success !== false) return;
-		const terminalError = typeof event.finalError === "string" && event.finalError.trim().length > 0
-			? event.finalError.trim()
-			: "terminated";
-		if (!shouldFinalize(acc, config.expectedTurns, true)) return;
+
+		if (event.success === true) {
+			return;
+		}
+
+		if (event.success !== false) {
+			return;
+		}
+
+		const terminalError =
+			typeof event.finalError === "string" && event.finalError.trim().length > 0
+				? event.finalError.trim()
+				: "terminated";
+
+		if (!shouldFinalize(acc, config.expectedTurns, true)) {
+			return;
+		}
+
 		await persistResult(ctx, terminalError);
 	});
 

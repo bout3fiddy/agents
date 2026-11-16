@@ -10,6 +10,7 @@ compatible agents.
 agents/
 ├── instructions/global.md     # always-loaded personal defaults
 ├── skills/                    # progressively disclosed Agent Skills
+├── harnesses/                 # isolated Pi runtime and Claude baseline
 ├── bin/
 │   ├── sync.sh                # validate and hard-sync global assets
 │   └── build_agents_index.py  # skill/reference metadata audit
@@ -21,6 +22,8 @@ agents/
 Detailed instructions live near their scope:
 
 - [Devcontainer operations](devcontainer/README.md)
+- [Pi coding harness](harnesses/pi/README.md)
+- [Claude baseline](harnesses/claude/README.md)
 - [Skill evaluation harness](skills-evals/README.md)
 - [Evaluation guardrails](skills-evals/AGENTS.md)
 - Individual workflow and domain guidance under `skills/<name>/`
@@ -36,18 +39,40 @@ Run from the repository root:
 The sync command first runs `python3 bin/build_agents_index.py --no-warnings`,
 then mirrors:
 
-- `skills/` to `~/.agents/skills/` and `~/.claude/skills/`
-- `instructions/global.md` to `~/.agents/AGENTS.md` and `~/.claude/CLAUDE.md`
+- `skills/` to `~/.agents/skills/`
+- `instructions/global.md` to `~/.agents/AGENTS.md`
 - a thin `~/.codex/AGENTS.md` pointer to `~/.agents/AGENTS.md`
 
-Sync also removes the retired `~/.agents/workflows/` and
-`~/.claude/workflows/` trees; reusable procedures now live only as skills.
+Sync removes the retired `~/.agents/workflows/` tree. It leaves Claude and Pi
+alone. Pi installs separately with `./bin/sync-pi.sh`; Claude's global baseline
+is managed by `harnesses/claude/reset.py`.
 
 If the checkout is not the intended source directory, set `AGENTS_DIR` to its
 absolute path before syncing. Sync does not deploy devcontainer template
 changes.
 
 ## Create or update a skill
+
+All authored repository code uses the executable lint rules under
+`harnesses/pi/scripts/linting/` and the shared Oxlint configuration. Run:
+
+```sh
+node bin/format-repo.mjs
+node bin/lint-repo.mjs
+./bin/verify.sh
+```
+
+The checks cover code across this repository. Intentional evaluation fixtures
+are excluded. Existing evaluation code keeps tabs, double quotes and semicolons;
+Pi code uses spaces and single quotes. Both enforce logical paragraph spacing,
+100 columns and semantic checks. Long literals may use concatenation to preserve
+their exact contents within the column limit.
+
+On a fresh checkout, first install the pinned dependencies with
+`npm ci --prefix harnesses/pi --ignore-scripts` and
+`bun install --cwd skills-evals/pi-eval --frozen-lockfile`.
+Verification needs macOS, Node, Python and Bun. The formatting command also uses
+`uvx` to run pinned Ruff.
 
 Every `skills/<name>/SKILL.md` uses Agent Skills frontmatter:
 

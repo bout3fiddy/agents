@@ -18,6 +18,7 @@ export type RemoveTargets = {
 	isBundle: boolean;
 	variantTags: string[];
 	suite: string;
+
 	/** Args for purge-report.ts CLI (--case, --reports-dir, optionally --variants). */
 	purgeArgs: string[];
 };
@@ -30,7 +31,9 @@ export type RemoveDirs = {
 
 // ── Target resolution ───────────────────────────────────────────────────
 
-const parseJsonlMetadata = async (jsonlPath: string): Promise<{
+const parseJsonlMetadata = async (
+	jsonlPath: string,
+): Promise<{
 	isBundle: boolean;
 	suite: string;
 	variantTags: string[];
@@ -48,11 +51,10 @@ const parseJsonlMetadata = async (jsonlPath: string): Promise<{
 
 const discoverTraceDirs = async (reportsDir: string): Promise<string[]> => {
 	const tracesRoot = path.join(reportsDir, "routing-traces");
+
 	try {
 		const entries = await readdir(tracesRoot, { withFileTypes: true });
-		return entries
-			.filter((e) => e.isDirectory())
-			.map((e) => path.join(tracesRoot, e.name, ""));
+		return entries.filter((e) => e.isDirectory()).map((e) => path.join(tracesRoot, e.name, ""));
 	} catch {
 		return [];
 	}
@@ -63,9 +65,10 @@ const discoverTraceDirs = async (reportsDir: string): Promise<string[]> => {
  * Uses the canonical `slugFromId` and `traceFileName` from the TS data layer
  * instead of reimplementing them in shell.
  */
-/** Resolve case JSONL path: subdirectory layout (CASE_ID/case.jsonl) or legacy flat (CASE_ID.jsonl). */
+/** Resolve the case path in a subdirectory or the legacy flat layout. */
 const resolveCaseJsonlPath = async (caseId: string, casesDir: string): Promise<string> => {
 	const subdirPath = path.join(casesDir, caseId, "case.jsonl");
+
 	try {
 		await stat(subdirPath);
 		return subdirPath;
@@ -95,11 +98,13 @@ export const resolveRemoveTargets = async (
 
 	// 2. Routing traces and suite-level judge verdicts
 	const modelDirs = await discoverTraceDirs(dirs.reportsDir);
+
 	if (isBundle) {
 		for (const modelDir of modelDirs) {
 			for (const tag of variantTags) {
 				filesToDelete.push(path.join(modelDir, `${traceFileName(`${caseId}:${tag}`)}.json`));
 			}
+
 			filesToDelete.push(path.join(modelDir, `${traceFileName(caseId)}--verdict.json`));
 			filesToDelete.push(path.join(modelDir, "suite-verdict.json"));
 		}
@@ -117,7 +122,10 @@ export const resolveRemoveTargets = async (
 
 	// 4. Purge args
 	const purgeArgs = ["--case", caseId, "--reports-dir", dirs.reportsDir];
-	if (isBundle) purgeArgs.push("--variants", variantTags.join(","));
+
+	if (isBundle) {
+		purgeArgs.push("--variants", variantTags.join(","));
+	}
 
 	return { filesToDelete, dirsToDelete, isBundle, variantTags, suite, purgeArgs };
 };
@@ -138,18 +146,22 @@ export const executeRemove = async (
 
 	for (const f of targets.filesToDelete) {
 		const resolved = path.resolve(f);
+
 		if (!allowedFileRoots.some((root) => hasPathPrefix(resolved, path.resolve(root)))) {
 			throw new Error(`delete target outside managed dirs: ${resolved}`);
 		}
+
 		await rm(resolved, { force: true });
 		deleted.push(resolved);
 	}
 
 	for (const d of targets.dirsToDelete) {
 		const resolved = path.resolve(d);
+
 		if (!allowedDirRoots.some((root) => hasPathPrefix(resolved, path.resolve(root)))) {
 			throw new Error(`delete target outside managed dirs: ${resolved}`);
 		}
+
 		await rm(resolved, { recursive: true, force: true });
 		deleted.push(resolved);
 	}

@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildTimeoutDiagnosticsHint, createRpcDiagnosticsTracker } from "../../../src/runtime/rpc/rpc-diagnostics.js";
+import {
+	buildTimeoutDiagnosticsHint,
+	createRpcDiagnosticsTracker,
+} from "../../../src/runtime/rpc/rpc-diagnostics.js";
 import type { RpcDiagnostics } from "../../../src/data/types.js";
 
 test("createRpcDiagnosticsTracker records raw lines and events", () => {
@@ -38,6 +41,7 @@ test("createRpcDiagnosticsTracker detects incomplete tool calls", () => {
 		toolCall: { name: "read", id: "tc1" },
 		partialJson: '{"path": "/foo"}',
 	});
+
 	// No toolcall_end or execution_start
 	const summary = tracker.toSummary();
 	assert.ok(summary.anomalies.length > 0);
@@ -48,9 +52,7 @@ test("createRpcDiagnosticsTracker tracks terminal agent errors", () => {
 	const tracker = createRpcDiagnosticsTracker();
 	tracker.recordEvent({
 		type: "agent_end",
-		messages: [
-			{ role: "assistant", stopReason: "error", errorMessage: "terminated" },
-		],
+		messages: [{ role: "assistant", stopReason: "error", errorMessage: "terminated" }],
 	});
 	const summary = tracker.toSummary();
 	assert.equal(summary.terminalAgentErrorCount, 1);

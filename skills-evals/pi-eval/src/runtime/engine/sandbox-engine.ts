@@ -36,13 +36,7 @@ const PROVIDER_ALLOWED_HOSTS: Record<string, string[]> = {
 	groq: ["api.groq.com", "groq.com", "*.groq.com"],
 	mistral: ["api.mistral.ai", "mistral.ai", "*.mistral.ai"],
 	openai: ["api.openai.com", "openai.com", "*.openai.com"],
-	"openai-codex": [
-		"api.openai.com",
-		"openai.com",
-		"*.openai.com",
-		"chatgpt.com",
-		"*.chatgpt.com",
-	],
+	"openai-codex": ["api.openai.com", "openai.com", "*.openai.com", "chatgpt.com", "*.chatgpt.com"],
 	openrouter: ["api.openrouter.ai", "openrouter.ai", "*.openrouter.ai"],
 	ollama: ["localhost", "127.0.0.1", "::1"],
 	vertex: ["aiplatform.googleapis.com", "*.googleapis.com"],
@@ -53,16 +47,30 @@ import { uniqueSorted } from "../../data/utils.js";
 
 export const resolveProviderAllowedHosts = (model: ModelSpec): string[] => {
 	const providerKey = model.provider.trim().toLowerCase();
+
 	if (providerKey.length === 0) {
 		throw new Error("Missing model provider for sandbox network policy.");
 	}
+
 	const hosts = PROVIDER_ALLOWED_HOSTS[providerKey];
-	if (hosts && hosts.length > 0) return uniqueSorted(hosts);
-	if (providerKey === "local") return [...PROVIDER_ALLOWED_HOSTS.ollama];
+
+	if (hosts && hosts.length > 0) {
+		return uniqueSorted(hosts);
+	}
+
+	if (providerKey === "local") {
+		return [...PROVIDER_ALLOWED_HOSTS.ollama];
+	}
+
 	throw new Error(
-		`No sandbox network allowlist for model provider '${model.provider}' (${model.provider}/${model.id}).`,
+		"No sandbox network allowlist for model provider '" +
+			`${model.provider}` +
+			"' (" +
+			`${model.provider}` +
+			"/" +
+			`${model.id}` +
+			").",
 	);
 };
 
-export const createMandatorySandboxEngine = (): SandboxEngine =>
-	createGondolinSandboxEngine();
+export const createMandatorySandboxEngine = (): SandboxEngine => createGondolinSandboxEngine();

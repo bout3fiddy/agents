@@ -40,7 +40,10 @@ type GondolinEngineDependencies = {
 };
 
 const shellEscapeArg = (arg: string): string => {
-	if (/^[a-zA-Z0-9_./:@%+=,-]+$/.test(arg)) return arg;
+	if (/^[a-zA-Z0-9_./:@%+=,-]+$/.test(arg)) {
+		return arg;
+	}
+
 	return `'${arg.replace(/'/g, `'\\''`)}'`;
 };
 
@@ -50,38 +53,47 @@ const buildCommandString = (command: string, args: string[]): string =>
 const normalizeEnv = (env: NodeJS.ProcessEnv): Record<string, string> =>
 	Object.fromEntries(
 		Object.entries(env).flatMap(([key, value]) =>
-			typeof value === "string" ? [[key, value]] : []
+			typeof value === "string" ? [[key, value]] : [],
 		),
 	);
 
 const resolveRootfsMode = (raw: string | undefined): "readonly" | "memory" | "cow" => {
 	const mode = (raw ?? "cow").trim().toLowerCase();
-	if (mode === "readonly" || mode === "memory" || mode === "cow") return mode;
+
+	if (mode === "readonly" || mode === "memory" || mode === "cow") {
+		return mode;
+	}
+
 	throw new Error(
-		`PI_EVAL_GONDOLIN_ROOTFS_MODE must be one of 'readonly', 'memory', or 'cow'; got '${raw ?? ""}'.`,
+		"PI_EVAL_GONDOLIN_ROOTFS_MODE must be one of 'readonly', 'memory', or" +
+			" 'cow'; got '" +
+			`${raw ?? ""}` +
+			"'.",
 	);
 };
 
 const resolveRepoImagePath = async (
 	deps: Pick<GondolinEngineDependencies, "pathExists">,
 ): Promise<string | null> => {
-	const manifestSuffix = path.join(
-		"skills-evals",
-		"gondolin",
-		"image",
-		"current",
-		"manifest.json",
-	);
+	const manifestSuffix = path.join("skills-evals", "gondolin", "image", "current", "manifest.json");
 	let cursor = path.resolve(process.cwd());
+
 	while (true) {
 		const manifestPath = path.join(cursor, manifestSuffix);
+
 		if (await deps.pathExists(manifestPath)) {
 			return path.dirname(manifestPath);
 		}
+
 		const parent = path.dirname(cursor);
-		if (parent === cursor) break;
+
+		if (parent === cursor) {
+			break;
+		}
+
 		cursor = parent;
 	}
+
 	return null;
 };
 
@@ -90,24 +102,32 @@ const resolveRequiredImagePath = async (
 ): Promise<string> => {
 	const rawImagePath = process.env.PI_EVAL_GONDOLIN_IMAGE_PATH?.trim() ?? "";
 	const imagePath =
-		rawImagePath.length > 0
-			? path.resolve(rawImagePath)
-			: await resolveRepoImagePath(deps);
+		rawImagePath.length > 0 ? path.resolve(rawImagePath) : await resolveRepoImagePath(deps);
+
 	if (!imagePath) {
 		throw new Error(
-			"Gondolin image path is unset. Set PI_EVAL_GONDOLIN_IMAGE_PATH or build the repo image at skills-evals/gondolin/image/current via ./skills-evals/gondolin/scripts/build-image.sh.",
+			"Gondolin image path is unset. Set PI_EVAL_GONDOLIN_IMAGE_PATH or bui" +
+				"ld the repo image at skills-evals/gondolin/image/current via ./skill" +
+				"s-evals/gondolin/scripts/build-image.sh.",
 		);
 	}
+
 	const exists = await deps.pathExists(imagePath);
+
 	if (!exists) {
 		throw new Error(`PI_EVAL_GONDOLIN_IMAGE_PATH does not exist: ${imagePath}`);
 	}
+
 	const manifestPath = path.join(imagePath, "manifest.json");
+
 	if (!(await deps.pathExists(manifestPath))) {
 		throw new Error(
-			`Gondolin image is missing manifest.json: ${manifestPath}. Build or sync the custom image assets before running evals.`,
+			"Gondolin image is missing manifest.json: " +
+				`${manifestPath}` +
+				". Build or sync the custom image assets before running evals.",
 		);
 	}
+
 	return imagePath;
 };
 
@@ -142,16 +162,24 @@ const withCheckpointLock = async <T>(params: {
 }): Promise<T> => {
 	const lockDir = `${params.checkpointPath}.lock`;
 	const deadline = Date.now() + CHECKPOINT_LOCK_TIMEOUT_MS;
+
 	while (true) {
 		try {
 			await params.deps.createLockDirectory(lockDir);
 			break;
 		} catch (error) {
 			const code = (error as NodeJS.ErrnoException)?.code;
-			if (code !== "EEXIST") throw error;
-			if (Date.now() >= deadline) {
-				throw new Error(`timed out waiting for checkpoint lock: ${params.checkpointPath}`);
+
+			if (code !== "EEXIST") {
+				throw error;
 			}
+
+			if (Date.now() >= deadline) {
+				throw new Error(`timed out waiting for checkpoint lock: ${params.checkpointPath}`, {
+					cause: error,
+				});
+			}
+
 			await params.deps.sleep(CHECKPOINT_LOCK_POLL_MS);
 		}
 	}
@@ -165,10 +193,7 @@ const withCheckpointLock = async <T>(params: {
 
 const isCheckpointCompatibilityError = (error: unknown): boolean => {
 	const message = error instanceof Error ? error.message : String(error);
-	return (
-		message.includes("manifest buildId") ||
-		message.includes("checkpoint buildId")
-	);
+	return message.includes("manifest buildId") || message.includes("checkpoint buildId");
 };
 
 const createOrResumeVm = async (params: {
@@ -178,9 +203,13 @@ const createOrResumeVm = async (params: {
 	rootfsMode: "readonly" | "memory" | "cow";
 }): Promise<GondolinVm> => {
 	const { vmOptions, deps, imagePath, rootfsMode } = params;
+
 	// Gondolin disk checkpoints require a writable qcow2 root disk, which is
 	// provided by rootfs mode "cow". Other modes run without checkpoint resume.
-	if (!resolveCheckpointEnabled() || rootfsMode !== "cow") return deps.createVm(vmOptions);
+
+	if (!resolveCheckpointEnabled() || rootfsMode !== "cow") {
+		return deps.createVm(vmOptions);
+	}
 
 	await deps.ensureGuestAssets();
 	const checkpointPath = buildCheckpointPath({ imagePath, rootfsMode });
@@ -191,7 +220,10 @@ const createOrResumeVm = async (params: {
 		try {
 			return await deps.loadCheckpoint(checkpointPath).resume(vmOptions);
 		} catch (error) {
-			if (!isCheckpointCompatibilityError(error)) throw error;
+			if (!isCheckpointCompatibilityError(error)) {
+				throw error;
+			}
+
 			await deps.removePath(checkpointPath).catch(() => undefined);
 			return deps.createVm(vmOptions);
 		}
@@ -202,8 +234,12 @@ const createOrResumeVm = async (params: {
 			checkpointPath,
 			deps,
 			fn: async () => {
-				if (await deps.pathExists(checkpointPath)) return;
+				if (await deps.pathExists(checkpointPath)) {
+					return;
+				}
+
 				const baseVm = await deps.createVm(vmOptions);
+
 				try {
 					await baseVm.checkpoint(checkpointPath);
 				} catch (error) {
@@ -215,17 +251,24 @@ const createOrResumeVm = async (params: {
 			},
 		});
 	} catch (error) {
-		if (!isCheckpointCompatibilityError(error)) throw error;
+		if (!isCheckpointCompatibilityError(error)) {
+			throw error;
+		}
+
 		return deps.createVm(vmOptions);
 	}
 
 	if (!(await deps.pathExists(checkpointPath))) {
 		throw new Error(`checkpoint was not created: ${checkpointPath}`);
 	}
+
 	try {
 		return await deps.loadCheckpoint(checkpointPath).resume(vmOptions);
 	} catch (error) {
-		if (!isCheckpointCompatibilityError(error)) throw error;
+		if (!isCheckpointCompatibilityError(error)) {
+			throw error;
+		}
+
 		await deps.removePath(checkpointPath).catch(() => undefined);
 		return deps.createVm(vmOptions);
 	}
@@ -242,6 +285,7 @@ const createProcessStdin = (proc: { write: (data: string | Buffer) => void; end:
 						typeof encoding === "string" && encoding.length > 0 ? encoding : "utf8";
 					proc.write(Buffer.from(chunk, resolvedEncoding));
 				}
+
 				callback();
 			} catch (error) {
 				callback(error as Error);
@@ -268,9 +312,15 @@ const assertGuestPiAvailable = async (
 		stderr: "pipe",
 	});
 	const result = await probe;
-	if (result.exitCode === 0) return;
+
+	if (result.exitCode === 0) {
+		return;
+	}
+
 	throw new Error(
-		"Gondolin guest is missing `pi` in PATH. Rebuild the custom Gondolin image with `pi` installed and set PI_EVAL_GONDOLIN_IMAGE_PATH to that image.",
+		"Gondolin guest is missing `pi` in PATH. Rebuild the custom Gondolin " +
+			"image with `pi` installed and set PI_EVAL_GONDOLIN_IMAGE_PATH to tha" +
+			"t image.",
 	);
 };
 
@@ -285,14 +335,26 @@ const normalizeLaunchError = (error: unknown): Error => {
 	const syscall = (error as NodeJS.ErrnoException)?.syscall ?? "";
 	const pathName = (error as NodeJS.ErrnoException)?.path ?? "";
 	const haystack = [err.message, syscall, pathName].filter(Boolean).join(" ");
-	if (errno !== "ENOENT" && !haystack.includes("ENOENT")) return err;
+
+	if (errno !== "ENOENT" && !haystack.includes("ENOENT")) {
+		return err;
+	}
 
 	const missingBinary = extractMissingQemuBinary(haystack);
-	if (!missingBinary) return err;
+
+	if (!missingBinary) {
+		return err;
+	}
+
 	const installHint =
-		"Install QEMU on macOS with `brew install qemu` or on Debian/Ubuntu with `sudo apt install qemu-system-arm qemu-utils`.";
+		"Install QEMU on macOS with `brew install qemu` or on Debian/Ubuntu w" +
+		"ith `sudo apt install qemu-system-arm qemu-utils`.";
 	return new Error(
-		`Missing required host binary '${missingBinary}' for Gondolin sandbox. ${installHint}`,
+		"Missing required host binary '" +
+			`${missingBinary}` +
+			"' for Gondolin sandbox. " +
+			`${installHint}` +
+			"",
 		{ cause: err },
 	);
 };
@@ -366,6 +428,7 @@ export const createGondolinSandboxEngine = (
 			};
 
 			let vm: GondolinVm | null = null;
+
 			try {
 				vm = await createOrResumeVm({
 					vmOptions,
@@ -400,18 +463,28 @@ export const createGondolinSandboxEngine = (
 					} catch (error) {
 						processSettled = true;
 						const message = error instanceof Error ? error.message : String(error);
-						if (processCancelled && message.includes("exec aborted")) return 137;
+
+						if (processCancelled && message.includes("exec aborted")) {
+							return 137;
+						}
+
 						throw error;
 					}
 				})();
 				const requestCancel = () => {
-					if (processSettled || processCancelled) return;
+					if (processSettled || processCancelled) {
+						return;
+					}
+
 					processCancelled = true;
 					abortController.abort();
 				};
 				let cleanedUp = false;
 				const cleanup = async () => {
-					if (cleanedUp) return;
+					if (cleanedUp) {
+						return;
+					}
+
 					cleanedUp = true;
 					requestCancel();
 					await waitForExitPromise.catch(() => undefined);
@@ -425,6 +498,7 @@ export const createGondolinSandboxEngine = (
 					waitForExit: () => waitForExitPromise,
 					kill: () => {
 						requestCancel();
+
 						try {
 							proc.end();
 						} catch {

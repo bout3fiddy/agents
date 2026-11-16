@@ -5,14 +5,15 @@
  * across agent_end events, then assembles the final CaseRunResult.
  */
 import type { AssistantMessage, ToolResultMessage } from "@earendil-works/pi-ai";
-import {
-	isReferencePath,
-	isSkillPath,
-	serializeReadCapture,
-	type ReadCapture,
-} from "./capture.js";
+import { isReferencePath, isSkillPath, serializeReadCapture, type ReadCapture } from "./capture.js";
 import { modelSpecFromModel } from "../model/model-registry.js";
-import type { CaseRunResult, ReadBreakdownEntry, TokenUsage, TurnTokenUsage, ToolUsageSummary } from "../../data/types.js";
+import type {
+	CaseRunResult,
+	ReadBreakdownEntry,
+	TokenUsage,
+	TurnTokenUsage,
+	ToolUsageSummary,
+} from "../../data/types.js";
 import type { PathDenyPolicy } from "../policy/read-policy.js";
 import { collectAssistantText, sumUsageFromMessages } from "../rpc/rpc-messages.js";
 import {
@@ -64,8 +65,13 @@ export const appendAgentEnd = (
 	countTurn = true,
 ): void => {
 	const outputText = collectAssistantText(messages);
-	if (outputText) acc.outputChunks.push(outputText);
+
+	if (outputText) {
+		acc.outputChunks.push(outputText);
+	}
+
 	const usage = sumUsageFromMessages(messages);
+
 	if (countTurn) {
 		acc.turnBreakdown.push({
 			turn: acc.completedTurns + 1,
@@ -76,17 +82,31 @@ export const appendAgentEnd = (
 			totalTokens: usage.totalTokens,
 		});
 	}
+
 	acc.tokenTotals.input += usage.input;
 	acc.tokenTotals.output += usage.output;
 	acc.tokenTotals.cacheRead += usage.cacheRead;
 	acc.tokenTotals.cacheWrite += usage.cacheWrite;
 	acc.tokenTotals.totalTokens += usage.totalTokens;
-	if (countTurn) acc.completedTurns += 1;
+
+	if (countTurn) {
+		acc.completedTurns += 1;
+	}
 };
 
-export const shouldFinalize = (acc: WorkerAccumulator, expectedTurns: number, force = false): boolean => {
-	if (acc.finalized) return false;
-	if (!force && acc.completedTurns < expectedTurns) return false;
+export const shouldFinalize = (
+	acc: WorkerAccumulator,
+	expectedTurns: number,
+	force = false,
+): boolean => {
+	if (acc.finalized) {
+		return false;
+	}
+
+	if (!force && acc.completedTurns < expectedTurns) {
+		return false;
+	}
+
 	acc.finalized = true;
 	return true;
 };
@@ -95,10 +115,16 @@ export const shouldFinalize = (acc: WorkerAccumulator, expectedTurns: number, fo
 
 export const buildReadBreakdown = (readCapture: ReadCapture): ReadBreakdownEntry[] => {
 	const entries: ReadBreakdownEntry[] = [];
+
 	for (const [filePath, bytes] of readCapture.readSizes) {
 		let category: ReadBreakdownEntry["category"] = "task";
-		if (isSkillPath(filePath)) category = "skill";
-		else if (isReferencePath(filePath)) category = "ref";
+
+		if (isSkillPath(filePath)) {
+			category = "skill";
+		} else if (isReferencePath(filePath)) {
+			category = "ref";
+		}
+
 		entries.push({
 			path: filePath,
 			category,
@@ -106,6 +132,7 @@ export const buildReadBreakdown = (readCapture: ReadCapture): ReadBreakdownEntry
 			estTokens: Math.ceil(bytes / 4),
 		});
 	}
+
 	return entries.sort((a, b) => a.path.localeCompare(b.path));
 };
 
@@ -124,7 +151,7 @@ export const buildResult = (params: {
 	toolUsage: ToolUsageCapture;
 	acc: WorkerAccumulator;
 	startedAt: number;
-	model: any;
+	model: Parameters<typeof modelSpecFromModel>[0] | null;
 }): CaseRunResult => {
 	const {
 		caseId,
@@ -143,13 +170,16 @@ export const buildResult = (params: {
 	} = params;
 	const capturedReads = serializeReadCapture(readCapture);
 	const deniedReadErrors = denyPolicy
-		? Array.from(denyPolicy.deniedReads).sort().map((entry) => `forbidden read: ${entry}`)
+		? Array.from(denyPolicy.deniedReads)
+				.sort()
+				.map((entry) => `forbidden read: ${entry}`)
 		: [];
 	const boundaryErrors = Array.from(sandboxBoundary.violations)
 		.sort()
 		.map((entry) => `${FORBIDDEN_WORKSPACE_VIOLATION}: ${entry}`);
 	const toolFailureErrors = Array.from(toolFailures).sort();
 	const errors = [...boundaryErrors, ...deniedReadErrors, ...toolFailureErrors];
+
 	if (bootstrapProfile === "no_payload" && errors.length > 0) {
 		errors.unshift("policy deny triggered in no_payload profile");
 	}

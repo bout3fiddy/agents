@@ -1,6 +1,11 @@
 import { runCase, buildErrorEvaluation } from "./case-lifecycle.js";
 import { runItemsInParallel } from "../util/parallel.js";
-import type { CaseEvaluation, EvalConfig, EvalRunOptions, ResolvedEvalCase } from "../../data/types.js";
+import type {
+	CaseEvaluation,
+	EvalConfig,
+	EvalRunOptions,
+	ResolvedEvalCase,
+} from "../../data/types.js";
 
 export const evaluateSelectedCases = async (params: {
 	cases: ResolvedEvalCase[];
@@ -10,7 +15,10 @@ export const evaluateSelectedCases = async (params: {
 }): Promise<CaseEvaluation[]> => {
 	const { cases, options, config, extensionEntry } = params;
 	return runItemsInParallel(cases, options.caseParallelism, async (evalCase) => {
-		const dryRun = options.dryRunOverride ? true : evalCase.dryRun ?? config.defaults?.dryRun ?? false;
+		const dryRun = options.dryRunOverride
+			? true
+			: (evalCase.dryRun ?? config.defaults?.dryRun ?? false);
+
 		try {
 			return await runCase({
 				evalCase,

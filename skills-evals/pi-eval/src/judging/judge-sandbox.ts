@@ -40,8 +40,12 @@ export const createJudgeSandbox = async (params: {
 };
 
 export const cleanupJudgeSandbox = async (layout: JudgeSandboxLayout | null): Promise<void> => {
-	if (!layout) return;
+	if (!layout) {
+		return;
+	}
+
 	// Assert against the managed root — workspaceDir parent's parent is the instance root
+
 	const instanceRoot = path.dirname(layout.workspaceDir);
 	const safePath = assertManagedTempPath(instanceRoot, JUDGE_ROOT, "judge sandbox cleanup");
 	await rm(safePath, { recursive: true, force: true });

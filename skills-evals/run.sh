@@ -62,13 +62,16 @@ fi
 
 if [[ ! -d "${PI_EVAL_GONDOLIN_IMAGE_PATH}" ]]; then
 	echo "Gondolin image directory not found: ${PI_EVAL_GONDOLIN_IMAGE_PATH}" >&2
-	echo "Build it with ./skills-evals/gondolin/scripts/build-image.sh or set PI_EVAL_GONDOLIN_IMAGE_PATH." >&2
+	echo "Build it with ./skills-evals/gondolin/scripts/build-image.sh" \
+    "or set PI_EVAL_GONDOLIN_IMAGE_PATH." >&2
 	exit 1
 fi
 
 if [[ ! -f "${PI_EVAL_GONDOLIN_IMAGE_PATH}/manifest.json" ]]; then
-	echo "Gondolin image directory is missing manifest.json: ${PI_EVAL_GONDOLIN_IMAGE_PATH}/manifest.json" >&2
-	echo "Build it with ./skills-evals/gondolin/scripts/build-image.sh or set PI_EVAL_GONDOLIN_IMAGE_PATH." >&2
+	echo "Gondolin image directory is missing manifest.json:" \
+    "${PI_EVAL_GONDOLIN_IMAGE_PATH}/manifest.json" >&2
+	echo "Build it with ./skills-evals/gondolin/scripts/build-image.sh" \
+    "or set PI_EVAL_GONDOLIN_IMAGE_PATH." >&2
 	exit 1
 fi
 
@@ -134,7 +137,8 @@ print(f'{model}\t{thinking}\t{jm}\t{jt}')
 		judge_model="$(printf "%s" "$parsed" | cut -f3)"
 		judge_thinking="$(printf "%s" "$parsed" | cut -f4)"
 		if [[ -z "$model" ]]; then
-			echo "Invalid model entry in $MODELS_FILE:$line_no (expected {\"eval\":{\"model\":\"provider/model\"}})." >&2
+			echo "Invalid model entry in $MODELS_FILE:$line_no" \
+        "(expected {\"eval\":{\"model\":\"provider/model\"}})." >&2
 			exit 1
 		fi
 		if [[ -z "$thinking" ]]; then
@@ -180,7 +184,8 @@ run_for_model() {
 		mkdir -p "$(dirname "$run_log")"
 		echo "[$model] Logging to $run_log"
 		if [[ "${#env_prefix[@]}" -gt 0 ]]; then
-			env "${env_prefix[@]}" pi --no-session --no-extensions -e "$EXT_PATH" -p "$prompt" 2>&1 | tee "$run_log"
+			env "${env_prefix[@]}" pi --no-session --no-extensions \
+        -e "$EXT_PATH" -p "$prompt" 2>&1 | tee "$run_log"
 		else
 			pi --no-session --no-extensions -e "$EXT_PATH" -p "$prompt" 2>&1 | tee "$run_log"
 		fi

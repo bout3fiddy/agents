@@ -1,0 +1,12 @@
+{
+  "plugins": ["typescript", "import"],
+  "categories": { "correctness": "error", "suspicious": "error" },
+  "rules": {
+    "no-unused-vars": "off",
+    "typescript/no-unused-vars": "error",
+    "typescript/no-explicit-any": "error",
+    "no-useless-concat": "off",
+    "curly": ["error", "all"]
+  },
+  "ignorePatterns": ["node_modules/**", "reports/**", "fixtures/**"]
+}

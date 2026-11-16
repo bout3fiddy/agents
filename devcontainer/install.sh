@@ -121,7 +121,8 @@ sync_workspace_mounts() {
   local skip_app_mounts="false"
   local python_bin
 
-  if [[ "${DEVC_SKIP_WORKSPACE_MOUNTS:-}" =~ ^(1|true|yes)$ || "${DEVC_SKIP_APP_MOUNTS:-}" =~ ^(1|true|yes)$ ]]; then
+  if [[ "${DEVC_SKIP_WORKSPACE_MOUNTS:-}" =~ ^(1|true|yes)$ || \
+      "${DEVC_SKIP_APP_MOUNTS:-}" =~ ^(1|true|yes)$ ]]; then
     skip_app_mounts="true"
   fi
 
@@ -233,7 +234,10 @@ def read_pnpm_workspaces(path):
                                 if isinstance(item, str):
                                     patterns.append(item)
                     else:
-                        if (inline.startswith("'") and inline.endswith("'")) or (inline.startswith('"') and inline.endswith('"')):
+                        if (
+                            (inline.startswith("'") and inline.endswith("'"))
+                            or (inline.startswith('"') and inline.endswith('"'))
+                        ):
                             inline = inline[1:-1]
                         if inline:
                             patterns.append(inline)
@@ -245,7 +249,10 @@ def read_pnpm_workspaces(path):
                 continue
             if stripped.startswith("-"):
                 item = stripped[1:].strip()
-                if (item.startswith("'") and item.endswith("'")) or (item.startswith('"') and item.endswith('"')):
+                if (
+                    (item.startswith("'") and item.endswith("'"))
+                    or (item.startswith('"') and item.endswith('"'))
+                ):
                     item = item[1:-1]
                 if item:
                     patterns.append(item)

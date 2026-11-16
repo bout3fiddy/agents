@@ -9,14 +9,11 @@ SOURCE_SKILLS_DIR="$SOURCE_DIR/skills"
 SOURCE_INSTRUCTIONS_FILE="$SOURCE_DIR/instructions/global.md"
 BUILD_AGENT_INDEX_SCRIPT="$SOURCE_DIR/bin/build_agents_index.py"
 
-CLAUDE_DIR="$HOME/.claude"
-CLAUDE_MD_FILE="$CLAUDE_DIR/CLAUDE.md"
-
 usage() {
     cat <<'USAGE'
 Usage: bin/sync.sh
-Performs a hard one-way sync from this repo to ~/.agents and mirrors skills and
-instructions into ~/.claude for native Claude Code discovery.
+Performs a hard one-way sync from this repo to ~/.agents and writes the Codex
+instruction pointer. Pi and Claude are managed separately under harnesses/.
 USAGE
 }
 
@@ -91,20 +88,12 @@ fi
 
 # Workflows are now ordinary Agent Skills. Remove the former parallel workflow
 # trees so stale copies cannot bypass skill discovery and progressive disclosure.
-for legacy_workflows_dir in "$TARGET_ROOT/workflows" "$CLAUDE_DIR/workflows"; do
+for legacy_workflows_dir in "$TARGET_ROOT/workflows"; do
     if [[ -e "$legacy_workflows_dir" || -L "$legacy_workflows_dir" ]]; then
         rm -rf -- "$legacy_workflows_dir"
         echo "Removed legacy $legacy_workflows_dir"
     fi
 done
-
-# --- Claude Code integration ---
-# Full mirror into ~/.claude so Claude Code can natively discover skills and
-# instructions without relying on @ pointers or ~/.agents.
-mkdir -p "$CLAUDE_DIR"
-mirror_file "$SOURCE_INSTRUCTIONS_FILE" "$CLAUDE_MD_FILE"
-mirror_dir "$SOURCE_SKILLS_DIR" "$CLAUDE_DIR/skills"
-echo "Mirrored instructions and skills to $CLAUDE_DIR"
 
 # --- Codex integration ---
 # Write a thin AGENTS.md that references ~/.agents/AGENTS.md so Codex

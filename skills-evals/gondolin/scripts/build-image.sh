@@ -69,13 +69,22 @@ if [[ -z "${GONDOLIN_GUEST_SRC:-}" ]]; then
 		fi
 
 		GUEST_REPO_URL="$(
-			node -e 'const fs=require("fs"); const j=JSON.parse(fs.readFileSync(process.argv[1],"utf8")); process.stdout.write(j.repository || "");' "$GUEST_LOCK_PATH"
+			node -e '
+        const fs=require("fs");
+        const j=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));
+        process.stdout.write(j.repository || "");' "$GUEST_LOCK_PATH"
 		)"
 		GUEST_REPO_REF="$(
-			node -e 'const fs=require("fs"); const j=JSON.parse(fs.readFileSync(process.argv[1],"utf8")); process.stdout.write(j.ref || "");' "$GUEST_LOCK_PATH"
+			node -e '
+        const fs=require("fs");
+        const j=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));
+        process.stdout.write(j.ref || "");' "$GUEST_LOCK_PATH"
 		)"
 		GUEST_RELATIVE_PATH="$(
-			node -e 'const fs=require("fs"); const j=JSON.parse(fs.readFileSync(process.argv[1],"utf8")); process.stdout.write(j.guestPath || "guest");' "$GUEST_LOCK_PATH"
+			node -e '
+        const fs=require("fs");
+        const j=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));
+        process.stdout.write(j.guestPath || "guest");' "$GUEST_LOCK_PATH"
 		)"
 
 		if [[ -z "$GUEST_REPO_URL" || -z "$GUEST_REPO_REF" ]]; then
@@ -94,7 +103,8 @@ if [[ -z "${GONDOLIN_GUEST_SRC:-}" ]]; then
 		GUEST_CACHE_ROOT="$CACHE_ROOT/$CACHE_KEY"
 		GUEST_DIR="$GUEST_CACHE_ROOT/$GUEST_RELATIVE_PATH"
 
-		echo "[gondolin-image] installed package guest sources unavailable; syncing fallback sources from $GUEST_REPO_URL @ $GUEST_REPO_REF"
+		echo "[gondolin-image] installed package guest sources unavailable;" \
+      "syncing fallback sources from $GUEST_REPO_URL @ $GUEST_REPO_REF"
 		mkdir -p "$CACHE_ROOT"
 		if [[ -d "$GUEST_CACHE_ROOT/.git" ]]; then
 			git -C "$GUEST_CACHE_ROOT" fetch --depth 1 origin "$GUEST_REPO_REF"

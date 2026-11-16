@@ -199,10 +199,7 @@ export type CaseRunResult = {
 };
 
 export type FailureCategory =
-	| "BOOTSTRAP_FAILURE"
-	| "POLICY_FAILURE"
-	| "ROUTING_FAILURE"
-	| "TASK_FAILURE";
+	"BOOTSTRAP_FAILURE" | "POLICY_FAILURE" | "ROUTING_FAILURE" | "TASK_FAILURE";
 
 export type FailureReason = {
 	category: FailureCategory;

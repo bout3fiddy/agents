@@ -22,14 +22,18 @@ def normalize_option_values(argv: list[str]) -> list[str]:
     }
     normalized: list[str] = []
     index = 0
+
     while index < len(argv):
         arg = argv[index]
+
         if arg in value_options and index + 1 < len(argv):
             normalized.append(f"{arg}={argv[index + 1]}")
             index += 2
             continue
+
         normalized.append(arg)
         index += 1
+
     return normalized
 
 
@@ -52,10 +56,13 @@ def write_text(path: Path, text: str) -> None:
 def command_head(path: Path, max_lines: int = 12) -> str:
     if not path.exists() or path.stat().st_size == 0:
         return ""
+
     lines: list[str] = []
+
     with path.open("r", encoding="utf-8", errors="replace") as handle:
         for line in islice(handle, max_lines):
             lines.append(line.rstrip("\n"))
+
     return "\n".join(lines)
 
 
@@ -72,8 +79,10 @@ def command_environment(env_extra: dict[str, str] | None = None) -> dict[str, st
             "TERM": "dumb",
         }
     )
+
     if env_extra:
         env.update(env_extra)
+
     return env
 
 
@@ -93,6 +102,7 @@ def run_command(spec: CommandSpec) -> CommandResult:
     started = time.monotonic()
     timed_out = False
     exit_code: int | None
+
     with (
         stdout_path.open("w", encoding="utf-8") as stdout,
         stderr_path.open("w", encoding="utf-8") as stderr,
@@ -136,8 +146,10 @@ def run_command(spec: CommandSpec) -> CommandResult:
 def timeout_text(value: str | bytes | None, fallback: str = "") -> str:
     if value is None:
         return fallback
+
     if isinstance(value, bytes):
         return value.decode("utf-8", errors="replace")
+
     return value
 
 
@@ -162,13 +174,18 @@ def run_capture(
 
 def parse_key_value_env(values: list[str]) -> dict[str, str]:
     env: dict[str, str] = {}
+
     for value in values:
         if "=" not in value:
             raise SystemExit(f"expected KEY=VALUE environment override, got: {value}")
+
         key, raw = value.split("=", 1)
+
         if not key:
             raise SystemExit(f"empty environment key in: {value}")
+
         env[key] = raw
+
     return env
 
 
@@ -176,11 +193,14 @@ def command_by_name(commands: list[CommandResult], name: str) -> CommandResult |
     for command in commands:
         if command.name == name:
             return command
+
     return None
 
 
 def command_status(commands: list[CommandResult], name: str) -> str:
     command = command_by_name(commands, name)
+
     if command is None:
         return "skip"
+
     return command.status
