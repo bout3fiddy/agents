@@ -84,7 +84,9 @@ export function projectContext(messages: AgentMessage[], checkpoint?: Checkpoint
     }
 
     // Upstream branch/compaction summaries can contain old exploration. Rebuild from owned state.
-    if (!['user', 'assistant', 'toolResult'].includes(message.role)) {
+    const advice = message.role === 'custom' && message.customType === 'pi-design-advice'
+
+    if (!advice && !['user', 'assistant', 'toolResult'].includes(message.role)) {
       return false
     }
 

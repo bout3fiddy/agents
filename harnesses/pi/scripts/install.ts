@@ -71,9 +71,10 @@ export async function install(agentDir = join(homedir(), '.pi', 'agent'), binDir
       '# Pi harness',
       '',
       `Canonical source: ${harnessRoot}`,
-      'The harness owns roles, tools, accepted designs and verification.',
+      'Workshop designs with Codex and parallel Fable advice; ' +
+        'save requested document edits directly.',
       'Read applicable repository AGENTS.md files through project_read.',
-      'Use /accept-design HASH after reviewing a proposal, then ' + 'request implementation.',
+      'Use /accept-design HASH only for a settled substantial implementation handoff.',
       '',
     ].join('\n'),
   )
@@ -100,6 +101,8 @@ export async function install(agentDir = join(homedir(), '.pi', 'agent'), binDir
     '--no-context-files',
     '--no-mcp',
     '--no-approve',
+    '--session-dir',
+    '"$PWD/.pi/traces/sessions"',
     '--tools',
     shellQuote(role.tools.join(',')),
     '"$@"',

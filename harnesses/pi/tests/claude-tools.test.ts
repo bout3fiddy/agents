@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { mkdir, readFile, rm } from 'node:fs/promises'
+import { mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
@@ -110,6 +110,46 @@ test('a missing Claude executable reports its launch error cleanly', async () =>
       ),
       { code: 'ENOENT' },
     )
+  } finally {
+    if (previous === undefined) {
+      delete process.env.PI_HARNESS_CLAUDE_BIN
+    } else {
+      process.env.PI_HARNESS_CLAUDE_BIN = previous
+    }
+
+    await rm(item.base, { recursive: true, force: true })
+  }
+})
+
+test('Claude traces retain live output and enforce a byte budget for Unicode', async () => {
+  const item = await fixture()
+  const previous = process.env.PI_HARNESS_CLAUDE_BIN
+  const executable = join(item.base, 'trace-producer')
+  await writeFile(executable, '#!/usr/bin/env node\nprocess.stdout.write("€".repeat(6000000))\n', {
+    mode: 0o755,
+  })
+  process.env.PI_HARNESS_CLAUDE_BIN = executable
+  const outputPath = join(item.base, 'overflow.json')
+
+  try {
+    await assert.rejects(
+      runClaudeWorker(
+        {
+          role: 'reviewer',
+          task: 'Exercise the trace byte limit',
+          workspace: item.root,
+          project: await loadProject(item.root),
+          checkpoint: (await item.store.checkpoint())!,
+          model: 'unused',
+          outputPath,
+          baseline: {},
+        },
+        await loadRole('reviewer'),
+      ),
+      /trace exceeded the 16 MB output budget/,
+    )
+    const trace = await stat(`${outputPath}.claude.jsonl`)
+    assert.ok(trace.size > 0 && trace.size <= 16000000)
   } finally {
     if (previous === undefined) {
       delete process.env.PI_HARNESS_CLAUDE_BIN

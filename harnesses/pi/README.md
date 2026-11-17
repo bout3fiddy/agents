@@ -1,19 +1,22 @@
 # Pi coding harness
 
-A design partner delegates product work to isolated workers. Accepted designs, executable checks and
-independent reviews determine completion.
+Codex workshops designs with the user and parallel Fable advice. It has shell and file tools for
+investigation, setup, documents and routine edits. Substantial implementation uses isolated Astra
+workers, executable checks and independent Fable reviews.
 
-| Role                     | Runtime/model              | Authority                                |
-| ------------------------ | -------------------------- | ---------------------------------------- |
-| Orchestrator             | Pi / OpenAI Codex          | Discuss, read, propose, delegate         |
-| Implementer              | Pi / inherited Codex model | Assigned product and test paths          |
-| Engineering reviewer     | Claude Code / Fable 5.2    | Read, run isolated probes, report        |
-| Database reviewer        | Claude Code / Fable 5.2    | Read, run recovery probes, report        |
-| Performance investigator | Claude Code / Fable 5.2    | Benchmark/instrumentation paths, reports |
+| Role                     | Model / effort     |
+| ------------------------ | ------------------ |
+| Orchestrator             | Codex / medium     |
+| Design advisor           | Fable 5.2 / medium |
+| Implementer              | GPT 6 Astra / high |
+| Engineering reviewer     | Fable 5.2 / high   |
+| Database reviewer        | Fable 5.2 / high   |
+| Performance investigator | Fable 5.2 / medium |
 
-The default Pi model is `openai-codex/gpt-6.1-sol`. Reviewers use high effort; performance uses
-medium. Change `roles/*.json` to select models, effort, tools, skills, scopes and budgets. The main
-agent never receives shell or product-write tools.
+The default orchestrator is `openai-codex/gpt-6.1-sol`. Implementation is pinned to
+`openai-codex/gpt-6-astra` at high effort. Change `roles/*.json` to select models, effort, tools,
+skills, scopes and budgets. The orchestrator has normal host shell/file access; the isolated worker
+boundaries apply to delegated execution.
 
 ## Install and run
 
@@ -51,19 +54,46 @@ Claude workers use `claude --dangerously-skip-permissions`, exactly the user's `
 alias is not executable by subprocesses, so the adapter passes its flag explicitly. No permission
 dialog is expected inside workers. Their only execution tools are the harness's scoped MCP tools.
 
-## Design and implementation
+## Design workshop and routine work
 
-1. Discuss the problem. The orchestrator uses `propose_design` to write a complete proposal with
-   invariants, acceptance criteria, scope and DB/performance flags.
-2. Review it and enter `/accept-design HASH`. The command persists the accepted design, starts a
-   fresh session and carries forward current work state. It refuses a session switch while user
-   input is queued.
+Discuss the design naturally. For substantive questions, Codex starts `consult_design` with the same
+question and relevant documents, then develops its own answer while Fable runs. Fable receives up to
+twelve recent user messages verbatim, the selected files, folder instructions and any supplied
+confirmed context. The total input is bounded at 160 KB; large inputs fail explicitly.
+`historyMessages` can reduce the included history (0 omits it); supply necessary constraints in
+`context` when doing so. Each consultation uses a fresh Claude instance with no tools, global
+instructions, skills or memory.
+
+Fable's advice arrives automatically as a follow-up in the originating session. Codex presents each
+view, agreements, disagreements, constraints and choices for the user. `design_consultation` can
+inspect, await or cancel a job. Waiting consumes the result once; interrupting a wait keeps the
+background consultation running. Use explicit cancellation to stop it. There are at most two active
+consultations; each has a four-minute budget. Session shutdown, replacement, reload and tree changes
+cancel pending advice. Results and inputs live in the project's private harness state under
+`consultations/`. Resuming can inspect a saved result; an abandoned running job must be restarted.
+
+When you settle a choice and ask to update the document, Codex saves it directly using ordinary file
+tools. Open questions can remain in the document. Saving a design needs no checkpoint,
+implementation worker or application test adapter, and does not reset the conversation. A request to
+commit an update to a document means save it; Git commits require a specific request.
+
+The orchestrator can use `bash`, `read`, `write`, `edit`, `grep`, `find` and `ls` for its work. Its
+delegation rule is behavioral: substantial implementation goes to Astra; ordinary work stays with
+the orchestrator. It applies repository lint and appropriate verification to its own changes.
+
+## Substantial implementation
+
+1. Once you request implementation of a settled scope, Codex uses `propose_design` to record its
+   invariants, acceptance criteria, permitted paths and DB/performance flags.
+2. `/accept-design HASH` is an explicit implementation handoff and context checkpoint. It persists
+   that scope and starts a fresh session, preserving current work state. Queued input prevents the
+   switch. This command is optional during ordinary workshop work and never required for documents.
 3. Ask for implementation. The orchestrator invokes `workflow`.
-4. Implementation, applicable performance work, executable checks, engineering review and
-   conditional database review run in that order. Findings go back to the implementer. At most three
-   rounds run per workflow invocation.
-5. Only a fully verified candidate is applied. Concurrent project edits block integration. Required
-   checks run again against the integrated project.
+4. Astra implementation, applicable Fable performance work, executable checks, Fable engineering
+   review and conditional Fable database review run in order. Findings return to Astra, with at most
+   three repair rounds per invocation.
+5. A verified candidate is applied and checked again. Concurrent project edits block integration.
+   Avoid editing the candidate's files from the orchestrator while this workflow runs.
 
 An interrupted workflow retains its candidate. Run `workflow` again to resume it: the original
 project baseline must still match. An unchanged candidate awaiting review goes through fresh checks
@@ -134,8 +164,8 @@ concise machine-readable summaries when a test suite is verbose.
 ## Where the rules live
 
 - `prompts/shared.md`: TigerStyle, all ten NASA rules and language adaptations.
-- `prompts/{orchestrator,implementer,reviewer,database-reviewer,performance}.md`: each role's task
-  and evidence requirements.
+- `prompts/{orchestrator,design-advisor,implementer,reviewer,database-reviewer,performance}.md`:
+  each role's task and evidence requirements.
 - `roles/*.json`: executable role configuration, including backend and model.
 - `scripts/linting/`: actual JS/TS AST and Python token/AST readability checks, JSON validity,
   Unicode-aware 100-column checks and exclusions.
@@ -155,6 +185,7 @@ TigerStyle, security or test quality; those remain explicit review responsibilit
 npm run verify
 npm run test:live
 npm run test:live:basic
+npm run test:live:workshop
 ```
 
 The live test uses real model calls and a disposable SQLite ledger. It exercises seeded
@@ -162,14 +193,31 @@ replay/conflict properties, invalid inputs, SIGKILL recovery, file-backed benchm
 roles. Reports are written to ignored `reports/`. Set `PI_HARNESS_LIVE_MODEL` to choose another
 Codex model for a live run.
 
+The workshop live case uses real Codex and Fable calls to check parallel guidance, automatic reply
+delivery, shell access and direct document updates despite unresolved workshop questions. It spawns
+no implementation workers.
+
 The basic live case exercises a seeded parser contract and confirms that database and performance
 roles stay inactive when the accepted design does not need them.
 
-Host state lives under `~/.pi/harness-state/<canonical-project-hash>/`: accepted designs, attempts,
-command receipts, original snapshots, task state and integration journal. Failed candidates are
-retained in the task's `candidate` directory. A cancelled or crashed worker cannot report success. A
-subsequent run recovers a pending integration only if every file still matches its recorded before
-or after value. Unexpected user edits stop recovery.
+Project-local traces live in `.pi/traces/` under the directory where Pi starts:
+
+- `sessions/`: orchestrator JSONL sessions, readable with Pi or a text editor. The `pih` launcher
+  stores sessions here directly. Ordinary `pi` sessions are mirrored here at lifecycle boundaries.
+- `harness/consultations/`: Fable workshop inputs, status and advice.
+- `harness/attempts/`: worker assignments, Codex session JSONL directories, Claude event JSONL,
+  scoped tool evidence and results.
+- `harness/`: implementation checkpoints, receipts, task state, snapshots and integration journal.
+
+The harness adds `/traces/` to `.pi/.gitignore`, preserving existing entries. This also works for a
+project folder before Git initialization. Traces are excluded from worker file tools and snapshots.
+Start Pi from the project root to keep its traces together. Older sessions and state under `~/.pi/`
+remain historical files; new runs use local state and do not automatically import old checkpoints.
+`pih --continue` resumes the most recent local session.
+
+Failed candidates remain at the path recorded in task state. A cancelled or crashed worker cannot
+report success. A subsequent run recovers a pending integration only if every file still matches its
+recorded before or after value. Unexpected user edits stop recovery.
 
 Old exploration remains in the Pi session archive but is excluded from model requests after
 acceptance, including resume and tree navigation. See [architecture](documentation/architecture.md),

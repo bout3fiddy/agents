@@ -1,8 +1,8 @@
 {
   "name": "implementer",
   "prompt": "implementer.md",
-  "model": "inherit",
-  "thinking": "medium",
+  "model": "openai-codex/gpt-6-astra",
+  "thinking": "high",
   "skills": ["housekeeping"],
   "tools": [
     "project_read",

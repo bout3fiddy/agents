@@ -21,6 +21,7 @@ const generated = new Set(['package-lock.json', 'bun.lock', 'uv.lock'])
 export async function sourceFiles(root) {
   const files = []
   const ignoredPath = (name) =>
+    /(?:^|\/)\.pi\/traces(?:\/|$)/i.test(name.normalize('NFKC')) ||
     name
       .split('/')
       .some((part) => ignored.has(part) || generated.has(part) || /^\.env(?:\.|$)/.test(part))
@@ -69,6 +70,10 @@ export async function sourceFiles(root) {
       }
 
       const path = join(directory, entry.name)
+
+      if (ignoredPath(relative(root, path))) {
+        continue
+      }
 
       if (entry.isDirectory()) {
         await walk(path)

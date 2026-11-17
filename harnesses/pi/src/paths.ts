@@ -39,16 +39,17 @@ function folded(path: string): string {
 }
 
 export function sensitive(path: string): boolean {
-  return path
-    .split('/')
-    .map(folded)
-    .some(
+  const parts = path.split('/').map(folded)
+  return (
+    parts.some((part, index) => part === '.pi' && parts[index + 1] === 'traces') ||
+    parts.some(
       (part) =>
         excluded.has(part) ||
         /^\.env(?:\.|$)/i.test(part) ||
         /^(?:auth|credentials|secrets)(?:\.|$)/i.test(part) ||
         /\.(?:pem|key|p12|pfx|jks|tfstate|tfvars)$/i.test(part),
     )
+  )
 }
 
 export function digest(value: string | Buffer): string {

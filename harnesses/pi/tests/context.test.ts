@@ -16,6 +16,20 @@ test('accepted context excludes old exploration and preserves new input', () => 
     { role: 'user', content: 'REJECTED_DESIGN_MARKER', timestamp: 1000 },
     { role: 'user', content: 'Keep the new constraint', timestamp: 3000 },
     {
+      role: 'custom',
+      customType: 'pi-design-advice',
+      content: 'CURRENT_FABLE_ADVICE',
+      display: true,
+      timestamp: 3000,
+    },
+    {
+      role: 'custom',
+      customType: 'pi-design-advice',
+      content: 'REJECTED_DESIGN_MARKER',
+      display: true,
+      timestamp: 1000,
+    },
+    {
       role: 'branchSummary',
       summary: 'REJECTED_DESIGN_MARKER',
       timestamp: 4000,
@@ -31,6 +45,7 @@ test('accepted context excludes old exploration and preserves new input', () => 
   const projected = projectContext(messages, checkpoint)
   assert.doesNotMatch(JSON.stringify(projected), /REJECTED_DESIGN_MARKER/)
   assert.match(JSON.stringify(projected), /Keep the new constraint/)
+  assert.match(JSON.stringify(projected), /CURRENT_FABLE_ADVICE/)
   assert.deepEqual(projectContext(projected, checkpoint), projected)
   assert.equal(projectContext(messages).length, messages.length)
 })

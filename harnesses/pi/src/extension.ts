@@ -8,8 +8,12 @@ import { runWorkflow } from './workflow.ts'
 import { loadRole, rolePrompt } from './roles.ts'
 import { checkpointText, projectContext, taskView } from './context.ts'
 import { instructions } from './project.ts'
+import { registerWorkshop } from './workshop.ts'
+import { registerTraces } from './traces.ts'
 
 export default function harness(pi: ExtensionAPI): void {
+  registerTraces(pi)
+  const workshop = registerWorkshop(pi)
   const storeFor = async (cwd: string) => new StateStore(await realpath(cwd))
 
   pi.on('session_start', async (_event, ctx) => {
@@ -25,7 +29,9 @@ export default function harness(pi: ExtensionAPI): void {
       systemPrompt: [
         await rolePrompt('orchestrator'),
         await instructions(ctx.cwd, []),
-        checkpoint ? checkpointText(checkpoint, await store.task()) : 'No accepted design yet.',
+        checkpoint
+          ? checkpointText(checkpoint, await store.task())
+          : 'No implementation checkpoint. Workshop, shell and file tools are available.',
       ].join('\n\n'),
     }
   })
@@ -59,7 +65,7 @@ export default function harness(pi: ExtensionAPI): void {
 
   pi.on('tool_call', async (event) => {
     if (!(await loadRole('orchestrator')).tools.includes(event.toolName)) {
-      return { block: true, reason: 'The orchestrator delegates execution to scoped workers.' }
+      return { block: true, reason: 'This tool is not enabled in the orchestrator role.' }
     }
 
     return undefined
@@ -131,7 +137,9 @@ export default function harness(pi: ExtensionAPI): void {
   pi.registerTool({
     name: 'propose_design',
     label: 'Propose design',
-    description: 'Persist a proposed design. User acceptance: /accept-design HASH.',
+    description:
+      'Prepare a settled implementation scope for /accept-design HASH. ' +
+      'Use normal file tools for workshop documents and routine edits.',
     parameters: designSchema,
     async execute(_id, args, _signal, _update, ctx) {
       const hash = await (await storeFor(ctx.cwd)).draft(validateDesign(args))
@@ -165,6 +173,7 @@ export default function harness(pi: ExtensionAPI): void {
 
       try {
         release.assertHeld()
+        await workshop.cancel(ctx)
         const checkpoint = await store.accept(expectedHash)
         const result = await ctx.newSession({
           parentSession: ctx.sessionManager.getSessionFile(),

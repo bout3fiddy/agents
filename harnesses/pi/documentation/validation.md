@@ -6,7 +6,7 @@ Bun 1.3.5.
 ## Automated checks
 
 `./bin/verify.sh` passes repository-wide executable lint, Pi formatting and strict TypeScript
-checks, 28 Pi harness tests, 132 existing evaluation tests, 13 skill-validator tests and the skill
+checks, 38 Pi harness tests, 132 existing evaluation tests, 13 skill-validator tests and the skill
 routing metadata audit. No tests were skipped.
 
 The harness tests exercise:
@@ -39,7 +39,7 @@ using `harness_status`. The dedicated launcher also executed `/accept-design HAS
 session replacement path. This exposed and fixed an obsolete-context notification after the switch;
 the confirmation now uses Pi's `withSession` callback.
 
-Doctor reports the macOS sandbox ready, Claude logged in and all five roles configured. These
+Doctor reports the macOS sandbox ready, Claude logged in and all configured roles available. These
 configuration checks supplement the real provider calls; listing models alone does not prove that
 credentials are accepted by the provider.
 
@@ -47,7 +47,40 @@ The 47 captured installed Codex/shared files retain their original SHA-256 value
 global `CLAUDE.md`, skills, agents, commands and workflows are absent. Its credentials and ordinary
 settings remain in place. No backup of those removed Claude instruction assets is retained.
 
+## Workshop, shell access and project-local traces
+
+The 17 November workshop revision adds Fable design advice alongside the Codex orchestrator, normal
+host shell/file tools, and direct design document edits. Implementation is pinned to
+`openai-codex/gpt-6-astra` with high effort; all Fable roles use medium or high effort.
+
+New regression checks cover parallel advice, session ownership, cancellation, interrupted waits,
+exactly-once wait consumption, teardown/preparation races, oversized context recovery, persisted
+results, private trace exclusions, Git ignore behavior and live-session filesystem aliases. Claude
+trace tests exercise an 18 MB Unicode stream against the 16 MB byte budget; partial evidence is
+retained on failure. Non-Git lint/format traversal also excludes generated trace contents. The
+independent Fable source review identified duplicate wait delivery, cancellation/lifecycle races and
+live-file alias hazards; the corresponding fixes have regression coverage.
+
+Real Codex/Fable workshop runs produced Codex guidance before Fable finished, automatically returned
+Fable's independent answer, then saved the user's decision directly while leaving a future question
+open. No implementation worker ran and the existing checkpoint stayed unchanged. Reports:
+`reports/workshop-1794910842913/` and `reports/workshop-1794911492278/`.
+
+The installed launcher also completed a real Codex shell/document request from a fresh directory
+with no implementation checkpoint or test adapter. The local session contains 14 unique entries,
+with no mirror-induced duplicates. Report: `reports/installed-workshop-result.json`. Runtime
+sessions and receipts now live in the project's ignored `.pi/traces/` tree. Existing home-directory
+histories remain historical artifacts until explicitly removed.
+
 ## Live workflow
+
+The Astra high revision completed the full live workload in two rounds. Fable engineering and DB
+reviewers reproduced concurrent WAL startup, malformed Unicode ID and benchmark durability issues;
+Astra repaired them, and the second engineering and database verdicts passed. The final host checks
+passed after integration. Recorded workers use `openai-codex/gpt-6-astra` and
+`claude-cli/claude-fable-5-2`. Report: `reports/2026-11-17T10-22-20.556Z/`.
+
+Earlier validation before the Astra model change follows for historical comparison.
 
 The disposable SQLite workload uses seeded replay/conflict properties, invalid inputs, crash
 recovery after SIGKILL, rollback, real file-backed benchmarks and independent specialist reviews.
@@ -86,7 +119,8 @@ review is supplementary evidence; the regression tests establish the corrected b
 
 The command sandbox currently supports macOS only. Network-backed database services and external
 virtual environments require a separate tested adapter. Provider clients themselves remain trusted
-host programs with login/network access; the command sandbox isolates model-issued commands.
+host programs with login/network access; the command sandbox isolates delegated worker commands. The
+orchestrator intentionally has ordinary host shell and file access.
 
 SQLite crash tests establish the stated single-machine process-crash contract. They do not establish
 disk-loss recovery, replication, failover or regional disaster recovery. Successful model reviews

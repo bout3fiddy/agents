@@ -1,10 +1,10 @@
 import { mkdir, open, readFile, rename, rm } from 'node:fs/promises'
 import { realpathSync } from 'node:fs'
 import { dirname, join } from 'node:path'
-import { homedir } from 'node:os'
 import { randomUUID } from 'node:crypto'
 import { digest, validateScope } from './paths.ts'
 import { acquireLock, type ReleaseLock } from './lock.ts'
+import { projectTraces } from './traces.ts'
 import {
   validateDesign,
   type Checkpoint,
@@ -67,10 +67,12 @@ export class StateStore {
 
   constructor(
     readonly projectRoot: string,
-    stateRoot = join(homedir(), '.pi', 'harness-state'),
+    stateRoot?: string,
   ) {
     this.projectRoot = realpathSync(projectRoot)
-    this.directory = join(stateRoot, digest(this.projectRoot).slice(0, 24))
+    this.directory = stateRoot
+      ? join(stateRoot, digest(this.projectRoot).slice(0, 24))
+      : join(projectTraces(this.projectRoot), 'harness')
   }
 
   async draft(design: Design): Promise<string> {

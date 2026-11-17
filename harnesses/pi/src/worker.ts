@@ -73,7 +73,7 @@ export async function runWorker(request: WorkerRequest): Promise<WorkerEvidence>
       compaction: { enabled: true },
       retry: { enabled: true, maxRetries: 2 },
     }),
-    sessionManager: SessionManager.inMemory(request.workspace),
+    sessionManager: SessionManager.create(request.workspace, `${request.outputPath}.sessions`),
   })
   let exhausted = false
   const timer = setTimeout(() => {

@@ -24,8 +24,11 @@ test('installer backs up only Pi assets and preserves auth and provider choice',
     const settings = JSON.parse(await readFile(join(agentDir, 'settings.json'), 'utf8'))
     assert.equal(settings.defaultModel, 'chosen')
     assert.equal(settings.theme, 'dark')
-    assert.ok(!settings.defaultTools.includes('bash'))
+    assert.ok(settings.defaultTools.includes('bash'))
+    assert.ok(settings.defaultTools.includes('write'))
+    assert.ok(settings.defaultTools.includes('consult_design'))
     assert.match(await readFile(result.wrapper, 'utf8'), /--no-extensions/)
+    assert.match(await readFile(result.wrapper, 'utf8'), /--session-dir.*\.pi\/traces\/sessions/)
   } finally {
     await rm(base, { recursive: true, force: true })
   }

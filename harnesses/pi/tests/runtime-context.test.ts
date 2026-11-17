@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { rm } from 'node:fs/promises'
-import { join } from 'node:path'
+import { readFile, rm } from 'node:fs/promises'
+import { basename, join } from 'node:path'
 import {
   createAgentSession,
   DefaultResourceLoader,
@@ -15,6 +15,7 @@ import type { AssistantMessage } from '@earendil-works/pi-ai'
 import harness from '../src/extension.ts'
 import { StateStore } from '../src/state.ts'
 import { fixture, design } from './support.ts'
+import { loadRole } from '../src/roles.ts'
 
 test('Pi excludes rejected designs across context lifecycle changes', async () => {
   const item = await fixture()
@@ -134,6 +135,11 @@ test('Pi excludes rejected designs across context lifecycle changes', async () =
     assert.match(payloads.at(-1)!, /PENDING_CONSTRAINT_MARKER/)
     assert.doesNotMatch(payloads.at(-1)!, /REJECTED_SCHEMA_MARKER/)
     const sessionFile = manager.getSessionFile()!
+    const mirror = await readFile(
+      join(item.root, '.pi/traces/sessions', basename(sessionFile)),
+      'utf8',
+    )
+    assert.match(mirror, /PENDING_CONSTRAINT_MARKER/)
     session.dispose()
     session = await create(SessionManager.open(sessionFile))
     await session.prompt('Continue after resume')
@@ -143,13 +149,10 @@ test('Pi excludes rejected designs across context lifecycle changes', async () =
     await session.prompt('Continue after navigating the old branch')
     assert.match(payloads.at(-1)!, /FINAL_SCHEMA_MARKER/)
     assert.doesNotMatch(payloads.at(-1)!, /REJECTED_SCHEMA_MARKER/)
-    assert.deepEqual(session.getActiveToolNames().sort(), [
-      'harness_status',
-      'project_read',
-      'project_search',
-      'propose_design',
-      'workflow',
-    ])
+    assert.deepEqual(
+      session.getActiveToolNames().sort(),
+      (await loadRole('orchestrator')).tools.sort(),
+    )
     const originalVersion = (await store.checkpoint())!.version
     const nextHash = await store.draft({ ...design, design: 'UPDATED_SCHEMA_MARKER' })
     await session.prompt('/accept-design')

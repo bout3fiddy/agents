@@ -1,0 +1,13 @@
+{
+  "name": "design-advisor",
+  "prompt": "design-advisor.md",
+  "model": "claude-fable-5-2",
+  "thinking": "medium",
+  "skills": [],
+  "tools": [],
+  "writes": [],
+  "mayDelegate": false,
+  "timeoutMs": 240000,
+  "maxTurns": 4,
+  "backend": "claude-cli"
+}

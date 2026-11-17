@@ -14,6 +14,7 @@
     "test": "tsx --test tests/*.test.ts",
     "test:live": "tsx scripts/live.ts",
     "test:live:basic": "tsx scripts/live.ts --basic",
+    "test:live:workshop": "tsx scripts/live-workshop.ts",
     "verify": "node scripts/verify.mjs",
     "doctor": "tsx src/cli.ts doctor",
     "install:local": "tsx scripts/install.ts"

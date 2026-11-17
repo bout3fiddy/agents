@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process'
-import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { appendFileSync } from 'node:fs'
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { atomicJson, readJson } from './state.ts'
@@ -16,7 +17,12 @@ import {
   type WorkerResult,
 } from './contracts.ts'
 
-export function claudeArguments(role: Role, configuration: string, prompt: string): string[] {
+export function claudeArguments(
+  role: Role,
+  configuration: string,
+  prompt: string,
+  stream = false,
+): string[] {
   return [
     '--dangerously-skip-permissions',
     '--setting-sources',
@@ -39,7 +45,8 @@ export function claudeArguments(role: Role, configuration: string, prompt: strin
     '--max-turns',
     String(role.maxTurns),
     '--output-format',
-    'json',
+    stream ? 'stream-json' : 'json',
+    ...(stream ? ['--verbose'] : []),
     '-p',
   ]
 }
@@ -66,20 +73,43 @@ export async function runClaudeWorker(request: WorkerRequest, role: Role): Promi
   await writeFile(promptPath, await rolePrompt(request.role))
 
   try {
-    let output = ''
     let diagnostics = ''
     const input = JSON.stringify(await assignment(request))
+    const tracePath = `${request.outputPath}.claude.jsonl`
+    await writeFile(tracePath, '', { mode: 0o600 })
     const child = spawn(
       process.env.PI_HARNESS_CLAUDE_BIN ?? 'claude',
-      claudeArguments(role, configPath, promptPath),
+      claudeArguments(role, configPath, promptPath, true),
       {
         cwd: scratch,
         env: process.env,
         stdio: ['pipe', 'pipe', 'pipe'],
       },
     )
+    let overflow = false
+    let outputBytes = 0
+    let traceError: unknown
     child.stdout.on('data', (chunk: Buffer) => {
-      output = (output + chunk.toString()).slice(-2_000_000)
+      outputBytes += chunk.length
+
+      if (outputBytes > 16_000_000) {
+        overflow = true
+        child.kill('SIGKILL')
+        return
+      }
+
+      if (traceError) {
+        return
+      }
+
+      try {
+
+        // Append raw bytes as they arrive, preserving UTF-8 boundaries and live crash evidence.
+        appendFileSync(tracePath, chunk)
+      } catch (error) {
+        traceError = error
+        child.kill('SIGKILL')
+      }
     })
     child.stderr.on('data', (chunk: Buffer) => {
       diagnostics = (diagnostics + chunk.toString()).slice(-8000)
@@ -91,16 +121,29 @@ export async function runClaudeWorker(request: WorkerRequest, role: Role): Promi
     child.stdin.on('error', () => {})
     child.stdin.end(input)
     const exitCode = await completion
-    await writeFile(`${request.outputPath}.claude.json`, output, { mode: 0o600 })
-    const response = JSON.parse(output) as {
+
+    if (traceError) {
+      throw traceError
+    }
+
+    if (overflow) {
+      throw new Error('Claude trace exceeded the 16 MB output budget')
+    }
+
+    const output = await readFile(tracePath, 'utf8')
+    const response = output
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line))
+      .findLast((event) => event.type === 'result') as {
       is_error?: boolean
       result?: string
       num_turns?: number
       modelUsage?: Record<string, unknown>
     }
 
-    if (exitCode !== 0 || response.is_error) {
-      throw new Error(`Claude worker failed: ${response.result ?? diagnostics}`)
+    if (exitCode !== 0 || !response || response.is_error) {
+      throw new Error(`Claude worker failed: ${response?.result ?? diagnostics}`)
     }
 
     const evidence = await readJson<{ commands: CommandResult[]; result?: WorkerResult }>(
