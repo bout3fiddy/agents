@@ -1,4 +1,5 @@
 import { execFile } from 'node:child_process'
+import { appendFileSync } from 'node:fs'
 import { promisify } from 'node:util'
 import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -6,7 +7,7 @@ import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { Type, type Static } from 'typebox'
 import { Check } from 'typebox/value'
-import { claudeArguments } from './claude-worker.ts'
+import { claudeArguments, parseClaudeTrace } from './claude-worker.ts'
 import { loadRole, rolePrompt } from './roles.ts'
 import { atomicJson, readJson, type StateStore } from './state.ts'
 import { readBoundedFile, safePath } from './paths.ts'
@@ -20,7 +21,7 @@ export const consultationSchema = Type.Object({
 })
 
 export type ConsultationInput = Static<typeof consultationSchema>
-export type Advice = { text: string; model: string }
+export type Advice = { text: string; model: string; toolsUsed?: string[] }
 export type Consultation = {
   id: string
   session: string
@@ -31,7 +32,11 @@ export type Consultation = {
   advice?: Advice
   error?: string
 }
-export type AdviceRunner = (input: string, signal: AbortSignal) => Promise<Advice>
+export type AdviceRunner = (
+  input: string,
+  signal: AbortSignal,
+  tracePath?: string,
+) => Promise<Advice>
 
 export async function consultationInput(
   store: StateStore,
@@ -71,7 +76,11 @@ export async function consultationInput(
   return input
 }
 
-export async function runDesignAdvice(input: string, signal: AbortSignal): Promise<Advice> {
+export async function runDesignAdvice(
+  input: string,
+  signal: AbortSignal,
+  tracePath?: string,
+): Promise<Advice> {
   signal.throwIfAborted()
   const role = await loadRole('design-advisor')
   const scratch = await mkdtemp(join(tmpdir(), 'pi-design-advice-'))
@@ -81,35 +90,58 @@ export async function runDesignAdvice(input: string, signal: AbortSignal): Promi
     const prompt = join(scratch, 'system.txt')
     await atomicJson(config, { mcpServers: {} })
     await writeFile(prompt, await rolePrompt('design-advisor'), { mode: 0o600 })
+
+    if (tracePath) {
+      await writeFile(tracePath, '', { mode: 0o600 })
+    }
+
     signal.throwIfAborted()
     const invocation = promisify(execFile)(
       process.env.PI_HARNESS_CLAUDE_BIN ?? 'claude',
-      claudeArguments(role, config, prompt),
+      claudeArguments(role, config, prompt, true),
       {
         cwd: scratch,
         signal,
         timeout: role.timeoutMs,
         killSignal: 'SIGKILL',
-        maxBuffer: 2_000_000,
+        maxBuffer: 8_000_000,
       },
     )
+    let traceError: unknown
+    invocation.child.stdout?.on('data', (chunk: Buffer | string) => {
+      if (tracePath && !traceError) {
+        try {
+          appendFileSync(tracePath, chunk)
+        } catch (error) {
+          traceError = error
+          invocation.child.kill('SIGKILL')
+        }
+      }
+    })
     invocation.child.stdin?.on('error', () => {})
     invocation.child.stdin?.end(input)
     const { stdout } = await invocation
     signal.throwIfAborted()
-    const response = JSON.parse(stdout) as {
-      is_error?: boolean
-      result?: string
-      modelUsage?: Record<string, unknown>
+
+    if (traceError) {
+      throw traceError
     }
 
-    if (response.is_error || !response.result?.trim() || response.result.length > 32000) {
+    const { response, toolsUsed } = parseClaudeTrace(stdout)
+
+    if (
+      !response ||
+      response.is_error ||
+      !response.result?.trim() ||
+      response.result.length > 32000
+    ) {
       throw new Error('Fable returned an error, empty advice or advice exceeding 32 KB')
     }
 
     return {
       text: response.result,
       model: `claude-cli/${Object.keys(response.modelUsage ?? {})[0] ?? role.model}`,
+      toolsUsed,
     }
   } finally {
     await rm(scratch, { recursive: true, force: true })
@@ -171,7 +203,7 @@ export class DesignConsultations {
         await atomicJson(`${path}.input.json`, JSON.parse(input))
         await atomicJson(path, job)
         controller.signal.throwIfAborted()
-        job.advice = await this.run(input, controller.signal)
+        job.advice = await this.run(input, controller.signal, `${path}.claude.jsonl`)
         controller.signal.throwIfAborted()
         job.status = 'complete'
       } catch (error) {

@@ -4,10 +4,10 @@
   "model": "claude-fable-5-2",
   "thinking": "medium",
   "skills": [],
-  "tools": [],
+  "tools": ["WebSearch", "WebFetch"],
   "writes": [],
   "mayDelegate": false,
   "timeoutMs": 240000,
-  "maxTurns": 4,
+  "maxTurns": 12,
   "backend": "claude-cli"
 }

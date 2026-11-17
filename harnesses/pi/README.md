@@ -52,7 +52,8 @@ claude auth login
 
 Claude workers use `claude --dangerously-skip-permissions`, exactly the user's `clod` alias. A shell
 alias is not executable by subprocesses, so the adapter passes its flag explicitly. No permission
-dialog is expected inside workers. Their only execution tools are the harness's scoped MCP tools.
+dialog is expected inside workers. WebSearch and WebFetch provide public research; command/file
+tools use the scoped MCP bridge.
 
 ## Design workshop and routine work
 
@@ -61,8 +62,9 @@ question and relevant documents, then develops its own answer while Fable runs. 
 twelve recent user messages verbatim, the selected files, folder instructions and any supplied
 confirmed context. The total input is bounded at 160 KB; large inputs fail explicitly.
 `historyMessages` can reduce the included history (0 omits it); supply necessary constraints in
-`context` when doing so. Each consultation uses a fresh Claude instance with no tools, global
-instructions, skills or memory.
+`context` when doing so. Each consultation uses a fresh Claude instance with WebSearch/WebFetch and
+explicit prompts. It has no local execution/file tools, ambient global instructions, skills or
+memory.
 
 Fable's advice arrives automatically as a follow-up in the originating session. Codex presents each
 view, agreements, disagreements, constraints and choices for the user. `design_consultation` can
@@ -80,6 +82,11 @@ commit an update to a document means save it; Git commits require a specific req
 The orchestrator can use `bash`, `read`, `write`, `edit`, `grep`, `find` and `ls` for its work. Its
 delegation rule is behavioral: substantial implementation goes to Astra; ordinary work stays with
 the orchestrator. It applies repository lint and appropriate verification to its own changes.
+
+Fable can research current platform details and engineering practices during design advice and
+specialist reviews. Its shared `prompts/web-research.md` prefers primary sources, requires source
+links and version/context qualifications, and keeps private data out of search queries. Web calls
+and their results are recorded in the Claude JSONL trace. Research supplements project tests.
 
 ## Substantial implementation
 
@@ -186,6 +193,7 @@ npm run verify
 npm run test:live
 npm run test:live:basic
 npm run test:live:workshop
+npm run test:live:web
 ```
 
 The live test uses real model calls and a disposable SQLite ledger. It exercises seeded
@@ -196,6 +204,9 @@ Codex model for a live run.
 The workshop live case uses real Codex and Fable calls to check parallel guidance, automatic reply
 delivery, shell access and direct document updates despite unresolved workshop questions. It spawns
 no implementation workers.
+
+The web live case verifies successful WebSearch and WebFetch calls in both the design advisor and an
+engineering reviewer, including source citations and the scoped MCP result handoff.
 
 The basic live case exercises a seeded parser contract and confirms that database and performance
 roles stay inactive when the accepted design does not need them.

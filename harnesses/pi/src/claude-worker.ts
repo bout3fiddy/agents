@@ -30,7 +30,7 @@ export function claudeArguments(
     '--settings',
     JSON.stringify({ disableAllHooks: true, autoMemoryEnabled: false, enabledPlugins: {} }),
     '--tools',
-    '',
+    role.tools.filter((name) => ['WebSearch', 'WebFetch'].includes(name)).join(','),
     '--no-session-persistence',
     '--disable-slash-commands',
     '--strict-mcp-config',
@@ -49,6 +49,46 @@ export function claudeArguments(
     ...(stream ? ['--verbose'] : []),
     '-p',
   ]
+}
+
+export function parseClaudeTrace(output: string) {
+  type Event = {
+    type?: string
+    is_error?: boolean
+    result?: string
+    num_turns?: number
+    modelUsage?: Record<string, unknown>
+    message?: {
+      content?: {
+        type: string
+        name?: string
+        id?: string
+        tool_use_id?: string
+        is_error?: boolean
+      }[]
+    }
+  }
+  const events = output
+    .trim()
+    .split('\n')
+    .filter(Boolean)
+    .map((line) => JSON.parse(line) as Event)
+  const content = events.flatMap((event) => event.message?.content ?? [])
+  const completed = new Set(
+    content
+      .filter((part) => part.type === 'tool_result' && !part.is_error)
+      .map((part) => part.tool_use_id),
+  )
+  return {
+    response: events.findLast((event) => event.type === 'result'),
+    toolsUsed: [
+      ...new Set(
+        content
+          .filter((part) => part.type === 'tool_use' && part.name && completed.has(part.id))
+          .map((part) => part.name!),
+      ),
+    ],
+  }
 }
 
 export async function runClaudeWorker(request: WorkerRequest, role: Role): Promise<WorkerEvidence> {
@@ -131,16 +171,7 @@ export async function runClaudeWorker(request: WorkerRequest, role: Role): Promi
     }
 
     const output = await readFile(tracePath, 'utf8')
-    const response = output
-      .trim()
-      .split('\n')
-      .map((line) => JSON.parse(line))
-      .findLast((event) => event.type === 'result') as {
-      is_error?: boolean
-      result?: string
-      num_turns?: number
-      modelUsage?: Record<string, unknown>
-    }
+    const { response } = parseClaudeTrace(output)
 
     if (exitCode !== 0 || !response || response.is_error) {
       throw new Error(`Claude worker failed: ${response?.result ?? diagnostics}`)

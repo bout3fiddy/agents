@@ -5,10 +5,10 @@
 - This directory owns Pi-specific prompts, roles, runtime, lint profiles and tests. Shared skill
   content is an input. Preserve Codex installation behavior; Claude cleanup belongs in `../claude/`
   and its workers receive explicit prompts from this harness.
-- Use `npm ci`, `npm run format`, then `npm run verify`. Run `npm run test:live` when changing model
-  integration, delegation, review or context behavior. Run `npm run test:live:workshop` for design
-  advice, shell/file authority or workshop lifecycle changes. Live runs use the configured Pi
-  credentials.
+- Use `npm ci`, `npm run format`, then `npm run verify`. Run `npm run test:live` for implementation
+  and review workflow changes, `npm run test:live:workshop` for design advice, shell/file authority
+  or workshop lifecycle changes, and `npm run test:live:web` for Claude web tools and research
+  prompts. Live runs use the configured provider credentials.
 - The orchestrator has normal host shell and file tools. It workshops designs, saves requested
   document edits directly and handles routine work. Delegate substantial implementation to Astra
   high; Fable 5.2 medium or high supplies independent design advice and specialist reviews.

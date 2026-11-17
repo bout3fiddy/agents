@@ -3,8 +3,9 @@
 The orchestrator is a Pi extension. Workers are fresh processes selected by the role's `backend`: Pi
 SDK for Astra high implementation, Claude Code CLI for the three review specialists. A separate
 Fable design advisor runs concurrently with the orchestrator. Claude receives shared and
-role-specific system prompts directly. Its built-in tools are disabled and its only MCP server is
-the harness bridge. The bridge implements the same scoped tools used by Pi workers.
+role-specific system prompts directly. Its native tools are limited to WebSearch and WebFetch; its
+only MCP server is the harness bridge. The bridge implements the same scoped tools used by Pi
+workers.
 
 ## Trusted host and untrusted execution
 
@@ -38,9 +39,9 @@ side channel. macOS sandbox-exec is a platform dependency; other platforms fail 
 tested adapter exists.
 
 Claude invocation uses the `clod` flag, empty cwd, empty settings sources, disabled hooks/automatic
-memory/skills, explicit system prompt, no built-ins and exclusive MCP configuration. `--safe-mode`
-cannot be used because it also disables explicitly configured MCP servers. Managed organizational
-policy can still apply; the runtime does not bypass that policy.
+memory/skills, explicit system prompt, web-only native tools and exclusive MCP configuration.
+`--safe-mode` cannot be used because it also disables explicitly configured MCP servers. Managed
+organizational policy can still apply; the runtime does not bypass that policy.
 
 ## Decisions and context
 
@@ -49,8 +50,9 @@ with the same question, recent user messages and selected document snapshots, th
 reasoning. Results are persisted and delivered as a custom follow-up to the originating session.
 Accepted-epoch context projection admits these advice messages while rejecting obsolete advice.
 Session shutdown/replacement/reload and tree changes cancel pending calls. There are two concurrent
-slots, bounded input/output and a role timeout. Fable uses a fresh CLI process with no tools/MCP
-servers or ambient global customization. It offers guidance and cannot accept or write a design.
+slots, bounded input/output and a role timeout. Fable uses a fresh CLI process with
+WebSearch/WebFetch, no MCP servers and no ambient global customization. It offers sourced guidance
+and cannot accept or write a design.
 
 Document changes use the orchestrator's ordinary tools after the user's request. They require no
 accepted checkpoint and can retain open questions. Only substantial implementation uses the

@@ -4,7 +4,15 @@
   "model": "claude-fable-5-2",
   "thinking": "high",
   "skills": [],
-  "tools": ["project_read", "project_search", "run_command", "submit_result", "original_read"],
+  "tools": [
+    "project_read",
+    "project_search",
+    "run_command",
+    "submit_result",
+    "original_read",
+    "WebSearch",
+    "WebFetch"
+  ],
   "writes": [],
   "mayDelegate": false,
   "timeoutMs": 600000,

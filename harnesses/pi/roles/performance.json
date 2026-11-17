@@ -13,7 +13,9 @@
     "submit_result",
     "read_reference",
     "project_format",
-    "original_read"
+    "original_read",
+    "WebSearch",
+    "WebFetch"
   ],
   "writes": ["benchmark/**", "benchmarks/**", "scaffolding/**", "tests/performance/**"],
   "mayDelegate": false,

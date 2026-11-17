@@ -47,3 +47,11 @@ Codex drafts. It used Opus 4.7 and GPT-5.5 on 116 LiveCodeBench tasks, with revi
 execute tests. It does not establish the best pairing for Fable 5.2, GPT-6.1 Sol, security review or
 a production repository. The harness's own live runs validate integration and gates; they are not a
 model leaderboard or proof that every future generated change is correct.
+
+## Claude research tools
+
+- [Claude Code tools reference](https://code.claude.com/docs/en/tools-reference): WebSearch and
+  WebFetch capabilities and availability.
+- [Claude CLI reference](https://code.claude.com/docs/en/cli-reference): the explicit `--tools`
+  selection, print mode and streamed JSON output. Local CLI help and real tool calls verify the
+  installed version's behavior.

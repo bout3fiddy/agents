@@ -6,7 +6,7 @@ Bun 1.3.5.
 ## Automated checks
 
 `./bin/verify.sh` passes repository-wide executable lint, Pi formatting and strict TypeScript
-checks, 38 Pi harness tests, 132 existing evaluation tests, 13 skill-validator tests and the skill
+checks, 39 Pi harness tests, 132 existing evaluation tests, 13 skill-validator tests and the skill
 routing metadata audit. No tests were skipped.
 
 The harness tests exercise:
@@ -71,6 +71,18 @@ with no implementation checkpoint or test adapter. The local session contains 14
 with no mirror-induced duplicates. Report: `reports/installed-workshop-result.json`. Runtime
 sessions and receipts now live in the project's ignored `.pi/traces/` tree. Existing home-directory
 histories remain historical artifacts until explicitly removed.
+
+## Web research
+
+Real Fable design-advisor and engineering-reviewer runs successfully used both WebSearch and
+WebFetch against official Node.js documentation, and returned source URLs. The reviewer also used
+scoped project_read, run_command and submit_result tools. Successful calls were verified from the
+JSONL tool-use/tool-result pairs; failed or unfinished calls do not count as evidence. Project
+contents were unchanged. Report: `reports/web-1794913761755/`.
+
+Native Claude tools are explicitly limited to WebSearch/WebFetch. Research guidance lives in
+`prompts/web-research.md` and is loaded for all Claude roles. Their file and command operations
+continue to use the scoped MCP bridge.
 
 ## Live workflow
 

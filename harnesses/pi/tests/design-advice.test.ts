@@ -130,7 +130,7 @@ test('Fable receives bounded user context and permitted documents', async () => 
     const advisor = await loadRole('design-advisor')
     assert.equal(advisor.model, 'claude-fable-5-2')
     assert.ok(['medium', 'high'].includes(advisor.thinking))
-    assert.deepEqual(advisor.tools, [])
+    assert.deepEqual(advisor.tools, ['WebSearch', 'WebFetch'])
   } finally {
     await rm(item.base, { recursive: true, force: true })
   }

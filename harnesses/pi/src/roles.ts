@@ -39,6 +39,10 @@ export async function rolePrompt(name: RoleName): Promise<string> {
   const role = await loadRole(name)
   const parts = await Promise.all([readFile(join(harnessRoot, 'prompts', 'shared.md'), 'utf8')])
 
+  if (role.backend === 'claude-cli') {
+    parts.push(await readFile(join(harnessRoot, 'prompts', 'web-research.md'), 'utf8'))
+  }
+
   for (const skill of role.skills) {
     if (!['performance-engineering', 'housekeeping', 'zig'].includes(skill)) {
       throw new Error('Unapproved skill in role')

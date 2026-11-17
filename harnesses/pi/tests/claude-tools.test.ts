@@ -7,8 +7,46 @@ import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { fixture } from './support.ts'
 import { atomicJson } from '../src/state.ts'
 import { harnessRoot, loadProject } from '../src/project.ts'
-import { claudeArguments, runClaudeWorker } from '../src/claude-worker.ts'
+import { claudeArguments, parseClaudeTrace, runClaudeWorker } from '../src/claude-worker.ts'
 import { loadRole } from '../src/roles.ts'
+
+test('Claude enables web tools and records successful calls', async () => {
+  for (const name of ['design-advisor', 'reviewer', 'database-reviewer', 'performance'] as const) {
+    const role = await loadRole(name)
+    const args = claudeArguments(
+      { ...role, tools: [...role.tools, 'Bash', 'Read', 'Agent'] },
+      '/config.json',
+      '/system.txt',
+    )
+    assert.equal(args[args.indexOf('--tools') + 1], 'WebSearch,WebFetch')
+  }
+
+  const trace = [
+    {
+      type: 'assistant',
+      message: {
+        content: [
+          { type: 'tool_use', id: 'search', name: 'WebSearch' },
+          { type: 'tool_use', id: 'fetch', name: 'WebFetch' },
+          { type: 'tool_use', id: 'unfinished', name: 'Unfinished' },
+        ],
+      },
+    },
+    {
+      type: 'user',
+      message: {
+        content: [
+          { type: 'tool_result', tool_use_id: 'search', is_error: false },
+          { type: 'tool_result', tool_use_id: 'fetch', is_error: true },
+        ],
+      },
+    },
+    { type: 'result', result: 'Verified the source', is_error: false },
+  ]
+    .map((event) => JSON.stringify(event))
+    .join('\n')
+  assert.deepEqual(parseClaudeTrace(trace).toolsUsed, ['WebSearch'])
+})
 
 test('Claude bridge gives performance scoped writes and denies product writes', async () => {
   const item = await fixture({ performance: true })
@@ -80,7 +118,7 @@ test('Claude bridge gives performance scoped writes and denies product writes', 
     const args = claudeArguments(await loadRole('performance'), '/config.json', '/system.txt')
     assert.ok(args.includes('--dangerously-skip-permissions'))
     assert.ok(args.includes('--strict-mcp-config'))
-    assert.equal(args[args.indexOf('--tools') + 1], '')
+    assert.equal(args[args.indexOf('--tools') + 1], 'WebSearch,WebFetch')
     assert.equal(args[args.indexOf('--setting-sources') + 1], '')
   } finally {
     await client.close()
