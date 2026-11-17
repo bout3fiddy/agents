@@ -235,7 +235,7 @@ test('Pi keeps chatting, guards owned files and delivers once', async () => {
     assert.equal(state.status, 'complete', state.error)
     const before = requests
     await new Promise((resolve) => setTimeout(resolve, 1200))
-    assert.equal(requests, before, 'Idle delivery must not launch a model turn')
+    assert.equal(requests, before + 1, 'Idle completion must wake the model exactly once')
     assert.equal(
       captured.session.sessionManager
         .getEntries()
@@ -245,7 +245,7 @@ test('Pi keeps chatting, guards owned files and delivers once', async () => {
     )
     await captured.session.reload()
     await captured.session.prompt('Continue the next decision.')
-    assert.equal(requests, before + 1)
+    assert.equal(requests, before + 2)
     const results = captured.session.sessionManager
       .getEntries()
       .filter((entry) => entry.type === 'custom_message' && entry.customType === 'pi-task-result')

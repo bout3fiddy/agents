@@ -39,7 +39,16 @@
 - Benchmarks measure real public behavior. Instrumentation must preserve disabled behavior.
 - Background task processes survive reload and session exit. Keep project-wide file reservations,
   bounded coordinator children, scoped steering/cancellation, and per-task private evidence. Deliver
-  completion once without requesting an extra conversational turn. Test against the real Pi SDK.
+  completion once at a safe boundary and wake an idle orchestrator for a brief acknowledgement.
+  Batch simultaneous results and prioritize queued user input. Test against the real Pi SDK.
 - Apply document candidates only after scope, format, control revision and changed-file conflict
   checks. Maintenance code also requires final specialist review and executable project checks.
   Never replace a pending integration journal. Keep subprocess cancellation bounded and propagated.
+- Route multi-file or lengthy document changes before patch generation. The direct-edit guard
+  permits one file, two calls, 2 KB of combined old/new text and four model steps per user request.
+  Keep shell reads available; reject common document-rewriting bypasses. Exercise natural user
+  requests without tool names in live delegation tests.
+- Capture runtime source identity at module load. Record startup/reload IDs, reasons and actual tool
+  inventories under project-local `harness/runtime/`; attach the load ID to request timing. Never
+  report a newer disk revision as the version already loaded in a process. Keep role/prompt policy
+  fixed for that loaded generation. `/harness-version` must show this receipt without a model call.

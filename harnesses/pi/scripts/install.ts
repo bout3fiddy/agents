@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url'
 import { atomicJson, readJson } from '../src/state.ts'
 import { harnessRoot } from '../src/project.ts'
 import { loadRole, rolePrompt } from '../src/roles.ts'
+import { captureBuild } from '../src/runtime-version.ts'
 
 function shellQuote(value: string): string {
   return `'${value.replaceAll("'", "'\\''")}'`
@@ -113,12 +114,15 @@ export async function install(agentDir = join(homedir(), '.pi', 'agent'), binDir
       `export PI_HARNESS_AGENT_DIR=${shellQuote(destination)}\nexec ${command}\n`,
   )
   await chmod(wrapper, 0o755)
+  const build = captureBuild(harnessRoot)
   await atomicJson(join(destination, 'harness-install.json'), {
     source: harnessRoot,
     installedAt: new Date().toISOString(),
     backup,
     wrapper,
-    version: '0.1.0',
+    version: build.version,
+    revision: build.revision,
+    sourceHash: build.sourceHash,
   })
   return { destination, backup, wrapper }
 }

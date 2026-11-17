@@ -2,8 +2,12 @@ import { appendFile, mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { ExtensionAPI, ExtensionContext } from '@earendil-works/pi-coding-agent'
 import { StateStore } from './state.ts'
+import type { LoadedRuntime } from './runtime-version.ts'
 
-export function registerTiming(pi: ExtensionAPI): void {
+export function registerTiming(
+  pi: ExtensionAPI,
+  runtime: () => LoadedRuntime | undefined = () => undefined,
+): void {
   let started = 0
   let firstText = false
   let step = 0
@@ -26,6 +30,12 @@ export function registerTiming(pi: ExtensionAPI): void {
       trigger: event.messageType,
       model: ctx.model?.id,
       thinking: pi.getThinkingLevel(),
+      runtime: runtime() && {
+        loadId: runtime()!.loadId,
+        version: runtime()!.version,
+        revision: runtime()!.revision,
+        sourceHash: runtime()!.sourceHash,
+      },
     })
   })
   pi.on('turn_start', (_event, ctx) => {

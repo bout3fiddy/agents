@@ -102,6 +102,14 @@ candidate.
 
 ## Background task coordination
 
+The orchestrator routes lengthy document work before generating patches. A runtime guard bounds its
+local document edits to one file, two calls, 2 KB and four model steps since the latest user
+request. It inspects whole tool batches before execution, so a multi-file batch is rejected before
+its first write. Raw branch history preserves the budget across reload. Large writes, repeated edits
+and multi-document formatting return a concrete delegation instruction. Reads/search remain
+available; common shell rewriting forms are also rejected. Arbitrary shell programs remain outside
+this heuristic guard and must obey the prompt. This is a workflow policy, not shell containment.
+
 `delegate_task` and `workflow` return a durable task ID after spawning a detached supervisor. A
 project registry reserves write paths under a short OS lock. At most two tasks run; overlapping
 paths are rejected with case/Unicode folding. Accepted implementation excludes another writer. Reads
@@ -130,11 +138,13 @@ supervisor is reported as needs-attention; candidates and evidence remain availa
 retry is deliberately absent to avoid duplicate edits.
 
 Supervisors survive reload, session exit and foreground interruption. A filesystem observer delivers
-terminal results once to the originating session/branch at a safe boundary or while idle. It never
-requests an extra provider turn. Persisted custom message IDs deduplicate delivery after reload. New
-sessions can inspect project-wide status. Stopped/dead jobs release reservations; cancellation keeps
-ownership until shutdown is observed. The registry retains at most 200 indexed tasks and limits
-control messages to 32 and 48 KB. Artifacts remain until explicitly removed.
+terminal results once to the originating session/branch. It batches ready results, appends them at a
+safe boundary, and requests a continuation when needed for acknowledgement. While idle, the batch
+starts one response. Queued user input takes priority; in-flight requests are not interrupted.
+Persisted custom message IDs deduplicate delivery after reload. New sessions can inspect
+project-wide status. Stopped/dead jobs release reservations; cancellation keeps ownership until
+shutdown is observed. The registry retains at most 200 indexed tasks and limits control messages to
+32 and 48 KB. Artifacts remain until explicitly removed.
 
 ## Workflow and persistence
 
@@ -195,3 +205,14 @@ Baseline and candidate benchmark receipts retain raw output, snapshot and comman
 definitions or workloads differ, do not calculate a speedup. Missing or failed baselines must be
 disclosed. A public-path canary can reject a regression; a performance claim requires matched full
 measurements.
+
+## Runtime identity
+
+The version module captures a Git revision and SHA-256 digest of source, role, prompt and package
+assets when loaded. Orchestrator role/prompt policy is fixed for that generation. A startup or
+reload receipt records its unique load ID, session, process ID, time, reason and actual
+registered/active tools. Receipts are appended to `harness/runtime/<session>.jsonl` and the raw
+session; timing requests reference the load identity. `/harness-version` and `harness_status` expose
+the captured values. A changed disk checkout never changes the identity of code already running. The
+installer records its source hash for comparison. A live reload is verifiable by the new ID, reason
+and matching hash.

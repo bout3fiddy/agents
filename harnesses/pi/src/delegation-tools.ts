@@ -45,13 +45,21 @@ async function destination(cwd: string, path: string): Promise<string> {
   throw new Error('Write destination exceeds the directory depth limit')
 }
 
-function resultMessage(job: Delegation): CustomMessageEntryDraft {
+function messageIds(details: unknown): string[] {
+  const value = details as { taskId?: string; taskIds?: string[] } | undefined
+  return value?.taskIds ?? (value?.taskId ? [value.taskId] : [])
+}
+
+function resultMessage(jobs: Delegation[]): CustomMessageEntryDraft {
   return {
     type: 'custom_message',
     customType: 'pi-task-result',
     display: true,
-    content: 'Background task result\n' + JSON.stringify(delegationView(job)),
-    details: { taskId: job.request.id },
+    content:
+      'Background task completion. Briefly acknowledge the outcome and any blocker, ' +
+      'then continue the current discussion. Do not launch follow-up work unless authorized.\n' +
+      JSON.stringify(jobs.map(delegationView)),
+    details: { taskIds: jobs.map((job) => job.request.id) },
   }
 }
 
@@ -87,7 +95,7 @@ export function registerDelegation(pi: ExtensionAPI, launch: Launcher = launchDe
           .getEntries()
           .flatMap((entry) =>
             entry.type === 'custom_message' && entry.customType === 'pi-task-result'
-              ? [(entry.details as { taskId?: string })?.taskId]
+              ? messageIds(entry.details)
               : [],
           ),
       )
@@ -104,7 +112,7 @@ export function registerDelegation(pi: ExtensionAPI, launch: Launcher = launchDe
         delivered.add(`${session}:${job.request.id}`)
       }
 
-      return ready.map(resultMessage)
+      return ready.length ? [resultMessage(ready)] : []
     } finally {
       collecting = false
     }
@@ -118,8 +126,9 @@ export function registerDelegation(pi: ExtensionAPI, launch: Launcher = launchDe
 
     if (closed || !ctx.isIdle() || ctx.hasPendingMessages()) {
       for (const message of messages) {
-        const id = (message.details as { taskId: string }).taskId
-        delivered.delete(`${ctx.sessionManager.getSessionId()}:${id}`)
+        for (const id of messageIds(message.details)) {
+          delivered.delete(`${ctx.sessionManager.getSessionId()}:${id}`)
+        }
       }
 
       return
@@ -127,8 +136,8 @@ export function registerDelegation(pi: ExtensionAPI, launch: Launcher = launchDe
 
     for (const message of messages) {
 
-      // A filesystem poll never requests another provider turn.
-      pi.sendMessage(message, { triggerTurn: false })
+      // One batch wakes an idle orchestrator once; ordinary polling never invokes a model.
+      pi.sendMessage(message, { triggerTurn: true, deliverAs: 'followUp' })
     }
   }
   const boundary = async (event: BoundaryState, ctx: ExtensionContext) => {
@@ -137,15 +146,19 @@ export function registerDelegation(pi: ExtensionAPI, launch: Launcher = launchDe
     }
 
     const messages = await collect(ctx)
-    return messages.length ? { entries: [...event.entries, ...messages] } : undefined
+    return messages.length
+      ? {
+          entries: [...event.entries, ...messages],
+          ...(event.context.pendingMessages.length ? {} : { continue: true }),
+        }
+      : undefined
   }
   pi.on('turn_end', boundary)
   pi.on('agent_before_settle', boundary)
   pi.on('agent_settled', async (_event, ctx) => idle(ctx))
-  pi.on('session_start', async (_event, ctx) => {
+  pi.on('session_start', (_event, ctx) => {
     closed = false
     current = ctx
-    await idle(ctx)
   })
   pi.on('before_agent_start', async (_event, ctx) => {
     current = ctx

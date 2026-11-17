@@ -88,11 +88,18 @@ a four-minute budget. Session shutdown, replacement, reload and tree changes can
 Results and inputs live in the project's private harness state under `consultations/`. Resuming can
 inspect a saved result; an abandoned running job must be restarted.
 
-Explicit delegation requests use `delegate_task`, including document edits. Lengthy work and
-multi-file rewrites also go to a background coordinator. Small, quick local edits can use ordinary
-file tools. Open questions can remain in documents; saving them needs no implementation checkpoint
-or application test adapter and preserves the conversation. A request to commit a document update
-means save it; Git commits require a specific request.
+Document updates spanning multiple files, rewrites, splits and accumulated decisions automatically
+use `delegate_task` before patch generation. The user does not need to request delegation. Explicit
+delegation requests also use that path. Small, quick local edits can use ordinary file tools. Open
+questions can remain in documents; saving them needs no implementation checkpoint or application
+test adapter and preserves the conversation. A request to commit a document update means save it;
+Git commits require a specific request.
+
+The runtime allows a quick local document correction within one file, two write/edit calls, 2 KB of
+combined old/new text and four model steps after a user request. Larger direct writes and multi-file
+formatting return an instruction to delegate the remaining task immediately. Common document-writing
+shell scripts are redirected too; unrestricted shell access remains a behavioral boundary, not a
+complete shell parser or sandbox. Worker document edits are scoped and unaffected by this budget.
 
 The orchestrator keeps `bash`, `read`, `write`, `edit`, `grep`, `find` and `ls`. It applies
 repository lint and appropriate checks to its own changes. `document_check` checks or formats
@@ -109,8 +116,10 @@ substantial implementation uses Astra high. Routine documents need no review cal
 requires passing engineering review; DB changes also require database review and recovery checks.
 
 `task_control` sends a scoped update or cancellation. `task_status` inspects durable state and
-evidence. Completion appears once in the originating session without requesting another model turn.
-The orchestrator reads it at its next natural step; no repeated model polling is required.
+evidence. Completion reaches the originating session once at a safe model/tool boundary. While idle,
+it wakes the orchestrator for a brief acknowledgement; while busy, it joins the current discussion.
+Simultaneous completions are batched, queued user input takes priority, and reload does not repeat
+the notification. Polling itself never starts model calls. Results do not authorize follow-up work.
 
 Two jobs may run concurrently on disjoint paths. Each coordinator can make at most eight leaf calls;
 its children run serially on one candidate and cannot delegate further. Explicit file tools and
@@ -137,6 +146,21 @@ Fable can research current platform details and engineering practices during des
 specialist reviews. Its shared `prompts/web-research.md` prefers primary sources, requires source
 links and version/context qualifications, and keeps private data out of search queries. Web calls
 and their results are recorded in the Claude JSONL trace. Research supplements project tests.
+
+Run `npm run test:live:delegation -- --automatic` to exercise document routing from an ordinary
+request, concurrent discussion, completion acknowledgement and reload receipts.
+
+## Verify the loaded runtime
+
+Run `/harness-version` to inspect the currently loaded version, Git revision, source digest, load
+ID, load time, startup/reload reason and actual tool inventory. The footer shows the version and
+short digest; `harness_status` returns the same receipt. Each session records these receipts in
+`.pi/traces/harness/runtime/<session-id>.jsonl` and its raw trace. Request timing references the
+load ID. Compare the source digest with `~/.pi/agent/harness-install.json` after an installation.
+
+Code identity and orchestrator prompt/tool policy are captured for the loaded generation. Editing
+files on disk cannot relabel the running process. `/reload` activates the new generation and records
+a fresh load ID with reason `reload`; it preserves conversation and background tasks.
 
 ## Substantial implementation
 
@@ -272,6 +296,7 @@ Project-local traces live in `.pi/traces/` under the directory where Pi starts:
   bodies. Model intervals include client/provider overhead; they do not isolate server queueing or
   compute.
 - `harness/delegations/`: task requests, controls, status, child receipts and coordinator sessions.
+- `harness/runtime/`: loaded-version receipts, reload reasons and active/registered tools.
 - `harness/attempts/`: worker assignments, Codex session JSONL directories, Claude event JSONL,
   scoped tool evidence and results.
 - `harness/`: implementation checkpoints, receipts, task state, snapshots and integration journal.

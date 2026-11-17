@@ -15,6 +15,7 @@ export async function captureSession(
   base: string,
   extensions: ExtensionFactory[],
   respond: (context: Context) => Promise<AssistantMessage['content']>,
+  options: { extensionPaths?: string[] } = {},
 ) {
   const runtime = await ModelRuntime.create({
     authPath: join(base, 'auth.json'),
@@ -84,6 +85,7 @@ export async function captureSession(
     noPromptTemplates: true,
     noThemes: true,
     extensionFactories: extensions,
+    additionalExtensionPaths: options.extensionPaths,
   })
   await loader.reload()
   const { session } = await createAgentSession({
@@ -95,6 +97,10 @@ export async function captureSession(
     resourceLoader: loader,
     sessionManager: SessionManager.create(root, join(base, 'sessions')),
   })
-  await session.bindExtensions({})
+  await session.bindExtensions({
+    onError: (error) => {
+      throw new Error(JSON.stringify(error))
+    },
+  })
   return { session, runtime }
 }

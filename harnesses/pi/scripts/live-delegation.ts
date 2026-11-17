@@ -16,6 +16,7 @@ import { StateStore, atomicJson } from '../src/state.ts'
 import { Delegations, activeTask } from '../src/delegation-state.ts'
 import { loadRole } from '../src/roles.ts'
 
+const automatic = process.argv.includes('--automatic')
 const root = await mkdtemp(join(tmpdir(), 'pi-live-delegation-'))
 const store = new StateStore(root)
 const jobs = new Delegations(store)
@@ -26,6 +27,12 @@ await writeFile(
   join(root, 'design/queue.md'),
   '# Queue design\n\nCapacity and overload behavior remain open.\n\nPersistence is future work.\n',
 )
+
+if (automatic) {
+  await writeFile(join(root, 'design/operations.md'), '# Operations\n\nOverload policy is open.\n')
+  await writeFile(join(root, 'design/decisions.md'), '# Decisions\n\nCapacity is open.\n')
+}
+
 const agentDir = process.env.PI_HARNESS_AGENT_DIR ?? join(homedir(), '.pi/agent')
 const runtime = await ModelRuntime.create({
   authPath: join(agentDir, 'auth.json'),
@@ -56,7 +63,11 @@ const { session } = await createAgentSession({
   settingsManager: settings,
   sessionManager: SessionManager.create(root, join(reports, 'sessions')),
 })
-await session.bindExtensions({})
+await session.bindExtensions({
+  onError: (error) => {
+    throw new Error(JSON.stringify(error))
+  },
+})
 const events: unknown[] = []
 let requests = 0
 let foregroundWrites = 0
@@ -79,15 +90,20 @@ const timer = setTimeout(() => {
 try {
   const started = performance.now()
   await session.prompt(
-    'We chose capacity 100 and rejection of new jobs when full. Record those decisions in ' +
-      'design/queue.md via a subagent, keeping persistence as an open future question. ' +
-      'Have that agent get a Fable reviewer to verify the document against these decisions. ' +
-      'Continue quizzing me on the next critical decision boundary while that task runs. ' +
-      'Keep the document under 150 words and your response concise.',
+    automatic
+      ? 'We chose capacity 100 and rejection of new jobs when full. ' +
+          'Record those decisions across design/queue.md, design/operations.md and ' +
+          'design/decisions.md, preserving persistence as an open question. ' +
+          'Keep each document concise. Continue quizzing me on the next critical decision boundary.'
+      : 'We chose capacity 100 and rejection of new jobs when full. Record those decisions in ' +
+          'design/queue.md via a subagent, keeping persistence as an open future question. ' +
+          'Have that agent get a Fable reviewer to verify the document against these decisions. ' +
+          'Continue quizzing me on the next critical decision boundary while that task runs. ' +
+          'Keep the document under 150 words and your response concise.',
   )
   const dispatchMs = performance.now() - started
   let job = (await jobs.list()).at(-1)
-  assert.ok(job, 'Explicit delegation must start a writable background task')
+  assert.ok(job, 'Document work must start a writable background task')
   assert.equal(job.request.kind, 'documents')
   assert.ok(activeTask(job.state), 'The orchestrator must return before the worker finishes')
   assert.equal(foregroundWrites, 0)
@@ -110,18 +126,31 @@ try {
   }
 
   assert.equal(job.state.status, 'complete', job.state.error)
-  await delay(1500)
-  assert.equal(requests, before, 'Background completion must not launch a provider turn')
+
+  for (let attempt = 0; attempt < 120; attempt++) {
+    if (requests !== before) {
+      break
+    }
+
+    await delay(1000)
+  }
+
+  await session.waitForIdle()
+  assert.ok(
+    requests > before && requests <= before + 3,
+    'Completion must produce one brief acknowledgement without a tool loop',
+  )
   assert.equal(foregroundWrites, 0)
   assert.equal((await jobs.list()).length, 1)
   assert.ok(job.state.children?.some((child) => child.role === 'task-worker'))
   assert.ok(
-    job.state.children?.some(
-      (child) =>
-        child.role === 'reviewer' &&
-        child.model.startsWith('claude-cli/claude-fable-5-2') &&
-        child.verdict === 'pass',
-    ),
+    automatic ||
+      job.state.children?.some(
+        (child) =>
+          child.role === 'reviewer' &&
+          child.model.startsWith('claude-cli/claude-fable-5-2') &&
+          child.verdict === 'pass',
+      ),
   )
   const document = await readFile(join(root, 'design/queue.md'), 'utf8')
   assert.match(document, /100/)
@@ -137,11 +166,29 @@ try {
       .filter((entry) => entry.type === 'custom_message' && entry.customType === 'pi-task-result')
       .length
   assert.equal(delivered(), 1)
+
+  if (automatic) {
+    for (const name of ['operations', 'decisions']) {
+      assert.match(await readFile(join(root, `design/${name}.md`), 'utf8'), /100|reject/i)
+    }
+
+    assert.ok(job.state.children?.every((child) => child.role === 'task-worker'))
+  }
+
+  const loadEntries = () =>
+    session.sessionManager
+      .getEntries()
+      .filter((entry) => entry.type === 'custom' && entry.customType === 'pi-harness-load')
+  assert.equal(loadEntries().length, 2)
+  const acknowledgedRequests = requests
   await session.reload()
   await delay(1200)
   assert.equal(delivered(), 1)
+  assert.equal(requests, acknowledgedRequests)
+  assert.equal(loadEntries().length, 3)
   await atomicJson(join(reports, 'result.json'), {
     status: 'passed',
+    automatic,
     root,
     dispatchMs,
     discussionMs,

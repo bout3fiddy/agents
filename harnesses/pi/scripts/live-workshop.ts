@@ -13,6 +13,8 @@ import harness from '../src/extension.ts'
 import { harnessRoot } from '../src/project.ts'
 import { StateStore, atomicJson } from '../src/state.ts'
 import { loadRole } from '../src/roles.ts'
+import { Delegations, activeTask } from '../src/delegation-state.ts'
+import { setTimeout as delay } from 'node:timers/promises'
 
 const root = await mkdtemp(join(tmpdir(), 'pi-live-workshop-'))
 const store = new StateStore(root)
@@ -70,7 +72,11 @@ const { session } = await createAgentSession({
   settingsManager,
   sessionManager: SessionManager.create(root, join(reports, 'sessions')),
 })
-await session.bindExtensions({})
+await session.bindExtensions({
+  onError: (error) => {
+    throw new Error(JSON.stringify(error))
+  },
+})
 const events: unknown[] = []
 let receivedAdvice = false
 let ownResponseBeforeAdvice = false
@@ -194,12 +200,24 @@ try {
     'mechanical document split',
     'Pause the quiz. Split the existing design document into design/capacity.md and ' +
       'design/persistence.md, with design/design.md as a short index. Preserve existing choices ' +
-      'and open questions; this is only document organization. Keep all three concise. ' +
-      'This is a quick local edit for this test; do it directly without delegate_task.',
+      'and open questions; this is only document organization. Keep all three concise.',
   )
   assert.equal(split.consultations, 0)
   assert.ok(split.steps <= 10, 'A small document split should not become a prolonged edit loop')
-  assert.ok(documentChecks >= 2, 'Use the executable document checker')
+  assert.ok(documentChecks >= 1, 'Use the executable document checker for the quick local edit')
+  const jobs = new Delegations(store)
+  let job = (await jobs.list()).at(-1)
+  assert.ok(job, 'A multi-file document split must delegate automatically')
+  const deadline = Date.now() + 600_000
+
+  while (activeTask(job.state) && Date.now() < deadline) {
+    await delay(1000)
+    job = await jobs.get(job.request.id)
+  }
+
+  assert.equal(job.state.status, 'complete', job.state.error)
+  await delay(1200)
+  await session.waitForIdle()
   assert.equal(consultationCount, consultations)
   assert.ok(
     session.sessionManager.getBranch().some((entry) => entry.type === 'context_edit'),

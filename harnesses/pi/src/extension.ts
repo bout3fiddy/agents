@@ -14,28 +14,43 @@ import { registerDocumentTools } from './document-tools.ts'
 import { registerTiming } from './timing.ts'
 import { registerDelegation } from './delegation-tools.ts'
 import { Delegations, activeTask } from './delegation-state.ts'
+import { registerDocumentRouting } from './document-routing.ts'
+import { runtimeVersion } from './runtime-version.ts'
+
+// A running generation keeps matching code, prompts and tool policy until a real reload.
+const orchestratorPolicy = Promise.all([loadRole('orchestrator'), rolePrompt('orchestrator')])
 
 export default function harness(pi: ExtensionAPI): void {
-  registerTraces(pi)
   const workshop = registerWorkshop(pi)
   registerWorkshopContext(pi)
   registerDocumentTools(pi)
-  registerTiming(pi)
+  const runtime = runtimeVersion(pi)
+  registerTiming(pi, runtime.current)
   const delegation = registerDelegation(pi)
+  registerDocumentRouting(pi)
   const storeFor = async (cwd: string) => new StateStore(await realpath(cwd))
 
-  pi.on('session_start', async (_event, ctx) => {
-    pi.setActiveTools((await loadRole('orchestrator')).tools)
-    ctx.ui.setStatus('pi-harness', 'Pi harness · orchestrator')
+  pi.on('session_start', async (event, ctx) => {
+    pi.setActiveTools((await orchestratorPolicy)[0].tools)
+    await runtime.record(ctx, event.reason)
+  })
+  registerTraces(pi)
+
+  pi.registerCommand('harness-version', {
+    description: 'Show the loaded harness build and reload receipt',
+    async handler(_args, ctx) {
+      ctx.ui.notify(JSON.stringify(runtime.current(), null, 2), 'info')
+    },
   })
 
   pi.on('before_agent_start', async (_event, ctx) => {
     const store = await storeFor(ctx.cwd)
     const checkpoint = await store.checkpoint()
-    pi.setActiveTools((await loadRole('orchestrator')).tools)
+    const [role, prompt] = await orchestratorPolicy
+    pi.setActiveTools(role.tools)
     return {
       systemPrompt: [
-        await rolePrompt('orchestrator'),
+        prompt,
         await instructions(ctx.cwd, []),
         checkpoint
           ? checkpointText(checkpoint, await store.task())
@@ -72,7 +87,7 @@ export default function harness(pi: ExtensionAPI): void {
   })
 
   pi.on('tool_call', async (event) => {
-    if (!(await loadRole('orchestrator')).tools.includes(event.toolName)) {
+    if (!(await orchestratorPolicy)[0].tools.includes(event.toolName)) {
       return { block: true, reason: 'This tool is not enabled in the orchestrator role.' }
     }
 
@@ -245,6 +260,7 @@ export default function harness(pi: ExtensionAPI): void {
       const checkpoint = await store.checkpoint()
       const task = await store.task()
       return textResult({
+        runtime: runtime.current(),
         checkpoint,
         task:
           task?.designHash === checkpoint?.hash &&

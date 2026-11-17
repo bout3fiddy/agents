@@ -3,7 +3,27 @@
 Validated locally on 17 November 2026 with macOS, Node 26.12.1, Pi 1.5.2, Claude Code 2.1.326 and
 Bun 1.3.5.
 
-## Background delegation
+## Automatic document routing and completion delivery (0.2.0)
+
+The natural-language live request specified three design documents and asked to continue the quiz;
+it contained no tool name or request for a subagent. The orchestrator automatically dispatched one
+document task, returned in 14.0 seconds, then answered the next quiz question in 6.1 seconds while
+work continued. No foreground write/edit ran. One general worker updated all three documents,
+completion woke the orchestrator for acknowledgement, and reload produced fresh load receipts
+without repeating the notification. Report: `reports/delegation-1794937949079/`.
+
+The live workshop also passed: substantive Fable advice, a quick direct single-document correction,
+a quiz, and automatic background delegation of a three-file document split. No new Fable
+consultation was added for document work. Report: `reports/workshop-1794937949079/`.
+
+Regression tests exercise oversized, multi-file, repeated, late and shell-based document edits;
+small corrections remain available. Completion tests cover idle, busy and queued-user cases, batch
+simultaneous results into one acknowledgement, and reject replay after reload. Runtime tests load an
+extension from disk, modify it, reload it and verify the changed code executes. Receipts record
+actual tools and a new load ID; request timing binds to that ID. A later source edit cannot relabel
+a captured build. SDK fixtures now install lifecycle bindings so reload emits its startup event.
+
+## Initial background delegation (0.1.0)
 
 The delegated-document scenario uses the same user wording that exposed the original gap: record
 settled decisions through a subagent and continue quizzing. Codex returned in 10.4 seconds while the
@@ -34,7 +54,7 @@ and fixed stale-context polling after SDK disposal.
 ## Automated checks
 
 `./bin/verify.sh` passes repository-wide executable lint, Pi formatting and strict TypeScript
-checks, 87 Pi harness tests, 132 existing evaluation tests, 13 skill-validator tests and the skill
+checks, 99 Pi harness tests, 132 existing evaluation tests, 13 skill-validator tests and the skill
 routing metadata audit. No tests were skipped.
 
 The harness tests exercise:
