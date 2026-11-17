@@ -9,6 +9,8 @@ import { atomicJson } from '../src/state.ts'
 import { liveFixture } from './live-fixture.ts'
 import { basicFixture } from './live-basic-fixture.ts'
 import { loadRole } from '../src/roles.ts'
+import { Delegations, activeTask } from '../src/delegation-state.ts'
+import { setTimeout as delay } from 'node:timers/promises'
 
 const basic = process.argv.includes('--basic')
 const { root, store, hash } = await (basic ? basicFixture() : liveFixture())
@@ -62,9 +64,8 @@ const child = spawn(
     '--mode',
     'json',
     '-p',
-    'The accepted design is ready. Use workflow now, wait for its result,' +
-      ' then report the ' +
-      'actual status.',
+    'The accepted design is ready. Start workflow now and tell me the task ID. ' +
+      'Return while it runs in the background; do not wait or poll.',
   ],
   { cwd: root, env: environment, stdio: ['ignore', 'pipe', 'pipe'], signal: controller.signal },
 )
@@ -83,6 +84,21 @@ const code = await new Promise<number | null>((resolve) => {
 }).finally(() => clearTimeout(timer))
 await writeFile(join(reports, 'orchestrator.jsonl'), output)
 await writeFile(join(reports, 'stderr.txt'), errorOutput)
+const jobs = new Delegations(store)
+const deadline = Date.now() + 90 * 60_000
+let job = (await jobs.list()).at(-1)
+assert.ok(job, 'The orchestrator must start a background workflow')
+
+while (activeTask(job.state) && Date.now() < deadline && !controller.signal.aborted) {
+  await delay(1000)
+  job = await jobs.get(job.request.id)
+}
+
+if (activeTask(job.state)) {
+  await jobs.control(job.request.id, 'cancel')
+}
+
+assert.equal(job.state.status, 'complete', job.state.error)
 const task = await store.task()
 await atomicJson(join(reports, 'result.json'), {
   code,

@@ -1,0 +1,22 @@
+{
+  "name": "task-coordinator",
+  "prompt": "task-coordinator.md",
+  "model": "openai-codex/gpt-6.1-sol",
+  "thinking": "medium",
+  "skills": [],
+  "tools": [
+    "project_read",
+    "project_search",
+    "original_read",
+    "run_command",
+    "read_reference",
+    "document_check",
+    "delegate_worker",
+    "submit_result"
+  ],
+  "writes": [],
+  "mayDelegate": true,
+  "timeoutMs": 1800000,
+  "maxTurns": 50,
+  "backend": "pi"
+}

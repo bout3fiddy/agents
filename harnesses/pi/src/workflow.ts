@@ -47,7 +47,7 @@ function failed(receipts: Receipt[], project: Project): Receipt[] {
   )
 }
 
-async function benchmarks(
+export async function benchmarks(
   workspace: string,
   project: Project,
   signal?: AbortSignal,

@@ -1,18 +1,19 @@
 # Runtime boundaries
 
 The orchestrator is a Pi extension. Workers are fresh processes selected by the role's `backend`: Pi
-SDK for Astra high implementation, Claude Code CLI for the three review specialists. A separate
-Fable design advisor runs concurrently with the orchestrator. Claude receives shared and
-role-specific system prompts directly. Its native tools are limited to WebSearch and WebFetch; its
-only MCP server is the harness bridge. The bridge implements the same scoped tools used by Pi
-workers.
+SDK for Codex task coordination/general work and Astra high implementation, Claude Code CLI for the
+three review specialists. A separate Fable design advisor runs concurrently with the orchestrator.
+Claude receives shared and role-specific system prompts directly. Its native tools are limited to
+WebSearch and WebFetch; its only MCP server is the harness bridge. The bridge implements the same
+scoped tools used by Pi workers.
 
 ## Trusted host and untrusted execution
 
 The Codex orchestrator has normal Pi shell and file tools on the host. It can investigate, set up
-projects, save design documents and perform routine edits directly. Substantial implementation is
-routed to workers by its prompt. Worker isolation is not a sandbox around the orchestrator; its
-shell can access everything available to the Pi process.
+projects and make small quick edits directly. Explicit delegation and lengthy work go to background
+task coordinators. Substantial implementation is routed to workers by its prompt. Worker isolation
+is not a sandbox around the orchestrator; its shell can access everything available to the Pi
+process.
 
 The host loads role policy, freezes the project adapter and accepted design, creates candidate
 snapshots, dispatches workers and writes private receipts. Provider clients need their normal login
@@ -61,9 +62,10 @@ bounded input/output and a role timeout. Fable uses a fresh CLI process with Web
 MCP servers and no ambient global customization. It offers sourced guidance and cannot accept or
 write a design.
 
-Document changes use the orchestrator's ordinary tools after the user's request. They require no
-accepted checkpoint and can retain open questions. Only substantial implementation uses the
-following checkpoint mechanism; no document save accepts a design or starts a new session.
+Document changes use a background task when delegated or lengthy, and ordinary tools for small quick
+edits. They require no accepted checkpoint and can retain open questions. Only substantial
+implementation uses the following checkpoint mechanism; no document save accepts a design or starts
+a new session.
 
 The orchestrator's context uses append-only `context_edit` entries to excerpt bulky successful
 file/search tool results and historical write/edit/shell arguments after four newer model steps.
@@ -97,6 +99,42 @@ Acceptance is explicit. The runtime cannot decide on its own which tentative con
 the user considers final. An unresolved checkpoint question blocks that implementation scope; future
 workshop questions can remain in the document. A changed accepted design invalidates an in-flight
 candidate.
+
+## Background task coordination
+
+`delegate_task` and `workflow` return a durable task ID after spawning a detached supervisor. A
+project registry reserves write paths under a short OS lock. At most two tasks run; overlapping
+paths are rejected with case/Unicode folding. Accepted implementation excludes another writer. Reads
+and conversation remain available. Direct write/edit and document formatting check ownership; the
+orchestrator's unrestricted shell obeys the same rule through its prompt. Task controls persist
+separately from supervisor status, so foreground updates cannot overwrite worker progress.
+
+A fresh Codex coordinator gets a bounded explicit assignment, shared/role prompts and scoped folder
+instructions. It can inspect the candidate and delegate up to eight children. Leaf calls serialize
+against its candidate. General task workers may edit only the task scope; engineering and DB
+reviewers are read-only; performance retains its benchmark/instrumentation limits. Leaf workers
+cannot delegate. Child receipts bind role, model and candidate snapshot. Requested reviews must pass
+on the final snapshot; unresolved findings prevent a passing coordinator result. Deciding which
+reviews a prose task requests remains model policy. Actual maintenance code always requires fresh
+engineering review and conditional DB review at the host gate.
+
+General task candidates are isolated from the live project. Document changes enforce document-only
+extensions, Markdown formatting, write scope and ignored/private path exclusions. Maintenance runs
+required project tests/lint and DB checks. Cancellation is propagated through coordinator, leaf and
+command controllers; scoped steering invalidates a prior result. A late message that was not
+consumed blocks integration. The host serializes integration with the workflow lock, rejects a
+pending journal, verifies each changed path still matches its baseline and applies the existing
+journal protocol. Document tasks preserve unrelated foreground changes. Code maintenance requires
+the entire project baseline to stay unchanged so its final checks and reviews still apply. A stopped
+supervisor is reported as needs-attention; candidates and evidence remain available. Automatic task
+retry is deliberately absent to avoid duplicate edits.
+
+Supervisors survive reload, session exit and foreground interruption. A filesystem observer delivers
+terminal results once to the originating session/branch at a safe boundary or while idle. It never
+requests an extra provider turn. Persisted custom message IDs deduplicate delivery after reload. New
+sessions can inspect project-wide status. Stopped/dead jobs release reservations; cancellation keeps
+ownership until shutdown is observed. The registry retains at most 200 indexed tasks and limits
+control messages to 32 and 48 KB. Artifacts remain until explicitly removed.
 
 ## Workflow and persistence
 

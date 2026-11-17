@@ -18,7 +18,8 @@
     "test:live:web": "tsx scripts/live-web.ts",
     "verify": "node scripts/verify.mjs",
     "doctor": "tsx src/cli.ts doctor",
-    "install:local": "tsx scripts/install.ts"
+    "install:local": "tsx scripts/install.ts",
+    "test:live:delegation": "tsx scripts/live-delegation.ts"
   },
   "dependencies": {
     "@earendil-works/pi-coding-agent": "1.5.2",

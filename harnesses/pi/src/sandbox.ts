@@ -5,6 +5,16 @@ import { join } from 'node:path'
 import type { CommandResult } from './contracts.ts'
 
 const outputLimit = 64_000
+const workerTermination = new AbortController()
+export const workerAbortSignal = workerTermination.signal
+
+// The dispatcher first signals the whole worker group, including Claude's MCP bridge.
+// Keep those processes alive briefly so their separately grouped commands can be stopped.
+if (process.env.PI_HARNESS_WORKER === '1') {
+  const stop = () => workerTermination.abort(new Error('Worker process terminated'))
+  process.once('SIGTERM', stop)
+  process.once('SIGINT', stop)
+}
 
 function quote(value: string): string {
   return JSON.stringify(value)
@@ -71,6 +81,8 @@ export async function runSandboxed(
   timeoutMs = 120_000,
   signal?: AbortSignal,
 ): Promise<CommandResult> {
+  signal = signal ? AbortSignal.any([signal, workerAbortSignal]) : workerAbortSignal
+
   if (
     !argv.length ||
     argv.length > 100 ||
@@ -90,6 +102,19 @@ export async function runSandboxed(
 
   try {
     await writeFile(profile, await sandboxProfile(workspace, scratch))
+
+    if (signal.aborted) {
+      return {
+        argv,
+        exitCode: null,
+        output: '',
+        timedOut: false,
+        aborted: true,
+        truncated: false,
+        durationMs: Date.now() - started,
+      }
+    }
+
     const result = await new Promise<CommandResult>((resolve, reject) => {
       const command = argv[0] === 'node' ? process.execPath : argv[0]!
       const child = spawn('/usr/bin/sandbox-exec', ['-f', profile, command, ...argv.slice(1)], {

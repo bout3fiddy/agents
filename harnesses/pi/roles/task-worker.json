@@ -1,0 +1,24 @@
+{
+  "name": "task-worker",
+  "prompt": "task-worker.md",
+  "model": "openai-codex/gpt-6.1-sol",
+  "thinking": "medium",
+  "skills": [],
+  "tools": [
+    "project_read",
+    "project_search",
+    "project_write",
+    "project_delete",
+    "project_format",
+    "document_check",
+    "original_read",
+    "run_command",
+    "read_reference",
+    "submit_result"
+  ],
+  "writes": ["**"],
+  "mayDelegate": false,
+  "timeoutMs": 600000,
+  "maxTurns": 40,
+  "backend": "pi"
+}

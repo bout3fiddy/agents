@@ -4,6 +4,8 @@ import { Check } from 'typebox/value'
 export const roleNames = [
   'orchestrator',
   'design-advisor',
+  'task-coordinator',
+  'task-worker',
   'implementer',
   'reviewer',
   'database-reviewer',
@@ -11,7 +13,7 @@ export const roleNames = [
 ] as const
 
 export type RoleName = (typeof roleNames)[number]
-export type WorkerRole = Exclude<RoleName, 'orchestrator' | 'design-advisor'>
+export type WorkerRole = Exclude<RoleName, 'orchestrator' | 'design-advisor' | 'task-coordinator'>
 
 export const designSchema = Type.Object(
   {

@@ -17,7 +17,7 @@ export async function loadRole(name: RoleName): Promise<Role> {
     !['pi', 'claude-cli'].includes(role.backend) ||
     role.name !== name ||
     role.prompt !== `${name}.md` ||
-    role.mayDelegate !== (name === 'orchestrator') ||
+    role.mayDelegate !== ['orchestrator', 'task-coordinator'].includes(name) ||
     !Array.isArray(role.tools) ||
     !Array.isArray(role.skills) ||
     !Array.isArray(role.writes) ||

@@ -1,12 +1,15 @@
 # Pi coding harness
 
 Codex workshops designs with the user and parallel Fable advice. It has shell and file tools for
-investigation, setup, documents and routine edits. Substantial implementation uses isolated Astra
-workers, executable checks and independent Fable reviews.
+investigation, setup and small quick edits. Background task coordinators handle delegated work while
+discussion continues. Substantial implementation uses isolated Astra workers, executable checks and
+independent Fable reviews.
 
 | Role                     | Model / effort     |
 | ------------------------ | ------------------ |
 | Orchestrator             | Codex / medium     |
+| Task coordinator         | Codex / medium     |
+| General task worker      | Codex / medium     |
 | Design advisor           | Fable 5.2 / medium |
 | Implementer              | GPT 6 Astra / high |
 | Engineering reviewer     | Fable 5.2 / high   |
@@ -85,17 +88,44 @@ a four-minute budget. Session shutdown, replacement, reload and tree changes can
 Results and inputs live in the project's private harness state under `consultations/`. Resuming can
 inspect a saved result; an abandoned running job must be restarted.
 
-When you settle a choice and ask to update the document, Codex saves it directly using ordinary file
-tools. Open questions can remain in the document. Saving a design needs no checkpoint,
-implementation worker or application test adapter, and does not reset the conversation. A request to
-commit an update to a document means save it; Git commits require a specific request.
+Explicit delegation requests use `delegate_task`, including document edits. Lengthy work and
+multi-file rewrites also go to a background coordinator. Small, quick local edits can use ordinary
+file tools. Open questions can remain in documents; saving them needs no implementation checkpoint
+or application test adapter and preserves the conversation. A request to commit a document update
+means save it; Git commits require a specific request.
 
-The orchestrator can use `bash`, `read`, `write`, `edit`, `grep`, `find` and `ls` for its work. Its
-delegation rule is behavioral: substantial implementation goes to Astra; ordinary work stays with
-the orchestrator. It applies repository lint and appropriate verification to its own changes.
-`document_check` checks or formats selected Markdown files with the pinned formatter and 100-column
-policy. It reports its scope explicitly; content correctness and links still need review. Prefer one
-coherent edit and check over generated checking scripts and repeated document rewrites.
+The orchestrator keeps `bash`, `read`, `write`, `edit`, `grep`, `find` and `ls`. It applies
+repository lint and appropriate checks to its own changes. `document_check` checks or formats
+selected Markdown files with the pinned formatter and 100-column policy. Content correctness and
+links still need review.
+
+### Background delegation
+
+`delegate_task` accepts a task, complete context, a kind and repository-relative write paths:
+`documents`, read-only `research`, bounded `maintenance`, or accepted `implementation`. It returns a
+task ID immediately. Continue the discussion while a separate Codex coordinator reads the project,
+delegates writable tasks and requests Fable reviews when useful. Document workers use Codex medium;
+substantial implementation uses Astra high. Routine documents need no review call. Code maintenance
+requires passing engineering review; DB changes also require database review and recovery checks.
+
+`task_control` sends a scoped update or cancellation. `task_status` inspects durable state and
+evidence. Completion appears once in the originating session without requesting another model turn.
+The orchestrator reads it at its next natural step; no repeated model polling is required.
+
+Two jobs may run concurrently on disjoint paths. Each coordinator can make at most eight leaf calls;
+its children run serially on one candidate and cannot delegate further. Explicit file tools and
+Markdown formatting reject writes to active task paths. Shell ownership is a prompt rule; host
+integration also rejects a changed target file. Document tasks preserve unrelated foreground edits.
+Code maintenance and implementation require the complete project baseline to remain unchanged. New
+scope requires a new task. Acceptance/context reset waits for active tasks to finish or cancel.
+
+Jobs survive `/reload` and Pi exit; their process, controls, status and evidence live under
+`.pi/traces/harness/delegations/<id>/`. Stop a job through `task_control`; an ordinary conversation
+interrupt only stops the foreground turn. Completion delivery is session/branch-specific, while
+`task_status` works from a new session. Failed or conflicted candidates remain available for
+inspection. Interrupted task coordinators require a new task; the accepted implementation workflow
+retains its existing resume behavior. Each general task has a 30-minute supervisor limit;
+implementation has 90 minutes, with smaller role/command limits inside it.
 
 Older bulky file/search tool results and write/edit/shell arguments are excerpted after four newer
 model steps. Current-request reads remain intact until a successful write/edit supersedes them;
@@ -115,7 +145,8 @@ and their results are recorded in the Claude JSONL trace. Research supplements p
 2. `/accept-design HASH` is an explicit implementation handoff and context checkpoint. It persists
    that scope and starts a fresh session, preserving current work state. Queued input prevents the
    switch. This command is optional during ordinary workshop work and never required for documents.
-3. Ask for implementation. The orchestrator invokes `workflow`.
+3. Ask for implementation. The orchestrator invokes `workflow`, which returns a background task ID
+   immediately.
 4. Astra implementation, applicable Fable performance work, executable checks, Fable engineering
    review and conditional Fable database review run in order. Findings return to Astra, with at most
    three repair rounds per invocation.
@@ -217,9 +248,9 @@ npm run test:live:web
 ```
 
 The live test uses real model calls and a disposable SQLite ledger. It exercises seeded
-replay/conflict properties, invalid inputs, SIGKILL recovery, file-backed benchmarks and all five
-roles. Reports are written to ignored `reports/`. Set `PI_HARNESS_LIVE_MODEL` to choose another
-Codex model for a live run.
+replay/conflict properties, invalid inputs, SIGKILL recovery, file-backed benchmarks and the
+implementation and specialist roles. Reports are written to ignored `reports/`. Set
+`PI_HARNESS_LIVE_MODEL` to choose another Codex model for a live run.
 
 The workshop live case uses real Codex and Fable calls to check parallel guidance, automatic reply
 delivery, shell access and direct document updates despite unresolved workshop questions. It spawns
@@ -240,6 +271,7 @@ Project-local traces live in `.pi/traces/` under the directory where Pi starts:
   duration and settled events. These contain timing/usage metadata, without prompt or tool-argument
   bodies. Model intervals include client/provider overhead; they do not isolate server queueing or
   compute.
+- `harness/delegations/`: task requests, controls, status, child receipts and coordinator sessions.
 - `harness/attempts/`: worker assignments, Codex session JSONL directories, Claude event JSONL,
   scoped tool evidence and results.
 - `harness/`: implementation checkpoints, receipts, task state, snapshots and integration journal.

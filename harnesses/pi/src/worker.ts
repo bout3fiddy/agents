@@ -14,6 +14,7 @@ import { loadRole, rolePrompt } from './roles.ts'
 import { inventory, snapshotHash } from './paths.ts'
 import { atomicJson, readJson } from './state.ts'
 import { runClaudeWorker } from './claude-worker.ts'
+import { workerAbortSignal } from './sandbox.ts'
 
 export function explicitResources(prompt: string): ResourceLoader {
   return {
@@ -32,6 +33,7 @@ export function explicitResources(prompt: string): ResourceLoader {
 }
 
 export async function runWorker(request: WorkerRequest): Promise<WorkerEvidence> {
+  workerAbortSignal.throwIfAborted()
   const role = await loadRole(request.role)
 
   if (role.backend === 'claude-cli') {
@@ -76,6 +78,10 @@ export async function runWorker(request: WorkerRequest): Promise<WorkerEvidence>
     sessionManager: SessionManager.create(request.workspace, `${request.outputPath}.sessions`),
   })
   let exhausted = false
+  const abort = () => {
+    void session.abort()
+  }
+  workerAbortSignal.addEventListener('abort', abort, { once: true })
   const timer = setTimeout(() => {
     exhausted = true
     void session.abort()
@@ -93,13 +99,17 @@ export async function runWorker(request: WorkerRequest): Promise<WorkerEvidence>
 
   try {
     const task = await assignment(request)
+    workerAbortSignal.throwIfAborted()
     await session.prompt(JSON.stringify(task))
+    workerAbortSignal.throwIfAborted()
 
     if (!worker.result() && !exhausted) {
       await session.prompt(
         'Return the assignment result through submit_result now, ' + 'including any blockers.',
       )
     }
+
+    workerAbortSignal.throwIfAborted()
 
     if (exhausted || !worker.result()) {
       throw new Error('Worker did not produce a result within its execution budget')
@@ -115,6 +125,7 @@ export async function runWorker(request: WorkerRequest): Promise<WorkerEvidence>
     }
   } finally {
     clearTimeout(timer)
+    workerAbortSignal.removeEventListener('abort', abort)
     session.dispose()
     await modelRuntime.settleCredentialWrites()
   }

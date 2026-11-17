@@ -194,7 +194,8 @@ try {
     'mechanical document split',
     'Pause the quiz. Split the existing design document into design/capacity.md and ' +
       'design/persistence.md, with design/design.md as a short index. Preserve existing choices ' +
-      'and open questions; this is only document organization. Keep all three concise.',
+      'and open questions; this is only document organization. Keep all three concise. ' +
+      'This is a quick local edit for this test; do it directly without delegate_task.',
   )
   assert.equal(split.consultations, 0)
   assert.ok(split.steps <= 10, 'A small document split should not become a prolonged edit loop')

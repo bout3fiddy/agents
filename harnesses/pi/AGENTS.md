@@ -6,12 +6,14 @@
   content is an input. Preserve Codex installation behavior; Claude cleanup belongs in `../claude/`
   and its workers receive explicit prompts from this harness.
 - Use `npm ci`, `npm run format`, then `npm run verify`. Run `npm run test:live` for implementation
-  and review workflow changes, `npm run test:live:workshop` for design advice, shell/file authority
-  or workshop lifecycle changes, and `npm run test:live:web` for Claude web tools and research
-  prompts. Live runs use the configured provider credentials.
-- The orchestrator has normal host shell and file tools. It workshops designs, saves requested
-  document edits directly and handles routine work. Delegate substantial implementation to Astra
-  high; Fable 5.2 medium or high supplies independent design advice and specialist reviews.
+  and review workflow changes, `npm run test:live:delegation` for background task changes,
+  `npm run test:live:workshop` for design advice, shell/file authority or workshop lifecycle
+  changes, and `npm run test:live:web` for Claude web tools and research prompts. Live runs use the
+  configured provider credentials.
+- The orchestrator has normal host shell and file tools. It workshops designs and makes small, quick
+  edits directly. Honor explicit delegation and send lengthy work to background task coordinators
+  while discussion continues. Delegate substantial implementation to Astra high; Fable 5.2 medium or
+  high supplies independent design advice and specialist reviews.
 - Keep trusted policy and receipts outside worker workspaces. Delegated product edits go through
   scoped workers and snapshot-bound verification. Never silently fall back from worker sandboxing.
 - Workshop document edits require no acceptance checkpoint, implementation worker or test adapter.
@@ -22,9 +24,10 @@
 - Deliver consultation results once at the next safe model/tool boundary. Persist consumption for
   late waits, discard obsolete automatic delivery after newer user input, and preserve raw advice.
   Test delivery with actual Pi runtime events; boundary messages emit `entry_appended`.
-- Keep routine choices and document organization within the orchestrator. Use `document_check` for
-  Markdown formatting, bounded consultation excerpts, and concise independent advice. Preserve user
-  constraints and exact raw traces when excerpting historical tool payloads from working context.
+- Keep routine decisions within the orchestrator; delegate lengthy document work or explicit
+  delegation requests. Use `document_check` for Markdown formatting, bounded consultation excerpts,
+  and concise independent advice. Preserve user constraints and exact raw traces when excerpting
+  historical tool payloads from working context.
 - Record actual model/effort and request/model/tool timing under project-local `harness/timing/`.
   Respect the selected orchestrator model; implementation remains independently pinned to Astra
   high.
@@ -34,3 +37,9 @@
   ignored `reports/`. The installer backs up changed Pi assets and never reads credential contents.
 - Preserve exit status, required skips, cancellation and stale evidence as distinct outcomes.
 - Benchmarks measure real public behavior. Instrumentation must preserve disabled behavior.
+- Background task processes survive reload and session exit. Keep project-wide file reservations,
+  bounded coordinator children, scoped steering/cancellation, and per-task private evidence. Deliver
+  completion once without requesting an extra conversational turn. Test against the real Pi SDK.
+- Apply document candidates only after scope, format, control revision and changed-file conflict
+  checks. Maintenance code also requires final specialist review and executable project checks.
+  Never replace a pending integration journal. Keep subprocess cancellation bounded and propagated.

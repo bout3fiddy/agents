@@ -11,6 +11,91 @@ export type Dispatcher = (
   signal?: AbortSignal,
 ) => Promise<WorkerEvidence>
 
+export async function runWorkerProcess(
+  argv: string[],
+  timeoutMs: number,
+  signal?: AbortSignal,
+): Promise<{ code: number | null; diagnostics: string }> {
+  signal?.throwIfAborted()
+  return new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, argv, {
+      cwd: harnessRoot,
+      env: { ...process.env, PI_HARNESS_WORKER: '1' },
+      stdio: ['ignore', 'pipe', 'pipe'],
+      detached: true,
+    })
+    let diagnostics = ''
+    let timedOut = false
+    let termination: Promise<void> | undefined
+    let forceTimer: ReturnType<typeof setTimeout> | undefined
+    const capture = (chunk: Buffer) => {
+      diagnostics = (diagnostics + chunk.toString()).slice(-4000)
+    }
+    child.stdout.on('data', capture)
+    child.stderr.on('data', capture)
+    const signalGroup = (value: NodeJS.Signals) => {
+      if (!child.pid) {
+        return
+      }
+
+      try {
+        process.kill(-child.pid, value)
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ESRCH') {
+          reject(error)
+        }
+      }
+    }
+    const terminate = () => {
+      termination ??= new Promise<void>((settled) => {
+        signalGroup('SIGTERM')
+        forceTimer = setTimeout(() => {
+          signalGroup('SIGKILL')
+          settled()
+        }, 1000)
+      })
+    }
+    const timer = setTimeout(() => {
+      timedOut = true
+      terminate()
+    }, timeoutMs)
+    signal?.addEventListener('abort', terminate, { once: true })
+
+    if (signal?.aborted) {
+      terminate()
+    }
+
+    const cleanup = () => {
+      clearTimeout(timer)
+      clearTimeout(forceTimer)
+      signal?.removeEventListener('abort', terminate)
+    }
+    child.once('error', (error) => {
+      cleanup()
+      reject(error)
+    })
+    child.once('close', (code) => {
+
+      // Let all group members forward SIGTERM to their separate sandbox groups before killing
+      // lingering bridge/provider processes, even if the main worker exits immediately.
+      void Promise.resolve(termination).then(() => {
+        cleanup()
+        signalGroup('SIGKILL')
+
+        if (signal?.aborted) {
+          reject(new Error('Worker cancelled'))
+        } else if (timedOut) {
+          reject(new Error('Worker exceeded its execution time budget'))
+        } else if (code === null) {
+          reject(new Error(`Worker terminated: ${diagnostics}`))
+        } else {
+          resolve({ code, diagnostics })
+        }
+      }, reject)
+    })
+  })
+}
+
 export function dispatcher(store: StateStore): Dispatcher {
   return async (request, signal) => {
     signal?.throwIfAborted()
@@ -20,9 +105,9 @@ export function dispatcher(store: StateStore): Dispatcher {
     await atomicJson(path, { ...request, outputPath })
     await atomicJson(`${path}.status`, { status: 'dispatched', role: request.role })
     const role = await loadRole(request.role)
-    await new Promise<void>((resolve, reject) => {
-      const child = spawn(
-        process.execPath,
+
+    try {
+      const outcome = await runWorkerProcess(
         [
           '--import',
           join(harnessRoot, 'node_modules', 'tsx', 'dist', 'loader.mjs'),
@@ -30,63 +115,27 @@ export function dispatcher(store: StateStore): Dispatcher {
           '--worker',
           path,
         ],
-        {
-          cwd: harnessRoot,
-          env: { ...process.env, PI_HARNESS_WORKER: '1' },
-          stdio: ['ignore', 'pipe', 'pipe'],
-          detached: true,
-        },
+        role.timeoutMs + 15000,
+        signal,
       )
-      let diagnostics = ''
-      const capture = (chunk: Buffer) => {
-        diagnostics = (diagnostics + chunk.toString()).slice(-4000)
-      }
-      child.stdout.on('data', capture)
-      child.stderr.on('data', capture)
-      const kill = () => {
-        if (child.pid) {
-          try {
-            process.kill(-child.pid, 'SIGKILL')
-          } catch (error) {
-            if ((error as NodeJS.ErrnoException).code !== 'ESRCH') {
-              reject(error)
-            }
-          }
-        }
-      }
-      const timer = setTimeout(kill, role.timeoutMs + 15000)
-      signal?.addEventListener('abort', kill, { once: true })
-      const cleanup = () => {
-        clearTimeout(timer)
-        signal?.removeEventListener('abort', kill)
-      }
-      child.once('error', (error) => {
-        cleanup()
-        reject(error)
+      await atomicJson(`${path}.status`, {
+        status: outcome.code === 0 ? 'finished' : 'failed',
+        code: outcome.code,
       })
-      child.once('close', (code) => {
-        cleanup()
-        kill()
-        void atomicJson(`${path}.status`, {
-          status: code === 0 ? 'finished' : 'failed',
-          code,
-        }).then(() => {
-          if (signal?.aborted) {
-            reject(new Error('Worker cancelled'))
-          } else if (code === null) {
-            reject(new Error(`Worker terminated: ${diagnostics}`))
-          } else {
-            resolve()
-          }
-        }, reject)
-      })
-    })
-    const output = await readJson<{ evidence?: WorkerEvidence; error?: string }>(outputPath)
+      const output = await readJson<{ evidence?: WorkerEvidence; error?: string }>(outputPath)
+      signal?.throwIfAborted()
 
-    if (!output?.evidence) {
-      throw new Error(output?.error ?? 'Worker exited without a result')
+      if (outcome.code !== 0 || !output?.evidence) {
+        throw new Error(output?.error ?? `Worker exited without a result: ${outcome.diagnostics}`)
+      }
+
+      return output.evidence
+    } catch (error) {
+      await atomicJson(`${path}.status`, {
+        status: signal?.aborted ? 'cancelled' : 'failed',
+        error: String(error),
+      })
+      throw error
     }
-
-    return output.evidence
   }
 }

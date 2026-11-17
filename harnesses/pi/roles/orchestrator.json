@@ -19,7 +19,10 @@
     "propose_design",
     "workflow",
     "harness_status",
-    "document_check"
+    "document_check",
+    "delegate_task",
+    "task_status",
+    "task_control"
   ],
   "writes": ["**"],
   "mayDelegate": true,

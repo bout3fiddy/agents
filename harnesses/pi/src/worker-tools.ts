@@ -15,6 +15,7 @@ import { createWorkspace, harnessRoot, instructions } from './project.ts'
 import { runSandboxed } from './sandbox.ts'
 import { safePath, writable } from './paths.ts'
 import { format } from 'prettier'
+import { checkDocuments } from './document-tools.ts'
 
 // @ts-expect-error Shared formatting code is JavaScript.
 import { addReadabilitySpacing } from '../scripts/linting/readability.mjs'
@@ -30,7 +31,7 @@ export const references: Record<string, string> = {
 export function createWorkerTools(request: WorkerRequest, role: Role) {
   const commands: CommandResult[] = []
   let submitted: WorkerResult | undefined
-  const writeScopes = ['implementer', 'performance'].includes(request.role)
+  const writeScopes = ['implementer', 'performance', 'task-worker'].includes(request.role)
     ? request.checkpoint.writePaths
     : undefined
   const roleScopes =
@@ -83,6 +84,33 @@ export function createWorkerTools(request: WorkerRequest, role: Role) {
   }
 
   tools.push(
+    {
+      name: 'document_check',
+      label: 'Check assigned Markdown documents',
+      description:
+        'Check Markdown formatting with the pinned formatter. Formatting requires write scope.',
+      parameters: Type.Object({
+        paths: Type.Array(Type.String(), { minItems: 1, maxItems: 24 }),
+        format: Type.Optional(Type.Boolean()),
+      }),
+      async execute(_id, raw) {
+        const { paths, format: shouldFormat = false } = raw as {
+          paths: string[]
+          format?: boolean
+        }
+
+        if (
+          shouldFormat &&
+          (!writeScopes ||
+            paths.some((path) => !writable(path, writeScopes) || !writable(path, roleScopes)))
+        ) {
+          throw new Error('Document formatting is outside this worker assignment')
+        }
+
+        const result = await checkDocuments(request.workspace, paths, shouldFormat)
+        return { ...textResult(result), isError: result.status === 'failed' }
+      },
+    },
     {
       name: 'run_command',
       label: 'Run isolated command',

@@ -72,7 +72,7 @@ export async function install(agentDir = join(homedir(), '.pi', 'agent'), binDir
       '',
       `Canonical source: ${harnessRoot}`,
       'Workshop designs with Codex and parallel Fable advice; ' +
-        'save requested document edits directly.',
+        'delegate requested or lengthy work in the background and keep quick edits local.',
       'Read applicable repository AGENTS.md files through project_read.',
       'Use /accept-design HASH only for a settled substantial implementation handoff.',
       '',

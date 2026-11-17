@@ -3,10 +3,38 @@
 Validated locally on 17 November 2026 with macOS, Node 26.12.1, Pi 1.5.2, Claude Code 2.1.326 and
 Bun 1.3.5.
 
+## Background delegation
+
+The delegated-document scenario uses the same user wording that exposed the original gap: record
+settled decisions through a subagent and continue quizzing. Codex returned in 10.4 seconds while the
+task was active; after `/reload`, the next quiz response took 3.9 seconds. Its background
+coordinator called a scoped Codex task worker and the explicitly requested Fable reviewer. The final
+document passed, an unrelated foreground edit survived integration, and completion arrived once
+without an extra model turn. There were zero foreground write/edit calls. Report:
+`reports/delegation-1794933182536/`.
+
+The installed `pi-harness` launcher returned in 13.1 seconds, exited, and its detached document task
+finished after 42.2 seconds. It preserved the open question and called only the general task worker;
+no routine Fable review was added. Evidence: `reports/delegation-installed-result.json`.
+
+The first live attempt exposed a missing worker `document_check` capability. The tool now uses the
+same pinned formatter as the orchestrator, with all paths validated before formatting and read-only
+coordinator access. A separate live coordinator run consumed a task update during child execution
+and delegated the revision to a second worker. The background accepted-design workflow also passed
+with Astra high and Fable review in one round: `reports/2026-11-17T16-33-03.394Z/`.
+
+Regression coverage includes real Pi dispatch/continued conversation, ownership guards, idle
+completion without provider calls, reload deduplication, disjoint concurrent document application,
+conflict/scope/format rejection, late steering, cancellation, stale reviews, required maintenance
+review/DB/benchmark checks, skipped-test receipts and unchanged code baselines. Process tests prove
+cancellation reaches independently grouped sandbox commands through both Pi workers and MCP bridge
+processes, including a bounded fallback and cancellation during setup. The full suite also caught
+and fixed stale-context polling after SDK disposal.
+
 ## Automated checks
 
 `./bin/verify.sh` passes repository-wide executable lint, Pi formatting and strict TypeScript
-checks, 53 Pi harness tests, 132 existing evaluation tests, 13 skill-validator tests and the skill
+checks, 87 Pi harness tests, 132 existing evaluation tests, 13 skill-validator tests and the skill
 routing metadata audit. No tests were skipped.
 
 The harness tests exercise:

@@ -4,7 +4,6 @@ import type { ExtensionAPI } from '@earendil-works/pi-coding-agent'
 import { designSchema, validateDesign } from './contracts.ts'
 import { fileTools, textResult } from './file-tools.ts'
 import { StateStore } from './state.ts'
-import { runWorkflow } from './workflow.ts'
 import { loadRole, rolePrompt } from './roles.ts'
 import { checkpointText, projectContext, taskView } from './context.ts'
 import { instructions } from './project.ts'
@@ -13,6 +12,8 @@ import { registerTraces } from './traces.ts'
 import { registerWorkshopContext } from './workshop-context.ts'
 import { registerDocumentTools } from './document-tools.ts'
 import { registerTiming } from './timing.ts'
+import { registerDelegation } from './delegation-tools.ts'
+import { Delegations, activeTask } from './delegation-state.ts'
 
 export default function harness(pi: ExtensionAPI): void {
   registerTraces(pi)
@@ -20,6 +21,7 @@ export default function harness(pi: ExtensionAPI): void {
   registerWorkshopContext(pi)
   registerDocumentTools(pi)
   registerTiming(pi)
+  const delegation = registerDelegation(pi)
   const storeFor = async (cwd: string) => new StateStore(await realpath(cwd))
 
   pi.on('session_start', async (_event, ctx) => {
@@ -145,7 +147,7 @@ export default function harness(pi: ExtensionAPI): void {
     label: 'Propose design',
     description:
       'Prepare a settled implementation scope for /accept-design HASH. ' +
-      'Use normal file tools for workshop documents and routine edits.',
+      'Use delegate_task for delegated workshop documents; small quick edits may stay local.',
     parameters: designSchema,
     async execute(_id, args, _signal, _update, ctx) {
       const hash = await (await storeFor(ctx.cwd)).draft(validateDesign(args))
@@ -175,6 +177,15 @@ export default function harness(pi: ExtensionAPI): void {
       }
 
       const store = await storeFor(ctx.cwd)
+
+      if ((await new Delegations(store).list()).some((job) => activeTask(job.state))) {
+        ctx.ui.notify(
+          'Finish or cancel background tasks before replacing the design context.',
+          'warning',
+        )
+        return
+      }
+
       const release = await store.lock()
 
       try {
@@ -210,18 +221,16 @@ export default function harness(pi: ExtensionAPI): void {
   pi.registerTool({
     name: 'workflow',
     label: 'Run delegated workflow',
-    description: 'Delegate implementation, checks and reviews. Allow several minutes.',
+    description:
+      'Start accepted implementation, checks and reviews in the background. ' +
+      'Returns immediately; continue discussing other work while it runs.',
     parameters: Type.Object({}),
-    async execute(_id, _args, signal, _update, ctx) {
-      if (!ctx.model) {
-        throw new Error('Select a model first')
-      }
-
-      const store = await storeFor(ctx.cwd)
-      const task = await runWorkflow(store, `${ctx.model.provider}/${ctx.model.id}`, signal)
-      return textResult({
-        ...taskView(task),
-        artifacts: store.directory,
+    async execute(_id, _args, _signal, _update, ctx) {
+      return delegation.start(ctx, {
+        kind: 'implementation',
+        task: 'Implement the accepted design with its required checks and specialist reviews.',
+        context: '',
+        writePaths: [],
       })
     },
   })
