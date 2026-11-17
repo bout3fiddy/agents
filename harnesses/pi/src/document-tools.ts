@@ -10,6 +10,16 @@ export async function checkDocuments(root: string, paths: string[], format: bool
     throw new Error('Select 1–24 distinct Markdown files')
   }
 
+  const ignorePath = await safePath(root, '.prettierignore')
+
+  try {
+    await readBoundedFile(ignorePath)
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+      throw error
+    }
+  }
+
   // Validate every destination before formatting any file.
   const files = await Promise.all(
     paths.map(async (path) => {
@@ -19,12 +29,18 @@ export async function checkDocuments(root: string, paths: string[], format: bool
 
       const absolute = await safePath(root, path)
       const source = (await readBoundedFile(absolute)).toString('utf8')
-      const formatted = await prettier.format(source, {
-        parser: 'markdown',
-        printWidth: 100,
-        proseWrap: 'always',
+      const { ignored } = await prettier.getFileInfo(absolute, {
+        ignorePath,
+        resolveConfig: false,
       })
-      return { path, absolute, source, formatted }
+      const formatted = ignored
+        ? source
+        : await prettier.format(source, {
+            parser: 'markdown',
+            printWidth: 100,
+            proseWrap: 'always',
+          })
+      return { path, absolute, source, formatted, ignored }
     }),
   )
   const changed: string[] = []
@@ -54,7 +70,10 @@ export async function checkDocuments(root: string, paths: string[], format: bool
     changed,
     failures,
     checked: paths,
-    scope: 'Markdown formatting and line width; content and links need review.',
+    formattingSkipped: files.filter((file) => file.ignored).map((file) => file.path),
+    scope:
+      'Markdown formatting respects root .prettierignore; line width checks all selected files. ' +
+      'Content and links need review.',
   }
 }
 
@@ -64,6 +83,7 @@ export function registerDocumentTools(pi: ExtensionAPI): void {
     label: 'Check Markdown documents',
     description:
       'Check or format selected Markdown files with the pinned harness formatter. ' +
+      'Respect root .prettierignore; check line width even when formatting is excluded. ' +
       'Use once after a coherent edit, then fix reported failures. No generated checking scripts.',
     parameters: Type.Object({
       paths: Type.Array(Type.String(), { minItems: 1, maxItems: 24 }),

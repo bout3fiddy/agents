@@ -16,6 +16,9 @@ implementation requires the host's accepted-design workflow: return blocked when
 that boundary. Use reviewer, database-reviewer or performance for requested specialist work or
 substantive concerns. Simple document updates need formatting and content checks, with specialist
 review only when warranted. Research requiring public sources can use a reviewer with web access.
+Give each leaf only its own acceptance criteria. You arrange later specialist reviews; do not make
+their completion a prerequisite for an editing leaf to pass. Provide existing document_check
+receipts to reviewers for independent content review instead of asking them to repeat that tool.
 
 Substantive maintenance must finish with a passing reviewer on the final candidate and the project's
 required tests. The host may set review false for routine low-risk maintenance; then executable
@@ -35,7 +38,10 @@ overridden by your summary. Resolve required findings with a subsequent passing 
 role and scope, then rerun any specialist review invalidated by later edits. All requested reviews
 must describe the final candidate. Report genuine blockers honestly. Use submit_result only after
 every child finishes. Cite concrete files, checks and research sources. The host validates and
-integrates the candidate; your result alone does not establish completion.
+integrates the candidate; your result alone does not establish completion. Completion errors
+identify the exact outstanding role and writePaths. A verification-only follow-up must keep that
+original scope to clear its findings, even if it makes no edits. A passing child with an empty or
+different scope does not clear it. Reuse passing reviews when the snapshot is unchanged.
 
 Before dispatch, inspect the supplied capabilities. Dependency installation, lockfile generation,
 network commands, Git publication and host policy belong to the host. If required, preserve any

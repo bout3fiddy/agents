@@ -36,6 +36,9 @@
   delegation requests. Use `document_check` for Markdown formatting, bounded consultation excerpts,
   and concise independent advice. Preserve user constraints and exact raw traces when excerpting
   historical tool payloads from working context.
+- Honor root `.prettierignore` in document tools and document integration checks. Report skipped
+  formatting separately; retain the independent line-width check and path protections. Do not load
+  executable project formatter configuration.
 - Record actual model/effort and request/model/tool timing under project-local `harness/timing/`.
   Respect the selected orchestrator model; implementation remains independently pinned to Astra
   high.
@@ -68,7 +71,9 @@
   attention notice when activity is absent, inspect the cause, and recover within original
   authority. Silence alone never cancels work. Test progress delivery and reload deduplication with
   the real SDK.
-- Capture runtime source identity at module load. Record startup/reload IDs, reasons and actual tool
+- Keep later specialist reviews with the coordinator instead of blocking leaf acceptance on them.
+  Completion diagnostics must identify the outstanding role and write scope. Require matching-scope
+  clearance and reuse passing reviews when the candidate is unchanged.
 - Pause affected tasks before scope reassignment. Keep paused paths reserved, preserve candidate
   edits, and revise assignments as a recoverable batch before resuming with fresh context. Reject
   conflicts and scope expansion. Invalidate approvals after revisions. Published branch ownership

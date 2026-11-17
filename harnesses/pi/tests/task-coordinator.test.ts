@@ -280,6 +280,30 @@ test('required findings need a same-role passing child on the final candidate', 
   assert.equal(worker.result()?.verdict, 'pass')
 })
 
+test('completion identifies unresolved scope and reuses unchanged reviews', async (t) => {
+  const { request, controller } = await setup(t)
+  let calls = 0
+  let reviews = 0
+  const worker = await createTaskCoordinatorTools(request, controller.signal, async (child) => {
+    calls++
+    reviews += Number(child.role === 'reviewer')
+    return receipt(child, calls === 1 ? { verdict: 'blocked' } : {})
+  })
+  await invoke(worker.tools, 'delegate_worker', leaf)
+  await invoke(worker.tools, 'delegate_worker', { ...leaf, role: 'reviewer', writePaths: [] })
+  await invoke(worker.tools, 'delegate_worker', { ...leaf, writePaths: [] })
+  await assert.rejects(invoke(worker.tools, 'submit_result', pass), (error: Error) => {
+    assert.match(error.message, /"role":"task-worker","writePaths":\["src\/\*\*"\]/)
+    assert.match(error.message, /"verdict":"blocked","snapshotMatches":true/)
+    assert.match(error.message, /exact role and writePaths/)
+    return true
+  })
+  await invoke(worker.tools, 'delegate_worker', leaf)
+  await invoke(worker.tools, 'submit_result', pass)
+  assert.equal(worker.result()?.verdict, 'pass')
+  assert.equal(reviews, 1)
+})
+
 test('an edit invalidates an earlier requested engineering review', async (t) => {
   const { request, controller } = await setup(t)
   const worker = await createTaskCoordinatorTools(request, controller.signal, async (child) => {

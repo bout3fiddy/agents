@@ -15,8 +15,10 @@ import { harnessRoot } from '../src/project.ts'
 import { StateStore, atomicJson } from '../src/state.ts'
 import { Delegations, activeTask } from '../src/delegation-state.ts'
 import { loadRole } from '../src/roles.ts'
+import { checkDocuments } from '../src/document-tools.ts'
 
 const automatic = process.argv.includes('--automatic')
+const excludedDocuments = process.argv.includes('--excluded-documents')
 const root = await mkdtemp(join(tmpdir(), 'pi-live-delegation-'))
 const store = new StateStore(root)
 const jobs = new Delegations(store)
@@ -25,8 +27,18 @@ await mkdir(reports, { recursive: true })
 await mkdir(join(root, 'design'))
 await writeFile(
   join(root, 'design/queue.md'),
-  '# Queue design\n\nCapacity and overload behavior remain open.\n\nPersistence is future work.\n',
+  '# Queue design\n\n' +
+    (excludedDocuments ? '\n' : '') +
+    'Capacity and overload behavior remain open.\n\nPersistence is future work.\n',
 )
+
+if (excludedDocuments) {
+  await writeFile(join(root, '.prettierignore'), '/design/**\n')
+  await writeFile(
+    join(root, 'AGENTS.md'),
+    'Preserve the three newlines after the design heading. Design is excluded from formatting.\n',
+  )
+}
 
 if (automatic) {
   await writeFile(join(root, 'design/operations.md'), '# Operations\n\nOverload policy is open.\n')
@@ -156,6 +168,14 @@ try {
   assert.match(document, /100/)
   assert.match(document, /reject/i)
   assert.match(document, /persist/i)
+
+  if (excludedDocuments) {
+    assert.match(document, /^# Queue design\n\n\n/)
+    const checked = await checkDocuments(root, ['design/queue.md'], false)
+    assert.equal(checked.status, 'passed')
+    assert.deepEqual(checked.formattingSkipped, ['design/queue.md'])
+  }
+
   assert.equal(
     await readFile(join(root, 'independent.md'), 'utf8'),
     '# Independent foreground note\n',
@@ -189,6 +209,7 @@ try {
   await atomicJson(join(reports, 'result.json'), {
     status: 'passed',
     automatic,
+    excludedDocuments,
     root,
     dispatchMs,
     discussionMs,

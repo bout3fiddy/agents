@@ -115,7 +115,10 @@ unique text block, avoiding regeneration of unchanged large files.
 The orchestrator keeps `bash`, `read`, `write`, `edit`, `grep`, `find` and `ls`. It applies
 repository lint and appropriate checks to its own changes. `document_check` checks or formats
 selected Markdown files with the pinned formatter and 100-column policy. Content correctness and
-links still need review.
+links still need review. Root `.prettierignore` exclusions skip formatting checks and writes,
+including the document integration gate. Results list these paths in `formattingSkipped`; the
+independent 100-column check still applies. Formatter configuration code is never loaded by this
+tool.
 
 ### Background delegation
 
@@ -127,6 +130,11 @@ substantial implementation uses Astra high. Routine documents need no review cal
 maintenance requires passing engineering review; routine low-risk maintenance can set
 `review: false` and retain executable checks. DB changes also require database review and recovery
 checks.
+
+Leaf acceptance covers its assigned work; the coordinator owns subsequent specialist reviews. When
+completion is blocked by an earlier child result, the error names the exact role and write scope
+that must pass. Verification-only follow-ups retain that scope. Passing reviews remain reusable
+while the candidate is unchanged.
 
 `task_control` sends a scoped update, pause or cancellation. `task_status` inspects durable state
 and evidence. Completion reaches the originating session once at a safe model/tool boundary. While

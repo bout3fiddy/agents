@@ -103,6 +103,30 @@ test('documents preserve unrelated edits without a checkpoint', async () => {
   }
 })
 
+test('document integration respects repository formatting exclusions', async () => {
+  const { base, root } = await fixture()
+  const store = new StateStore(root)
+
+  try {
+    await writeFile(join(root, '.prettierignore'), '/decision.md\n')
+    await writeFile(join(root, 'decision.md'), '# Decision\n\nPending.\n')
+    const jobs = new Delegations(store)
+    const job = await jobs.start(input, origin, async () => {})
+    const candidate = '# Decision\n\n\nAccepted.\n'
+    let attempts = 0
+    const state = await runDelegation(store, job.request.id, signal(), async (request) => {
+      attempts++
+      await writeFile(join(request.workspace, 'decision.md'), candidate)
+      return result()
+    })
+    assert.equal(state.status, 'complete', state.error)
+    assert.equal(attempts, 1, 'Excluded formatting must not trigger a repair cycle')
+    assert.equal(await readFile(join(root, 'decision.md'), 'utf8'), candidate)
+  } finally {
+    await rm(base, { recursive: true, force: true })
+  }
+})
+
 for (const failure of [
   'conflict',
   'scope',

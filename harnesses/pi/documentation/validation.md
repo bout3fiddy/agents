@@ -1,7 +1,32 @@
 # Validation record
 
-Validated locally on 17 November 2026 with macOS, Node 26.12.1, Pi 1.5.2, Claude Code 2.1.326 and
+Validated locally on 18 November 2026 with macOS, Node 26.12.1, Pi 1.5.2, Claude Code 2.1.326 and
 Bun 1.3.5.
+
+## Trace audit: document exclusions and completion diagnostics (0.4.1)
+
+The hourly audit found eleven excluded design files incorrectly reported as requiring formatting.
+The host trace was from 0.3.0; the bug independently reproduced in 0.4.0. Document tools and the
+integration gate now honor root `.prettierignore`, report skipped formatting, preserve excluded
+bytes and retain line-width checks. Ignore policy is bounded and symlink-checked; executable
+formatter configuration is not loaded. Read-only replay against the retained eleven-file candidate
+passes with no writes. The separate missing-Git prerequisite remains a host action.
+
+The first live regression exposed a generic completion error after a follow-up used a different
+write scope. Completion diagnostics now name the outstanding role and exact scope. Regression
+coverage rejects mismatched clearance, accepts matching clearance and reuses unchanged passing
+reviews. Prompts keep subsequent specialist reviews with the coordinator, so editing leaves can
+finish their own acceptance criteria. The first run is preserved at
+`reports/delegation-1794957109215/`.
+
+The live rerun passed in 83.2 seconds with one task-worker and one Fable reviewer. Dispatch returned
+in 11.4 seconds, and the next discussion response took 3.4 seconds while work continued. Excluded
+blank lines survived integration, completion arrived once, and reload did not repeat it. Evidence:
+`reports/delegation-1794957349901/`. Run this case with
+`npm run test:live:delegation -- --excluded-documents`.
+
+All 194 Pi tests pass with no skips, plus formatting, executable lint, strict TypeScript checks and
+repository-wide code lint. Evidence lives under `reports/trace-audit/`.
 
 ## Worker recovery and contextual routing (0.4.0)
 

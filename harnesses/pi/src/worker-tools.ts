@@ -89,7 +89,8 @@ export function createWorkerTools(request: WorkerRequest, role: Role) {
       name: 'document_check',
       label: 'Check assigned Markdown documents',
       description:
-        'Check Markdown formatting with the pinned formatter. Formatting requires write scope.',
+        'Check Markdown formatting and line width. Respect root .prettierignore for formatting. ' +
+        'Formatting requires write scope.',
       parameters: Type.Object({
         paths: Type.Array(Type.String(), { minItems: 1, maxItems: 24 }),
         format: Type.Optional(Type.Boolean()),

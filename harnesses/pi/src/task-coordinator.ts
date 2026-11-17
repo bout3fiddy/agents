@@ -365,7 +365,18 @@ export async function createTaskCoordinatorTools(
 
       if (latest.evidence.result.verdict !== 'pass' || latest.evidence.snapshot !== snapshot) {
         throw new Error(
-          'Resolve child findings and refresh requested reviews on the final snapshot',
+          'Resolve child findings and refresh requested reviews on the final snapshot. ' +
+            'Outstanding assignment: ' +
+            JSON.stringify({
+              role: receipt.assignment.role,
+              writePaths: receipt.assignment.writePaths,
+              verdict: latest.evidence.result.verdict,
+              snapshotMatches: latest.evidence.snapshot === snapshot,
+            }) +
+            '. Delegate this exact role and writePaths to resolve its prior findings. ' +
+            'A read-only follow-up with different writePaths does not clear this assignment. ' +
+            'Keep the same scope even if no edits are needed. ' +
+            'Reuse passing reviews when unchanged.',
         )
       }
     }
