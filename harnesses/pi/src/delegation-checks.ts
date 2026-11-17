@@ -17,6 +17,8 @@ export class DelegationChecksFailed extends Error {
   }
 }
 
+export class DelegationRepairRequired extends Error {}
+
 export async function checkDelegation(
   request: DelegationRequest,
   workspace: string,
@@ -51,31 +53,42 @@ export async function checkDelegation(
     const checked = await checkDocuments(workspace, markdown.slice(offset, offset + 24), false)
 
     if (checked.status !== 'passed') {
-      throw new Error(checked.failures.join('\n'))
+      throw new DelegationRepairRequired(checked.failures.join('\n'))
     }
   }
 
-  if (!changed.length || request.kind === 'documents') {
+  if ((!changed.length && request.kind !== 'branch') || request.kind === 'documents') {
     return []
   }
 
   const database =
+    request.branch?.design.database ||
     evidence.result.databaseImpact ||
     evidence.children.some((child) => child.result.databaseImpact) ||
     databaseImpact(before, after, project.databasePaths)
   const snapshot = snapshotHash(after)
 
-  for (const role of ['reviewer', ...(database ? ['database-reviewer'] : [])]) {
+  const performance =
+    request.branch?.design.performance ||
+    evidence.children.some((child) => child.role === 'performance')
+
+  for (const role of [
+    'reviewer',
+    ...(database ? ['database-reviewer'] : []),
+    ...(performance ? ['performance'] : []),
+  ]) {
     const review = evidence.children.findLast((child) => child.role === role)
 
     if (!review || review.result.verdict !== 'pass' || review.snapshot !== snapshot) {
-      throw new Error(`Changed code requires a passing ${role} on the final snapshot`)
+      throw new DelegationRepairRequired(
+        `Changed code requires a passing ${role} on the final snapshot`,
+      )
     }
   }
 
   const receipts = await verifyProject(workspace, project, database, signal)
 
-  if (evidence.children.some((child) => child.role === 'performance')) {
+  if (performance) {
     receipts.push(...(await benchmarks(workspace, project, signal)))
   }
 

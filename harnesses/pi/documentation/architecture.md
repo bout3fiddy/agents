@@ -148,6 +148,17 @@ shutdown is observed. The registry retains at most 200 indexed tasks and limits 
 
 ## Workflow and persistence
 
+Independent remote-branch execution is described in [branches.md](branches.md). A parent Pi session
+pins a committed design and remote-main revision, then starts up to four autonomous Codex branch
+orchestrators in Git worktrees. Their Astra/Fable children and executable checks run independently.
+Tasks publish branches by default; only an explicit merge request authorizes main updates. The
+common-Git-directory merge lock serializes publication to main. Changed bases require fresh review
+and tests. GitHub CI failures feed back into the task's orchestrator. Individual operations remain
+bounded and cancellable; the branch orchestration service loop has no child-call, turn,
+implementation repair-round or overall-duration ceiling. External GitHub review feedback follows the
+user's separate maximum of five observe/triage/fix/push rounds, with durable accounting and
+current-head matching. The parent session remains available for conversation.
+
 Runtime state is project-local under `.pi/traces/`, ignored through `.pi/.gitignore`. Conversations
 live in `sessions/`; checkpoints, attempts, consultations and receipts live in `harness/`. Worker
 snapshots and scoped reads exclude this private tree, including case/Unicode aliases. The launcher
@@ -157,10 +168,10 @@ avoid replacing Pi's own live session file. Codex workers persist complete Pi se
 workers capture streamed JSONL events, bounded at 16 MB per attempt. Oversized output fails
 explicitly.
 
-Each workflow has one project lock and at most three repair rounds. Commands, model turns, output
-size, snapshot file count and size are bounded. Database review is activated by the checkpoint,
-changed paths/content or either worker's database-impact finding. The detector is conservative;
-explicit project paths and independent review complement it.
+Each local accepted-design workflow has one project lock and at most three repair rounds. Commands,
+model turns, output size, snapshot file count and size are bounded. Database review is activated by
+the checkpoint, changed paths/content or either worker's database-impact finding. The detector is
+conservative; explicit project paths and independent review complement it.
 
 The project lock uses a Python helper holding a kernel advisory lock on a stable inode. Its stdin
 pipe closes when the supervisor exits, releasing the lock without stale-file takeover races. An

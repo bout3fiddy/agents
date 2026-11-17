@@ -16,6 +16,7 @@ import { registerDelegation } from './delegation-tools.ts'
 import { Delegations, activeTask } from './delegation-state.ts'
 import { registerDocumentRouting } from './document-routing.ts'
 import { runtimeVersion } from './runtime-version.ts'
+import { registerBranchTools } from './branch-tools.ts'
 
 // A running generation keeps matching code, prompts and tool policy until a real reload.
 const orchestratorPolicy = Promise.all([loadRole('orchestrator'), rolePrompt('orchestrator')])
@@ -27,6 +28,7 @@ export default function harness(pi: ExtensionAPI): void {
   const runtime = runtimeVersion(pi)
   registerTiming(pi, runtime.current)
   const delegation = registerDelegation(pi)
+  registerBranchTools(pi)
   registerDocumentRouting(pi)
   const storeFor = async (cwd: string) => new StateStore(await realpath(cwd))
 

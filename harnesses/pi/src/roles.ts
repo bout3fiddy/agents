@@ -17,15 +17,16 @@ export async function loadRole(name: RoleName): Promise<Role> {
     !['pi', 'claude-cli'].includes(role.backend) ||
     role.name !== name ||
     role.prompt !== `${name}.md` ||
-    role.mayDelegate !== ['orchestrator', 'task-coordinator'].includes(name) ||
+    role.mayDelegate !==
+      ['orchestrator', 'task-coordinator', 'branch-orchestrator'].includes(name) ||
     !Array.isArray(role.tools) ||
     !Array.isArray(role.skills) ||
     !Array.isArray(role.writes) ||
     !Number.isSafeInteger(role.maxTurns) ||
-    role.maxTurns < 1 ||
+    role.maxTurns < (name === 'branch-orchestrator' ? 0 : 1) ||
     role.maxTurns > 100 ||
     !Number.isSafeInteger(role.timeoutMs) ||
-    role.timeoutMs < 1000 ||
+    (role.timeoutMs < 1000 && !(name === 'branch-orchestrator' && role.timeoutMs === 0)) ||
     role.timeoutMs > 1800000
   ) {
     throw new Error(`Invalid role definition: ${name}`)

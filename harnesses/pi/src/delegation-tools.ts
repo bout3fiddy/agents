@@ -50,6 +50,9 @@ function messageIds(details: unknown): string[] {
   return value?.taskIds ?? (value?.taskId ? [value.taskId] : [])
 }
 
+const notificationId = (job: Delegation) =>
+  job.state.deliveryVersion ? `${job.request.id}:${job.state.deliveryVersion}` : job.request.id
+
 function resultMessage(jobs: Delegation[]): CustomMessageEntryDraft {
   return {
     type: 'custom_message',
@@ -59,7 +62,7 @@ function resultMessage(jobs: Delegation[]): CustomMessageEntryDraft {
       'Background task completion. Briefly acknowledge the outcome and any blocker, ' +
       'then continue the current discussion. Do not launch follow-up work unless authorized.\n' +
       JSON.stringify(jobs.map(delegationView)),
-    details: { taskIds: jobs.map((job) => job.request.id) },
+    details: { taskIds: jobs.map(notificationId) },
   }
 }
 
@@ -104,12 +107,12 @@ export function registerDelegation(pi: ExtensionAPI, launch: Launcher = launchDe
           !activeTask(job.state) &&
           job.request.session === session &&
           (!job.request.originEntry || branch.has(job.request.originEntry)) &&
-          !persisted.has(job.request.id) &&
-          !delivered.has(`${session}:${job.request.id}`),
+          !persisted.has(notificationId(job)) &&
+          !delivered.has(`${session}:${notificationId(job)}`),
       )
 
       for (const job of ready) {
-        delivered.add(`${session}:${job.request.id}`)
+        delivered.add(`${session}:${notificationId(job)}`)
       }
 
       return ready.length ? [resultMessage(ready)] : []
@@ -221,7 +224,11 @@ export function registerDelegation(pi: ExtensionAPI, launch: Launcher = launchDe
     )
 
     for (const job of await new Delegations(store).list()) {
-      if (activeTask(job.state) && scopesOverlap(names, job.request.writePaths)) {
+      if (
+        job.request.kind !== 'branch' &&
+        activeTask(job.state) &&
+        scopesOverlap(names, job.request.writePaths)
+      ) {
         return {
           block: true,
           reason:

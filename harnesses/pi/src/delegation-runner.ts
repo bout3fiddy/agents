@@ -19,6 +19,7 @@ import { runWorkflow } from './workflow.ts'
 import { checkDelegation, DelegationChecksFailed } from './delegation-checks.ts'
 import { runTaskCoordinator } from './task-coordinator.ts'
 import type { Checkpoint } from './contracts.ts'
+import { runBranchTask } from './branch-runner.ts'
 
 async function integrationLock(store: StateStore, signal: AbortSignal) {
   for (let attempt = 0; attempt < 200; attempt++) {
@@ -62,6 +63,11 @@ export async function runDelegation(
 ): Promise<DelegationStatus> {
   const jobs = new Delegations(store)
   const { request } = await jobs.get(id)
+
+  if (request.kind === 'branch') {
+    return runBranchTask(store, request, signal, coordinate)
+  }
+
   const directory = delegationDirectory(store, id)
   let state: DelegationStatus = {
     id,
@@ -254,10 +260,13 @@ async function main(): Promise<void> {
   const stop = () => controller.abort(new Error('Task supervisor terminated'))
   process.once('SIGTERM', stop)
   process.once('SIGINT', stop)
-  const timer = setTimeout(
-    () => controller.abort(new Error('Background task timed out')),
-    request.kind === 'implementation' ? 90 * 60_000 : 30 * 60_000,
-  )
+  const timer =
+    request.kind === 'branch'
+      ? undefined
+      : setTimeout(
+          () => controller.abort(new Error('Background task timed out')),
+          request.kind === 'implementation' ? 90 * 60_000 : 30 * 60_000,
+        )
   let polling = false
   const poll = setInterval(async () => {
     if (polling) {

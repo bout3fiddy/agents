@@ -1,0 +1,53 @@
+import { Type, type Static } from 'typebox'
+import type { Design } from './contracts.ts'
+
+export const branchTaskSchema = Type.Object(
+  {
+    task: Type.String({ minLength: 1, maxLength: 2000 }),
+    writePaths: Type.Array(Type.String({ minLength: 1, maxLength: 200 }), {
+      minItems: 1,
+      maxItems: 30,
+    }),
+    invariants: Type.Array(Type.String({ minLength: 1, maxLength: 1000 }), {
+      minItems: 1,
+      maxItems: 30,
+    }),
+    acceptance: Type.Array(Type.String({ minLength: 1, maxLength: 1000 }), {
+      minItems: 1,
+      maxItems: 30,
+    }),
+    database: Type.Boolean(),
+    performance: Type.Boolean(),
+  },
+  { additionalProperties: false },
+)
+
+export const fanoutSchema = Type.Object(
+  {
+    designPath: Type.String({ minLength: 1, maxLength: 200 }),
+    tasks: Type.Array(branchTaskSchema, { minItems: 1, maxItems: 4 }),
+    remote: Type.Optional(Type.String({ pattern: '^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$' })),
+    mergeToMain: Type.Optional(Type.Boolean()),
+  },
+  { additionalProperties: false },
+)
+
+export type FanoutInput = Static<typeof fanoutSchema>
+export type BranchPlan = {
+  batch: string
+  remote: string
+  target: 'main'
+  remoteUrl: string
+  base: string
+  designPath: string
+  designHash: string
+  design: Design
+  mergeToMain?: boolean
+}
+
+export type BranchTaskInput = {
+  task: string
+  context: string
+  writePaths: string[]
+  branch: BranchPlan
+}

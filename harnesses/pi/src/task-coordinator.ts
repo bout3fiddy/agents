@@ -1,4 +1,4 @@
-import { dirname, join, resolve, sep } from 'node:path'
+import { dirname, extname, join, resolve, sep } from 'node:path'
 import { homedir } from 'node:os'
 import {
   createAgentSession,
@@ -14,6 +14,7 @@ import {
   validateResult,
   type Checkpoint,
   type Project,
+  type Receipt,
   type WorkerEvidence,
   type WorkerResult,
 } from './contracts.ts'
@@ -28,7 +29,9 @@ import {
   validateScope,
   writable,
 } from './paths.ts'
-import { instructions } from './project.ts'
+import { instructions, verifyProject } from './project.ts'
+import { benchmarks, databaseImpact } from './workflow.ts'
+import { receiptView } from './context.ts'
 import { loadRole, rolePrompt } from './roles.ts'
 import { StateStore, atomicJson } from './state.ts'
 import { explicitResources } from './worker.ts'
@@ -37,7 +40,7 @@ import { createWorkerTools } from './worker-tools.ts'
 export interface TaskCoordinatorRequest {
   task: string
   context: string
-  kind: 'documents' | 'research' | 'maintenance'
+  kind: 'documents' | 'research' | 'maintenance' | 'branch'
   workspace: string
   project: Project
   checkpoint: Checkpoint
@@ -54,6 +57,7 @@ export interface TaskCoordinatorEvidence {
   model: string
   turns: number
   controlRevision: number
+  checks?: Receipt[]
 }
 
 const delegateSchema = Type.Object(
@@ -73,7 +77,9 @@ const delegateSchema = Type.Object(
 
 type Delegation = Static<typeof delegateSchema>
 type ChildReceipt = { assignment: Delegation; evidence: WorkerEvidence }
-const childBudget = 8
+const childBudget = (request: TaskCoordinatorRequest) => (request.kind === 'branch' ? undefined : 8)
+const coordinatorRole = (request: TaskCoordinatorRequest) =>
+  request.kind === 'branch' ? 'branch-orchestrator' : 'task-coordinator'
 
 export function scopeContained(child: string[], parent: string[]): boolean {
   validateScope(child)
@@ -106,9 +112,13 @@ export async function createTaskCoordinatorTools(
   signal: AbortSignal,
   dispatch: Dispatcher,
 ) {
-  const role = await loadRole('task-coordinator')
+  const role = await loadRole(coordinatorRole(request))
   const worker = createWorkerTools({ ...request, role: 'reviewer' }, role)
   const receipts: ChildReceipt[] = []
+  const originals = request.kind === 'branch' ? await inventory(request.originals) : undefined
+  let checks: Receipt[] = []
+  let checkedDatabase = false
+  let declaredDatabase = request.checkpoint.database
   let submitted: WorkerResult | undefined
   let fatal: unknown
   let calls = 0
@@ -131,8 +141,10 @@ export async function createTaskCoordinatorTools(
       throw new Error('Invalid leaf assignment')
     }
 
-    if (submitted || submitting || calls >= childBudget) {
-      throw new Error('Task is already submitted or its eight-child budget is exhausted')
+    const limit = childBudget(request)
+
+    if (submitted || submitting || (limit !== undefined && calls >= limit)) {
+      throw new Error('Task is already submitted or its child-call budget is exhausted')
     }
 
     if (!scopeContained(raw.writePaths, request.checkpoint.writePaths)) {
@@ -158,7 +170,10 @@ export async function createTaskCoordinatorTools(
               parentTask: request.task,
               context: request.context,
               kind: request.kind,
-              authority: 'Bounded task scope; this is not an accepted implementation design.',
+              authority:
+                request.kind === 'branch'
+                  ? 'Authorized design-document implementation; resolve reviewer feedback.'
+                  : 'Bounded task scope; this is not an accepted implementation design.',
               previousFindings: receipts
                 .filter((receipt) => sameAssignment(receipt.assignment, raw))
                 .map((receipt) => receipt.evidence.result),
@@ -206,6 +221,14 @@ export async function createTaskCoordinatorTools(
 
         for (const path of changes(before, after)) {
           if (
+            request.kind === 'branch' &&
+            raw.role === 'task-worker' &&
+            !['.md', '.txt', '.rst'].includes(extname(path).toLowerCase())
+          ) {
+            throw new Error('Branch code implementation requires the implementer role')
+          }
+
+          if (
             isReview(raw.role) ||
             !writable(path, raw.writePaths) ||
             !writable(path, roleScopes)
@@ -223,6 +246,62 @@ export async function createTaskCoordinatorTools(
       throw error
     } finally {
       pending--
+    }
+  }
+
+  async function needsDatabase(): Promise<boolean> {
+    return Boolean(
+      declaredDatabase ||
+      receipts.some((receipt) => receipt.evidence.result.databaseImpact) ||
+      (originals &&
+        databaseImpact(
+          originals,
+          await inventory(request.workspace),
+          request.project.databasePaths,
+        )),
+    )
+  }
+
+  async function validateBranch(snapshot: string): Promise<void> {
+    const database = await needsDatabase()
+    const performance =
+      request.checkpoint.performance ||
+      receipts.some((receipt) => receipt.evidence.role === 'performance')
+    const requiredRoles = [
+      'reviewer',
+      ...(database ? ['database-reviewer'] : []),
+      ...(performance ? ['performance'] : []),
+    ]
+
+    for (const name of requiredRoles) {
+      const review = receipts.findLast((receipt) => receipt.evidence.role === name)?.evidence
+
+      if (!review || review.result.verdict !== 'pass' || review.snapshot !== snapshot) {
+        throw new Error(`Branch completion requires a passing ${name} on the final candidate`)
+      }
+    }
+
+    const required = [
+      'harness-lint',
+      ...request.project.checks
+        .filter((check) => check.required && (check.kind !== 'benchmark' || performance))
+        .map((check) => check.id),
+    ]
+
+    if (
+      !checks.length ||
+      (database && !checkedDatabase) ||
+      checks.some((check) => check.snapshot !== snapshot) ||
+      checks.some(
+        (check) =>
+          check.status !== 'passed' &&
+          (required.includes(check.check) || check.check.startsWith('required-')),
+      ) ||
+      required.some(
+        (id) => !checks.some((check) => check.check === id && check.status === 'passed'),
+      )
+    ) {
+      throw new Error('Run run_checks and resolve required failures on the final candidate')
     }
   }
 
@@ -250,6 +329,10 @@ export async function createTaskCoordinatorTools(
         )
       }
     }
+
+    if (request.kind === 'branch') {
+      await validateBranch(snapshot)
+    }
   }
 
   const tools: ToolDefinition[] = worker.tools
@@ -259,11 +342,59 @@ export async function createTaskCoordinatorTools(
       execute: (...args: Parameters<ToolDefinition['execute']>) =>
         serialize(() => tool.execute(args[0], args[1], signal, args[3], args[4])),
     }))
+
+  if (request.kind === 'branch') {
+    tools.push({
+      name: 'run_checks',
+      label: 'Run branch acceptance checks',
+      description:
+        'Run the configured required tests, lint, recovery checks and benchmarks. ' +
+        'Repair failures through workers, then rerun after any retained edit.',
+      parameters: Type.Object({}),
+      async execute() {
+        pending++
+
+        try {
+          return await serialize(async () => {
+            if (submitted || submitting) {
+              throw new Error('Task is already submitted')
+            }
+
+            checks = []
+            checkedDatabase = false
+            checkedDatabase = await needsDatabase()
+            checks = await verifyProject(
+              request.workspace,
+              request.project,
+              checkedDatabase,
+              signal,
+            )
+
+            if (
+              request.checkpoint.performance ||
+              receipts.some((receipt) => receipt.evidence.role === 'performance')
+            ) {
+              checks.push(...(await benchmarks(request.workspace, request.project, signal)))
+            }
+
+            await atomicJson(`${request.outputPath}.checks.json`, checks)
+            return textResult({ database: checkedDatabase, checks: checks.map(receiptView) })
+          })
+        } finally {
+          pending--
+        }
+      },
+    })
+  }
+
   tools.push(
     {
       name: 'delegate_worker',
       label: 'Delegate bounded leaf task',
-      description: 'Run one scoped leaf worker, await its receipt. At most eight calls per task.',
+      description:
+        request.kind === 'branch'
+          ? 'Await one scoped leaf worker and use its findings to continue autonomous work.'
+          : `Await one scoped leaf worker. Limit: ${childBudget(request)} calls.`,
       parameters: delegateSchema,
       async execute(_id, raw) {
         return textResult(await delegate(raw))
@@ -282,6 +413,7 @@ export async function createTaskCoordinatorTools(
         }
 
         const result = validateResult(raw)
+        declaredDatabase ||= result.databaseImpact
         const submittedRevision = revision
         submitting = true
 
@@ -305,6 +437,7 @@ export async function createTaskCoordinatorTools(
   return {
     tools,
     children: () => receipts.map((receipt) => receipt.evidence),
+    checks: () => checks,
     result: () => submitted,
     invalidateResult: () => {
       submitted = undefined
@@ -343,7 +476,7 @@ export async function runTaskCoordinator(
     throw new Error('Coordinator traces must use the original project private trace directory')
   }
 
-  const role = await loadRole('task-coordinator')
+  const role = await loadRole(coordinatorRole(request))
   const modelId = role.model === 'inherit' ? request.model : role.model
   const split = modelId.indexOf('/')
 
@@ -375,7 +508,7 @@ export async function runTaskCoordinator(
     thinkingLevel: role.thinking,
     tools: role.tools,
     customTools: worker.tools,
-    resourceLoader: explicitResources(await rolePrompt('task-coordinator')),
+    resourceLoader: explicitResources(await rolePrompt(coordinatorRole(request))),
     settingsManager: SettingsManager.inMemory({
       compaction: { enabled: true },
       retry: { enabled: true, maxRetries: 2 },
@@ -391,11 +524,19 @@ export async function runTaskCoordinator(
     void session.abort()
   }
   combined.addEventListener('abort', abort, { once: true })
-  const timer = setTimeout(
-    () => controller.abort(new Error('Task coordinator timed out')),
-    role.timeoutMs,
-  )
+  const timer =
+    role.timeoutMs > 0
+      ? setTimeout(() => controller.abort(new Error('Task coordinator timed out')), role.timeoutMs)
+      : undefined
   session.subscribe((event) => {
+    if (
+      event.type === 'message_end' &&
+      event.message.role === 'assistant' &&
+      event.message.stopReason === 'error'
+    ) {
+      controller.abort(new Error(event.message.errorMessage ?? 'Coordinator model request failed'))
+    }
+
     if (event.type === 'message_start' && event.message.role === 'user') {
       const content = event.message.content
       const text =
@@ -417,7 +558,7 @@ export async function runTaskCoordinator(
     if (event.type === 'turn_end') {
       turns++
 
-      if (turns >= role.maxTurns && !worker.result()) {
+      if (role.maxTurns > 0 && turns >= role.maxTurns && !worker.result()) {
         controller.abort(new Error('Task coordinator exhausted its turn budget'))
       }
     }
@@ -491,20 +632,31 @@ export async function runTaskCoordinator(
         kind: request.kind,
         taskScope: request.checkpoint,
         folderInstructions: await instructions(request.workspace, request.checkpoint.writePaths),
-        childBudget,
+        childBudget: childBudget(request),
       }),
     )
     await refreshControls()
     combined.throwIfAborted()
 
-    if (!worker.result()) {
-      await session.prompt('Finish through submit_result, reporting remaining blockers honestly.')
+    while (!worker.result()) {
+      await session.prompt(
+        request.kind === 'branch'
+          ? 'Continue autonomous implementation, repairs, checks and reviews within the design. ' +
+              'Use submit_result when complete or genuinely blocked; do not ask for approval.'
+          : 'Finish through submit_result, reporting remaining blockers honestly.',
+      )
+      await refreshControls()
+      combined.throwIfAborted()
+
+      if (request.kind !== 'branch') {
+        break
+      }
     }
 
     await worker.settle()
     combined.throwIfAborted()
 
-    if (controlsError || !worker.result() || turns > role.maxTurns) {
+    if (controlsError || !worker.result() || (role.maxTurns > 0 && turns > role.maxTurns)) {
       throw new Error('Coordinator did not produce a result within its execution budget')
     }
 
@@ -524,6 +676,7 @@ export async function runTaskCoordinator(
       model: modelId,
       turns,
       controlRevision,
+      ...(request.kind === 'branch' ? { checks: worker.checks() } : {}),
     }
   } finally {
     clearTimeout(timer)

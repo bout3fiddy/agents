@@ -5,6 +5,7 @@ export const roleNames = [
   'orchestrator',
   'design-advisor',
   'task-coordinator',
+  'branch-orchestrator',
   'task-worker',
   'implementer',
   'reviewer',
@@ -13,7 +14,10 @@ export const roleNames = [
 ] as const
 
 export type RoleName = (typeof roleNames)[number]
-export type WorkerRole = Exclude<RoleName, 'orchestrator' | 'design-advisor' | 'task-coordinator'>
+export type WorkerRole = Exclude<
+  RoleName,
+  'orchestrator' | 'design-advisor' | 'task-coordinator' | 'branch-orchestrator'
+>
 
 export const designSchema = Type.Object(
   {

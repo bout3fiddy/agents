@@ -3,6 +3,47 @@
 Validated locally on 17 November 2026 with macOS, Node 26.12.1, Pi 1.5.2, Claude Code 2.1.326 and
 Bun 1.3.5.
 
+## Independent branch orchestration (0.3.0)
+
+Real Git regression tests cover concurrent worktrees, separate pushed branches, serialized
+integration, changed-main revalidation, remote update races, scoped conflict repair, cancellation,
+server-side rejection, and committed bytes changed by Git attributes or filters. GitHub adapter
+tests cover exact PR heads, paginated checks, CI failures with log excerpts, pending CI,
+cancellation, outstanding review objections and PR creation races.
+
+Coordinator tests run beyond the former child-call ceiling. Integration tests run 28 repair rounds
+without a fixed limit, exercise real failing behavioral checks and stale/missing review repair, and
+confirm foreground discussion continues while both tasks run. The ordinary task coordinator's limits
+stay intact. Production branch orchestrators have no call, turn or total-duration ceiling.
+
+The live GitHub fixture ran two real Astra implementations and Fable engineering reviews in
+parallel, published separate branches/PRs with passing CI, and preserved main until a later
+natural-language merge request. Both then merged sequentially; the second refreshed review and tests
+against main containing the first. The foreground answered another question in 4.3 seconds while
+workers ran. The original checkout remained unchanged. Evidence: `reports/branches-1794946217354/`
+and the two merged PRs in `bout3fiddy/pi-harness-worktree-validation-20261117-v2`.
+
+The first live attempt exposed GitHub's brief old-head response after a push. The adapter now waits
+only for a known previous head; unexpected heads still fail. The second completed both merges but
+its final test counter missed idle notifications because it observed only `entry_appended`. All four
+persisted notifications and model acknowledgements were present. The counter now reads session
+entries; `postcheck.json` records re-executed Git, checkout, notification and real SDK reload checks
+against those retained artifacts, with no replay or new model turn.
+
+External review policy is tested with deterministic GitHub responses and real Git repair/push
+cycles: no triggered agent, delayed discovery, false positives, changed comments, stale heads, five
+rounds, interruption during the fifth repair and persisted resumption. The live fixture had ordinary
+GitHub CI and internal Fable reviews; no external review bot was configured. Six real-Git final-gate
+cases cover controls, human objections, failing CI reruns, cancellation and merge-authority changes
+arriving during an external review wait, plus the unchanged success path.
+
+Handoff text tests preserve spaces, newlines, Unicode, quoted text and identifiers through every
+two-chunk SDK JSON boundary, character-at-a-time streaming, consultations and persisted task
+steering. A reported joined-word handoff was already joined in the saved assistant tool arguments;
+all inspected downstream copies matched exactly. The SDK source preserves argument deltas. Shared
+and orchestrator prompts now explicitly require ordinary prose spacing. Raw provider wire data was
+unavailable, so the trace does not conclusively separate model generation from upstream parsing.
+
 ## Automatic document routing and completion delivery (0.2.0)
 
 The natural-language live request specified three design documents and asked to continue the quiz;
@@ -54,7 +95,7 @@ and fixed stale-context polling after SDK disposal.
 ## Automated checks
 
 `./bin/verify.sh` passes repository-wide executable lint, Pi formatting and strict TypeScript
-checks, 99 Pi harness tests, 132 existing evaluation tests, 13 skill-validator tests and the skill
+checks, 174 Pi harness tests, 132 existing evaluation tests, 13 skill-validator tests and the skill
 routing metadata audit. No tests were skipped.
 
 The harness tests exercise:

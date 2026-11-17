@@ -10,6 +10,11 @@
   `npm run test:live:workshop` for design advice, shell/file authority or workshop lifecycle
   changes, and `npm run test:live:web` for Claude web tools and research prompts. Live runs use the
   configured provider credentials.
+- The automated test runner uses four concurrent files to bound simultaneous SDK fixtures and
+  subprocess trees. This test-resource setting does not limit production branch orchestration.
+- For independent branch execution, read `documentation/branches.md` and run
+  `npm run test:live:branches`; `-- --github OWNER/REPO` also exercises real GitHub PRs and CI in an
+  empty private fixture. Never use an active assignment repository as a destructive fixture.
 - The orchestrator has normal host shell and file tools. It workshops designs and makes small, quick
   edits directly. Honor explicit delegation and send lengthy work to background task coordinators
   while discussion continues. Delegate substantial implementation to Astra high; Fable 5.2 medium or
@@ -52,3 +57,23 @@
   inventories under project-local `harness/runtime/`; attach the load ID to request timing. Never
   report a newer disk revision as the version already loaded in a process. Keep role/prompt policy
   fixed for that loaded generation. `/harness-version` must show this receipt without a model call.
+- `delegate_branches` pins a settled committed design and remote-main baseline for up to four
+  independent tasks. The branch orchestrator owns its implementation/review/repair cycle and needs
+  no routine human approvals. It has no child-call, turn or total-duration ceiling. Keep explicit
+  cancellation, bounded command execution, scopes and concurrency controls. Local task-coordinator
+  budgets remain unchanged.
+- Keep Git and publication authority in the host. Branch workers cannot edit Git metadata or project
+  policy. Verify committed blobs against the reviewed snapshot, retain separate remote branches and
+  GitHub PR/CI evidence, and serialize merge-time refresh against current main. Never force-push
+  main or bypass remote protection. Preserve the user's checkout and unrelated files. Persist
+  failures and worktrees for inspection; a reviewer summary alone never establishes a successful
+  merge.
+- Branch publication defaults to stopping at `published`. Only an explicit user merge request may
+  set `mergeToMain` or invoke `merge_branches`. Persist that authority; reuse the task's worktree
+  and send separate publication/merge notifications. Race-test authorization at the publication
+  boundary.
+- On authorized merges, discover automated GitHub reviewers and triage their findings through the
+  branch orchestrator. Commit/push verified fixes and observe the next review, at most five external
+  rounds. Skip absent reviewers; use adaptive waits for detected work. Persist round counts and
+  comment versions, resume interrupted repairs, and retain normal required CI/protection gates. Keep
+  this five-round merge policy separate from uncapped implementation orchestration.

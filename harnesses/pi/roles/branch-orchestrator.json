@@ -1,0 +1,23 @@
+{
+  "name": "branch-orchestrator",
+  "prompt": "branch-orchestrator.md",
+  "model": "openai-codex/gpt-6.1-sol",
+  "thinking": "medium",
+  "skills": [],
+  "tools": [
+    "project_read",
+    "project_search",
+    "original_read",
+    "run_command",
+    "read_reference",
+    "document_check",
+    "delegate_worker",
+    "run_checks",
+    "submit_result"
+  ],
+  "writes": [],
+  "mayDelegate": true,
+  "timeoutMs": 0,
+  "maxTurns": 0,
+  "backend": "pi"
+}

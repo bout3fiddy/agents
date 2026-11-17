@@ -8,6 +8,8 @@ import { StateStore, atomicJson, readJson } from './state.ts'
 import { acquireLock } from './lock.ts'
 import { matches, validateScope } from './paths.ts'
 import type { Receipt } from './contracts.ts'
+import { validateDesign } from './contracts.ts'
+import type { BranchPlan, BranchTaskInput } from './branch-contracts.ts'
 
 export const delegateSchema = Type.Object(
   {
@@ -24,7 +26,9 @@ export const delegateSchema = Type.Object(
   { additionalProperties: false },
 )
 export type DelegateInput = Static<typeof delegateSchema>
-export type DelegationRequest = DelegateInput & {
+export type DelegationRequest = Omit<DelegateInput, 'kind'> & {
+  kind: DelegateInput['kind'] | 'branch'
+  branch?: BranchPlan
   id: string
   root: string
   session: string
@@ -40,6 +44,10 @@ export type DelegationStatus = {
     | 'running'
     | 'checking'
     | 'applying'
+    | 'publishing'
+    | 'merge_queued'
+    | 'merging'
+    | 'published'
     | 'complete'
     | 'needs_attention'
     | 'cancelled'
@@ -52,15 +60,34 @@ export type DelegationStatus = {
   changedPaths?: string[]
   receipts?: Receipt[]
   children?: { role: string; model: string; verdict: string }[]
+  branch?: string
+  base?: string
+  commit?: string
+  pullRequest?: string
+  mergeBase?: string
+  mergeAttempts?: number
+  deliveryVersion?: number
+  mergeRequested?: boolean
 }
 export type Delegation = { request: DelegationRequest; state: DelegationStatus }
 export type TaskControls = {
   revision: number
   messages: { revision: number; text: string }[]
   cancelled: boolean
+  mergeRequested?: boolean
+  mergeRequestId?: string
 }
 export const emptyControls: TaskControls = { revision: 0, messages: [], cancelled: false }
-const activeStates = new Set(['queued', 'running', 'checking', 'applying'])
+const activeStates = new Set([
+  'queued',
+  'running',
+  'checking',
+  'applying',
+  'publishing',
+  'merge_queued',
+  'merging',
+])
+export type DelegationOrigin = { session: string; originEntry?: string; model: string }
 
 export function activeTask(state: DelegationStatus): boolean {
   return activeStates.has(state.status)
@@ -165,7 +192,7 @@ export class Delegations {
       }
     }
 
-    if (state.status === 'queued' && Date.now() - Date.parse(request.createdAt) > 60000) {
+    if (state.status === 'queued' && Date.now() - Date.parse(state.updatedAt) > 60000) {
       state = {
         ...state,
         status: 'failed',
@@ -189,7 +216,7 @@ export class Delegations {
 
   async start(
     input: DelegateInput,
-    origin: { session: string; originEntry?: string; model: string },
+    origin: DelegationOrigin,
     launch: (request: DelegationRequest) => Promise<void>,
   ): Promise<Delegation> {
     if (!Check(delegateSchema, input)) {
@@ -226,7 +253,9 @@ export class Delegations {
         checkpointHash: checkpoint?.hash,
       }
       const previous = await this.list()
-      const active = previous.filter((job) => activeTask(job.state))
+      const active = previous.filter(
+        (job) => activeTask(job.state) && job.request.kind !== 'branch',
+      )
 
       if (active.length >= 2) {
         throw new Error(
@@ -277,6 +306,179 @@ export class Delegations {
       }
 
       return { request, state }
+    })
+  }
+
+  async startBranches(
+    inputs: BranchTaskInput[],
+    origin: DelegationOrigin,
+    launch: (request: DelegationRequest) => Promise<void>,
+  ): Promise<Delegation[]> {
+    if (!inputs.length || inputs.length > 4) {
+      throw new Error('Provide one to four independent branch tasks')
+    }
+
+    for (const input of inputs) {
+      validateDesign(input.branch.design)
+      validateScope(input.writePaths)
+
+      if (
+        input.branch.design.unresolved.length ||
+        JSON.stringify(input.writePaths) !== JSON.stringify(input.branch.design.writePaths) ||
+        input.branch.target !== 'main' ||
+        !/^[a-f0-9]{40,64}$/.test(input.branch.base)
+      ) {
+        throw new Error('Branch tasks need a pinned main commit and settled scoped design')
+      }
+    }
+
+    return this.locked(async () => {
+      const previous = await this.list()
+      const active = previous.filter(
+        (job) => activeTask(job.state) && job.request.kind === 'branch',
+      )
+
+      if (active.length + inputs.length > 4) {
+        throw new Error('At most four independent branch orchestrators can run at once')
+      }
+
+      const scopes = active.map((job) => job.request.writePaths)
+
+      for (const input of inputs) {
+        if (scopes.some((scope) => scopesOverlap(scope, input.writePaths))) {
+          throw new Error('Independent branch tasks require disjoint write scopes')
+        }
+
+        scopes.push(input.writePaths)
+      }
+
+      const jobs: Delegation[] = []
+
+      for (const input of inputs) {
+        const request: DelegationRequest = {
+          ...input,
+          ...origin,
+          kind: 'branch',
+          id: randomUUID(),
+          root: this.store.projectRoot,
+          createdAt: new Date().toISOString(),
+        }
+        const state: DelegationStatus = {
+          id: request.id,
+          status: 'queued',
+          updatedAt: request.createdAt,
+          mergeRequested: input.branch.mergeToMain === true,
+        }
+        const directory = delegationDirectory(this.store, request.id)
+        await atomicJson(join(directory, 'request.json'), request)
+        await atomicJson(join(directory, 'controls.json'), {
+          ...emptyControls,
+          mergeRequested: input.branch.mergeToMain === true,
+          mergeRequestId: input.branch.mergeToMain ? randomUUID() : undefined,
+        })
+        await atomicJson(join(directory, 'status.json'), state)
+        jobs.push({ request, state })
+      }
+
+      const retained = previous
+        .filter((job) => activeTask(job.state))
+        .concat(previous.filter((job) => !activeTask(job.state)).slice(-190))
+      await atomicJson(join(this.store.directory, 'delegations', 'index.json'), [
+        ...retained.map((job) => job.request.id),
+        ...jobs.map((job) => job.request.id),
+      ])
+
+      // Persist the whole batch before launching any worker. Failed starts remain inspectable.
+      for (const job of jobs) {
+        try {
+          await launch(job.request)
+        } catch (error) {
+          job.state = { ...job.state, status: 'failed', error: String(error) }
+          await atomicJson(
+            join(delegationDirectory(this.store, job.request.id), 'status.json'),
+            job.state,
+          )
+        }
+      }
+
+      return jobs
+    })
+  }
+
+  async requestMerge(
+    ids: string[],
+    origin: DelegationOrigin,
+    launch: (request: DelegationRequest) => Promise<void>,
+  ): Promise<Delegation[]> {
+    if (!ids.length || ids.length > 4 || new Set(ids).size !== ids.length) {
+      throw new Error('Choose one to four distinct branch tasks to merge')
+    }
+
+    return this.locked(async () => {
+      const jobs = await Promise.all(ids.map((id) => this.get(id)))
+      const running = (await this.list()).filter(
+        (job) => job.request.kind === 'branch' && activeTask(job.state),
+      ).length
+      const restarting = jobs.filter((job) => job.state.status === 'published').length
+
+      if (running + restarting > 4) {
+        throw new Error('At most four branch orchestrators can run; finish or cancel active tasks')
+      }
+
+      for (const job of jobs) {
+        if (
+          job.request.kind !== 'branch' ||
+          (!activeTask(job.state) && !['published', 'complete'].includes(job.state.status))
+        ) {
+          throw new Error('Merge requests require active or published independent branch tasks')
+        }
+      }
+
+      for (const job of jobs) {
+        if (job.state.status === 'complete') {
+          continue
+        }
+
+        const directory = delegationDirectory(this.store, job.request.id)
+        const path = join(directory, 'controls.json')
+        const control = await readJson<TaskControls>(path)
+
+        if (!control || control.cancelled) {
+          throw new Error('Cannot merge a cancelled task')
+        }
+
+        await atomicJson(path, {
+          ...control,
+          mergeRequested: true,
+          mergeRequestId: control.mergeRequestId ?? randomUUID(),
+        })
+        job.request = { ...job.request, ...origin }
+        await atomicJson(join(directory, 'request.json'), job.request)
+
+        if (activeTask(job.state)) {
+          continue
+        }
+
+        job.state = {
+          ...job.state,
+          status: 'queued',
+          updatedAt: new Date().toISOString(),
+          deliveryVersion: (job.state.deliveryVersion ?? 0) + 1,
+          mergeRequested: true,
+          pid: undefined,
+          error: undefined,
+        }
+        await atomicJson(join(directory, 'status.json'), job.state)
+
+        try {
+          await launch(job.request)
+        } catch (error) {
+          job.state = { ...job.state, status: 'needs_attention', error: String(error) }
+          await atomicJson(join(directory, 'status.json'), job.state)
+        }
+      }
+
+      return jobs
     })
   }
 

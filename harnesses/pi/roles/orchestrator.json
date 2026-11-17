@@ -21,6 +21,8 @@
     "harness_status",
     "document_check",
     "delegate_task",
+    "delegate_branches",
+    "merge_branches",
     "task_status",
     "task_control"
   ],

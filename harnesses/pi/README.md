@@ -9,6 +9,7 @@ independent Fable reviews.
 | ------------------------ | ------------------ |
 | Orchestrator             | Codex / medium     |
 | Task coordinator         | Codex / medium     |
+| Branch orchestrator      | Codex / medium     |
 | General task worker      | Codex / medium     |
 | Design advisor           | Fable 5.2 / medium |
 | Implementer              | GPT 6 Astra / high |
@@ -163,6 +164,29 @@ files on disk cannot relabel the running process. `/reload` activates the new ge
 a fresh load ID with reason `reload`; it preserves conversation and background tasks.
 
 ## Substantial implementation
+
+For independent work from a settled design document, ask for parallel branch execution. The
+orchestrator uses `delegate_branches` to launch up to four autonomous orchestrators with disjoint
+scopes, each in a Git worktree on its own branch. They implement through Astra, handle Fable review
+feedback, fix test failures, push branches and open GitHub PRs. Publication is the default. Only an
+explicit user request authorizes merging, either through `mergeToMain: true` at dispatch or a later
+`merge_branches` call. Published tasks resume in their existing worktrees.
+
+For an authorized merge, the host detects external review agents such as Codex or Claude, waits for
+feedback, and sends findings to the branch orchestrator for triage and verified fixes. Each fix is
+pushed for another review. After at most five external review rounds, the host proceeds with serial
+merging and passing required checks; it skips that loop when no review agents are triggered. Tests
+and internal reviews are refreshed against current remote `main` before each integration.
+
+Branch orchestrators have no child-call, turn or total-duration ceiling. Routine approvals are
+unnecessary; the pinned design supplies their decisions. Cancellation, scope enforcement and
+individual-operation timeouts remain. GitHub CI failures return to the orchestrator for repair.
+Missing design decisions, credentials or repository-policy blockers retain the branch with a clear
+`needs_attention` result. The user's original checkout stays unchanged as remote main advances.
+
+See [independent branch orchestration](documentation/branches.md) for preparation, traces, GitHub
+requirements and recovery. The following accepted-design workflow remains available for a single
+local implementation:
 
 1. Once you request implementation of a settled scope, Codex uses `propose_design` to record its
    invariants, acceptance criteria, permitted paths and DB/performance flags.

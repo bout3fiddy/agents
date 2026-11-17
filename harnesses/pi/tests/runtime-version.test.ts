@@ -36,9 +36,11 @@ test('startup and reload receipts identify loaded code and tools', async () => {
         .split('\n')
         .map((line) => JSON.parse(line))
     const first = (await records())[0]
-    assert.equal(first.version, '0.2.0')
+    assert.equal(first.version, captureBuild(harnessRoot).version)
     assert.match(first.sourceHash, /^[a-f0-9]{64}$/)
     assert.ok(first.activeTools.includes('delegate_task'))
+    assert.ok(first.activeTools.includes('delegate_branches'))
+    assert.ok(first.activeTools.includes('merge_branches'))
     assert.ok(first.registeredTools.includes('task_control'))
 
     // Pi creates the persisted session file after the first assistant response.
