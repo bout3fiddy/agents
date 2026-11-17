@@ -13,10 +13,10 @@ import { registerWorkshopContext } from './workshop-context.ts'
 import { registerDocumentTools } from './document-tools.ts'
 import { registerTiming } from './timing.ts'
 import { registerDelegation } from './delegation-tools.ts'
-import { Delegations, activeTask } from './delegation-state.ts'
-import { registerDocumentRouting } from './document-routing.ts'
+import { Delegations, activeTask, delegationView } from './delegation-state.ts'
 import { runtimeVersion } from './runtime-version.ts'
 import { registerBranchTools } from './branch-tools.ts'
+import { capabilities } from './capabilities.ts'
 
 // A running generation keeps matching code, prompts and tool policy until a real reload.
 const orchestratorPolicy = Promise.all([loadRole('orchestrator'), rolePrompt('orchestrator')])
@@ -29,7 +29,6 @@ export default function harness(pi: ExtensionAPI): void {
   registerTiming(pi, runtime.current)
   const delegation = registerDelegation(pi)
   registerBranchTools(pi)
-  registerDocumentRouting(pi)
   const storeFor = async (cwd: string) => new StateStore(await realpath(cwd))
 
   pi.on('session_start', async (event, ctx) => {
@@ -37,6 +36,16 @@ export default function harness(pi: ExtensionAPI): void {
     await runtime.record(ctx, event.reason)
   })
   registerTraces(pi)
+
+  pi.registerTool({
+    name: 'harness_capabilities',
+    label: 'Inspect host and worker capabilities',
+    description: 'Choose host execution or delegation using actual capabilities and task context.',
+    parameters: Type.Object({}),
+    async execute() {
+      return textResult(capabilities)
+    },
+  })
 
   pi.registerCommand('harness-version', {
     description: 'Show the loaded harness build and reload receipt',
@@ -263,6 +272,8 @@ export default function harness(pi: ExtensionAPI): void {
       const task = await store.task()
       return textResult({
         runtime: runtime.current(),
+        capabilities,
+        delegations: (await new Delegations(store).list()).map(delegationView),
         checkpoint,
         task:
           task?.designHash === checkpoint?.hash &&

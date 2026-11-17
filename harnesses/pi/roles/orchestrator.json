@@ -24,11 +24,12 @@
     "delegate_branches",
     "merge_branches",
     "task_status",
-    "task_control"
+    "task_control",
+    "revise_tasks",
+    "resume_task",
+    "harness_capabilities"
   ],
   "writes": ["**"],
   "mayDelegate": true,
-  "timeoutMs": 1800000,
-  "maxTurns": 80,
   "backend": "pi"
 }

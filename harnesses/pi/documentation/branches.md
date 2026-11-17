@@ -34,11 +34,11 @@ Codex branch orchestrator receives explicit prompts from `prompts/branch-orchest
 configuration from `roles/branch-orchestrator.json`. It can inspect files, call scoped workers, run
 project checks and submit an outcome. It cannot perform Git publication or expand its scope.
 
-Branch mode has no child-call, model-turn or overall-duration ceiling: zero values in its role
-configuration mean unlimited. The coordinator continues until completion, a genuine blocker,
-provider failure or cancellation. Individual worker and command timeouts remain enforced. Leaf calls
-within one worktree execute serially; independent branch orchestrators run concurrently. The
-ordinary local task coordinator retains its existing limits.
+Agents have no child-call, model-turn or overall-duration ceiling; role definitions contain no
+execution-budget fields. The coordinator continues until completion, a genuine blocker, provider
+failure or cancellation. Individual command timeouts remain enforced. Leaf calls within one worktree
+execute serially; independent branch orchestrators run concurrently. All local coordinators and leaf
+workers follow the same uncapped model-execution policy.
 
 Passing results require executable checks and current engineering review on the exact candidate.
 Database impact also requires database review and recovery checks. Performance tasks require
@@ -95,11 +95,17 @@ automatic deletion is deliberately absent.
 ## Controls and evidence
 
 `task_status` reports queued, running, checking, publishing, published, merge-queued, merging and
-terminal outcomes. `task_control` can send a scoped clarification or cancel work. A scope expansion
-requires a new task. Detached supervisors survive parent reload/exit; completion reaches the parent
-once, including while idle. Publication and later merge each deliver a distinct acknowledgement.
-Reload does not repeat either acknowledgement. Merge authorization while implementation is active
-updates the existing task without starting another supervisor.
+terminal outcomes. `task_control` can send a scoped clarification, pause or cancel work. A scope
+expansion requires a new task. Detached supervisors survive parent reload/exit; completion reaches
+the parent once, including while idle. Publication and later merge each deliver a distinct
+acknowledgement. Reload does not repeat either acknowledgement. Merge authorization while
+implementation is active updates the existing task without starting another supervisor.
+
+Pause preserves the worktree and ownership. After acknowledgement, `revise_tasks` can replace task
+instructions while retaining the pinned design and scope. `resume_task` restarts orchestration and
+refreshes evidence invalidated by steering. Branch scope changes use replacement tasks; the host
+must inspect retained work and dependencies before assigning a new owner. Published history is
+preserved. Pause and eventual completion each produce a distinct parent notification.
 
 Project-local `.pi/traces/harness/` contains:
 

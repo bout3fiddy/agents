@@ -73,7 +73,7 @@ export async function checkDelegation(
     evidence.children.some((child) => child.role === 'performance')
 
   for (const role of [
-    'reviewer',
+    ...(request.review === false && request.kind !== 'branch' ? [] : ['reviewer']),
     ...(database ? ['database-reviewer'] : []),
     ...(performance ? ['performance'] : []),
   ]) {

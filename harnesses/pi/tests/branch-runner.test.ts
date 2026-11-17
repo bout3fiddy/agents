@@ -5,6 +5,7 @@ import test from 'node:test'
 import { runBranchTask } from '../src/branch-runner.ts'
 import { delegationDirectory, type DelegationRequest } from '../src/delegation-state.ts'
 import { atomicJson } from '../src/state.ts'
+import { reviseTasks } from '../src/task-recovery.ts'
 import { gitCommand, resolveRemote } from '../src/git-branches.ts'
 import {
   assertRootUnchanged,
@@ -113,6 +114,50 @@ test('host check and review failures return to the autonomous orchestrator', asy
   assert.equal(state.status, 'complete', state.error)
   assert.equal(rounds, 3)
   assert.match(await readCurrentMain(setup.root, 'src/one.js'), /return value \* 2/)
+})
+
+test('paused branches retain worktrees and revalidate revised instructions', async (t) => {
+  const setup = await branchRepository(t)
+  const { requests } = await setup.launch({ ...setup.input, tasks: [setup.input.tasks[0]!] })
+  const request = requests[0]!
+  const first = await runBranchTask(
+    setup.store,
+    request,
+    new AbortController().signal,
+    async (assignment) => {
+      await writeFeature(assignment)
+      await setup.jobs.control(request.id, 'pause')
+      return coordinatorEvidence(assignment)
+    },
+  )
+  assert.equal(first.status, 'paused', first.error)
+  assert.match(await readFile(join(first.candidate!, 'src/one.js'), 'utf8'), /return value \* 2/)
+  const [revised] = await reviseTasks(setup.jobs, {
+    tasks: [
+      {
+        id: request.id,
+        task: request.task,
+        context: 'Recheck arithmetic after pausing.',
+        writePaths: request.writePaths,
+      },
+    ],
+  })
+  assert.equal(revised!.state.candidate, first.candidate)
+  await setup.jobs.resume(request.id, setup.origin, async () => {})
+  const resumed = await runBranchTask(
+    setup.store,
+    revised!.request,
+    new AbortController().signal,
+    async (assignment) => {
+      assert.equal(assignment.workspace, first.candidate)
+      assert.equal(assignment.resumed, true)
+      assert.match(JSON.parse(assignment.context).parentContext, /Recheck arithmetic/)
+      return { ...(await coordinatorEvidence(assignment)), controlRevision: 1 }
+    },
+  )
+  assert.equal(resumed.status, 'complete', resumed.error)
+  assert.match(await readCurrentMain(setup.root, 'src/one.js'), /return value \* 2/)
+  await assertRootUnchanged(setup.root, setup.initial)
 })
 
 test('autonomous reviewer feedback repair has no fixed round ceiling', async (t) => {

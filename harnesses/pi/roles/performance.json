@@ -8,6 +8,7 @@
     "project_read",
     "project_search",
     "project_write",
+    "project_edit",
     "project_delete",
     "run_command",
     "submit_result",
@@ -15,11 +16,10 @@
     "project_format",
     "original_read",
     "WebSearch",
-    "WebFetch"
+    "WebFetch",
+    "document_check"
   ],
   "writes": ["benchmark/**", "benchmarks/**", "scaffolding/**", "tests/performance/**"],
   "mayDelegate": false,
-  "timeoutMs": 900000,
-  "maxTurns": 60,
   "backend": "claude-cli"
 }

@@ -130,8 +130,51 @@ test('required skips never become completion', async () => {
       evidence(request),
     )
     assert.equal(result.status, 'needs_attention')
-    assert.equal(result.round, 3)
+    assert.equal(result.round, 2)
+    assert.match(result.error!, /same failure persisted without candidate changes/)
     assert.ok(result.receipts.some((receipt) => receipt.status === 'skipped'))
+  } finally {
+    await rm(item.base, { recursive: true, force: true })
+  }
+})
+
+test('productive repair continues beyond three rounds', async () => {
+  const item = await fixture()
+  let attempts = 0
+
+  try {
+    const result = await runWorkflow(item.store, 'fixture/model', undefined, async (request) => {
+      if (request.role === 'implementer') {
+        await writeFile(
+          join(request.workspace, 'src/value.js'),
+          `export const value = ${++attempts}\n`,
+        )
+      }
+
+      return evidence(
+        request,
+        request.role === 'reviewer' && attempts < 5
+          ? {
+              verdict: 'changes',
+              summary: 'Another productive repair is required',
+              findings: [
+                {
+                  severity: 'required',
+                  location: 'src/value.js:1',
+                  problem: 'Fixture needs five',
+                  evidence: `Observed ${attempts}`,
+                },
+              ],
+            }
+          : {},
+      )
+    })
+    assert.equal(result.status, 'complete', result.error)
+    assert.equal(result.round, 5)
+    assert.equal(
+      await readFile(join(item.root, 'src/value.js'), 'utf8'),
+      'export const value = 5\n',
+    )
   } finally {
     await rm(item.base, { recursive: true, force: true })
   }

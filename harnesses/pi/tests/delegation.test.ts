@@ -265,7 +265,7 @@ test('Pi keeps chatting, guards owned files and delivers once', async () => {
   }
 })
 
-for (const variant of ['pass', 'baseline', 'skip', 'database', 'benchmark'] as const) {
+for (const variant of ['pass', 'routine', 'baseline', 'skip', 'database', 'benchmark'] as const) {
   test(`code maintenance enforces ${variant} evidence`, async () => {
     const { base, root } = await fixture()
     const store = new StateStore(root)
@@ -280,7 +280,7 @@ for (const variant of ['pass', 'baseline', 'skip', 'database', 'benchmark'] as c
     try {
       const jobs = new Delegations(store)
       const job = await jobs.start(
-        { ...input, kind: 'maintenance', writePaths: ['src/**'] },
+        { ...input, kind: 'maintenance', writePaths: ['src/**'], review: variant !== 'routine' },
         origin,
         async () => {},
       )
@@ -289,14 +289,17 @@ for (const variant of ['pass', 'baseline', 'skip', 'database', 'benchmark'] as c
         const output = result()
         output.result.databaseImpact = variant === 'database'
         const snapshot = snapshotHash(await inventory(request.workspace))
-        output.children.push({
-          role: 'reviewer',
-          model: 'claude-cli/claude-fable-5-2',
-          snapshot,
-          turns: 1,
-          commands: [],
-          result: output.result,
-        })
+
+        if (variant !== 'routine') {
+          output.children.push({
+            role: 'reviewer',
+            model: 'claude-cli/claude-fable-5-2',
+            snapshot,
+            turns: 1,
+            commands: [],
+            result: output.result,
+          })
+        }
 
         if (variant === 'benchmark') {
           output.children.push({ ...output.children[0]!, role: 'performance' })
@@ -308,10 +311,11 @@ for (const variant of ['pass', 'baseline', 'skip', 'database', 'benchmark'] as c
 
         return output
       })
-      assert.equal(state.status, variant === 'pass' ? 'complete' : 'needs_attention', state.error)
+      const passes = ['pass', 'routine'].includes(variant)
+      assert.equal(state.status, passes ? 'complete' : 'needs_attention', state.error)
       assert.equal(
         await readFile(join(root, 'src/value.js'), 'utf8'),
-        `export const value = ${variant === 'pass' ? 1 : 0}\n`,
+        `export const value = ${passes ? 1 : 0}\n`,
       )
 
       if (variant === 'baseline') {
@@ -367,6 +371,33 @@ test('two disjoint document tasks can finish concurrently without losing either 
     )
     assert.equal(await readFile(join(root, 'decision.md'), 'utf8'), '# Accepted\n')
     assert.equal(await readFile(join(root, 'other.md'), 'utf8'), '# Accepted\n')
+  } finally {
+    await rm(base, { recursive: true, force: true })
+  }
+})
+
+test('blocked workers preserve actionable host requirements', async () => {
+  const { base, root } = await fixture()
+  const store = new StateStore(root)
+
+  try {
+    const jobs = new Delegations(store)
+    const job = await jobs.start(input, origin, async () => {})
+    const state = await runDelegation(store, job.request.id, signal(), async () => ({
+      ...result(),
+      result: {
+        ...result().result,
+        verdict: 'blocked',
+        summary: 'Dependency setup requires the host',
+        hostActions: [
+          { capability: 'dependencies', reason: 'Install the pinned project toolchain' },
+        ],
+      },
+    }))
+    assert.equal(state.status, 'needs_attention')
+    assert.equal(state.hostActions?.[0]?.capability, 'dependencies')
+    assert.equal(state.children?.length, 0)
+    assert.equal(await readFile(join(root, 'src/value.js'), 'utf8'), 'export const value = 0\n')
   } finally {
     await rm(base, { recursive: true, force: true })
   }

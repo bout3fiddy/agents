@@ -5,10 +5,12 @@ import { atomicJson, readJson, type StateStore } from './state.ts'
 import { harnessRoot } from './project.ts'
 import { loadRole } from './roles.ts'
 import type { WorkerEvidence, WorkerRequest } from './contracts.ts'
+import { readProgress, type TaskProgress } from './progress.ts'
 
 export type Dispatcher = (
   request: Omit<WorkerRequest, 'outputPath'>,
   signal?: AbortSignal,
+  progress?: (value: TaskProgress) => Promise<void>,
 ) => Promise<WorkerEvidence>
 
 export async function runWorkerProcess(
@@ -55,10 +57,13 @@ export async function runWorkerProcess(
         }, 1000)
       })
     }
-    const timer = setTimeout(() => {
-      timedOut = true
-      terminate()
-    }, timeoutMs)
+    const timer =
+      timeoutMs > 0
+        ? setTimeout(() => {
+            timedOut = true
+            terminate()
+          }, timeoutMs)
+        : undefined
     signal?.addEventListener('abort', terminate, { once: true })
 
     if (signal?.aborted) {
@@ -97,14 +102,32 @@ export async function runWorkerProcess(
 }
 
 export function dispatcher(store: StateStore): Dispatcher {
-  return async (request, signal) => {
+  return async (request, signal, progress) => {
     signal?.throwIfAborted()
     const id = randomUUID()
     const path = join(store.directory, 'attempts', `${id}.json`)
     const outputPath = join(store.directory, 'attempts', `${id}.result.json`)
     await atomicJson(path, { ...request, outputPath })
     await atomicJson(`${path}.status`, { status: 'dispatched', role: request.role })
-    const role = await loadRole(request.role)
+    await loadRole(request.role)
+    let lastActivity = ''
+    let pending = Promise.resolve()
+    const observe = () => {
+      pending = pending.then(async () => {
+        const value = await readProgress(outputPath)
+
+        if (value && value.updatedAt !== lastActivity) {
+          lastActivity = value.updatedAt
+          await progress?.(value)
+        }
+      })
+      return pending
+    }
+    const observer = progress
+      ? setInterval(() => {
+          void observe().catch(() => {})
+        }, 1000)
+      : undefined
 
     try {
       const outcome = await runWorkerProcess(
@@ -115,7 +138,7 @@ export function dispatcher(store: StateStore): Dispatcher {
           '--worker',
           path,
         ],
-        role.timeoutMs + 15000,
+        0,
         signal,
       )
       await atomicJson(`${path}.status`, {
@@ -136,6 +159,9 @@ export function dispatcher(store: StateStore): Dispatcher {
         error: String(error),
       })
       throw error
+    } finally {
+      clearInterval(observer)
+      await observe()
     }
   }
 }

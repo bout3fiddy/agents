@@ -8,6 +8,7 @@ import { harnessRoot } from './project.ts'
 import { rolePrompt } from './roles.ts'
 import { assignment } from './worker-tools.ts'
 import { inventory, snapshotHash } from './paths.ts'
+import { progressReporter } from './progress.ts'
 import {
   validateResult,
   type CommandResult,
@@ -42,8 +43,6 @@ export function claudeArguments(
     role.model,
     '--effort',
     role.thinking,
-    '--max-turns',
-    String(role.maxTurns),
     '--output-format',
     stream ? 'stream-json' : 'json',
     ...(stream ? ['--verbose'] : []),
@@ -92,6 +91,8 @@ export function parseClaudeTrace(output: string) {
 }
 
 export async function runClaudeWorker(request: WorkerRequest, role: Role): Promise<WorkerEvidence> {
+  const progress = progressReporter(request.outputPath, request.role)
+  await progress.update({ stage: 'model', message: 'Claude worker starting' })
   const scratch = await mkdtemp(join(tmpdir(), 'pi-claude-'))
   const requestPath = `${request.outputPath}.request.json`
   const configPath = join(scratch, 'mcp.json')
@@ -130,6 +131,9 @@ export async function runClaudeWorker(request: WorkerRequest, role: Role): Promi
     let outputBytes = 0
     let traceError: unknown
     child.stdout.on('data', (chunk: Buffer) => {
+      void progress
+        .update({ stage: 'model', message: 'Claude activity received' }, true)
+        .catch(() => {})
       outputBytes += chunk.length
 
       if (outputBytes > 16_000_000) {
@@ -185,6 +189,7 @@ export async function runClaudeWorker(request: WorkerRequest, role: Role): Promi
       throw new Error(`Claude did not submit a scoped result: ${response.result?.slice(0, 2000)}`)
     }
 
+    await progress.update({ stage: 'complete', message: evidence.result.summary })
     return {
       role: request.role,
       snapshot: snapshotHash(await inventory(request.workspace)),
@@ -194,6 +199,7 @@ export async function runClaudeWorker(request: WorkerRequest, role: Role): Promi
       model: `claude-cli/${Object.keys(response.modelUsage ?? {})[0] ?? role.model}`,
     }
   } finally {
+    await progress.settle()
     await rm(scratch, { recursive: true, force: true })
   }
 }

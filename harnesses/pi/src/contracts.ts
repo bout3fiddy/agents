@@ -1,5 +1,6 @@
 import { Type, type Static } from 'typebox'
 import { Check } from 'typebox/value'
+import { hostCapability } from './capabilities.ts'
 
 export const roleNames = [
   'orchestrator',
@@ -63,6 +64,15 @@ export const resultSchema = Type.Object(
     ),
     databaseImpact: Type.Boolean(),
     evidence: Type.Array(Type.String({ maxLength: 1000 }), { maxItems: 30 }),
+    hostActions: Type.Optional(
+      Type.Array(
+        Type.Object({
+          capability: hostCapability,
+          reason: Type.String({ minLength: 1, maxLength: 1000 }),
+        }),
+        { maxItems: 8 },
+      ),
+    ),
   },
   { additionalProperties: false },
 )
@@ -78,8 +88,6 @@ export type Role = {
   tools: string[]
   writes: string[]
   mayDelegate: boolean
-  timeoutMs: number
-  maxTurns: number
 }
 
 export type CommandResult = {

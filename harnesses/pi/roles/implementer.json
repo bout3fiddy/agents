@@ -8,16 +8,16 @@
     "project_read",
     "project_search",
     "project_write",
+    "project_edit",
     "project_delete",
     "run_command",
     "submit_result",
     "read_reference",
     "project_format",
-    "original_read"
+    "original_read",
+    "document_check"
   ],
   "writes": ["**"],
   "mayDelegate": false,
-  "timeoutMs": 900000,
-  "maxTurns": 60,
   "backend": "pi"
 }

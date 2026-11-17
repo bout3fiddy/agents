@@ -20,7 +20,7 @@ independent Fable reviews.
 The default orchestrator is `openai-codex/gpt-6.1-sol` at medium effort. Pi's current model and
 thinking selection take precedence for the orchestrator; the harness never silently changes them.
 Timing traces record the actual selection. Implementation is pinned to `openai-codex/gpt-6-astra` at
-high effort. Change `roles/*.json` to select models, effort, tools, skills, scopes and budgets. The
+high effort. Change `roles/*.json` to select models, effort, tools, skills and write scopes. The
 orchestrator has normal host shell/file access; the isolated worker boundaries apply to delegated
 execution.
 
@@ -85,22 +85,32 @@ waits share a persisted consumption record, including waits made after Fable fin
 an earlier user request is saved as superseded and does not automatically interrupt the newer
 discussion. Waiting consumes the result once; interrupting a wait keeps the background consultation
 running. Use explicit cancellation to stop it. There are at most two active consultations; each has
-a four-minute budget. Session shutdown, replacement, reload and tree changes cancel pending advice.
-Results and inputs live in the project's private harness state under `consultations/`. Resuming can
-inspect a saved result; an abandoned running job must be restarted.
+no model-turn or elapsed-session cap. Session shutdown, replacement, reload and tree changes cancel
+pending advice. Results and inputs live in the project's private harness state under
+`consultations/`. Resuming can inspect a saved result; an abandoned running job must be restarted.
 
-Document updates spanning multiple files, rewrites, splits and accumulated decisions automatically
-use `delegate_task` before patch generation. The user does not need to request delegation. Explicit
-delegation requests also use that path. Small, quick local edits can use ordinary file tools. Open
-questions can remain in documents; saving them needs no implementation checkpoint or application
-test adapter and preserves the conversation. A request to commit a document update means save it;
-Git commits require a specific request.
+The orchestrator chooses direct work or delegation from task complexity, context and disruption. A
+fresh-session repository setup, lint configuration, related document update or other routine task
+can stay on the host. Multiple files do not force delegation, and direct edits have no byte, call or
+turn quota. Substantial product implementation, explicit delegation and distracting unrelated work
+use background workers. Routine setup needs appropriate executable checks, with specialist reviews
+only for substantive risks or explicit requests. Saving a document needs no implementation
+checkpoint; a Git commit requires user authorization.
 
-The runtime allows a quick local document correction within one file, two write/edit calls, 2 KB of
-combined old/new text and four model steps after a user request. Larger direct writes and multi-file
-formatting return an instruction to delegate the remaining task immediately. Common document-writing
-shell scripts are redirected too; unrestricted shell access remains a behavioral boundary, not a
-complete shell parser or sandbox. Worker document edits are scoped and unaffected by this budget.
+`harness_capabilities` reports the boundary. Host tools have ordinary filesystem, network and CLI
+access. Worker commands have no network/home access, Git publication or retained shell writes;
+workers edit through scoped file tools. Perform authorized installs, lockfile generation, Git setup
+and publication on the host. `delegate_task.requires` names host capabilities and rejects
+incompatible assignments before launch. Workers return structured `hostActions` when a missing
+capability is encountered. The host inspects retained work and completes authorized missing steps
+instead of repeating the same blocked worker.
+
+Active workers persist phase/tool/child progress. At most once per minute, fresh progress is added
+to the orchestrator context without interrupting discussion or triggering a model turn. Three
+minutes without recorded activity produces one attention notice for that activity point; age alone
+never cancels work. `task_status` exposes progress and activity age. Completion and real blockers
+wake the orchestrator for acknowledgement and authorized recovery. Worker `project_edit` changes one
+unique text block, avoiding regeneration of unchanged large files.
 
 The orchestrator keeps `bash`, `read`, `write`, `edit`, `grep`, `find` and `ls`. It applies
 repository lint and appropriate checks to its own changes. `document_check` checks or formats
@@ -113,18 +123,21 @@ links still need review.
 `documents`, read-only `research`, bounded `maintenance`, or accepted `implementation`. It returns a
 task ID immediately. Continue the discussion while a separate Codex coordinator reads the project,
 delegates writable tasks and requests Fable reviews when useful. Document workers use Codex medium;
-substantial implementation uses Astra high. Routine documents need no review call. Code maintenance
-requires passing engineering review; DB changes also require database review and recovery checks.
+substantial implementation uses Astra high. Routine documents need no review call. Substantive code
+maintenance requires passing engineering review; routine low-risk maintenance can set
+`review: false` and retain executable checks. DB changes also require database review and recovery
+checks.
 
-`task_control` sends a scoped update or cancellation. `task_status` inspects durable state and
-evidence. Completion reaches the originating session once at a safe model/tool boundary. While idle,
-it wakes the orchestrator for a brief acknowledgement; while busy, it joins the current discussion.
-Simultaneous completions are batched, queued user input takes priority, and reload does not repeat
-the notification. Polling itself never starts model calls. Results do not authorize follow-up work.
+`task_control` sends a scoped update, pause or cancellation. `task_status` inspects durable state
+and evidence. Completion reaches the originating session once at a safe model/tool boundary. While
+idle, it wakes the orchestrator for a brief acknowledgement; while busy, it joins the current
+discussion. Simultaneous completions are batched, queued user input takes priority, and reload does
+not repeat the notification. Routine progress does not start model calls. Recovery within the
+original authorization is permitted; unrelated work and publication need their own authorization.
 
-Two jobs may run concurrently on disjoint paths. Each coordinator can make at most eight leaf calls;
-its children run serially on one candidate and cannot delegate further. Explicit file tools and
-Markdown formatting reject writes to active task paths. Shell ownership is a prompt rule; host
+Two jobs may run concurrently on disjoint paths. Coordinators have no child-call or model-turn
+limit; their children run serially on one candidate and cannot delegate further. Explicit file tools
+and Markdown formatting reject writes to active task paths. Shell ownership is a prompt rule; host
 integration also rejects a changed target file. Document tasks preserve unrelated foreground edits.
 Code maintenance and implementation require the complete project baseline to remain unchanged. New
 scope requires a new task. Acceptance/context reset waits for active tasks to finish or cancel.
@@ -133,9 +146,14 @@ Jobs survive `/reload` and Pi exit; their process, controls, status and evidence
 `.pi/traces/harness/delegations/<id>/`. Stop a job through `task_control`; an ordinary conversation
 interrupt only stops the foreground turn. Completion delivery is session/branch-specific, while
 `task_status` works from a new session. Failed or conflicted candidates remain available for
-inspection. Interrupted task coordinators require a new task; the accepted implementation workflow
-retains its existing resume behavior. Each general task has a 30-minute supervisor limit;
-implementation has 90 minutes, with smaller role/command limits inside it.
+inspection. `resume_task` restarts a paused or failed coordinator against its retained candidate.
+Use `revise_tasks` after stopping all affected workers to replace their prompts and repartition
+existing authorized scopes as one recoverable batch. Retained edits transfer to their new owner;
+conflicts and scope expansion are rejected, approvals are invalidated, and tasks remain paused until
+resumed. Paused files remain reserved. Explicitly cancelled work needs a new user request. Accepted
+implementation retains its existing design/resume workflow. Agents have no model-turn, child-call or
+total-task duration ceiling. Individual commands still have execution timeouts, and explicit
+cancellation propagates to worker processes.
 
 Older bulky file/search tool results and write/edit/shell arguments are excerpted after four newer
 model steps. Current-request reads remain intact until a successful write/edit supersedes them;
@@ -196,8 +214,8 @@ local implementation:
 3. Ask for implementation. The orchestrator invokes `workflow`, which returns a background task ID
    immediately.
 4. Astra implementation, applicable Fable performance work, executable checks, Fable engineering
-   review and conditional Fable database review run in order. Findings return to Astra, with at most
-   three repair rounds per invocation.
+   review and conditional Fable database review run in order. Findings return to Astra without a
+   repair-round ceiling. An unchanged repeated failure returns to the host for diagnosis.
 5. A verified candidate is applied and checked again. Concurrent project edits block integration.
    Avoid editing the candidate's files from the orchestrator while this workflow runs.
 

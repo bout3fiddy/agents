@@ -17,7 +17,5 @@
   ],
   "writes": [],
   "mayDelegate": true,
-  "timeoutMs": 0,
-  "maxTurns": 0,
   "backend": "pi"
 }

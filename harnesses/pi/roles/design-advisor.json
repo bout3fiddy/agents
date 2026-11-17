@@ -7,7 +7,5 @@
   "tools": ["WebSearch", "WebFetch"],
   "writes": [],
   "mayDelegate": false,
-  "timeoutMs": 240000,
-  "maxTurns": 12,
   "backend": "claude-cli"
 }

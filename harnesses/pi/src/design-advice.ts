@@ -136,7 +136,6 @@ export async function runDesignAdvice(
       {
         cwd: scratch,
         signal,
-        timeout: role.timeoutMs,
         killSignal: 'SIGKILL',
         maxBuffer: 8_000_000,
       },

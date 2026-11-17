@@ -3,6 +3,44 @@
 Validated locally on 17 November 2026 with macOS, Node 26.12.1, Pi 1.5.2, Claude Code 2.1.326 and
 Bun 1.3.5.
 
+## Worker recovery and contextual routing (0.4.0)
+
+All agents now have no model-turn, child-call or total-task duration ceiling. Regression tests
+accept a 46-turn Claude review, complete twelve child assignments, recover a transient child
+failure, and finish a productive five-round local repair. The separate five-round external GitHub
+review policy remains. Identical failures without candidate changes return to the host for
+diagnosis.
+
+The host-routing live fixture completed a fresh local Git/npm/Prettier setup in 28.5 seconds with
+six host calls and no delegation or Fable review. A later explicit background edit changed a 40 KB
+document using one project_edit and zero project_write calls while discussion continued. Evidence:
+`reports/host-routing-1794949232231/`. The accepted implementation workflow also passed with actual
+Astra and Fable in one round: `reports/2026-11-17T21-00-31.801Z/`.
+
+The recovery live fixture paused two real workers after retained edits, inspected drafts, swapped
+ownership, revised assignments and resumed both to completion in 85.6 seconds. The host made no
+direct file edits. Both paused outcomes and both resumed completions reached the parent once.
+Evidence: `reports/task-recovery-1794950473114/`. Its first attempt exposed temporary pause wording
+copied into task context; explicit runtime resume state and lifecycle prompt guidance fixed that
+behavior. The successful run consumed a revised control baseline after prior steering.
+
+Deterministic and actual SDK tests cover retained edits, paused ownership, batch transfers,
+conflicting live changes, unauthorized scope expansion, partial metadata recovery, branch worktree
+resumption, progress without model calls, silence attention, and reload deduplication. Host-only
+requirements fail preflight or return structured hostActions. Routine maintenance may omit a
+specialist review while retaining required executable checks. The Pi verification suite passes 189
+tests with no skips, including executable lint, formatting and strict TypeScript checks.
+Repository-wide verification also passes 132 evaluation tests, 13 skill-validator tests and the
+routing audit. Accepted implementation workflows forward worker/tool activity through the same
+parent progress channel as general and branch coordinators.
+
+The full live SQLite workflow passed after two rounds with real Astra implementation and Fable
+performance, engineering and database roles: `reports/2026-11-17T21-25-11.345Z/`. Independent
+reviews found Unicode ID aliasing, concurrent WAL startup and a balance scan under the writer lock.
+Astra repaired the fixture, all specialists passed the final snapshot, and post-integration checks
+passed. The repair used 46 model turns and the benchmark refresh 43; both results were retained
+normally.
+
 ## Independent branch orchestration (0.3.0)
 
 Real Git regression tests cover concurrent worktrees, separate pushed branches, serialized
@@ -13,8 +51,8 @@ cancellation, outstanding review objections and PR creation races.
 
 Coordinator tests run beyond the former child-call ceiling. Integration tests run 28 repair rounds
 without a fixed limit, exercise real failing behavioral checks and stale/missing review repair, and
-confirm foreground discussion continues while both tasks run. The ordinary task coordinator's limits
-stay intact. Production branch orchestrators have no call, turn or total-duration ceiling.
+confirm foreground discussion continues while both tasks run. In 0.3.0 the ordinary task coordinator
+retained its limits; 0.4.0 removes those limits across all roles.
 
 The live GitHub fixture ran two real Astra implementations and Fable engineering reviews in
 parallel, published separate branches/PRs with passing CI, and preserved main until a later

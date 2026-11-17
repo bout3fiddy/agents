@@ -20,8 +20,8 @@ snapshots, dispatches workers and writes private receipts. Provider clients need
 and network access. They are trusted host processes; they are not presented as fully containerized
 programs.
 
-Model-issued commands run through macOS `sandbox-exec` in disposable project copies with a clean
-environment. The profile permits platform executables, runtime dependencies, the disposable
+Worker-issued shell commands run through macOS `sandbox-exec` in disposable project copies with a
+clean environment. The profile permits platform executables, runtime dependencies, the disposable
 workspace and scratch directory. Home files, host project writes and network access are denied.
 Dependencies and harness source are readable but not writable. Commands cannot retain generated
 code: scoped file tools perform retained edits. File tools reject traversal, secret/dependency paths
@@ -58,9 +58,9 @@ between them can leave a claimed result without a session message. Inspect the s
 explicitly in that case; automatic recovery does not replay already-claimed advice. Accepted-epoch
 context projection admits these advice messages while rejecting obsolete advice. Session
 shutdown/replacement/reload and tree changes cancel pending calls. There are two concurrent slots,
-bounded input/output and a role timeout. Fable uses a fresh CLI process with WebSearch/WebFetch, no
-MCP servers and no ambient global customization. It offers sourced guidance and cannot accept or
-write a design.
+bounded input/output and explicit cancellation. Fable uses a fresh CLI process with
+WebSearch/WebFetch, no MCP servers and no ambient global customization. It offers sourced guidance
+and cannot accept or write a design.
 
 Document changes use a background task when delegated or lengthy, and ordinary tools for small quick
 edits. They require no accepted checkpoint and can retain open questions. Only substantial
@@ -102,13 +102,12 @@ candidate.
 
 ## Background task coordination
 
-The orchestrator routes lengthy document work before generating patches. A runtime guard bounds its
-local document edits to one file, two calls, 2 KB and four model steps since the latest user
-request. It inspects whole tool batches before execution, so a multi-file batch is rejected before
-its first write. Raw branch history preserves the budget across reload. Large writes, repeated edits
-and multi-document formatting return a concrete delegation instruction. Reads/search remain
-available; common shell rewriting forms are also rejected. Arbitrary shell programs remain outside
-this heuristic guard and must obey the prompt. This is a workflow policy, not shell containment.
+The orchestrator chooses host work or delegation based on context, complexity and disruption.
+Routine setup and related edits may stay local, including in fresh sessions. There is no direct-edit
+size/call quota. Host tools provide network, dependency installation and Git operations under user
+authorization. Worker capabilities are explicit in every assignment and `harness_capabilities`;
+`delegate_task.requires` rejects host-only work before launching an incompatible worker. Scoped
+`project_edit` performs exact unique text replacement without regenerating a whole existing file.
 
 `delegate_task` and `workflow` return a durable task ID after spawning a detached supervisor. A
 project registry reserves write paths under a short OS lock. At most two tasks run; overlapping
@@ -118,13 +117,14 @@ orchestrator's unrestricted shell obeys the same rule through its prompt. Task c
 separately from supervisor status, so foreground updates cannot overwrite worker progress.
 
 A fresh Codex coordinator gets a bounded explicit assignment, shared/role prompts and scoped folder
-instructions. It can inspect the candidate and delegate up to eight children. Leaf calls serialize
-against its candidate. General task workers may edit only the task scope; engineering and DB
-reviewers are read-only; performance retains its benchmark/instrumentation limits. Leaf workers
-cannot delegate. Child receipts bind role, model and candidate snapshot. Requested reviews must pass
-on the final snapshot; unresolved findings prevent a passing coordinator result. Deciding which
-reviews a prose task requests remains model policy. Actual maintenance code always requires fresh
-engineering review and conditional DB review at the host gate.
+instructions. It can inspect the candidate and delegate children without a call or turn ceiling.
+Leaf calls serialize against its candidate. General task workers may edit only the task scope;
+engineering and DB reviewers are read-only; performance retains its benchmark/instrumentation
+limits. Leaf workers cannot delegate. Child receipts bind role, model and candidate snapshot.
+Requested reviews must pass on the final snapshot; unresolved findings prevent a passing coordinator
+result. Deciding which reviews a prose task requests remains model policy. Substantive maintenance
+requires fresh engineering review; the host may waive that review for routine low-risk maintenance.
+Required executable checks and conditional DB review remain enforced.
 
 General task candidates are isolated from the live project. Document changes enforce document-only
 extensions, Markdown formatting, write scope and ignored/private path exclusions. Maintenance runs
@@ -134,17 +134,29 @@ consumed blocks integration. The host serializes integration with the workflow l
 pending journal, verifies each changed path still matches its baseline and applies the existing
 journal protocol. Document tasks preserve unrelated foreground changes. Code maintenance requires
 the entire project baseline to stay unchanged so its final checks and reviews still apply. A stopped
-supervisor is reported as needs-attention; candidates and evidence remain available. Automatic task
-retry is deliberately absent to avoid duplicate edits.
+supervisor is reported as needs-attention; candidates and evidence remain available. The host
+inspects retained candidates before recovery and preserves concurrent edits. A transient child
+execution failure can be retried in the same scope; invalid evidence or scope violations continue to
+prevent passing completion. Agents have no total-task wall-clock or model-turn cap.
 
 Supervisors survive reload, session exit and foreground interruption. A filesystem observer delivers
 terminal results once to the originating session/branch. It batches ready results, appends them at a
 safe boundary, and requests a continuation when needed for acknowledgement. While idle, the batch
 starts one response. Queued user input takes priority; in-flight requests are not interrupted.
 Persisted custom message IDs deduplicate delivery after reload. New sessions can inspect
-project-wide status. Stopped/dead jobs release reservations; cancellation keeps ownership until
-shutdown is observed. The registry retains at most 200 indexed tasks and limits control messages to
-32 and 48 KB. Artifacts remain until explicitly removed.
+project-wide status. Paused jobs retain reservations; cancellation keeps ownership until shutdown is
+observed. The registry retains at most 200 indexed tasks and limits control messages to 32 and 48
+KB. Artifacts remain until explicitly removed.
+
+`task_control pause` aborts the coordinator and its child process tree; only acknowledged `paused`
+state permits reassignment. `revise_tasks` replaces complete prompts and repartitions existing scope
+among stopped tasks. It preserves original candidates, transfers their changed bytes to fresh
+snapshots, rejects conflicting project/candidate changes, and clears stale approvals. A prepared
+metadata journal rolls forward under the registry lock before any subsequent mutation or launch.
+Other readers may observe a partially replayed batch, but all participants remain paused.
+`resume_task` reuses retained work with fresh orchestration and a distinct notification generation.
+Revision baselines supersede archived steering without reusing review authorization. Branch tasks
+keep their worktree and fixed scope; changing branch ownership requires replacement tasks.
 
 ## Workflow and persistence
 
@@ -168,10 +180,11 @@ avoid replacing Pi's own live session file. Codex workers persist complete Pi se
 workers capture streamed JSONL events, bounded at 16 MB per attempt. Oversized output fails
 explicitly.
 
-Each local accepted-design workflow has one project lock and at most three repair rounds. Commands,
-model turns, output size, snapshot file count and size are bounded. Database review is activated by
-the checkpoint, changed paths/content or either worker's database-impact finding. The detector is
-conservative; explicit project paths and independent review complement it.
+Each local accepted-design workflow has one project lock and no repair-round ceiling. Repeating an
+identical failure with an unchanged candidate produces an actionable blocker. Commands, output size,
+snapshot file count and size remain bounded. Database review is activated by the checkpoint, changed
+paths/content or either worker's database-impact finding. The detector is conservative; explicit
+project paths and independent review complement it.
 
 The project lock uses a Python helper holding a kernel advisory lock on a stable inode. Its stdin
 pipe closes when the supervisor exits, releasing the lock without stale-file takeover races. An
@@ -227,3 +240,12 @@ session; timing requests reference the load identity. `/harness-version` and `ha
 the captured values. A changed disk checkout never changes the identity of code already running. The
 installer records its source hash for comparison. A live reload is verifiable by the new ID, reason
 and matching hash.
+
+Worker progress is persisted separately from task controls/status, including active child and tool.
+Codex streaming events and Claude output update activity timestamps; coordinators forward child
+progress. Periodic progress messages enter context without waking an idle model. A silent task gets
+one attention notice per unchanged activity point, while completion and genuine blockers wake the
+orchestrator. It must inspect evidence, resolve authorized host-only operations or report the actual
+external blocker; repeated identical incapable workers are not a recovery strategy. Recovery first
+reconciles current project state and user updates; work already completed directly must not be
+retried or overwritten from an old failed candidate.

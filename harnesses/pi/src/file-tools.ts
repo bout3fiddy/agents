@@ -82,6 +82,45 @@ export function fileTools(
 
   if (scopes && roleScopes) {
     tools.push({
+      name: 'project_edit',
+      label: 'Edit assigned text',
+      description:
+        'Replace one exact, unique text block in an assigned file. Prefer this for focused ' +
+        'changes to existing files. Missing or ambiguous text leaves the file unchanged.',
+      parameters: Type.Object({
+        path: Type.String(),
+        oldText: Type.String({ minLength: 1, maxLength: 200000 }),
+        newText: Type.String({ maxLength: 200000 }),
+      }),
+      async execute(id, raw) {
+        const { path, oldText, newText } = raw as {
+          path: string
+          oldText: string
+          newText: string
+        }
+
+        if (!writable(path, scopes) || !writable(path, roleScopes)) {
+          throw new Error('Path is outside this worker assignment')
+        }
+
+        const target = await safePath(root, path)
+        const source = (await readBoundedFile(target)).toString('utf8')
+        const offset = source.indexOf(oldText)
+
+        if (!oldText || offset < 0 || source.indexOf(oldText, offset + 1) >= 0) {
+          throw new Error('Edit text must match exactly once; read the current file and retry')
+        }
+
+        const content = source.slice(0, offset) + newText + source.slice(offset + oldText.length)
+        await writeFile(target, content)
+        return textResult({
+          edited: path,
+          instructions: await instructions(root, [path]),
+          call: id,
+        })
+      },
+    })
+    tools.push({
       name: 'project_write',
       label: 'Write assigned file',
       description: 'Replace an assigned file. Read its instructions and contents first.',

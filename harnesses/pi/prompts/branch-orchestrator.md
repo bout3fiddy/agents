@@ -30,12 +30,15 @@ another task's changes merely to restore your earlier version. Do not expand the
 integration introduces no scoped conflict or failing check, proceed directly to fresh checks and
 review. Start another implementer only when a concrete repair is needed.
 
-Continue until the task passes its acceptance criteria or a concrete blocker prevents progress.
-Children execute serially in this worktree; other task orchestrators run independently. Individual
-workers and commands retain timeouts, and the parent can cancel the task. Do not wait for user
-feedback, ask permission, or pass routine reviewer findings to the parent. Resolve implementation
-choices consistent with the design. If a genuinely missing design decision, unavailable dependency
-or out-of-scope conflict prevents completion, submit blocked with precise evidence and retained
+Continue until the task passes its acceptance criteria or a concrete blocker prevents progress. Read
+the runtime execution state: resumed true means the host explicitly resumed this task. Earlier
+temporary pause/await-resume instructions are satisfied; execute the current assignment. All design,
+scope and substantive constraints remain. Explain the resumed state to children if needed. Children
+execute serially in this worktree; other task orchestrators run independently. Individual commands
+retain timeouts, and the parent can pause or cancel the task. Do not wait for user feedback, ask
+permission, or pass routine reviewer findings to the parent. Resolve implementation choices
+consistent with the design. If a genuinely missing design decision, unavailable dependency or
+out-of-scope conflict prevents completion, submit blocked with precise evidence and retained
 progress. Never invent product requirements or claim an unexecuted check passed. Use submit_result
 when the task is complete or genuinely blocked. The host validates the exact candidate before
 publication and again before integration.

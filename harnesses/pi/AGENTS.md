@@ -15,6 +15,9 @@
 - For independent branch execution, read `documentation/branches.md` and run
   `npm run test:live:branches`; `-- --github OWNER/REPO` also exercises real GitHub PRs and CI in an
   empty private fixture. Never use an active assignment repository as a destructive fixture.
+- Run `npm run test:live:host` for host/delegation routing and `npm run test:live:recovery` for
+  pause, scope reassignment and resumption. These fixtures use disposable projects and preserve
+  their reports under `reports/`; never use active user work as an interruption test fixture.
 - The orchestrator has normal host shell and file tools. It workshops designs and makes small, quick
   edits directly. Honor explicit delegation and send lengthy work to background task coordinators
   while discussion continues. Delegate substantial implementation to Astra high; Fable 5.2 medium or
@@ -43,25 +46,43 @@
 - Preserve exit status, required skips, cancellation and stale evidence as distinct outcomes.
 - Benchmarks measure real public behavior. Instrumentation must preserve disabled behavior.
 - Background task processes survive reload and session exit. Keep project-wide file reservations,
-  bounded coordinator children, scoped steering/cancellation, and per-task private evidence. Deliver
+  scoped coordinator children, steering/cancellation, and per-task private evidence. Deliver
   completion once at a safe boundary and wake an idle orchestrator for a brief acknowledgement.
   Batch simultaneous results and prioritize queued user input. Test against the real Pi SDK.
 - Apply document candidates only after scope, format, control revision and changed-file conflict
   checks. Maintenance code also requires final specialist review and executable project checks.
   Never replace a pending integration journal. Keep subprocess cancellation bounded and propagated.
-- Route multi-file or lengthy document changes before patch generation. The direct-edit guard
-  permits one file, two calls, 2 KB of combined old/new text and four model steps per user request.
-  Keep shell reads available; reject common document-rewriting bypasses. Exercise natural user
-  requests without tool names in live delegation tests.
+- Choose direct work or delegation from context, complexity and disruption. Routine setup and
+  related edits may stay on the host; substantive implementation, explicit delegation and
+  distracting lengthy work go to workers. No direct-edit file/byte/call quota exists. Simple setup
+  does not need Fable review. Required checks still apply; specialist review follows actual risk or
+  user requests.
+- Inspect host/worker capabilities before dispatch. Workers cannot install dependencies, retain
+  shell-generated lockfiles, configure host policy or publish Git. Handle authorized host operations
+  directly, reject incompatible declared requirements, and use structured hostActions for handoff.
+  Inspect and recover retained work instead of repeating an incapable worker. Never resume explicit
+  user cancellation without a new request.
+- Workers use project_edit for focused existing-file changes. Preserve exact text, reject ambiguous
+  matches and enforce the same scope/private-path/symlink controls as full writes.
+- Persist child/tool progress and emit periodic context updates without new model turns. Emit one
+  attention notice when activity is absent, inspect the cause, and recover within original
+  authority. Silence alone never cancels work. Test progress delivery and reload deduplication with
+  the real SDK.
+- Capture runtime source identity at module load. Record startup/reload IDs, reasons and actual tool
+- Pause affected tasks before scope reassignment. Keep paused paths reserved, preserve candidate
+  edits, and revise assignments as a recoverable batch before resuming with fresh context. Reject
+  conflicts and scope expansion. Invalidate approvals after revisions. Published branch ownership
+  stays fixed; use replacement tasks for changed branch ownership. Test process stopping, retained
+  edits, recovery and notification delivery across resume.
 - Capture runtime source identity at module load. Record startup/reload IDs, reasons and actual tool
   inventories under project-local `harness/runtime/`; attach the load ID to request timing. Never
   report a newer disk revision as the version already loaded in a process. Keep role/prompt policy
   fixed for that loaded generation. `/harness-version` must show this receipt without a model call.
 - `delegate_branches` pins a settled committed design and remote-main baseline for up to four
   independent tasks. The branch orchestrator owns its implementation/review/repair cycle and needs
-  no routine human approvals. It has no child-call, turn or total-duration ceiling. Keep explicit
-  cancellation, bounded command execution, scopes and concurrency controls. Local task-coordinator
-  budgets remain unchanged.
+  no routine human approvals. It has no child-call, turn or total-duration ceiling. All agents
+  follow this uncapped policy. Keep explicit cancellation, bounded command execution, scopes and
+  concurrency controls; turn counts are telemetry only.
 - Keep Git and publication authority in the host. Branch workers cannot edit Git metadata or project
   policy. Verify committed blobs against the reviewed snapshot, retain separate remote branches and
   GitHub PR/CI evidence, and serialize merge-time refresh against current main. Never force-push

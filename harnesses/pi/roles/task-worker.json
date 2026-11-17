@@ -8,6 +8,7 @@
     "project_read",
     "project_search",
     "project_write",
+    "project_edit",
     "project_delete",
     "project_format",
     "document_check",
@@ -18,7 +19,5 @@
   ],
   "writes": ["**"],
   "mayDelegate": false,
-  "timeoutMs": 600000,
-  "maxTurns": 40,
   "backend": "pi"
 }

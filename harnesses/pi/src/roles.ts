@@ -22,12 +22,8 @@ export async function loadRole(name: RoleName): Promise<Role> {
     !Array.isArray(role.tools) ||
     !Array.isArray(role.skills) ||
     !Array.isArray(role.writes) ||
-    !Number.isSafeInteger(role.maxTurns) ||
-    role.maxTurns < (name === 'branch-orchestrator' ? 0 : 1) ||
-    role.maxTurns > 100 ||
-    !Number.isSafeInteger(role.timeoutMs) ||
-    (role.timeoutMs < 1000 && !(name === 'branch-orchestrator' && role.timeoutMs === 0)) ||
-    role.timeoutMs > 1800000
+    'maxTurns' in role ||
+    'timeoutMs' in role
   ) {
     throw new Error(`Invalid role definition: ${name}`)
   }

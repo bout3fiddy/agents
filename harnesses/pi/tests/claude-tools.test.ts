@@ -19,6 +19,7 @@ test('Claude enables web tools and records successful calls', async () => {
       '/system.txt',
     )
     assert.equal(args[args.indexOf('--tools') + 1], 'WebSearch,WebFetch')
+    assert.equal(args.includes('--max-turns'), false)
   }
 
   const trace = [
@@ -119,6 +120,7 @@ test('Claude bridge gives performance scoped writes and denies product writes', 
     assert.ok(args.includes('--dangerously-skip-permissions'))
     assert.ok(args.includes('--strict-mcp-config'))
     assert.equal(args[args.indexOf('--tools') + 1], 'WebSearch,WebFetch')
+    assert.equal(args.includes('--max-turns'), false)
     assert.equal(args[args.indexOf('--setting-sources') + 1], '')
   } finally {
     await client.close()

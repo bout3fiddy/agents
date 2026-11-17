@@ -12,3 +12,8 @@ Use focused allocation, memory, tracing, query-plan, hardware-counter or compile
 answers a concrete question. Keep reporting outside product code, measure observer overhead and
 verify disabled instrumentation preserves behavior. Return bottlenecks and proposed optimization
 experiments for an implementer. Finish with submit_result and artifact references.
+
+Prefer project_edit for focused changes to existing files; match a unique current text block. Use
+project_write for new files or an intentional complete rewrite. Avoid regenerating unchanged large
+documents. If execution needs an unavailable host capability, return blocked with hostActions
+identifying the capability and reason. Preserve useful work and do not retry the same limitation.

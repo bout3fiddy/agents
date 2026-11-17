@@ -81,6 +81,10 @@ export async function runBranchTask(
       throw new Error('Branch task cancelled or its controls are unavailable')
     }
 
+    if (control.paused) {
+      throw new Error('Branch task paused for inspection')
+    }
+
     return control
   }
   await save({})
@@ -196,6 +200,7 @@ export async function runBranchTask(
         revision++
         await save({ status: 'running', mergeBase: base, error: undefined })
         const outputPath = join(directory, `orchestrator-${validation}-${revision}.json`)
+        await save({ progressFile: `orchestrator-${validation}-${revision}.json` })
         const evidence = await coordinate(
           {
             kind: 'branch',
@@ -213,12 +218,14 @@ export async function runBranchTask(
               baseCommit: base,
               conflicts,
               previousFeedback: feedback,
+              parentContext: request.context,
             }),
             model: request.model,
             outputPath,
             originals,
             baseline: fileHashes(baseline),
             controlsPath: join(directory, 'controls.json'),
+            resumed: (state.deliveryVersion ?? 0) > 0,
           },
           signal,
         )
@@ -448,7 +455,11 @@ export async function runBranchTask(
   } catch (error) {
     const control = await readJson<TaskControls>(join(directory, 'controls.json'))
     await save({
-      status: signal.aborted || control?.cancelled ? 'cancelled' : 'needs_attention',
+      status: control?.paused
+        ? 'paused'
+        : signal.aborted || control?.cancelled
+          ? 'cancelled'
+          : 'needs_attention',
       error: String(error),
     })
     return state

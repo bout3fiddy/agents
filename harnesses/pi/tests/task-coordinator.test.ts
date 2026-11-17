@@ -174,18 +174,48 @@ test('concurrent child calls serialize and unfinished children prevent submissio
   await invoke(worker.tools, 'submit_result', pass)
 })
 
-test('child-call budget remains bounded', async (t) => {
+test('ordinary coordinators continue beyond the former eight-child limit', async (t) => {
   const { request, controller } = await setup(t)
   const worker = await createTaskCoordinatorTools(request, controller.signal, (child) =>
     receipt(child),
   )
 
-  for (let index = 0; index < 8; index++) {
+  for (let index = 0; index < 12; index++) {
     await invoke(worker.tools, 'delegate_worker', leaf)
   }
 
-  await assert.rejects(invoke(worker.tools, 'delegate_worker', leaf), /budget is exhausted/)
-  assert.equal(worker.children().length, 8)
+  assert.equal(worker.children().length, 12)
+  await invoke(worker.tools, 'submit_result', pass)
+})
+
+test('completed Claude review survives 46 turns without duplication', async (t) => {
+  const { request, controller } = await setup(t)
+  let reviews = 0
+  const worker = await createTaskCoordinatorTools(request, controller.signal, async (child) => {
+    reviews++
+    return { ...(await receipt(child)), turns: 46 }
+  })
+  await invoke(worker.tools, 'delegate_worker', { ...leaf, role: 'reviewer', writePaths: [] })
+  await invoke(worker.tools, 'submit_result', pass)
+  assert.equal(reviews, 1)
+  assert.equal(worker.children()[0]?.turns, 46)
+})
+
+test('a transient failed child can recover in the same scope', async (t) => {
+  const { request, controller } = await setup(t)
+  let calls = 0
+  const worker = await createTaskCoordinatorTools(request, controller.signal, async (child) => {
+    if (calls++ === 0) {
+      throw new Error('Provider temporarily unavailable')
+    }
+
+    return receipt(child)
+  })
+  await assert.rejects(invoke(worker.tools, 'delegate_worker', leaf), /temporarily unavailable/)
+  await assert.rejects(invoke(worker.tools, 'submit_result', pass), /failed child execution/)
+  await invoke(worker.tools, 'delegate_worker', leaf)
+  await invoke(worker.tools, 'submit_result', pass)
+  assert.equal(worker.result()?.verdict, 'pass')
 })
 
 test('stale child receipt poisons passing completion', async (t) => {

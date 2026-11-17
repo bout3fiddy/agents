@@ -10,6 +10,10 @@ import { matches, validateScope } from './paths.ts'
 import type { Receipt } from './contracts.ts'
 import { validateDesign } from './contracts.ts'
 import type { BranchPlan, BranchTaskInput } from './branch-contracts.ts'
+import { readProgress, type TaskProgress } from './progress.ts'
+import { hostCapability } from './capabilities.ts'
+import type { WorkerResult } from './contracts.ts'
+import { recoverTaskRevision } from './task-recovery.ts'
 
 export const delegateSchema = Type.Object(
   {
@@ -22,6 +26,12 @@ export const delegateSchema = Type.Object(
       Type.Literal('implementation'),
     ]),
     writePaths: Type.Array(Type.String({ maxLength: 200 }), { maxItems: 30 }),
+    requires: Type.Optional(Type.Array(hostCapability, { maxItems: 4 })),
+    review: Type.Optional(
+      Type.Boolean({
+        description: 'False only for routine low-risk maintenance; substantive code needs review.',
+      }),
+    ),
   },
   { additionalProperties: false },
 )
@@ -52,6 +62,7 @@ export type DelegationStatus = {
     | 'needs_attention'
     | 'cancelled'
     | 'failed'
+    | 'paused'
   updatedAt: string
   pid?: number
   candidate?: string
@@ -68,14 +79,21 @@ export type DelegationStatus = {
   mergeAttempts?: number
   deliveryVersion?: number
   mergeRequested?: boolean
+  progress?: TaskProgress
+  activityAgeMs?: number
+  health?: 'active' | 'quiet' | 'stopped' | 'needs_attention'
+  progressFile?: string
+  hostActions?: WorkerResult['hostActions']
 }
 export type Delegation = { request: DelegationRequest; state: DelegationStatus }
 export type TaskControls = {
   revision: number
+  baseRevision?: number
   messages: { revision: number; text: string }[]
   cancelled: boolean
   mergeRequested?: boolean
   mergeRequestId?: string
+  paused?: boolean
 }
 export const emptyControls: TaskControls = { revision: 0, messages: [], cancelled: false }
 const activeStates = new Set([
@@ -91,6 +109,22 @@ export type DelegationOrigin = { session: string; originEntry?: string; model: s
 
 export function activeTask(state: DelegationStatus): boolean {
   return activeStates.has(state.status)
+}
+
+export function ownsTaskPaths(state: DelegationStatus): boolean {
+  return activeTask(state) || state.status === 'paused'
+}
+
+function retainedJobs(previous: Delegation[], added: number): Delegation[] {
+  const owners = previous.filter((job) => ownsTaskPaths(job.state))
+  const available = 200 - added - owners.length
+
+  if (available < 0) {
+    throw new Error('Task registry is full; resolve paused tasks before adding more')
+  }
+
+  const completed = previous.filter((job) => !ownsTaskPaths(job.state))
+  return owners.concat(available ? completed.slice(-available) : [])
 }
 
 export function delegationDirectory(store: StateStore, id: string): string {
@@ -163,6 +197,7 @@ export class Delegations {
     }
 
     try {
+      await recoverTaskRevision(this.store)
       return await operation()
     } finally {
       await release()
@@ -200,6 +235,21 @@ export class Delegations {
       }
     }
 
+    const progress = await readProgress(join(directory, state.progressFile ?? 'coordinator.json'))
+    const activity = progress?.child?.updatedAt ?? progress?.updatedAt ?? state.updatedAt
+    const activityAgeMs = Math.max(0, Date.now() - Date.parse(activity))
+    state = {
+      ...state,
+      progress,
+      activityAgeMs,
+      health: activeTask(state)
+        ? activityAgeMs > 180000
+          ? 'quiet'
+          : 'active'
+        : state.status === 'needs_attention' || state.status === 'failed'
+          ? 'needs_attention'
+          : 'stopped',
+    }
     return { request, state }
   }
 
@@ -224,6 +274,13 @@ export class Delegations {
     }
 
     validateScope(input.writePaths)
+
+    if (input.requires?.length) {
+      throw new Error(
+        `Host capabilities required: ${input.requires.join(', ')}. ` +
+          'Perform these authorized operations on the host; delegate only worker-compatible work.',
+      )
+    }
 
     if (input.kind === 'research' && input.writePaths.length) {
       throw new Error('Research tasks have no write scope')
@@ -253,6 +310,7 @@ export class Delegations {
         checkpointHash: checkpoint?.hash,
       }
       const previous = await this.list()
+      const retained = retainedJobs(previous, 1)
       const active = previous.filter(
         (job) => activeTask(job.state) && job.request.kind !== 'branch',
       )
@@ -263,7 +321,9 @@ export class Delegations {
         )
       }
 
-      for (const job of active) {
+      for (const job of previous.filter(
+        (entry) => ownsTaskPaths(entry.state) && entry.request.kind !== 'branch',
+      )) {
         const exclusive = [request.kind, job.request.kind].includes('implementation')
 
         if (
@@ -285,9 +345,6 @@ export class Delegations {
       await atomicJson(join(directory, 'request.json'), request)
       await atomicJson(join(directory, 'controls.json'), emptyControls)
       await atomicJson(join(directory, 'status.json'), state)
-      const retained = previous
-        .filter((job) => activeTask(job.state))
-        .concat(previous.filter((job) => !activeTask(job.state)).slice(-197))
       await atomicJson(join(this.store.directory, 'delegations', 'index.json'), [
         ...retained.map((job) => job.request.id),
         request.id,
@@ -334,6 +391,7 @@ export class Delegations {
 
     return this.locked(async () => {
       const previous = await this.list()
+      const retained = retainedJobs(previous, inputs.length)
       const active = previous.filter(
         (job) => activeTask(job.state) && job.request.kind === 'branch',
       )
@@ -342,7 +400,9 @@ export class Delegations {
         throw new Error('At most four independent branch orchestrators can run at once')
       }
 
-      const scopes = active.map((job) => job.request.writePaths)
+      const scopes = previous
+        .filter((job) => ownsTaskPaths(job.state) && job.request.kind === 'branch')
+        .map((job) => job.request.writePaths)
 
       for (const input of inputs) {
         if (scopes.some((scope) => scopesOverlap(scope, input.writePaths))) {
@@ -380,9 +440,6 @@ export class Delegations {
         jobs.push({ request, state })
       }
 
-      const retained = previous
-        .filter((job) => activeTask(job.state))
-        .concat(previous.filter((job) => !activeTask(job.state)).slice(-190))
       await atomicJson(join(this.store.directory, 'delegations', 'index.json'), [
         ...retained.map((job) => job.request.id),
         ...jobs.map((job) => job.request.id),
@@ -482,11 +539,99 @@ export class Delegations {
     })
   }
 
-  async control(id: string, action: 'message' | 'cancel', text?: string): Promise<TaskControls> {
+  async resume(
+    id: string,
+    origin: DelegationOrigin,
+    launch: (request: DelegationRequest) => Promise<void>,
+  ): Promise<Delegation> {
     return this.locked(async () => {
       const job = await this.get(id)
 
-      if (!activeTask(job.state)) {
+      if (!['paused', 'needs_attention', 'failed'].includes(job.state.status)) {
+        throw new Error(
+          'Resume requires a paused or failed task; cancelled work needs a new request',
+        )
+      }
+
+      const others = (await this.list()).filter(
+        (other) =>
+          other.request.id !== id &&
+          (other.request.kind === 'branch') === (job.request.kind === 'branch'),
+      )
+      const limit = job.request.kind === 'branch' ? 4 : 2
+
+      if (
+        others.filter((other) => activeTask(other.state)).length >= limit ||
+        others.some(
+          (other) =>
+            ownsTaskPaths(other.state) &&
+            (scopesOverlap(other.request.writePaths, job.request.writePaths) ||
+              ([other.request.kind, job.request.kind].includes('implementation') &&
+                other.request.writePaths.length &&
+                job.request.writePaths.length)),
+        )
+      ) {
+        throw new Error('Resume would collide with another task; pause and revise ownership first')
+      }
+
+      const directory = delegationDirectory(this.store, id)
+
+      if (
+        job.state.candidate &&
+        !['branch', 'implementation'].includes(job.request.kind) &&
+        !(await readJson(join(directory, 'workspace.json')))
+      ) {
+        throw new Error('Use revise_tasks to recover this legacy candidate before resuming')
+      }
+
+      const controls = await readJson<TaskControls>(join(directory, 'controls.json'))
+
+      if (!controls) {
+        throw new Error('Task controls are unavailable')
+      }
+
+      job.request = { ...job.request, ...origin }
+      job.state = {
+        ...job.state,
+        status: 'queued',
+        pid: undefined,
+        error: undefined,
+        hostActions: undefined,
+        summary: 'Resuming retained task',
+        receipts: undefined,
+        children: undefined,
+        updatedAt: new Date().toISOString(),
+        deliveryVersion: (job.state.deliveryVersion ?? 0) + 1,
+        progressFile: `coordinator-${randomUUID()}.json`,
+      }
+      await atomicJson(join(directory, 'controls.json'), {
+        ...controls,
+        cancelled: false,
+        paused: false,
+      })
+      await atomicJson(join(directory, 'request.json'), job.request)
+      await atomicJson(join(directory, 'status.json'), job.state)
+
+      try {
+        await launch(job.request)
+      } catch (error) {
+        job.state = { ...job.state, status: 'needs_attention', error: String(error) }
+        await atomicJson(join(directory, 'status.json'), job.state)
+      }
+
+      return this.get(id)
+    })
+  }
+
+  async control(
+    id: string,
+    action: 'message' | 'cancel' | 'pause',
+    text?: string,
+  ): Promise<TaskControls> {
+    return this.locked(async () => {
+      const job = await this.get(id)
+
+      if (!ownsTaskPaths(job.state)) {
         throw new Error('Task already stopped; inspect its result or delegate a follow-up task')
       }
 
@@ -509,8 +654,19 @@ export class Delegations {
 
         controls.revision++
         controls.messages.push({ revision: controls.revision, text })
+      } else if (action === 'pause') {
+        controls.paused = true
       } else {
         controls.cancelled = true
+        controls.paused = false
+
+        if (job.state.status === 'paused') {
+          await atomicJson(join(delegationDirectory(this.store, id), 'status.json'), {
+            ...job.state,
+            status: 'cancelled',
+            updatedAt: new Date().toISOString(),
+          })
+        }
       }
 
       await atomicJson(path, controls)

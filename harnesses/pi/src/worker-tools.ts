@@ -16,6 +16,7 @@ import { runSandboxed } from './sandbox.ts'
 import { safePath, writable } from './paths.ts'
 import { format } from 'prettier'
 import { checkDocuments } from './document-tools.ts'
+import { capabilities } from './capabilities.ts'
 
 // @ts-expect-error Shared formatting code is JavaScript.
 import { addReadabilitySpacing } from '../scripts/linting/readability.mjs'
@@ -115,7 +116,7 @@ export function createWorkerTools(request: WorkerRequest, role: Role) {
       name: 'run_command',
       label: 'Run isolated command',
       description:
-        'Run isolated argv. No network/home access. Use project_write to ' + 'retain changes.',
+        'Run isolated argv. No network/home access. Retain edits with project_edit/project_write.',
       parameters: Type.Object({
         argv: Type.Array(Type.String(), { minItems: 1, maxItems: 100 }),
         timeoutMs: Type.Optional(Type.Integer({ minimum: 1, maximum: 120000 })),
@@ -176,7 +177,10 @@ export async function assignment(request: WorkerRequest) {
     acceptedDesign: request.checkpoint,
     originalFileHashes: request.baseline,
     checks: request.project.checks,
+    capabilities: capabilities.workers,
     folderInstructions: await instructions(request.workspace, request.checkpoint.writePaths),
-    output: 'Use submit_result when finished. Do not run git commits or ' + 'external actions.',
+    output:
+      'Use submit_result when finished. If a host capability is required, return blocked ' +
+      'with hostActions immediately. Do not retry unavailable operations in the sandbox.',
   }
 }

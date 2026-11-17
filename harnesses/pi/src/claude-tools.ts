@@ -31,10 +31,6 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
 }))
 server.setRequestHandler(CallToolRequestSchema, async (call, context) => {
   const action = queue.then(async () => {
-    if (++calls > role.maxTurns * 10) {
-      throw new Error('Worker tool-call budget exhausted')
-    }
-
     if (worker.result()) {
       throw new Error('This worker has already submitted its final result')
     }
@@ -46,7 +42,7 @@ server.setRequestHandler(CallToolRequestSchema, async (call, context) => {
     }
 
     const result = await tool.execute(
-      String(calls),
+      String(++calls),
       call.params.arguments ?? {},
       context.signal,
       undefined,

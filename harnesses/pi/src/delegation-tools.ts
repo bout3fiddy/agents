@@ -13,6 +13,7 @@ import { launchDelegation } from './delegation-process.ts'
 import {
   Delegations,
   activeTask,
+  ownsTaskPaths,
   delegateSchema,
   delegationView,
   scopesOverlap,
@@ -20,6 +21,7 @@ import {
   type Delegation,
   type DelegationRequest,
 } from './delegation-state.ts'
+import { revisionSchema, reviseTasks } from './task-recovery.ts'
 
 type Launcher = (request: DelegationRequest) => Promise<void>
 const idSchema = Type.String({ minLength: 36, maxLength: 36 })
@@ -59,8 +61,13 @@ function resultMessage(jobs: Delegation[]): CustomMessageEntryDraft {
     customType: 'pi-task-result',
     display: true,
     content:
-      'Background task completion. Briefly acknowledge the outcome and any blocker, ' +
-      'then continue the current discussion. Do not launch follow-up work unless authorized.\n' +
+      'Background task outcome. Briefly acknowledge the outcome and any blocker, ' +
+      'then continue the discussion. For failures, inspect the retained candidate and evidence. ' +
+      'Recover within the original authorized scope: handle host-only operations on the host, ' +
+      'preserve useful work and rerun relevant checks. Do not repeat a worker lacking the needed ' +
+      'capability or expand permission. Paused work is preserved: inspect, revise and resume it ' +
+      'when consistent with user instructions. Never restart user-cancelled work without a new ' +
+      'request. Report genuine external blockers.\n' +
       JSON.stringify(jobs.map(delegationView)),
     details: { taskIds: jobs.map(notificationId) },
   }
@@ -89,7 +96,17 @@ export function registerDelegation(pi: ExtensionAPI, launch: Launcher = launchDe
       ctx.ui.setStatus(
         'pi-tasks',
         jobs.some((job) => activeTask(job.state))
-          ? `Tasks · ${jobs.filter((job) => activeTask(job.state)).length} active`
+          ? 'Tasks · ' +
+              jobs
+                .filter((job) => activeTask(job.state))
+                .map((job) => {
+                  const progress = job.state.progress
+                  return (
+                    `${job.request.id.slice(0, 6)} ${progress?.role ?? job.state.status}/` +
+                    `${progress?.child?.tool ?? progress?.stage ?? 'starting'}`
+                  )
+                })
+                .join(' · ')
           : undefined,
       )
       const branch = new Set(ctx.sessionManager.getBranch().map((entry) => entry.id))
@@ -97,7 +114,8 @@ export function registerDelegation(pi: ExtensionAPI, launch: Launcher = launchDe
         ctx.sessionManager
           .getEntries()
           .flatMap((entry) =>
-            entry.type === 'custom_message' && entry.customType === 'pi-task-result'
+            entry.type === 'custom_message' &&
+            ['pi-task-result', 'pi-task-progress', 'pi-task-attention'].includes(entry.customType)
               ? messageIds(entry.details)
               : [],
           ),
@@ -115,7 +133,58 @@ export function registerDelegation(pi: ExtensionAPI, launch: Launcher = launchDe
         delivered.add(`${session}:${notificationId(job)}`)
       }
 
-      return ready.length ? [resultMessage(ready)] : []
+      const messages: CustomMessageEntryDraft[] = ready.length ? [resultMessage(ready)] : []
+
+      for (const job of jobs.filter(
+        (item) =>
+          activeTask(item.state) &&
+          item.request.session === session &&
+          (!item.request.originEntry || branch.has(item.request.originEntry)),
+      )) {
+        const progress = job.state.progress
+        const activity = progress?.child?.updatedAt ?? progress?.updatedAt ?? job.state.updatedAt
+        const attention = job.state.health === 'quiet'
+        const id = `${job.request.id}:${attention ? 'attention' : 'progress'}:${activity}`
+        const previous = ctx.sessionManager
+          .getEntries()
+          .findLast(
+            (entry) =>
+              entry.type === 'custom_message' &&
+              entry.customType === 'pi-task-progress' &&
+              (entry.details as { taskId?: string })?.taskId === job.request.id,
+          )
+        const since = previous?.timestamp ?? job.request.createdAt
+
+        if (
+          (!attention && Date.now() - Date.parse(since) < 60000) ||
+          persisted.has(id) ||
+          delivered.has(`${session}:${id}`)
+        ) {
+          continue
+        }
+
+        delivered.add(`${session}:${id}`)
+        messages.push({
+          type: 'custom_message',
+          customType: attention ? 'pi-task-attention' : 'pi-task-progress',
+          display: true,
+          content:
+            (attention
+              ? 'Task has no recorded activity for three minutes. Inspect status and traces; ' +
+                'distinguish a provider wait from failure. Recover authorized work; ' +
+                'do not cancel or restart solely because of elapsed time.\n'
+              : 'Background progress. Continue discussion; no acknowledgement needed.\n') +
+            JSON.stringify({
+              id: job.request.id,
+              task: job.request.task.slice(0, 160),
+              progress,
+              activityAgeMs: job.state.activityAgeMs,
+            }),
+          details: { taskIds: [id], taskId: job.request.id },
+        })
+      }
+
+      return messages
     } finally {
       collecting = false
     }
@@ -140,7 +209,10 @@ export function registerDelegation(pi: ExtensionAPI, launch: Launcher = launchDe
     for (const message of messages) {
 
       // One batch wakes an idle orchestrator once; ordinary polling never invokes a model.
-      pi.sendMessage(message, { triggerTurn: true, deliverAs: 'followUp' })
+      pi.sendMessage(message, {
+        triggerTurn: message.customType !== 'pi-task-progress',
+        deliverAs: 'followUp',
+      })
     }
   }
   const boundary = async (event: BoundaryState, ctx: ExtensionContext) => {
@@ -152,7 +224,10 @@ export function registerDelegation(pi: ExtensionAPI, launch: Launcher = launchDe
     return messages.length
       ? {
           entries: [...event.entries, ...messages],
-          ...(event.context.pendingMessages.length ? {} : { continue: true }),
+          ...(event.context.pendingMessages.length ||
+          messages.every((message) => message.customType === 'pi-task-progress')
+            ? {}
+            : { continue: true }),
         }
       : undefined
   }
@@ -166,7 +241,7 @@ export function registerDelegation(pi: ExtensionAPI, launch: Launcher = launchDe
   pi.on('before_agent_start', async (_event, ctx) => {
     current = ctx
     const active = (await new Delegations(await storeFor(ctx.cwd)).list()).filter((job) =>
-      activeTask(job.state),
+      ownsTaskPaths(job.state),
     )
 
     if (active.length) {
@@ -175,7 +250,7 @@ export function registerDelegation(pi: ExtensionAPI, launch: Launcher = launchDe
           customType: 'pi-active-tasks',
           display: false,
           content:
-            'Active background tasks; continue discussion and do not edit their owned paths.\n' +
+            'Active or paused tasks; continue discussion and preserve their owned paths.\n' +
             JSON.stringify(active.map(delegationView)),
         },
       }
@@ -226,14 +301,14 @@ export function registerDelegation(pi: ExtensionAPI, launch: Launcher = launchDe
     for (const job of await new Delegations(store).list()) {
       if (
         job.request.kind !== 'branch' &&
-        activeTask(job.state) &&
+        ownsTaskPaths(job.state) &&
         scopesOverlap(names, job.request.writePaths)
       ) {
         return {
           block: true,
           reason:
             `Task ${job.request.id} owns these files. ` +
-            'Send task_control a message or cancel it.',
+            'Use task_control to steer or pause, then revise_tasks to reassign ownership.',
         }
       }
     }
@@ -269,8 +344,10 @@ export function registerDelegation(pi: ExtensionAPI, launch: Launcher = launchDe
     label: 'Delegate background task',
     description:
       'Start a background coordinator that can delegate workers and specialist reviews. ' +
-      'Use for explicit delegation, multi-file document work, research or maintenance. Return ' +
-      'immediately and continue discussion. Supply decisions, context and bounded writePaths.',
+      'Use for substantial implementation, explicit delegation or work that would disrupt the ' +
+      'current discussion. Routine setup and related small work may stay on the host. Workers ' +
+      'cannot install dependencies, use the network or publish Git; declare host requirements. ' +
+      'Return immediately and continue discussion. Supply context and scoped writePaths.',
     parameters: delegateSchema,
     async execute(_id, args, _signal, _update, ctx) {
       return start(ctx, args)
@@ -291,18 +368,64 @@ export function registerDelegation(pi: ExtensionAPI, launch: Launcher = launchDe
   })
   pi.registerTool({
     name: 'task_control',
-    label: 'Update or cancel background task',
+    label: 'Steer, pause or cancel task',
     description:
-      'Send a scoped update to an active coordinator or cancel its work. Cancellation ' +
-      'releases ownership after the worker stops. Scope expansion needs a new task.',
+      'Send a scoped update, pause for inspection, or cancel. Pause stops the process tree and ' +
+      'preserves candidate and ownership. Wait for the paused outcome before revise_tasks or ' +
+      'resume_task. Cancellation releases ownership after the worker stops.',
     parameters: Type.Object({
       id: idSchema,
-      action: Type.Union([Type.Literal('message'), Type.Literal('cancel')]),
+      action: Type.Union([Type.Literal('message'), Type.Literal('pause'), Type.Literal('cancel')]),
       message: Type.Optional(Type.String({ maxLength: 12000 })),
     }),
     async execute(_id, args, _signal, _update, ctx) {
       return textResult(
         await new Delegations(await storeFor(ctx.cwd)).control(args.id, args.action, args.message),
+      )
+    },
+  })
+  pi.registerTool({
+    name: 'revise_tasks',
+    label: 'Revise paused assignments',
+    description:
+      'Revise prompts and partition existing scope across stopped tasks as one batch. ' +
+      'Supply complete replacement context. Preserve and transfer candidate edits, reject ' +
+      'conflicts, and invalidate old review approvals. Every task remains paused. Branch ' +
+      'prompts may change, but moving branch ownership needs replacement tasks.',
+    parameters: revisionSchema,
+    async execute(_id, args, _signal, _update, ctx) {
+      const jobs = new Delegations(await storeFor(ctx.cwd))
+      return textResult((await reviseTasks(jobs, args)).map(delegationView))
+    },
+  })
+  pi.registerTool({
+    name: 'resume_task',
+    label: 'Resume retained task',
+    description:
+      'Resume a paused or failed task after inspecting its blocker and retained work. ' +
+      'Reuses the candidate and starts fresh orchestration with current instructions. ' +
+      'Conflicting ownership is rejected. Explicitly cancelled work needs a new user request.',
+    parameters: Type.Object({ id: idSchema }),
+    async execute(_id, args, _signal, _update, ctx) {
+      if (!ctx.model) {
+        throw new Error('Select a model first')
+      }
+
+      const jobs = new Delegations(await storeFor(ctx.cwd))
+      return textResult(
+        delegationView(
+          await jobs.resume(
+            args.id,
+            {
+              session: ctx.sessionManager.getSessionId(),
+              originEntry: ctx.sessionManager
+                .getBranch()
+                .findLast((entry) => entry.type === 'message' && entry.message.role === 'user')?.id,
+              model: `${ctx.model.provider}/${ctx.model.id}`,
+            },
+            launch,
+          ),
+        ),
       )
     },
   })

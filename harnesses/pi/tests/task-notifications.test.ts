@@ -34,7 +34,7 @@ for (const mode of ['idle', 'busy', 'queued'] as const) {
       async (context) => {
         requests++
 
-        if (JSON.stringify(context).includes('Background task completion.')) {
+        if (JSON.stringify(context).includes('Background task outcome.')) {
           acknowledge++
           assert.match(JSON.stringify(context), /First finished/)
           assert.match(JSON.stringify(context), /Second finished/)

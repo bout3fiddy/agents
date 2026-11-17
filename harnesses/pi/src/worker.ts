@@ -15,6 +15,7 @@ import { inventory, snapshotHash } from './paths.ts'
 import { atomicJson, readJson } from './state.ts'
 import { runClaudeWorker } from './claude-worker.ts'
 import { workerAbortSignal } from './sandbox.ts'
+import { progressReporter } from './progress.ts'
 
 export function explicitResources(prompt: string): ResourceLoader {
   return {
@@ -60,6 +61,7 @@ export async function runWorker(request: WorkerRequest): Promise<WorkerEvidence>
   }
 
   const worker = createWorkerTools(request, role)
+  const progress = progressReporter(request.outputPath, request.role)
   let turns = 0
   const prompt = await rolePrompt(request.role)
   const { session } = await createAgentSession({
@@ -77,44 +79,63 @@ export async function runWorker(request: WorkerRequest): Promise<WorkerEvidence>
     }),
     sessionManager: SessionManager.create(request.workspace, `${request.outputPath}.sessions`),
   })
-  let exhausted = false
+  let modelError: string | undefined
   const abort = () => {
     void session.abort()
   }
   workerAbortSignal.addEventListener('abort', abort, { once: true })
-  const timer = setTimeout(() => {
-    exhausted = true
-    void session.abort()
-  }, role.timeoutMs)
   session.subscribe((event) => {
+    if (event.type === 'message_update') {
+      void progress.update({ stage: 'model', tool: undefined }, true).catch(() => {})
+    }
+
+    if (event.type === 'tool_execution_start' || event.type === 'tool_execution_end') {
+      void progress
+        .update({
+          stage: event.type === 'tool_execution_start' ? 'tool' : 'model',
+          tool: event.toolName,
+        })
+        .catch(() => {})
+    }
+
+    if (
+      event.type === 'message_end' &&
+      event.message.role === 'assistant' &&
+      event.message.stopReason === 'error'
+    ) {
+      modelError = event.message.errorMessage ?? 'Worker model request failed'
+    }
+
     if (event.type === 'turn_end') {
       turns++
-
-      if (turns >= role.maxTurns && !worker.result()) {
-        exhausted = true
-        void session.abort()
-      }
     }
   })
 
   try {
     const task = await assignment(request)
+    await progress.update({ stage: 'model', message: 'Executing assigned work' })
     workerAbortSignal.throwIfAborted()
     await session.prompt(JSON.stringify(task))
     workerAbortSignal.throwIfAborted()
 
-    if (!worker.result() && !exhausted) {
+    while (!worker.result()) {
+      if (modelError) {
+        throw new Error(modelError)
+      }
+
       await session.prompt(
         'Return the assignment result through submit_result now, ' + 'including any blockers.',
       )
+      workerAbortSignal.throwIfAborted()
     }
 
     workerAbortSignal.throwIfAborted()
 
-    if (exhausted || !worker.result()) {
-      throw new Error('Worker did not produce a result within its execution budget')
+    if (modelError || !worker.result()) {
+      throw new Error(modelError ?? 'Worker did not produce a result')
     }
 
+    await progress.update({ stage: 'complete', message: worker.result()!.summary })
     return {
       role: request.role,
       snapshot: snapshotHash(await inventory(request.workspace)),
@@ -124,9 +145,9 @@ export async function runWorker(request: WorkerRequest): Promise<WorkerEvidence>
       model: modelId,
     }
   } finally {
-    clearTimeout(timer)
     workerAbortSignal.removeEventListener('abort', abort)
     session.dispose()
+    await progress.settle()
     await modelRuntime.settleCredentialWrites()
   }
 }

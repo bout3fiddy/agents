@@ -92,7 +92,7 @@ test('the parent continues discussion while independent branch orchestrators wor
         ]
       }
 
-      if (JSON.stringify(context).includes('Background task completion.')) {
+      if (JSON.stringify(context).includes('Background task outcome.')) {
         acknowledgements++
         return [
           {

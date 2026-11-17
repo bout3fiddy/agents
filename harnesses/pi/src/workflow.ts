@@ -192,8 +192,24 @@ export async function runWorkflow(
       return evidence
     }
 
-    for (let round = 1; round <= 3; round++) {
+    let lastFailure = ''
+
+    for (let round = 1; ; round++) {
       signal?.throwIfAborted()
+
+      if (feedback) {
+        const failure = snapshotHash(await inventory(workspace)) + feedback
+
+        if (failure === lastFailure) {
+          throw new Error(
+            'The same failure persisted without candidate changes; ' +
+              'inspect retained evidence and resolve the missing prerequisite on the host',
+          )
+        }
+
+        lastFailure = failure
+      }
+
       task.round = round
       task.phase = 'implementation'
       await store.saveTask(task)
@@ -355,10 +371,6 @@ export async function runWorkflow(
       await rm(originals, { recursive: true, force: true })
       return task
     }
-
-    throw new Error(
-      `Review or verification still needs attention after 3 rounds: ${feedback.slice(0, 4000)}`,
-    )
   } catch (error) {
     if (!task) {
       throw error

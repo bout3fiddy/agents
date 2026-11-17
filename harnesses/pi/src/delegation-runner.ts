@@ -20,6 +20,8 @@ import { checkDelegation, DelegationChecksFailed } from './delegation-checks.ts'
 import { runTaskCoordinator } from './task-coordinator.ts'
 import type { Checkpoint } from './contracts.ts'
 import { runBranchTask } from './branch-runner.ts'
+import { dispatcher } from './dispatch.ts'
+import { trackDispatch } from './progress.ts'
 
 async function integrationLock(store: StateStore, signal: AbortSignal) {
   for (let attempt = 0; attempt < 200; attempt++) {
@@ -70,6 +72,7 @@ export async function runDelegation(
 
   const directory = delegationDirectory(store, id)
   let state: DelegationStatus = {
+    ...(await readJson<DelegationStatus>(join(directory, 'status.json'))),
     id,
     status: 'running',
     pid: process.pid,
@@ -85,8 +88,14 @@ export async function runDelegation(
   const cancelled = async () => {
     signal.throwIfAborted()
 
-    if ((await controls()).cancelled) {
+    const control = await controls()
+
+    if (control.cancelled) {
       throw new Error('Task cancelled by user')
+    }
+
+    if (control.paused) {
+      throw new Error('Task paused for inspection')
     }
   }
   await save({})
@@ -101,14 +110,22 @@ export async function runDelegation(
         throw new Error('Accepted implementation scope changed before background execution')
       }
 
-      const task = await runWorkflow(store, request.model, signal)
+      const task = await runWorkflow(
+        store,
+        request.model,
+        signal,
+        trackDispatch(dispatcher(store), join(directory, state.progressFile ?? 'coordinator.json')),
+      )
+      const control = await controls()
       await save({
         status:
           task.status === 'complete'
             ? 'complete'
-            : (await controls()).cancelled
+            : control.cancelled
               ? 'cancelled'
-              : 'needs_attention',
+              : control.paused
+                ? 'paused'
+                : 'needs_attention',
         summary: task.evidence.at(-1)?.result.summary,
         error: task.error,
         candidate: task.candidate,
@@ -123,11 +140,29 @@ export async function runDelegation(
     }
 
     const project = await loadProject(request.root)
-    const workspace = await createWorkspace(request.root)
-    const originals = await createWorkspace(workspace)
-    const before = await inventory(workspace)
+    const retained = await readJson<{ workspace: string; originals: string }>(
+      join(directory, 'workspace.json'),
+    )
+
+    if (retained && state.candidate && state.candidate !== retained.workspace) {
+      throw new Error('Retained candidate identity changed; inspect before resuming')
+    }
+
+    const workspace = retained?.workspace ?? (await createWorkspace(request.root))
+    const originals = retained?.originals ?? (await createWorkspace(workspace))
+    const before = await inventory(originals)
+
+    if (
+      retained &&
+      digest(JSON.stringify(fileHashes(before))) !==
+        digest(JSON.stringify(await readJson(join(directory, 'baseline.json'))))
+    ) {
+      throw new Error('Retained original snapshot changed; inspect before resuming')
+    }
+
     await save({ candidate: workspace })
     await atomicJson(join(directory, 'baseline.json'), fileHashes(before))
+    await atomicJson(join(directory, 'workspace.json'), { workspace, originals })
     const evidence = await coordinate(
       {
         task: request.task,
@@ -137,10 +172,12 @@ export async function runDelegation(
         project,
         checkpoint: taskScope(request),
         model: request.model,
-        outputPath: join(directory, 'coordinator.json'),
+        outputPath: join(directory, state.progressFile ?? 'coordinator.json'),
         baseline: fileHashes(before),
         originals,
         controlsPath: join(directory, 'controls.json'),
+        review: request.review,
+        resumed: (state.deliveryVersion ?? 0) > 0,
       },
       signal,
     )
@@ -156,6 +193,9 @@ export async function runDelegation(
         model: child.model,
         verdict: child.result.verdict,
       })),
+      hostActions:
+        evidence.result.hostActions ??
+        evidence.children.flatMap((child) => child.result.hostActions ?? []),
     })
     const receipts = await checkDelegation(
       request,
@@ -228,7 +268,7 @@ export async function runDelegation(
   } catch (error) {
     const control = await controls()
     await save({
-      status: control.cancelled ? 'cancelled' : 'needs_attention',
+      status: control.cancelled ? 'cancelled' : control.paused ? 'paused' : 'needs_attention',
       error: String(error),
       ...(error instanceof DelegationChecksFailed ? { receipts: error.receipts } : {}),
     })
@@ -260,13 +300,6 @@ async function main(): Promise<void> {
   const stop = () => controller.abort(new Error('Task supervisor terminated'))
   process.once('SIGTERM', stop)
   process.once('SIGINT', stop)
-  const timer =
-    request.kind === 'branch'
-      ? undefined
-      : setTimeout(
-          () => controller.abort(new Error('Background task timed out')),
-          request.kind === 'implementation' ? 90 * 60_000 : 30 * 60_000,
-        )
   let polling = false
   const poll = setInterval(async () => {
     if (polling) {
@@ -283,6 +316,10 @@ async function main(): Promise<void> {
       if (control?.cancelled) {
         controller.abort(new Error('Task cancelled by user'))
       }
+
+      if (control?.paused) {
+        controller.abort(new Error('Task paused for inspection'))
+      }
     } catch (error) {
       controller.abort(error)
     } finally {
@@ -293,7 +330,6 @@ async function main(): Promise<void> {
   try {
     await runDelegation(store, request.id, controller.signal)
   } finally {
-    clearTimeout(timer)
     clearInterval(poll)
     process.removeListener('SIGTERM', stop)
     process.removeListener('SIGINT', stop)

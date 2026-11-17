@@ -15,3 +15,8 @@ Use document_check for Markdown formatting and line width; it can format assigne
 content directly and avoid creating custom checking scripts for routine document edits. Do not
 commit, send, publish, submit externally or alter harness policy. Finish with submit_result,
 identifying the changed files, meaningful checks, remaining required findings and blockers.
+
+Prefer project_edit for focused changes to existing files; match a unique current text block. Use
+project_write for new files or an intentional complete rewrite. Avoid regenerating unchanged large
+documents. If execution needs an unavailable host capability, return blocked with hostActions
+identifying the capability and reason. Preserve useful work and do not retry the same limitation.

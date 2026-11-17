@@ -17,6 +17,7 @@ import {
   type Receipt,
   type WorkerEvidence,
   type WorkerResult,
+  type Role,
 } from './contracts.ts'
 import { dispatcher, type Dispatcher } from './dispatch.ts'
 import { textResult } from './file-tools.ts'
@@ -36,6 +37,8 @@ import { loadRole, rolePrompt } from './roles.ts'
 import { StateStore, atomicJson } from './state.ts'
 import { explicitResources } from './worker.ts'
 import { createWorkerTools } from './worker-tools.ts'
+import { progressReporter } from './progress.ts'
+import { capabilities } from './capabilities.ts'
 
 export interface TaskCoordinatorRequest {
   task: string
@@ -49,6 +52,8 @@ export interface TaskCoordinatorRequest {
   baseline: Record<string, string>
   originals: string
   controlsPath?: string
+  review?: boolean
+  resumed?: boolean
 }
 
 export interface TaskCoordinatorEvidence {
@@ -77,7 +82,6 @@ const delegateSchema = Type.Object(
 
 type Delegation = Static<typeof delegateSchema>
 type ChildReceipt = { assignment: Delegation; evidence: WorkerEvidence }
-const childBudget = (request: TaskCoordinatorRequest) => (request.kind === 'branch' ? undefined : 8)
 const coordinatorRole = (request: TaskCoordinatorRequest) =>
   request.kind === 'branch' ? 'branch-orchestrator' : 'task-coordinator'
 
@@ -107,6 +111,37 @@ function isReview(role: string): boolean {
   return role === 'reviewer' || role === 'database-reviewer'
 }
 
+function checkChildWrites(
+  request: TaskCoordinatorRequest,
+  assignment: Delegation,
+  role: Role,
+  before: Map<string, Buffer>,
+  after: Map<string, Buffer>,
+) {
+  const allowed =
+    assignment.role === 'performance'
+      ? [...role.writes, ...request.project.instrumentationPaths]
+      : role.writes
+
+  for (const path of changes(before, after)) {
+    if (
+      request.kind === 'branch' &&
+      assignment.role === 'task-worker' &&
+      !['.md', '.txt', '.rst'].includes(extname(path).toLowerCase())
+    ) {
+      throw new Error('Branch code implementation requires the implementer role')
+    }
+
+    if (
+      isReview(assignment.role) ||
+      !writable(path, assignment.writePaths) ||
+      !writable(path, allowed)
+    ) {
+      throw new Error(`Child edited outside its role or assignment: ${path}`)
+    }
+  }
+}
+
 export async function createTaskCoordinatorTools(
   request: TaskCoordinatorRequest,
   signal: AbortSignal,
@@ -114,6 +149,7 @@ export async function createTaskCoordinatorTools(
 ) {
   const role = await loadRole(coordinatorRole(request))
   const worker = createWorkerTools({ ...request, role: 'reviewer' }, role)
+  const progress = progressReporter(request.outputPath, role.name)
   const receipts: ChildReceipt[] = []
   const originals = request.kind === 'branch' ? await inventory(request.originals) : undefined
   let checks: Receipt[] = []
@@ -121,7 +157,7 @@ export async function createTaskCoordinatorTools(
   let declaredDatabase = request.checkpoint.database
   let submitted: WorkerResult | undefined
   let fatal: unknown
-  let calls = 0
+  const failedAssignments = new Set<string>()
   let pending = 0
   let submitting = false
   let revision = 0
@@ -141,10 +177,8 @@ export async function createTaskCoordinatorTools(
       throw new Error('Invalid leaf assignment')
     }
 
-    const limit = childBudget(request)
-
-    if (submitted || submitting || (limit !== undefined && calls >= limit)) {
-      throw new Error('Task is already submitted or its child-call budget is exhausted')
+    if (submitted || submitting) {
+      throw new Error('Task is already submitted')
     }
 
     if (!scopeContained(raw.writePaths, request.checkpoint.writePaths)) {
@@ -155,38 +189,58 @@ export async function createTaskCoordinatorTools(
       throw new Error('Review workers require an empty write scope')
     }
 
-    calls++
     pending++
+    let recoverableFailure = false
+    const assignmentKey = JSON.stringify([raw.role, [...raw.writePaths].sort()])
 
     try {
       return await serialize(async () => {
         const childRole = await loadRole(raw.role)
         const before = await inventory(request.workspace)
-        const child = await dispatch(
-          {
-            role: raw.role,
-            task: JSON.stringify({
-              task: raw.task,
-              parentTask: request.task,
-              context: request.context,
-              kind: request.kind,
-              authority:
-                request.kind === 'branch'
-                  ? 'Authorized design-document implementation; resolve reviewer feedback.'
-                  : 'Bounded task scope; this is not an accepted implementation design.',
-              previousFindings: receipts
-                .filter((receipt) => sameAssignment(receipt.assignment, raw))
-                .map((receipt) => receipt.evidence.result),
-            }),
-            workspace: request.workspace,
-            project: request.project,
-            checkpoint: { ...request.checkpoint, writePaths: raw.writePaths },
-            model: request.model,
-            baseline: request.baseline,
-            originals: request.originals,
-          },
-          signal,
-        )
+        await progress.update({
+          stage: 'child',
+          role: raw.role,
+          child: undefined,
+          message: raw.task.slice(0, 240),
+        })
+        let child: WorkerEvidence
+
+        try {
+          child = await dispatch(
+            {
+              role: raw.role,
+              task: JSON.stringify({
+                task: raw.task,
+                parentTask: request.task,
+                context: request.context,
+                kind: request.kind,
+                capabilities: capabilities.workers,
+                execution: { state: 'running', resumed: request.resumed ?? false },
+                authority:
+                  request.kind === 'branch'
+                    ? 'Authorized design-document implementation; resolve reviewer feedback.'
+                    : 'Bounded task scope; this is not an accepted implementation design.',
+                previousFindings: receipts
+                  .filter((receipt) => sameAssignment(receipt.assignment, raw))
+                  .map((receipt) => receipt.evidence.result),
+              }),
+              workspace: request.workspace,
+              project: request.project,
+              checkpoint: { ...request.checkpoint, writePaths: raw.writePaths },
+              model: request.model,
+              baseline: request.baseline,
+              originals: request.originals,
+            },
+            signal,
+            (activity) => progress.update({ stage: 'child', child: activity }),
+          )
+        } catch (error) {
+          checkChildWrites(request, raw, childRole, before, await inventory(request.workspace))
+          recoverableFailure = true
+          failedAssignments.add(assignmentKey)
+          throw error
+        }
+
         signal.throwIfAborted()
         const after = await inventory(request.workspace)
 
@@ -206,43 +260,29 @@ export async function createTaskCoordinatorTools(
           throw new Error('Child model does not match its configured role')
         }
 
-        if (
-          !Number.isSafeInteger(child.turns) ||
-          child.turns < 1 ||
-          child.turns > childRole.maxTurns
-        ) {
-          throw new Error('Child exceeded its turn budget')
+        if (!Number.isSafeInteger(child.turns) || child.turns < 1) {
+          throw new Error('Invalid child turn telemetry')
         }
 
-        const roleScopes =
-          raw.role === 'performance'
-            ? [...childRole.writes, ...request.project.instrumentationPaths]
-            : childRole.writes
-
-        for (const path of changes(before, after)) {
-          if (
-            request.kind === 'branch' &&
-            raw.role === 'task-worker' &&
-            !['.md', '.txt', '.rst'].includes(extname(path).toLowerCase())
-          ) {
-            throw new Error('Branch code implementation requires the implementer role')
-          }
-
-          if (
-            isReview(raw.role) ||
-            !writable(path, raw.writePaths) ||
-            !writable(path, roleScopes)
-          ) {
-            throw new Error(`Child edited outside its role or assignment: ${path}`)
-          }
-        }
+        checkChildWrites(request, raw, childRole, before, after)
+        failedAssignments.delete(assignmentKey)
 
         receipts.push({ assignment: raw, evidence: child })
         await atomicJson(`${request.outputPath}.children.json`, receipts)
+        await progress.update({
+          stage: 'coordinating',
+          role: role.name,
+          child: undefined,
+          message: `${raw.role}: ${child.result.verdict}. ${child.result.summary.slice(0, 200)}`,
+        })
         return child
       })
     } catch (error) {
-      fatal = error
+      if (!recoverableFailure) {
+        fatal = error
+      }
+
+      await progress.update({ stage: 'issue', message: String(error).slice(0, 500) })
       throw error
     } finally {
       pending--
@@ -308,7 +348,7 @@ export async function createTaskCoordinatorTools(
   async function validatePass(): Promise<void> {
     signal.throwIfAborted()
 
-    if (pending || fatal) {
+    if (pending || fatal || failedAssignments.size) {
       throw new Error('Unfinished or failed child execution prevents a passing result')
     }
 
@@ -391,10 +431,7 @@ export async function createTaskCoordinatorTools(
     {
       name: 'delegate_worker',
       label: 'Delegate bounded leaf task',
-      description:
-        request.kind === 'branch'
-          ? 'Await one scoped leaf worker and use its findings to continue autonomous work.'
-          : `Await one scoped leaf worker. Limit: ${childBudget(request)} calls.`,
+      description: 'Await one scoped leaf worker and resolve its findings autonomously.',
       parameters: delegateSchema,
       async execute(_id, raw) {
         return textResult(await delegate(raw))
@@ -427,6 +464,11 @@ export async function createTaskCoordinatorTools(
           }
 
           submitted = result
+          await progress.update({
+            stage: result.verdict === 'blocked' ? 'blocked' : 'complete',
+            message: result.summary,
+            child: undefined,
+          })
           return textResult({ submitted: true })
         } finally {
           submitting = false
@@ -447,10 +489,12 @@ export async function createTaskCoordinatorTools(
       await queue
     },
     validatePass,
+    progress,
   }
 }
 
 const controlsSchema = Type.Object({
+  baseRevision: Type.Optional(Type.Integer({ minimum: 0 })),
   revision: Type.Integer({ minimum: 0 }),
   messages: Type.Array(
     Type.Object({
@@ -460,6 +504,7 @@ const controlsSchema = Type.Object({
     { maxItems: 100 },
   ),
   cancelled: Type.Boolean(),
+  paused: Type.Optional(Type.Boolean()),
 })
 
 export async function runTaskCoordinator(
@@ -518,17 +563,18 @@ export async function runTaskCoordinator(
   let turns = 0
   let controlRevision = 0
   let queuedRevision = 0
+  let baseRevision: number | undefined
   let controlsError: unknown
   const steering = new Map<string, number>()
   const abort = () => {
     void session.abort()
   }
   combined.addEventListener('abort', abort, { once: true })
-  const timer =
-    role.timeoutMs > 0
-      ? setTimeout(() => controller.abort(new Error('Task coordinator timed out')), role.timeoutMs)
-      : undefined
   session.subscribe((event) => {
+    if (event.type === 'message_update') {
+      void worker.progress.update({ stage: 'coordinating', child: undefined }, true).catch(() => {})
+    }
+
     if (
       event.type === 'message_end' &&
       event.message.role === 'assistant' &&
@@ -557,10 +603,6 @@ export async function runTaskCoordinator(
 
     if (event.type === 'turn_end') {
       turns++
-
-      if (role.maxTurns > 0 && turns >= role.maxTurns && !worker.result()) {
-        controller.abort(new Error('Task coordinator exhausted its turn budget'))
-      }
     }
   })
 
@@ -580,6 +622,19 @@ export async function runTaskCoordinator(
     if (controls.cancelled) {
       controller.abort(new Error('Task cancelled by user'))
       return
+    }
+
+    if (controls.paused) {
+      controller.abort(new Error('Task paused for inspection'))
+      return
+    }
+
+    if (baseRevision === undefined) {
+      baseRevision = controls.baseRevision ?? 0
+      controlRevision = baseRevision
+      queuedRevision = baseRevision
+    } else if (baseRevision !== (controls.baseRevision ?? 0)) {
+      throw new Error('Task assignment changed without stopping the coordinator')
     }
 
     for (const message of controls.messages) {
@@ -632,7 +687,16 @@ export async function runTaskCoordinator(
         kind: request.kind,
         taskScope: request.checkpoint,
         folderInstructions: await instructions(request.workspace, request.checkpoint.writePaths),
-        childBudget: childBudget(request),
+        capabilities: capabilities.workers,
+        review: request.review ?? true,
+        execution: {
+          state: 'running',
+          resumed: request.resumed ?? false,
+          instruction: request.resumed
+            ? 'The host invoked resume_task. Earlier temporary pause/await-resume instructions ' +
+              'are satisfied. Execute the current assignment now; all other constraints remain.'
+            : 'Execute the current assignment; lifecycle controls are managed by the host.',
+        },
       }),
     )
     await refreshControls()
@@ -647,17 +711,13 @@ export async function runTaskCoordinator(
       )
       await refreshControls()
       combined.throwIfAborted()
-
-      if (request.kind !== 'branch') {
-        break
-      }
     }
 
     await worker.settle()
     combined.throwIfAborted()
 
-    if (controlsError || !worker.result() || (role.maxTurns > 0 && turns > role.maxTurns)) {
-      throw new Error('Coordinator did not produce a result within its execution budget')
+    if (controlsError || !worker.result()) {
+      throw new Error('Coordinator did not produce a result')
     }
 
     if (worker.result()!.verdict === 'pass') {
@@ -679,7 +739,6 @@ export async function runTaskCoordinator(
       ...(request.kind === 'branch' ? { checks: worker.checks() } : {}),
     }
   } finally {
-    clearTimeout(timer)
     clearInterval(controlsTimer)
     combined.removeEventListener('abort', abort)
     controller.abort()
@@ -687,6 +746,7 @@ export async function runTaskCoordinator(
     await session.abort()
     await worker.settle()
     session.dispose()
+    await worker.progress.settle()
     await modelRuntime.settleCredentialWrites()
   }
 }

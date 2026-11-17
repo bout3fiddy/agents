@@ -15,7 +15,5 @@
   ],
   "writes": [],
   "mayDelegate": false,
-  "timeoutMs": 600000,
-  "maxTurns": 40,
   "backend": "claude-cli"
 }
