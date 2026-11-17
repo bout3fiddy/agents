@@ -47,16 +47,36 @@ organizational policy can still apply; the runtime does not bypass that policy.
 
 Workshop conversation remains active as decisions evolve. Codex launches independent Fable advice
 with the same question, recent user messages and selected document snapshots, then continues its own
-reasoning. Results are persisted and delivered as a custom follow-up to the originating session.
-Accepted-epoch context projection admits these advice messages while rejecting obsolete advice.
-Session shutdown/replacement/reload and tree changes cancel pending calls. There are two concurrent
-slots, bounded input/output and a role timeout. Fable uses a fresh CLI process with
-WebSearch/WebFetch, no MCP servers and no ambient global customization. It offers sourced guidance
-and cannot accept or write a design.
+reasoning. Results are persisted and delivered as a custom message at a completed model/tool
+boundary, before the next model request. A completion while idle starts a response. Waits and
+automatic delivery share an atomic persisted consumption record; completed jobs remain eligible
+until consumed. A wait after automatic delivery returns metadata. A newer user request supersedes
+automatic delivery of older advice. Cancellation also consumes any completed, undelivered result.
+Raw advice remains inspectable. Consumption and Pi session append are separate writes: a crash
+between them can leave a claimed result without a session message. Inspect the saved consultation
+explicitly in that case; automatic recovery does not replay already-claimed advice. Accepted-epoch
+context projection admits these advice messages while rejecting obsolete advice. Session
+shutdown/replacement/reload and tree changes cancel pending calls. There are two concurrent slots,
+bounded input/output and a role timeout. Fable uses a fresh CLI process with WebSearch/WebFetch, no
+MCP servers and no ambient global customization. It offers sourced guidance and cannot accept or
+write a design.
 
 Document changes use the orchestrator's ordinary tools after the user's request. They require no
 accepted checkpoint and can retain open questions. Only substantial implementation uses the
-following checkpoint mechanism; no document save causes pruning or a new session.
+following checkpoint mechanism; no document save accepts a design or starts a new session.
+
+The orchestrator's context uses append-only `context_edit` entries to excerpt bulky successful
+file/search tool results and historical write/edit/shell arguments after four newer model steps.
+Current-request reads remain intact until a successful write/edit supersedes them; current shell
+output also stays. Original records remain untouched. User constraints, assistant prose, advice,
+failures and tool-call IDs are preserved. Exact editing requires a current read; the excerpt marker
+names the full project trace. This reduces redundant payloads during workshops without deciding
+which user choices are final.
+
+Consultation input uses small line excerpts, up to twelve recent user messages and explicit older
+constraints, bounded at 48 KB. The original user wording is separate from Codex's question framing.
+The 350/700-word response targets and consultation triggers are prompt policy. Live behavioral cases
+check that simple choices, quiz presentation and document splits avoid unnecessary calls.
 
 The draft contains objective, final design, invariants, acceptance conditions, write scope,
 specialist flags and unresolved questions. User acceptance writes a versioned checkpoint atomically

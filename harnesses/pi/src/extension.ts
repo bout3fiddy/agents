@@ -10,10 +10,16 @@ import { checkpointText, projectContext, taskView } from './context.ts'
 import { instructions } from './project.ts'
 import { registerWorkshop } from './workshop.ts'
 import { registerTraces } from './traces.ts'
+import { registerWorkshopContext } from './workshop-context.ts'
+import { registerDocumentTools } from './document-tools.ts'
+import { registerTiming } from './timing.ts'
 
 export default function harness(pi: ExtensionAPI): void {
   registerTraces(pi)
   const workshop = registerWorkshop(pi)
+  registerWorkshopContext(pi)
+  registerDocumentTools(pi)
+  registerTiming(pi)
   const storeFor = async (cwd: string) => new StateStore(await realpath(cwd))
 
   pi.on('session_start', async (_event, ctx) => {

@@ -13,10 +13,12 @@ workers, executable checks and independent Fable reviews.
 | Database reviewer        | Fable 5.2 / high   |
 | Performance investigator | Fable 5.2 / medium |
 
-The default orchestrator is `openai-codex/gpt-6.1-sol`. Implementation is pinned to
-`openai-codex/gpt-6-astra` at high effort. Change `roles/*.json` to select models, effort, tools,
-skills, scopes and budgets. The orchestrator has normal host shell/file access; the isolated worker
-boundaries apply to delegated execution.
+The default orchestrator is `openai-codex/gpt-6.1-sol` at medium effort. Pi's current model and
+thinking selection take precedence for the orchestrator; the harness never silently changes them.
+Timing traces record the actual selection. Implementation is pinned to `openai-codex/gpt-6-astra` at
+high effort. Change `roles/*.json` to select models, effort, tools, skills, scopes and budgets. The
+orchestrator has normal host shell/file access; the isolated worker boundaries apply to delegated
+execution.
 
 ## Install and run
 
@@ -57,22 +59,31 @@ tools use the scoped MCP bridge.
 
 ## Design workshop and routine work
 
-Discuss the design naturally. For substantive questions, Codex starts `consult_design` with the same
-question and relevant documents, then develops its own answer while Fable runs. Fable receives up to
-twelve recent user messages verbatim, the selected files, folder instructions and any supplied
-confirmed context. The total input is bounded at 160 KB; large inputs fail explicitly.
-`historyMessages` can reduce the included history (0 omits it); supply necessary constraints in
-`context` when doing so. Each consultation uses a fresh Claude instance with WebSearch/WebFetch and
-explicit prompts. It has no local execution/file tools, ambient global instructions, skills or
-memory.
+Consult Fable for new substantive architecture/security decisions, conflicting constraints,
+uncertain platform feasibility or an explicit second opinion. Routine choices, quiz presentation and
+mechanical document edits reuse existing advice. Codex quotes the user's wording separately from its
+own proposal and develops its own answer while Fable runs. These routing rules are prompt policy,
+exercised by the live workshop scenarios; they are not a semantic authorization gate.
 
-Fable's advice arrives automatically as a follow-up in the originating session. Codex presents each
-view, agreements, disagreements, constraints and choices for the user. `design_consultation` can
-inspect, await or cancel a job. Waiting consumes the result once; interrupting a wait keeps the
-background consultation running. Use explicit cancellation to stop it. There are at most two active
-consultations; each has a four-minute budget. Session shutdown, replacement, reload and tree changes
-cancel pending advice. Results and inputs live in the project's private harness state under
-`consultations/`. Resuming can inspect a saved result; an abandoned running job must be restarted.
+Fable receives up to twelve recent user messages, selected documents, folder instructions and
+confirmed context. `historyMessages` can select 0–12; omitted history is counted explicitly. Supply
+necessary older constraints in `context`. Whole files are limited to 16 KB each; use `excerpts` with
+`path`, `startLine` and `lines` (up to 160) for larger documents. Total input is bounded at 48 KB;
+oversized inputs fail explicitly. Advice targets 350 words, or 700 with `depth: "deep"`. Output
+budgets are instructions, with the existing 32 KB hard response limit retained. Each consultation
+uses a fresh Claude instance with WebSearch/WebFetch and explicit prompts. It has no local
+execution/file tools, ambient global instructions, skills or memory.
+
+Ready advice is consumed at the next completed model/tool boundary, or triggers a response when Pi
+is idle. Codex presents each view, agreements, disagreements, constraints and choices for the user.
+`design_consultation` can inspect metadata, await or cancel a job. Automatic delivery and explicit
+waits share a persisted consumption record, including waits made after Fable finishes. Advice from
+an earlier user request is saved as superseded and does not automatically interrupt the newer
+discussion. Waiting consumes the result once; interrupting a wait keeps the background consultation
+running. Use explicit cancellation to stop it. There are at most two active consultations; each has
+a four-minute budget. Session shutdown, replacement, reload and tree changes cancel pending advice.
+Results and inputs live in the project's private harness state under `consultations/`. Resuming can
+inspect a saved result; an abandoned running job must be restarted.
 
 When you settle a choice and ask to update the document, Codex saves it directly using ordinary file
 tools. Open questions can remain in the document. Saving a design needs no checkpoint,
@@ -82,6 +93,15 @@ commit an update to a document means save it; Git commits require a specific req
 The orchestrator can use `bash`, `read`, `write`, `edit`, `grep`, `find` and `ls` for its work. Its
 delegation rule is behavioral: substantial implementation goes to Astra; ordinary work stays with
 the orchestrator. It applies repository lint and appropriate verification to its own changes.
+`document_check` checks or formats selected Markdown files with the pinned formatter and 100-column
+policy. It reports its scope explicitly; content correctness and links still need review. Prefer one
+coherent edit and check over generated checking scripts and repeated document rewrites.
+
+Older bulky file/search tool results and write/edit/shell arguments are excerpted after four newer
+model steps. Current-request reads remain intact until a successful write/edit supersedes them;
+current shell output also stays. User messages, assistant prose, advice and tool failures remain
+intact. Full raw payloads stay in the session trace; persisted context edits survive resume and
+compaction. Read current file sections when exact text is needed for editing.
 
 Fable can research current platform details and engineering practices during design advice and
 specialist reviews. Its shared `prompts/web-research.md` prefers primary sources, requires source
@@ -216,6 +236,10 @@ Project-local traces live in `.pi/traces/` under the directory where Pi starts:
 - `sessions/`: orchestrator JSONL sessions, readable with Pi or a text editor. The `pih` launcher
   stores sessions here directly. Ordinary `pi` sessions are mirrored here at lifecycle boundaries.
 - `harness/consultations/`: Fable workshop inputs, status and advice.
+- `harness/timing/`: request/model selection, model-step start/end, first visible text, tool
+  duration and settled events. These contain timing/usage metadata, without prompt or tool-argument
+  bodies. Model intervals include client/provider overhead; they do not isolate server queueing or
+  compute.
 - `harness/attempts/`: worker assignments, Codex session JSONL directories, Claude event JSONL,
   scoped tool evidence and results.
 - `harness/`: implementation checkpoints, receipts, task state, snapshots and integration journal.

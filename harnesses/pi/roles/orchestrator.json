@@ -18,7 +18,8 @@
     "design_consultation",
     "propose_design",
     "workflow",
-    "harness_status"
+    "harness_status",
+    "document_check"
   ],
   "writes": ["**"],
   "mayDelegate": true,

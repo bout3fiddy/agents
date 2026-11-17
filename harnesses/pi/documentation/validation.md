@@ -6,7 +6,7 @@ Bun 1.3.5.
 ## Automated checks
 
 `./bin/verify.sh` passes repository-wide executable lint, Pi formatting and strict TypeScript
-checks, 39 Pi harness tests, 132 existing evaluation tests, 13 skill-validator tests and the skill
+checks, 53 Pi harness tests, 132 existing evaluation tests, 13 skill-validator tests and the skill
 routing metadata audit. No tests were skipped.
 
 The harness tests exercise:
@@ -48,6 +48,47 @@ global `CLAUDE.md`, skills, agents, commands and workflows are absent. Its crede
 settings remain in place. No backup of those removed Claude instruction assets is retained.
 
 ## Workshop, shell access and project-local traces
+
+The trace-driven workshop fixes add real Pi runtime regressions for completed-before-wait advice,
+automatic delivery before the next model step, late cancellation, older advice after new user input
+(including explicit waits), and an unreadable result alongside a valid result. Fault injection
+covers storage failure and a user-input change, abort or navigation during a delivery claim. Context
+tests preserve user decisions, errors, current unchanged reads, tool-call pairing and raw traces
+across resume; malformed historical calls and Unicode excerpt boundaries are exercised.
+
+The final live workshop run (`reports/workshop-1794929184681/`) used real Codex and Fable calls:
+
+| Scenario                 | Duration | Main model steps | New consultations |
+| ------------------------ | -------: | ---------------: | ----------------: |
+| Record a settled choice  |   18.7 s |                5 |                 0 |
+| Present the quiz         |   10.7 s |                1 |                 0 |
+| Split existing documents |   27.0 s |                9 |                 0 |
+
+The substantive question did consult Fable, Codex responded while advice was pending, and advice
+arrived automatically. The provider accepted further requests after persisted context edits
+excerpted an earlier large read. The document checker ran, files retained the selected
+capacity/rejection policy and open persistence question, and no implementation worker ran.
+
+A private replay of the observed project's pre-compaction history reduced visible text/tool-argument
+content from 800,518 to 362,083 characters (54.8%), preserving all five user messages and
+tool-result identities/statuses. This is a content-volume measurement, not a matched latency
+benchmark. Current reads and current shell output remain protected. Evidence:
+`reports/workshop-replay/final-result.json`.
+
+The web capability run (`reports/web-1794928122002/`) passed actual WebSearch and WebFetch calls for
+Fable advice and engineering review, including citations and the scoped result handoff. The
+independent Fable source review informed the added interruption/storage/history regressions; its
+speculation about multiple boundary handlers was checked against Pi's chained boundary API and
+runtime behavior.
+
+Request/model/first-text/tool timing now persists separately under project-local `harness/timing/`.
+The orchestrator's selected model/effort is recorded and preserved. These intervals include provider
+and client overhead; no server queueing or reasoning-time decomposition is claimed.
+
+After local installation, the actual `pi-harness` launcher read and edited a settled design, ran
+`document_check`, preserved the open question, and wrote a local session and timing trace. It
+invoked no consultation or implementation workflow. Evidence:
+`reports/workshop-fixes-installed.json`.
 
 The 17 November workshop revision adds Fable design advice alongside the Codex orchestrator, normal
 host shell/file tools, and direct design document edits. Implementation is pinned to

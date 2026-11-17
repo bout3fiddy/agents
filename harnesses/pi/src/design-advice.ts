@@ -17,6 +17,17 @@ export const consultationSchema = Type.Object({
   question: Type.String({ minLength: 1, maxLength: 16000 }),
   context: Type.Optional(Type.String({ maxLength: 16000 })),
   paths: Type.Optional(Type.Array(Type.String({ maxLength: 300 }), { maxItems: 12 })),
+  excerpts: Type.Optional(
+    Type.Array(
+      Type.Object({
+        path: Type.String({ maxLength: 300 }),
+        startLine: Type.Integer({ minimum: 1 }),
+        lines: Type.Integer({ minimum: 1, maximum: 160 }),
+      }),
+      { maxItems: 6 },
+    ),
+  ),
+  depth: Type.Optional(Type.Union([Type.Literal('brief'), Type.Literal('deep')])),
   historyMessages: Type.Optional(Type.Integer({ minimum: 0, maximum: 12 })),
 })
 
@@ -31,6 +42,8 @@ export type Consultation = {
   finishedAt?: string
   advice?: Advice
   error?: string
+  requestId?: string
+  delivery?: { via: 'tool' | 'automatic' | 'superseded' | 'cancelled'; at: string }
 }
 export type AdviceRunner = (
   input: string,
@@ -42,6 +55,7 @@ export async function consultationInput(
   store: StateStore,
   raw: ConsultationInput,
   userMessages: string[],
+  requestId?: string,
 ): Promise<string> {
   if (!Check(consultationSchema, raw)) {
     throw new Error('Invalid design consultation')
@@ -53,22 +67,42 @@ export async function consultationInput(
     const content = (await readBoundedFile(await safePath(store.projectRoot, path))).toString(
       'utf8',
     )
+
+    if (content.length > 16000) {
+      throw new Error(`${path} exceeds 16 KB; select relevant line ranges with excerpts`)
+    }
+
     documents.push({ path, content })
+  }
+
+  for (const excerpt of raw.excerpts ?? []) {
+    const file = await readBoundedFile(await safePath(store.projectRoot, excerpt.path))
+    const content = file
+      .toString('utf8')
+      .split('\n')
+      .slice(excerpt.startLine - 1, excerpt.startLine - 1 + excerpt.lines)
+      .join('\n')
+    documents.push({ path: `${excerpt.path}:${excerpt.startLine}`, content })
   }
 
   const input = JSON.stringify({
     question: raw.question,
+    requestId,
+    responseBudgetWords: raw.depth === 'deep' ? 700 : 350,
     confirmedContext: raw.context,
     userMessages: raw.historyMessages === 0 ? [] : userMessages.slice(-(raw.historyMessages ?? 12)),
     olderUserMessagesOmitted: Math.max(0, userMessages.length - (raw.historyMessages ?? 12)),
     documents,
-    folderInstructions: await instructions(store.projectRoot, raw.paths ?? []),
+    folderInstructions: await instructions(store.projectRoot, [
+      ...(raw.paths ?? []),
+      ...(raw.excerpts ?? []).map((item) => item.path),
+    ]),
     task: 'Give independent design advice. Open questions are expected. Do not implement.',
   })
 
-  if (Buffer.byteLength(input) > 160000) {
+  if (Buffer.byteLength(input) > 48000) {
     throw new Error(
-      'Consultation exceeds 160 KB; select fewer paths or reduce historyMessages ' +
+      'Consultation exceeds 48 KB; select smaller excerpts or reduce historyMessages ' +
         '(0 omits history). Supply necessary constraints in context.',
     )
   }
@@ -157,12 +191,16 @@ type Pending = {
 
 export class DesignConsultations {
   private readonly pending = new Map<string, Pending>()
+  private readonly ready = new Map<string, Consultation>()
+  private readonly stores = new Map<string, StateStore>()
+  private readonly claiming = new Set<string>()
   private closed = false
   epoch = 0
 
   constructor(
     private readonly run: AdviceRunner = runDesignAdvice,
     private readonly changed: (count: number) => void = () => {},
+    private readonly persist: typeof atomicJson = atomicJson,
   ) {}
 
   async start(
@@ -170,7 +208,7 @@ export class DesignConsultations {
     session: string,
     input: string,
     question: string,
-    notify: (job: Consultation) => void,
+    notify: (job: Consultation) => void | Promise<void>,
     signal?: AbortSignal,
     epoch = this.epoch,
   ): Promise<Consultation> {
@@ -190,18 +228,20 @@ export class DesignConsultations {
       question,
       status: 'running',
       startedAt: new Date().toISOString(),
+      requestId: (JSON.parse(input) as { requestId?: string }).requestId,
     }
     const controller = new AbortController()
     const path = join(store.directory, 'consultations', `${job.id}.json`)
     const pending: Pending = { job, controller, done: Promise.resolve(), claimed: false }
     this.pending.set(job.id, pending)
+    this.stores.set(job.id, store)
     this.changed(this.pending.size)
 
     // Reserve the slot before any await; persistence and dispatch share the same completion path.
     pending.done = (async () => {
       try {
-        await atomicJson(`${path}.input.json`, JSON.parse(input))
-        await atomicJson(path, job)
+        await this.persist(`${path}.input.json`, JSON.parse(input))
+        await this.persist(path, job)
         controller.signal.throwIfAborted()
         job.advice = await this.run(input, controller.signal, `${path}.claude.jsonl`)
         controller.signal.throwIfAborted()
@@ -213,9 +253,12 @@ export class DesignConsultations {
 
       job.finishedAt = new Date().toISOString()
 
+      let persisted = true
+
       try {
-        await atomicJson(path, job)
+        await this.persist(path, job)
       } catch {
+        persisted = false
         job.status = 'failed'
         job.error = 'Could not persist the consultation result'
       }
@@ -223,14 +266,93 @@ export class DesignConsultations {
       this.pending.delete(job.id)
       this.changed(this.pending.size)
 
-      if (!controller.signal.aborted && !pending.claimed) {
-        notify({ ...job })
+      if (!controller.signal.aborted) {
+        if (persisted) {
+          this.ready.set(job.id, { ...job })
+        } else {
+          this.stores.delete(job.id)
+        }
+
+        if (!pending.claimed) {
+          await notify({ ...job })
+        }
       }
     })()
 
     // Delivery can fail during teardown; the persisted result remains inspectable.
     pending.done.catch(() => {})
     return { ...job }
+  }
+
+  available(session: string): Consultation[] {
+    return [...this.ready.values()].filter((job) => job.session === session)
+  }
+
+  suppress(id: string): void {
+    this.ready.delete(id)
+    this.stores.delete(id)
+  }
+
+  async discard(store: StateStore, session: string, id: string): Promise<void> {
+    const job = await this.get(store, session, id)
+    job.delivery = { via: 'superseded', at: new Date().toISOString() }
+    await this.persist(join(store.directory, 'consultations', `${id}.json`), job)
+    this.suppress(id)
+  }
+
+  async claim(
+    store: StateStore,
+    session: string,
+    id: string,
+    via: NonNullable<Consultation['delivery']>['via'],
+    options: { valid?: () => boolean; signal?: AbortSignal } = {},
+  ): Promise<Consultation | undefined> {
+    if (this.claiming.has(id)) {
+      return undefined
+    }
+
+    this.claiming.add(id)
+    const epoch = this.epoch
+    const valid = () =>
+      !options.signal?.aborted &&
+      (options.valid?.() ?? true) &&
+      (via === 'superseded' || via === 'cancelled' || (!this.closed && epoch === this.epoch))
+
+    try {
+      const job = await this.get(store, session, id)
+
+      if (job.delivery) {
+        this.ready.delete(id)
+        return undefined
+      }
+
+      if (job.status === 'running' || !valid()) {
+        return undefined
+      }
+
+      job.delivery = { via, at: new Date().toISOString() }
+      const path = join(store.directory, 'consultations', `${id}.json`)
+      await this.persist(path, job)
+
+      if (!valid()) {
+        job.delivery =
+          epoch !== this.epoch || this.closed
+            ? { via: 'superseded', at: new Date().toISOString() }
+            : undefined
+        await this.persist(path, job)
+
+        if (job.delivery) {
+          this.suppress(id)
+        }
+
+        return undefined
+      }
+
+      this.suppress(id)
+      return job
+    } finally {
+      this.claiming.delete(id)
+    }
   }
 
   async get(store: StateStore, session: string, id: string): Promise<Consultation> {
@@ -296,5 +418,16 @@ export class DesignConsultations {
     }
 
     await Promise.allSettled(pending.map((item) => item.done))
+
+    for (const job of this.ready.values()) {
+      const store = this.stores.get(job.id)
+
+      if (store) {
+        await this.claim(store, job.session, job.id, 'superseded').catch(() => {})
+      }
+    }
+
+    this.ready.clear()
+    this.stores.clear()
   }
 }

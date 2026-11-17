@@ -6,6 +6,7 @@ import { setTimeout as delay } from 'node:timers/promises'
 import { consultationInput, DesignConsultations, type Advice } from '../src/design-advice.ts'
 import { fixture } from './support.ts'
 import { loadRole } from '../src/roles.ts'
+import { atomicJson } from '../src/state.ts'
 
 test('parallel advice persists results and respects session ownership', async () => {
   const item = await fixture()
@@ -33,9 +34,9 @@ test('parallel advice persists results and respects session ownership', async ()
     assert.equal(first.status, 'running')
 
     // Starting another task must remain possible before the first model call finishes.
-    const second = await consultations.start(item.store, 'session-a', '{}', 'Q2', (job) =>
-      delivered.push(job.id),
-    )
+    const second = await consultations.start(item.store, 'session-a', '{}', 'Q2', (job) => {
+      delivered.push(job.id)
+    })
     await assert.rejects(
       consultations.start(item.store, 'session-a', '{}', 'Q3', () => {}),
       /already running/,
@@ -113,7 +114,7 @@ test('Fable receives bounded user context and permitted documents', async () => 
     )
     await assert.rejects(
       consultationInput(item.store, { question: 'Q' }, ['x'.repeat(160001)]),
-      /160 KB/,
+      /48 KB/,
     )
     const withoutHistory = JSON.parse(
       await consultationInput(
@@ -131,6 +132,72 @@ test('Fable receives bounded user context and permitted documents', async () => 
     assert.equal(advisor.model, 'claude-fable-5-2')
     assert.ok(['medium', 'high'].includes(advisor.thinking))
     assert.deepEqual(advisor.tools, ['WebSearch', 'WebFetch'])
+  } finally {
+    await rm(item.base, { recursive: true, force: true })
+  }
+})
+
+test('completed advice has one consumer across late waits and racing readers', async () => {
+  const item = await fixture()
+  const jobs = new DesignConsultations(async () => ({ text: 'one result', model: 'test' }))
+
+  try {
+    const job = await jobs.start(item.store, 'session', '{}', 'Question', () => {})
+    await jobs.settle(job.id, false)
+    assert.equal(jobs.available('session').length, 1)
+    const claimed = await Promise.all([
+      jobs.claim(item.store, 'session', job.id, 'tool'),
+      jobs.claim(item.store, 'session', job.id, 'automatic'),
+    ])
+    assert.equal(claimed.filter(Boolean).length, 1)
+    assert.equal(jobs.available('session').length, 0)
+    assert.equal(await jobs.claim(item.store, 'session', job.id, 'automatic'), undefined)
+    const restarted = new DesignConsultations()
+    assert.equal(await restarted.claim(item.store, 'session', job.id, 'tool'), undefined)
+    assert.equal((await restarted.get(item.store, 'session', job.id)).advice?.text, 'one result')
+  } finally {
+    await jobs.close()
+    await rm(item.base, { recursive: true, force: true })
+  }
+})
+
+test('excerpts bound documents and disclose omitted user history', async () => {
+  const item = await fixture()
+
+  try {
+    await writeFile(
+      join(item.root, 'architecture.md'),
+      Array.from({ length: 2000 }, (_, n) => `Line ${n + 1}: design detail`).join('\n'),
+    )
+    await assert.rejects(
+      consultationInput(
+        item.store,
+        {
+          question: 'Q',
+          paths: ['architecture.md'],
+        },
+        [],
+      ),
+      /select relevant line ranges/,
+    )
+    const input = JSON.parse(
+      await consultationInput(
+        item.store,
+        {
+          question: 'Q',
+          context: 'Keep the original durability constraint',
+          historyMessages: 3,
+          excerpts: [{ path: 'architecture.md', startLine: 50, lines: 3 }],
+        },
+        ['first', 'second', 'third', 'fourth'],
+      ),
+    )
+    assert.match(input.documents[0].content, /^Line 50:/)
+    assert.doesNotMatch(input.documents[0].content, /Line 53:/)
+    assert.deepEqual(input.userMessages, ['second', 'third', 'fourth'])
+    assert.equal(input.olderUserMessagesOmitted, 1)
+    assert.equal(input.confirmedContext, 'Keep the original durability constraint')
+    assert.equal(input.responseBudgetWords, 350)
   } finally {
     await rm(item.base, { recursive: true, force: true })
   }
@@ -246,6 +313,87 @@ test('shutdown aborts active advice and suppresses late follow-up delivery', asy
     assert.equal(saved.status, 'cancelled')
   } finally {
     await consultations.close()
+    await rm(item.base, { recursive: true, force: true })
+  }
+})
+
+for (const interruption of ['new-input', 'abort', 'navigation'] as const) {
+  test(`claim interrupted by ${interruption} cannot mark unseen advice delivered`, async () => {
+    const item = await fixture()
+    let valid = true
+    let interrupted = false
+    const controller = new AbortController()
+    const jobs = new DesignConsultations(
+      async () => ({ text: 'Advice', model: 'test' }),
+      () => {},
+      async (path, value) => {
+        await atomicJson(path, value)
+
+        if (!interrupted && (value as { delivery?: { via: string } }).delivery?.via === 'tool') {
+          interrupted = true
+
+          if (interruption === 'new-input') {
+            valid = false
+          } else if (interruption === 'abort') {
+            controller.abort()
+          } else {
+            await jobs.cancelAll()
+          }
+        }
+      },
+    )
+
+    try {
+      const job = await jobs.start(item.store, 'session', '{}', 'Q', () => {})
+      await jobs.settle(job.id, false)
+      assert.equal(
+        await jobs.claim(item.store, 'session', job.id, 'tool', {
+          valid: () => valid,
+          signal: controller.signal,
+        }),
+        undefined,
+      )
+      const saved = await jobs.get(item.store, 'session', job.id)
+      assert.equal(saved.delivery?.via, interruption === 'navigation' ? 'superseded' : undefined)
+
+      if (interruption !== 'navigation') {
+        assert.equal(jobs.available('session').length, 1)
+        assert.equal(
+          (await jobs.claim(item.store, 'session', job.id, 'automatic'))?.advice?.text,
+          'Advice',
+        )
+      }
+    } finally {
+      await jobs.close()
+      await rm(item.base, { recursive: true, force: true })
+    }
+  })
+}
+
+test('failed result persistence cannot poison the ready queue', async () => {
+  const item = await fixture()
+  let notify!: () => void
+  const notified = new Promise<void>((resolve) => {
+    notify = resolve
+  })
+  const jobs = new DesignConsultations(
+    async () => ({ text: 'Advice', model: 'test' }),
+    () => {},
+    async () => {
+      throw new Error('Injected storage failure')
+    },
+  )
+
+  try {
+    await jobs.start(item.store, 'session', '{}', 'Q', (job) => {
+      assert.equal(job.status, 'failed')
+      assert.equal(job.error, 'Could not persist the consultation result')
+      notify()
+    })
+    await notified
+    assert.deepEqual(jobs.available('session'), [])
+  } finally {
+    await jobs.close()
     await rm(item.base, { recursive: true, force: true })
   }
 })

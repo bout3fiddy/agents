@@ -19,6 +19,15 @@
   implementation handoff. Persist accepted implementation scope before explicit pruning. Preserve
   pending user input. Archived exploration must not re-enter a request through resume, tree
   navigation or compaction.
+- Deliver consultation results once at the next safe model/tool boundary. Persist consumption for
+  late waits, discard obsolete automatic delivery after newer user input, and preserve raw advice.
+  Test delivery with actual Pi runtime events; boundary messages emit `entry_appended`.
+- Keep routine choices and document organization within the orchestrator. Use `document_check` for
+  Markdown formatting, bounded consultation excerpts, and concise independent advice. Preserve user
+  constraints and exact raw traces when excerpting historical tool payloads from working context.
+- Record actual model/effort and request/model/tool timing under project-local `harness/timing/`.
+  Respect the selected orchestrator model; implementation remains independently pinned to Astra
+  high.
 - Runtime traces belong under the target project’s gitignored `.pi/traces/`; keep them out of worker
   snapshots. The launcher persists local sessions; ordinary Pi sessions are mirrored.
 - Keep prompts in `prompts/`, role definitions in `roles/`, and harness validation evidence in
