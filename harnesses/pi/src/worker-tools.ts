@@ -14,13 +14,11 @@ import { fileTools, textResult } from './file-tools.ts'
 import { createWorkspace, harnessRoot, instructions } from './project.ts'
 import { runSandboxed } from './sandbox.ts'
 import { fileHashes, inventory, safePath, writable } from './paths.ts'
-import { format } from 'prettier'
-import { checkDocuments, harnessFormatOptions } from './document-tools.ts'
+import { checkDocuments } from './document-tools.ts'
 import { capabilities } from './capabilities.ts'
 import { atomicJson } from './state.ts'
 
-// @ts-expect-error Shared formatting code is JavaScript.
-import { addReadabilitySpacing } from '../scripts/linting/readability.mjs'
+import { formatSource } from './formatter-review.ts'
 
 export const references: Record<string, string> = {
   benchmarking: 'skills/zig/references/benchmarking.md',
@@ -79,8 +77,8 @@ export function createWorkerTools(request: WorkerRequest, role: Role) {
 
           const target = await safePath(request.workspace, path)
           const source = await readFile(target, 'utf8')
-          const formatted = await format(source, { ...harnessFormatOptions, filepath: path })
-          edits.push({ target, content: addReadabilitySpacing(formatted, path) })
+          const formatted = await formatSource(source, path)
+          edits.push({ target, content: formatted })
         }
 
         for (const edit of edits) {

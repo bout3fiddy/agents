@@ -77,6 +77,14 @@ export const resultSchema = Type.Object(
         {
           severity: Type.Union([Type.Literal('required'), Type.Literal('suggestion')]),
           location: Type.String({ maxLength: 300 }),
+          formatterPath: Type.Optional(
+            Type.String({
+              minLength: 1,
+              maxLength: 300,
+              description:
+                'Exact path only if pinned formatting alone resolves this entire finding.',
+            }),
+          ),
           problem: Type.String({ minLength: 1, maxLength: 1500 }),
           evidence: Type.String({ minLength: 1, maxLength: 2000 }),
         },
@@ -164,6 +172,8 @@ export type WorkerRequest = {
 }
 
 export type WorkerEvidence = {
+  formatterProof?: { path: string; before: string; after: string }[]
+  closedReview?: { snapshot: string; model: string; paths: string[] }
   thinking?: string
   liveWorkerId?: string
   role: WorkerRole

@@ -127,10 +127,23 @@ assert.deepEqual(
   ),
 )
 assert.ok(task.receipts.every((item) => item.status === 'passed'))
-assert.ok(
-  task.evidence.every((item) =>
-    item.role === 'implementer'
-      ? item.model === 'openai-codex/gpt-6.2-astra'
-      : item.model.startsWith('claude-cli/claude-fable-5-2'),
-  ),
-)
+
+for (const item of task.evidence) {
+  if (item.closedReview) {
+    assert.equal(item.model, 'harness/formatter')
+    assert.equal(item.turns, 0)
+    assert.ok(
+      task.evidence.some(
+        (original) =>
+          original.role === item.role &&
+          original.snapshot === item.closedReview!.snapshot &&
+          original.model === item.closedReview!.model &&
+          original.model.startsWith('claude-cli/claude-fable-5-2'),
+      ),
+    )
+  } else if (item.role === 'implementer') {
+    assert.equal(item.model, 'openai-codex/gpt-6.2-astra')
+  } else {
+    assert.ok(item.model.startsWith('claude-cli/claude-fable-5-2'))
+  }
+}

@@ -14,3 +14,7 @@ cross-shard invariants when sharding is used. Never weaken durability for a late
 Run probes only against disposable databases. Do not access deployed databases or alter product
 code. Missing required replication or restore evidence is a finding. Submit concrete findings,
 failure assumptions and command results to the orchestrator through submit_result.
+
+Set formatterPath on a required finding only when applying the pinned formatter to that exact file
+fully resolves the finding. Leave it absent for behavioral, security, persistence, missing-test or
+content findings, even if the same file also needs formatting.

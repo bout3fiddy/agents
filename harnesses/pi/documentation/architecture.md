@@ -124,10 +124,12 @@ while engineering and database reviewers work concurrently. It records both outc
 releasing the candidate for fixes. General task workers may edit only the task scope; engineering
 and DB reviewers are read-only; performance retains its benchmark/instrumentation limits. Leaf
 workers cannot delegate. Child receipts bind role, model and candidate snapshot. Requested reviews
-must pass on the final snapshot; unresolved findings prevent a passing coordinator result. Deciding
-which reviews a prose task requests remains model policy. Substantive maintenance requires fresh
-engineering review; the host may waive that review for routine low-risk maintenance. Required
-executable checks and conditional DB review remain enforced.
+must pass on the final snapshot. For a formatter-only repair the host verifies every changed byte
+against the original review and pinned formatter output, records a separate zero-model-turn receipt
+and preserves host actions, suggestions and required checks. Untagged findings take the normal
+review path. Deciding which reviews a prose task requests remains model policy. Substantive
+maintenance requires fresh engineering review; the host may waive that review for routine low-risk
+maintenance. Required executable checks and conditional DB review remain enforced.
 
 General task candidates are isolated from the live project. Document changes enforce document-only
 extensions, Markdown formatting, write scope and ignored/private path exclusions. Maintenance runs
@@ -219,8 +221,8 @@ explicitly.
 Each local accepted-design workflow has one project lock and no repair-round ceiling. Repeating an
 identical failure with an unchanged candidate produces an actionable blocker. Commands, output size,
 snapshot file count and size remain bounded. Database review is activated by the checkpoint, changed
-paths/content or either worker's database-impact finding. The detector is conservative; explicit
-project paths and independent review complement it.
+persistence modules, SQL/schema files, database configuration or a worker's explicit impact finding.
+Prose references outside configured DB paths do not trigger review.
 
 The project lock uses a Python helper holding a kernel advisory lock on a stable inode. Its stdin
 pipe closes when the supervisor exits, releasing the lock without stale-file takeover races. An

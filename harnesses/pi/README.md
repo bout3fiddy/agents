@@ -38,6 +38,14 @@ paired review can specify `engineeringThinking` and `databaseThinking` separatel
 `consult_design.thinking` selects the advisor's effort independently of answer length. The maximum
 for all workers is high. Worker receipts and the worker details view show the selected level.
 
+A reviewer may tag an exclusively formatting-related required finding with `formatterPath`. The
+harness records a separate formatter receipt when the entire repaired snapshot matches the pinned
+formatter output on those files. Any other edit or unclassified required finding needs independent
+review. Final checks still run. A new concern can request `freshReviewReason`.
+
+DB review follows explicit impact, configured DB paths, SQL/schema files and persistence code or
+configuration changes. References in ordinary Markdown do not trigger a specialist.
+
 ## Install and run
 
 Requires macOS, `sandbox-exec`, Node 22.19+, Python 3.10+, and Claude Code with `--setting-sources`,

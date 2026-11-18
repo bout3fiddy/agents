@@ -7,6 +7,7 @@ import { collectWorkerResults, dispatcher, type Dispatcher } from './dispatch.ts
 import { createWorkspace, hasSkippedTests, loadProject, verifyProject } from './project.ts'
 import { changes, integrate, recoverIntegration } from './integration.ts'
 import {
+  documentPath,
   fileHashes,
   inventory,
   matches,
@@ -16,25 +17,63 @@ import {
 } from './paths.ts'
 import { runSandboxed } from './sandbox.ts'
 import { retainedCandidate } from './resume.ts'
+import { bindFormatterProof, formatterClosures } from './formatter-review.ts'
 import { receiptView } from './context.ts'
+
+// A changed adapter can alter transaction semantics below an unchanged driver import.
+const databaseStatements = new RegExp(
+  [
+    String.raw`\b(?:create|alter|drop)\s+(?:table|index|schema)|\binsert\s+into\b|`,
+    String.raw`\b(?:delete\s+from|begin\s+transaction)\b|\bupdate\s+\w+\s+set\b|`,
+    String.raw`\b(?:select\s+[^;\n]{1,200}\s+from|pg_dump|pg_restore|redis-cli)\b|`,
+    String.raw`\b(?:db|database|prisma)\.(?:transaction|\$transaction|query|execute)\s*\(`,
+  ].join(''),
+  'i',
+)
+const driver =
+  '(?:pg|postgres(?:ql)?|psycopg[23]?|sqlite3?|redis|ioredis|prisma|drizzle-orm|' +
+  'mongoose|mysql2?|mongodb|knex|sqlalchemy)'
+const pythonDatabaseDependency = new RegExp(String.raw`^\s*${driver}(?:\[|\s|[<=>!~;]|$)`, 'im')
+const databaseDriver = new RegExp(
+  [
+    String.raw`(?:\b(?:from|import|require)\s*\(?\s*['"]?(?:node:|better-|@)?${driver}\b|`,
+    String.raw`\b(?:from|import|require)\s*\(?\s*['"](?:[@\w.-]+\/)+${driver}['"]|`,
+    String.raw`\b${driver}(?:\+\w+)?:\/\/|`,
+    String.raw`\b(?:image|engine|provider|dialect|driver)['"]?\s*[:=]\s*['"]?${driver}\b|`,
+    String.raw`['"](?:better-|@)?${driver}(?:\/client)?['"]\s*:)`,
+  ].join(''),
+  'i',
+)
 
 export function databaseImpact(
   before: Map<string, Buffer>,
   after: Map<string, Buffer>,
   paths: string[],
 ): boolean {
-  const databasePattern = new RegExp(
-    [
-      '\\b(?:sqlite|postgres|redis|prisma|drizzle|mongoose|mysql|mongodb|knex)\\b',
-      '\\b(?:CREATE TABLE|INSERT INTO|BEGIN TRANSACTION)\\b',
-    ].join('|'),
-    'i',
-  )
-  return changes(before, after).some(
-    (path) =>
-      paths.some((scope) => matches(path, scope)) ||
-      databasePattern.test((after.get(path) ?? before.get(path))?.toString('utf8') ?? ''),
-  )
+  return changes(before, after).some((path) => {
+    if (paths.some((scope) => matches(path, scope)) || /\.(?:sql|prisma)$/i.test(path)) {
+      return true
+    }
+
+    if (/(?:^|\/)requirements(?:[.-][^/]*)?\.txt$/i.test(path)) {
+      return [before.get(path), after.get(path)].some(
+        (bytes) => bytes && pythonDatabaseDependency.test(bytes.toString('utf8')),
+      )
+    }
+
+    if (documentPath(path) || /\.(?:mdx|markdown|adoc)$/i.test(path)) {
+      return false
+    }
+
+    return [before.get(path), after.get(path)].some((bytes) => {
+      if (!bytes || bytes.includes(0)) {
+        return false
+      }
+
+      const source = bytes.toString('utf8')
+      return databaseStatements.test(source) || databaseDriver.test(source)
+    })
+  })
 }
 
 function failed(receipts: Receipt[], project: Project): Receipt[] {
@@ -308,6 +347,14 @@ export async function runWorkflow(
             item.snapshot === frozen &&
             (item.role === 'reviewer' || item.role === 'database-reviewer'),
         )
+      const closures = formatterClosures(task.evidence, candidate)
+
+      if (closures.length) {
+        reviews.push(...closures)
+        task.evidence.push(...closures)
+        await store.saveTask(task)
+      }
+
       const changedFiles = changes(before, candidate)
       const engineeringTask = JSON.stringify({
         assignment: 'Independently review the complete candidate against the accepted design.',
@@ -323,6 +370,10 @@ export async function runWorkflow(
         collectWorkerResults(attempts, async (finished) => {
           if (snapshotHash(await inventory(workspace)) !== frozen) {
             throw new Error('Candidate changed during review')
+          }
+
+          for (const review of finished) {
+            await bindFormatterProof(review, candidate, workspace, checkpoint!.writePaths)
           }
 
           task!.evidence.push(...finished)

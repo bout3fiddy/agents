@@ -135,6 +135,7 @@ export async function runDelegation(
           role: child.role,
           model: child.model,
           verdict: child.result.verdict,
+          ...(child.closedReview && { closedReview: child.closedReview }),
         })),
       })
       return state
@@ -194,6 +195,7 @@ export async function runDelegation(
         role: child.role,
         model: child.model,
         verdict: child.result.verdict,
+        ...(child.closedReview && { closedReview: child.closedReview }),
       })),
       hostActions:
         evidence.result.hostActions ??

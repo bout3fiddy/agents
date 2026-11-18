@@ -23,6 +23,7 @@ import {
   type Role,
 } from './contracts.ts'
 import { collectWorkerResults, dispatcher, type Dispatcher } from './dispatch.ts'
+import { bindFormatterProof, formatterClosures } from './formatter-review.ts'
 import { textResult } from './file-tools.ts'
 import { changes } from './integration.ts'
 import {
@@ -74,6 +75,14 @@ export interface TaskCoordinatorEvidence {
   checks?: Receipt[]
 }
 
+const freshReviewReason = Type.Optional(
+  Type.String({
+    minLength: 1,
+    maxLength: 500,
+    description: 'New concern that needs independent review after a formatter-verified closure.',
+  }),
+)
+
 const delegateSchema = Type.Object(
   {
     role: Type.Union([
@@ -84,6 +93,7 @@ const delegateSchema = Type.Object(
       Type.Literal('performance'),
     ]),
     thinking: Type.Optional(thinkingSchema),
+    freshReviewReason,
     task: Type.String({ minLength: 1, maxLength: 16000 }),
     writePaths: Type.Array(writePathSchema, { maxItems: 50 }),
   },
@@ -95,6 +105,7 @@ const reviewPairSchema = Type.Object(
   {
     engineering: reviewTask,
     database: reviewTask,
+    freshReviewReason,
     engineeringThinking: Type.Optional(specialistThinkingSchema),
     databaseThinking: Type.Optional(specialistThinkingSchema),
   },
@@ -250,7 +261,7 @@ export async function createTaskCoordinatorTools(
     raw: Delegation,
     before: Map<string, Buffer>,
     changedFiles: string[] | undefined,
-  ): Promise<ChildReceipt> {
+  ): Promise<ChildReceipt[]> {
     const documentsOnly = request.kind === 'branch' && raw.role === 'task-worker'
     const assignmentKey = JSON.stringify([raw.role, [...raw.writePaths].sort()])
     let recoverableFailure = false
@@ -282,6 +293,7 @@ export async function createTaskCoordinatorTools(
                 request.kind === 'branch'
                   ? 'Authorized design-document implementation; resolve reviewer feedback.'
                   : 'Bounded task scope; this is not an accepted implementation design.',
+              ...(raw.freshReviewReason && { freshReviewReason: raw.freshReviewReason }),
               previousFindings: receipts
                 .filter((receipt) => sameAssignment(receipt.assignment, raw))
                 .map((receipt) => receipt.evidence.result),
@@ -326,9 +338,22 @@ export async function createTaskCoordinatorTools(
       }
 
       checkChildWrites(request, raw, childRole, before, after)
-      failedAssignments.delete(assignmentKey)
 
-      return { assignment: raw, evidence: child }
+      const completed = [{ assignment: raw, evidence: child }]
+
+      if (isReview(raw.role)) {
+        await bindFormatterProof(child, before, request.workspace, request.checkpoint.writePaths)
+      } else {
+        const history = receipts.map((receipt) => receipt.evidence)
+
+        for (const closure of formatterClosures(history, after)) {
+          const prior = receipts.findLast((receipt) => receipt.assignment.role === closure.role)!
+          completed.push({ assignment: prior.assignment, evidence: closure })
+        }
+      }
+
+      failedAssignments.delete(assignmentKey)
+      return completed
     } catch (error) {
       if (!recoverableFailure && !fatal) {
         fatal = error
@@ -403,28 +428,46 @@ export async function createTaskCoordinatorTools(
         }
 
         const changedFiles = originals && changes(originals, before)
-        const finished = await collectWorkerResults(
-          assignments.map((assignment) => runChild(assignment, before, changedFiles)),
-          async (children) => {
+        const groups = await collectWorkerResults(
+          assignments.map((assignment) => {
+            const prior = receipts.findLast((r) => sameAssignment(assignment, r.assignment))
+
+            if (
+              !assignment.freshReviewReason &&
+              prior?.evidence.closedReview &&
+              prior.evidence.snapshot === snapshot
+            ) {
+              return Promise.resolve([prior])
+            }
+
+            return runChild(assignment, before, changedFiles)
+          }),
+          async (completed) => {
+            const children = completed.flat()
+
             if (paired && snapshotHash(await inventory(request.workspace)) !== snapshot) {
               fatal = new Error('Candidate changed during paired review')
               throw fatal
             }
 
+            const additions = children.filter((child) => !receipts.includes(child))
+
             try {
-              await atomicJson(`${request.outputPath}.children.json`, [...receipts, ...children])
+              await atomicJson(`${request.outputPath}.children.json`, [...receipts, ...additions])
             } catch (error) {
               fatal = error
               throw error
             }
 
-            receipts.push(...children)
+            receipts.push(...additions)
 
             for (const child of children) {
               missingVerdicts.delete(child.assignment.role)
             }
           },
         )
+
+        const finished = groups.flat()
 
         if (
           requiresBoth &&
@@ -663,7 +706,13 @@ export async function createTaskCoordinatorTools(
         }
 
         const results = await delegateRound([child])
-        return textResult(results.length === 1 ? results[0] : reviewVerdicts(results))
+        const result = results[0]!
+
+        if (!isReview(child.role) && results.length > 1) {
+          return textResult({ ...result, closedReviews: reviewVerdicts(results.slice(1)) })
+        }
+
+        return textResult(results.length === 1 ? result : reviewVerdicts(results))
       },
     },
     {
@@ -683,12 +732,14 @@ export async function createTaskCoordinatorTools(
             role: 'reviewer',
             task: raw.engineering,
             writePaths: [],
+            ...(raw.freshReviewReason && { freshReviewReason: raw.freshReviewReason }),
             ...(raw.engineeringThinking && { thinking: raw.engineeringThinking }),
           }),
           validateAssignment({
             role: 'database-reviewer',
             task: raw.database,
             writePaths: [],
+            ...(raw.freshReviewReason && { freshReviewReason: raw.freshReviewReason }),
             ...(raw.databaseThinking && { thinking: raw.databaseThinking }),
           }),
         ]

@@ -96,6 +96,9 @@
   related outcomes, preserve pending user input, and deduplicate across reload. Routine worker
   activity stays private. Keep only the latest routine progress per task in model context. Preserve
   raw receipts, substantive notices and progress from a later resumption.
+- Formatting-only findings require an explicit formatterPath and a trusted exact-snapshot proof.
+  Preserve the original verdict, record formatter closures separately and retain final checks. Route
+  DB review by declared impact, configured paths or changed persistence code and config.
 - Pair engineering and database reviews on one frozen candidate whenever both apply. Join both
   verdicts before fixes. Keep writers exclusive, preserve partial evidence and retry missing roles.
 - Keep later specialist reviews with the coordinator instead of blocking leaf acceptance on them.

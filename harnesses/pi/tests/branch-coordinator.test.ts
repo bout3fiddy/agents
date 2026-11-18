@@ -287,3 +287,48 @@ test('branch coordination continues beyond the old child-call ceiling', async (t
   assert.equal('timeoutMs' in role, false)
   assert.ok(role.tools.includes('run_checks'))
 })
+
+test('formatter repair closes branch review and preserves final checks', async (t) => {
+  const { request, signal } = await setup(t)
+  const path = 'src/guide.md'
+  const original = '# Guide\n\n```ts\nsubmit(work);\n```\n'
+  await writeFile(join(request.workspace, path), original)
+  let reviews = 0
+  const worker = await createTaskCoordinatorTools(request, signal, async (child) => {
+    if (child.role === 'reviewer' && ++reviews === 1) {
+      return receipt(child, {
+        verdict: 'changes',
+        findings: [
+          {
+            severity: 'required',
+            location: path + ':4',
+            problem: 'Format the example.',
+            evidence: 'Pinned formatter removes the trailing semicolon.',
+            formatterPath: path,
+          },
+        ],
+      })
+    }
+
+    if (child.role === 'task-worker') {
+      await writeFile(join(child.workspace, path), original.replace('work);', 'work)'))
+    }
+
+    return receipt(child)
+  })
+  await invoke(worker.tools, 'run_checks')
+  await invoke(worker.tools, 'delegate_worker', assignment('reviewer'))
+  const repair = await invoke(worker.tools, 'delegate_worker', assignment('task-worker', [path]))
+  assert.match(JSON.stringify(repair), /closedReviews/)
+  await invoke(worker.tools, 'delegate_worker', assignment('reviewer'))
+  assert.equal(reviews, 1)
+  assert.equal(worker.children().filter((child) => child.closedReview).length, 1)
+  await assert.rejects(invoke(worker.tools, 'submit_result', pass), /run_checks/)
+  await invoke(worker.tools, 'run_checks')
+  await invoke(worker.tools, 'delegate_worker', {
+    ...assignment('reviewer'),
+    freshReviewReason: 'Investigate a newly reported failure.',
+  })
+  assert.equal(reviews, 2)
+  await invoke(worker.tools, 'submit_result', pass)
+})

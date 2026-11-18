@@ -227,6 +227,7 @@ export async function runBranchTask(
             role: child.role,
             model: child.model,
             verdict: child.result.verdict,
+            ...(child.closedReview && { closedReview: child.closedReview }),
           })),
         )
         await save({ children, summary: evidence.result.summary, status: 'checking' })

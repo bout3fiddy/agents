@@ -7,7 +7,7 @@ import { setTimeout as delay } from 'node:timers/promises'
 import { StateStore, atomicJson, readJson } from './state.ts'
 import { acquireLock } from './lock.ts'
 import { matches, validateWriteScope } from './paths.ts'
-import type { Receipt } from './contracts.ts'
+import type { Receipt, WorkerEvidence } from './contracts.ts'
 import {
   thinkingSchema,
   workflowSpecialistsSchema,
@@ -79,7 +79,12 @@ export type DelegationStatus = {
   error?: string
   changedPaths?: string[]
   receipts?: Receipt[]
-  children?: { role: string; model: string; verdict: string }[]
+  children?: {
+    role: string
+    model: string
+    verdict: string
+    closedReview?: WorkerEvidence['closedReview']
+  }[]
   branch?: string
   base?: string
   commit?: string

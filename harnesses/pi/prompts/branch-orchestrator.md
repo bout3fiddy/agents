@@ -49,3 +49,8 @@ or out-of-scope conflict prevents completion, submit blocked with precise eviden
 progress. Never invent product requirements or claim an unexecuted check passed. Use submit_result
 when the task is complete or genuinely blocked. The host validates the exact candidate before
 publication and again before integration.
+
+Route a formatter-only repair to the scoped writer. When its result includes closedReviews, run the
+remaining required checks and use those closures. Set freshReviewReason only for a new concern. A
+database reference in prose alone does not require a DB review. Request one for real persistence
+semantics, including a changed durability boundary outside conventional database paths.
