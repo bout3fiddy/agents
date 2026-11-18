@@ -63,17 +63,59 @@ function currentReads(entries: ProjectedSessionEntry[]): Set<string> {
   return new Set([...reads.values()].flatMap((ids) => [...ids]))
 }
 
+type ContextMessage = ProjectedSessionEntry['messages'][number]
+
+function supersededProgress(messages: ContextMessage[]): Set<ContextMessage> {
+  const newer = new Set<string>()
+  const obsolete = new Set<ContextMessage>()
+
+  for (let index = messages.length - 1; index >= 0; index--) {
+    const message = messages[index]!
+
+    if (message.role !== 'custom' || message.display) {
+      continue
+    }
+
+    const details = message.details as { taskId?: unknown; taskIds?: unknown } | undefined
+
+    if (message.customType === 'pi-task-result' && Array.isArray(details?.taskIds)) {
+      for (const id of details.taskIds) {
+        if (typeof id === 'string') {
+
+          // Resumed task notifications include a delivery version after the UUID.
+          newer.add(id.replace(/:\d+$/, ''))
+        }
+      }
+    }
+
+    const taskId = details?.taskId
+
+    if (message.customType === 'pi-task-progress' && typeof taskId === 'string' && taskId) {
+      if (newer.has(taskId)) {
+        obsolete.add(message)
+      }
+
+      newer.add(taskId)
+    }
+  }
+
+  return obsolete
+}
+
 export function workshopContextEdits(entries: ProjectedSessionEntry[]): ContextEditEntryDraft[] {
+  const obsolete = supersededProgress(entries.flatMap((entry) => entry.messages))
+  const edits: ContextEditEntryDraft[] = entries
+    .filter((entry) => entry.messages.length === 1 && obsolete.has(entry.messages[0]!))
+    .map((entry) => ({ type: 'context_edit', targetId: entry.sourceEntry.id, replacement: null }))
   const assistants = entries.filter((entry) =>
     entry.messages.some((message) => message.role === 'assistant'),
   )
   const cutoff = assistants.at(-4)?.sourceEntry.id
 
   if (!cutoff) {
-    return []
+    return edits
   }
 
-  const edits: ContextEditEntryDraft[] = []
   const protectedReads = currentReads(entries)
   const lastUser = entries.findLastIndex((entry) =>
     entry.messages.some((message) => message.role === 'user'),
@@ -159,6 +201,14 @@ export function workshopContextEdits(entries: ProjectedSessionEntry[]): ContextE
 }
 
 export function registerWorkshopContext(pi: ExtensionAPI): void {
+
+  // Idle workers can publish several updates before the next turn boundary.
+  pi.on('context', ({ messages }) => {
+    const obsolete = supersededProgress(messages)
+    return obsolete.size
+      ? { messages: messages.filter((message) => !obsolete.has(message)) }
+      : undefined
+  })
   pi.on('turn_end', (event) => {
     const edits = workshopContextEdits(event.context.contextEntries)
     return edits.length ? { entries: [...event.entries, ...edits] } : undefined

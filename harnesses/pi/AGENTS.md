@@ -85,7 +85,8 @@
   and optional metadata without flooding the orchestrator conversation.
 - Surface meaningful project milestones through one brief host summary at a safe boundary. Batch
   related outcomes, preserve pending user input, and deduplicate across reload. Routine worker
-  activity stays private.
+  activity stays private. Keep only the latest routine progress per task in model context. Preserve
+  raw receipts, substantive notices and progress from a later resumption.
 - Keep later specialist reviews with the coordinator instead of blocking leaf acceptance on them.
   Completion diagnostics must identify the outstanding role and write scope. Require matching-scope
   clearance and reuse passing reviews when the candidate is unchanged.

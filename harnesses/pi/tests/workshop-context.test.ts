@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { readFile, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { SessionManager } from '@earendil-works/pi-coding-agent'
+import { buildSessionProjection, SessionManager } from '@earendil-works/pi-coding-agent'
 import { registerWorkshopContext, workshopContextEdits } from '../src/workshop-context.ts'
 import { fixture } from './support.ts'
 import { captureSession } from './session-support.ts'
@@ -162,4 +162,83 @@ test('document checks preserve long URLs and reject invalid scope before edits',
   } finally {
     await rm(item.base, { recursive: true, force: true })
   }
+})
+
+test('worker progress coalesces before the next request and survives reopening', async (t) => {
+  const item = await fixture()
+  const payloads: string[] = []
+  const { session, runtime } = await captureSession(
+    item.root,
+    item.base,
+    [registerWorkshopContext],
+    async (context) => {
+      payloads.push(JSON.stringify(context.messages))
+      return [{ type: 'text', text: 'Continuing the discussion.' }]
+    },
+  )
+  t.after(async () => {
+    session.dispose()
+    await runtime.settleCredentialWrites()
+    await rm(item.base, { recursive: true, force: true })
+  })
+
+  function notice(customType: string, content: string, details: object) {
+    return session.sendCustomMessage({ customType, content, details, display: false })
+  }
+
+  const progress = (taskId: string, content: string) =>
+    notice('pi-task-progress', content, { taskId })
+
+  for (let index = 0; index < 12; index++) {
+    await progress('storage', `OLD_STORAGE_${index}`)
+    await progress('browser', `OLD_BROWSER_${index}`)
+  }
+
+  await notice('pi-task-attention', 'ATTENTION_MARKER', { taskId: 'storage' })
+  await notice('pi-task-milestone', 'MILESTONE_MARKER', {})
+  await notice('pi-task-progress', 'UNKEYED_PROGRESS', {})
+  await progress('api', 'OLD_API')
+  await notice('pi-task-result', 'BATCH_RESULT', { taskIds: ['storage:2', 'api'] })
+  await progress('storage', 'RESUMED_STORAGE')
+  await progress('browser', 'LATEST_BROWSER')
+  assert.equal(payloads.length, 0)
+  await session.prompt('USER_QUESTION')
+  assert.equal(payloads.length, 1)
+
+  function checkProjection(text: string) {
+    assert.doesNotMatch(text, /OLD_STORAGE|OLD_BROWSER|OLD_API/)
+
+    for (const marker of [
+      'RESUMED_STORAGE',
+      'LATEST_BROWSER',
+      'ATTENTION_MARKER',
+      'MILESTONE_MARKER',
+      'UNKEYED_PROGRESS',
+      'BATCH_RESULT',
+      'USER_QUESTION',
+    ]) {
+      assert.ok(text.includes(marker), marker)
+    }
+  }
+
+  checkProjection(payloads[0]!)
+  const file = session.sessionManager.getSessionFile()!
+  const reopened = SessionManager.open(file)
+  checkProjection(JSON.stringify(reopened.buildSessionProjection().messages))
+  const raw = reopened.getEntries()
+  const earlier = raw.find(
+    (entry) => entry.type === 'custom_message' && entry.content === 'OLD_API',
+  )
+  assert.ok(earlier)
+  const history = JSON.stringify(buildSessionProjection(raw, earlier.id).messages)
+  assert.match(history, /OLD_API/)
+  assert.doesNotMatch(history, /BATCH_RESULT|RESUMED_STORAGE/)
+  assert.match(await readFile(file, 'utf8'), /OLD_STORAGE_0/)
+  const omissions = () =>
+    session.sessionManager.getEntries().filter((entry) => entry.type === 'context_edit').length
+  assert.equal(omissions(), 25)
+  await session.reload()
+  await session.prompt('Continue.')
+  checkProjection(payloads[1]!)
+  assert.equal(omissions(), 25)
 })

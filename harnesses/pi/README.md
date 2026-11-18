@@ -107,15 +107,18 @@ instead of repeating the same blocked worker.
 
 Active workers persist phase/tool/child progress. At most once per minute, fresh progress is added
 privately to orchestrator context without a model turn or visible progress block. Workers use
-`report_progress` for meaningful findings, phase changes or concrete blockers. Ordinary activity is
-recorded automatically; workers need no periodic status calls or guidance questions. Three minutes
-without recorded activity produces one attention notice for that activity point; age alone never
-cancels work. A coordinator uses `report_milestone` when a verified result unblocks other work or
-materially changes the plan. The host summarizes related milestones together at a safe boundary. The
-latest summary per active task survives routine heartbeats and reload. A terminal result takes
-precedence over any pending milestone for that task. `task_status` exposes progress and activity
-age. Completion and real blockers wake the orchestrator for acknowledgement and authorized recovery.
-Worker `project_edit` changes one unique text block, avoiding regeneration of unchanged large files.
+`report_progress` for meaningful findings, phase changes or concrete blockers. The orchestrator
+receives the latest routine update per task. A terminal result retires that task's earlier updates.
+The raw trace keeps every update. Milestones, attention notices and results stay in context.
+Ordinary activity is recorded automatically; workers need no periodic status calls or guidance
+questions. Three minutes without recorded activity produces one attention notice for that activity
+point; age alone never cancels work. A coordinator uses `report_milestone` when a verified result
+unblocks other work or materially changes the plan. The host summarizes related milestones together
+at a safe boundary. The latest summary per active task survives routine heartbeats and reload. A
+terminal result takes precedence over any pending milestone for that task. `task_status` exposes
+progress and activity age. Completion and real blockers wake the orchestrator for acknowledgement
+and authorized recovery. Worker `project_edit` changes one unique text block, avoiding regeneration
+of unchanged large files.
 
 The orchestrator keeps `bash`, `read`, `write`, `edit`, `grep`, `find` and `ls`. It applies
 repository lint and appropriate checks to its own changes. `document_check` checks or formats
