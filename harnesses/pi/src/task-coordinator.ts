@@ -230,7 +230,11 @@ export async function createTaskCoordinatorTools(
     return raw
   }
 
-  async function runChild(raw: Delegation, before: Map<string, Buffer>): Promise<ChildReceipt> {
+  async function runChild(
+    raw: Delegation,
+    before: Map<string, Buffer>,
+    changedFiles: string[] | undefined,
+  ): Promise<ChildReceipt> {
     const documentsOnly = request.kind === 'branch' && raw.role === 'task-worker'
     const assignmentKey = JSON.stringify([raw.role, [...raw.writePaths].sort()])
     let recoverableFailure = false
@@ -271,6 +275,7 @@ export async function createTaskCoordinatorTools(
             model: request.model,
             baseline: request.baseline,
             originals: request.originals,
+            changedFiles,
           },
           signal,
           (activity) => progress.update({ stage: 'child', role: raw.role, child: activity }),
@@ -380,8 +385,9 @@ export async function createTaskCoordinatorTools(
           }
         }
 
+        const changedFiles = originals && changes(originals, before)
         const finished = await collectWorkerResults(
-          assignments.map((assignment) => runChild(assignment, before)),
+          assignments.map((assignment) => runChild(assignment, before, changedFiles)),
           async (children) => {
             if (paired && snapshotHash(await inventory(request.workspace)) !== snapshot) {
               fatal = new Error('Candidate changed during paired review')

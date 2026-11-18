@@ -74,6 +74,7 @@ test('branch coordinator repairs failing checks and refreshes review before pass
   let implementationCalls = 0
   const worker = await createTaskCoordinatorTools(request, signal, async (child) => {
     assert.match(child.task, /Authorized design-document implementation/)
+    assert.deepEqual(child.changedFiles, implementationCalls ? ['src/value.js'] : [])
 
     if (child.role === 'implementer') {
       implementationCalls++

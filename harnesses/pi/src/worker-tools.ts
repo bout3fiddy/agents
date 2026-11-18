@@ -13,7 +13,7 @@ import {
 import { fileTools, textResult } from './file-tools.ts'
 import { createWorkspace, harnessRoot, instructions } from './project.ts'
 import { runSandboxed } from './sandbox.ts'
-import { safePath, writable } from './paths.ts'
+import { fileHashes, inventory, safePath, writable } from './paths.ts'
 import { format } from 'prettier'
 import { checkDocuments, harnessFormatOptions } from './document-tools.ts'
 import { capabilities } from './capabilities.ts'
@@ -54,13 +54,15 @@ export function createWorkerTools(request: WorkerRequest, role: Role) {
       name: 'original_read',
       label: 'Read original file',
       description:
-        'Read the original snapshot before implementation; compare it ' + 'with project_read.',
+        'Read the original snapshot before implementation. Same paging and folder rules ' +
+        'as project_read.',
     })
   }
 
   if (writeScopes) {
     tools.push({
       name: 'project_format',
+      executionMode: 'sequential',
       label: 'Format assigned files',
       description:
         'Format Prettier-supported files. For Python use scoped edits and project checks.',
@@ -109,6 +111,7 @@ export function createWorkerTools(request: WorkerRequest, role: Role) {
     },
     {
       name: 'document_check',
+      executionMode: writeScopes ? 'sequential' : 'parallel',
       label: 'Check assigned Markdown documents',
       description:
         'Check Markdown formatting and line width. Respect root .prettierignore for formatting. ' +
@@ -200,11 +203,21 @@ export function createWorkerTools(request: WorkerRequest, role: Role) {
   }
 }
 
+async function changedSinceBaseline(request: WorkerRequest): Promise<string[]> {
+  const current = fileHashes(await inventory(request.workspace))
+  const names = new Set([...Object.keys(request.baseline), ...Object.keys(current)])
+  return [...names].filter((name) => current[name] !== request.baseline[name]).sort()
+}
+
 export async function assignment(request: WorkerRequest) {
+  const paths = Object.keys(request.baseline)
+  const smallIndex = paths.length <= 100 && Buffer.byteLength(JSON.stringify(paths)) <= 4096
+
   return {
     assignment: request.task,
     acceptedDesign: request.checkpoint,
-    originalFileHashes: request.baseline,
+    changedFiles: request.changedFiles ?? (await changedSinceBaseline(request)),
+    ...(smallIndex ? { originalPaths: paths } : {}),
     checks: request.project.checks,
     capabilities: capabilities.workers,
     ...(request.documentsOnly ? { retainedFileTypes: ['.md', '.txt', '.rst'] } : {}),

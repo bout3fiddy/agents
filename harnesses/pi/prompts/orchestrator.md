@@ -150,3 +150,9 @@ For a multi-component build, identify the smallest complete journey in the autho
 Sequence the work so that journey runs through the real component boundaries early. Distinguish
 required scope from proposed additions before assigning work. At checkpoints, identify what ran end
 to end and any recovery or capacity limits that still affect it.
+
+For container checks, keep runtime scratch on the guest filesystem, including Unix sockets, locks
+and permission-sensitive test files. Export finished evidence to the host mount. When filesystem
+semantics are uncertain, exercise the required operation with a small probe before the full suite.
+Capture stage logs and the first failure, and ensure cleanup also runs when setup fails. If a runner
+remains alive after a failed check, inspect open resources before retrying.

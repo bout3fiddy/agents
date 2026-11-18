@@ -137,6 +137,10 @@ test('review repair, conditional database review and benchmarks gate integration
         )
       }
 
+      if (request.role === 'reviewer' || request.role === 'database-reviewer') {
+        assert.deepEqual(request.changedFiles, ['src/value.js'])
+      }
+
       if (request.role === 'reviewer' && reviews++ === 0) {
         return evidence(request, {
           verdict: 'changes',

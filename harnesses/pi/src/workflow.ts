@@ -166,7 +166,12 @@ export async function runWorkflow(
       baseline,
     )
 
-    async function dispatchWorker(role: WorkerRole, assignment: string, frozen?: string) {
+    async function dispatchWorker(
+      role: WorkerRole,
+      assignment: string,
+      frozen?: string,
+      changedFiles?: string[],
+    ) {
       signal?.throwIfAborted()
       const evidence = await dispatch(
         {
@@ -177,6 +182,7 @@ export async function runWorkflow(
           checkpoint: checkpoint!,
           model,
           baseline: fileHashes(before),
+          changedFiles,
           originals,
         },
         signal,
@@ -298,10 +304,10 @@ export async function runWorkflow(
             item.snapshot === frozen &&
             (item.role === 'reviewer' || item.role === 'database-reviewer'),
         )
+      const changedFiles = changes(before, candidate)
       const engineeringTask = JSON.stringify({
         assignment: 'Independently review the complete candidate against the accepted design.',
         receipts: task.receipts.map(receiptView),
-        changedFiles: changes(before, candidate),
       })
       const databaseTask = () =>
         JSON.stringify({
@@ -322,11 +328,11 @@ export async function runWorkflow(
       const attempts: Promise<WorkerEvidence>[] = []
 
       if (!reviews.some((item) => item.role === 'reviewer')) {
-        attempts.push(dispatchWorker('reviewer', engineeringTask, frozen))
+        attempts.push(dispatchWorker('reviewer', engineeringTask, frozen, changedFiles))
       }
 
       if (needsDatabase && !reviews.some((item) => item.role === 'database-reviewer')) {
-        attempts.push(dispatchWorker('database-reviewer', databaseTask(), frozen))
+        attempts.push(dispatchWorker('database-reviewer', databaseTask(), frozen, changedFiles))
       }
 
       await collect(attempts)
@@ -342,7 +348,7 @@ export async function runWorkflow(
         }
 
         await store.saveTask(task)
-        await collect([dispatchWorker('database-reviewer', databaseTask(), frozen)])
+        await collect([dispatchWorker('database-reviewer', databaseTask(), frozen, changedFiles)])
       }
 
       const issues = reviews.filter((item) => item.result.verdict !== 'pass')

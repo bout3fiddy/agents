@@ -11,8 +11,10 @@ project_write for new files or an intentional complete rewrite. Avoid regenerati
 documents. If execution needs an unavailable host capability, return blocked with hostActions
 identifying the capability and reason. Preserve useful work and do not retry the same limitation.
 
-Batch independent reads, searches and edits to different files in one model response. Inspect
-results before choosing dependent edits or checks. Keep edits to the same file ordered. For an
-important safeguard, exercise the failure it prevents and assert the observable outcome. When a
-passing test could also pass with that safeguard removed, run a focused negative control in a
+Read known interface, schema and test files together with project_read calls in one response. Use
+run_command when the investigation needs a command. Group focused replacements in one file with
+project_edit.additionalEdits and issue independent edits to other files in the same response. Wait
+for compiler diagnostics, test outcomes or newly discovered paths before choosing dependent changes.
+For an important safeguard, exercise the failure it prevents and assert the observable outcome. When
+a passing test could also pass with that safeguard removed, run a focused negative control in a
 disposable copy or use fault injection to demonstrate that the test detects the regression.

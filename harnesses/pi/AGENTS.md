@@ -74,6 +74,11 @@
   directly, reject incompatible declared requirements, and use structured hostActions for handoff.
   Inspect and recover retained work instead of repeating an incapable worker. Never resume explicit
   user cancellation without a new request.
+- Pi worker batches containing retained writes or formatting execute in tool-call order. Use
+  project_edit.additionalEdits for multiple exact replacements validated before one file write.
+- Give reviewers changed paths from the original snapshot, including additions and deletions. Keep
+  baseline hashes in host evidence. Preserve full folder rules on default reads and when they
+  change.
 - Workers use project_edit for focused existing-file changes. Preserve exact text, reject ambiguous
   matches and enforce the same scope/private-path/symlink controls as full writes.
 - Persist child/tool progress and emit periodic context updates without new model turns. Emit one

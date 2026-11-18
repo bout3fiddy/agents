@@ -139,6 +139,7 @@ export type WorkerRequest = {
   outputPath: string
   baseline: Record<string, string>
   originals?: string
+  changedFiles?: string[]
   documentsOnly?: boolean
   parentWorkerId?: string
   liveWorkerId?: string

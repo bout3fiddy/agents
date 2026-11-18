@@ -117,8 +117,17 @@ unblocks other work or materially changes the plan. The host summarizes related 
 at a safe boundary. The latest summary per active task survives routine heartbeats and reload. A
 terminal result takes precedence over any pending milestone for that task. `task_status` exposes
 progress and activity age. Completion and real blockers wake the orchestrator for acknowledgement
-and authorized recovery. Worker `project_edit` changes one unique text block, avoiding regeneration
-of unchanged large files.
+and authorized recovery. Worker `project_edit` replaces unique text blocks in one file. Pass
+subsequent replacements in `additionalEdits` to validate them all in order before writing once. Pi
+executes tool batches containing retained edits in order. Independent read calls can share one model
+response.
+
+Workers receive the paths changed since the original snapshot. Reviewers can inspect both versions
+directly. Small projects also include a filename index. For larger projects, list paths by prefix
+and follow `nextAfterPath` to continue. File reads report total lines and the next line and column
+for bounded excerpts. Reads include folder instructions by default. Set `reuseInstructions` when the
+preceding rules are still in context. Write receipts omit repeated identical instructions; changed
+rules return in full.
 
 The orchestrator keeps `bash`, `read`, `write`, `edit`, `grep`, `find` and `ls`. It applies
 repository lint and appropriate checks to its own changes. `document_check` checks or formats

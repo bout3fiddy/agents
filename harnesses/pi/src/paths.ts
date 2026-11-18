@@ -56,7 +56,9 @@ export function digest(value: string | Buffer): string {
   return createHash('sha256').update(value).digest('hex')
 }
 
-export async function readBoundedFile(path: string, limit = 2_000_000): Promise<Buffer> {
+export const maxFileBytes = 2_000_000
+
+export async function readBoundedFile(path: string, limit = maxFileBytes): Promise<Buffer> {
   const file = await open(path, 'r')
 
   try {
@@ -211,7 +213,7 @@ export async function inventory(root: string): Promise<Map<string, Buffer>> {
       } else if (entry.isFile()) {
         const info = await lstat(path)
 
-        if (info.size > 2_000_000 || bytes + info.size > 100_000_000 || files.size >= 10_000) {
+        if (info.size > maxFileBytes || bytes + info.size > 100_000_000 || files.size >= 10_000) {
           throw new Error(`Snapshot limit exceeded at ${name}; narrow the project workspace`)
         }
 
@@ -271,7 +273,7 @@ export async function inventory(root: string): Promise<Map<string, Buffer>> {
           continue
         }
 
-        if (info.size > 2_000_000 || bytes + info.size > 100_000_000 || files.size >= 10_000) {
+        if (info.size > maxFileBytes || bytes + info.size > 100_000_000 || files.size >= 10_000) {
           throw new Error(`Snapshot limit exceeded at ${name}`)
         }
 
