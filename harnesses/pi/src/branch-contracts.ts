@@ -1,10 +1,10 @@
 import { Type, type Static } from 'typebox'
-import type { Design, Project } from './contracts.ts'
+import { writePathSchema, type Design, type Project } from './contracts.ts'
 
 export const branchTaskSchema = Type.Object(
   {
     task: Type.String({ minLength: 1, maxLength: 2000 }),
-    writePaths: Type.Array(Type.String({ minLength: 1, maxLength: 200 }), {
+    writePaths: Type.Array(writePathSchema, {
       minItems: 1,
       maxItems: 30,
     }),

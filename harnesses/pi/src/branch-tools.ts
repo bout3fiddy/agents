@@ -5,7 +5,7 @@ import { Type } from 'typebox'
 import type { ExtensionAPI, ExtensionContext } from '@earendil-works/pi-coding-agent'
 import { fanoutSchema, type FanoutInput } from './branch-contracts.ts'
 import { gitCommand, resolveRemote } from './git-branches.ts'
-import { digest, readBoundedFile, relativePath, safePath, validateScope } from './paths.ts'
+import { digest, readBoundedFile, relativePath, safePath, validateWriteScope } from './paths.ts'
 import { validateDesign } from './contracts.ts'
 import { StateStore } from './state.ts'
 import { Delegations, delegationView, scopesOverlap } from './delegation-state.ts'
@@ -31,7 +31,7 @@ export async function startBranchBatch(
   }
 
   for (const [index, task] of input.tasks.entries()) {
-    validateScope(task.writePaths)
+    validateWriteScope(task.writePaths)
 
     if (
       input.tasks.slice(0, index).some((prior) => scopesOverlap(prior.writePaths, task.writePaths))

@@ -37,9 +37,11 @@ directly. This five-round policy is specific to external merge reviews; implemen
 has no child-call or turn ceiling. Do not ask the user for routine approval or relay every review
 finding back for a decision. The design document already supplies authority; only genuine missing
 design decisions or external blockers need escalation. Return to discussion immediately after
-dispatch. task_status/task_control also inspect, steer within scope, or cancel these tasks. Merges
-advance remote main; the current checkout stays untouched, so synchronize it when appropriate before
-further local implementation.
+dispatch. Use exact paths or directory/** in writePaths. For a group of tests that shares a
+directory with another task, list the individual files. For a prompt-only revision, omit writePaths
+to keep the existing ownership. task_status/task_control also inspect, steer within scope, or cancel
+these tasks. Merges advance remote main; the current checkout stays untouched, so synchronize it
+when appropriate before further local implementation.
 
 Choose direct work or delegation using the current context, task complexity and expected disruption.
 In a fresh session, handle a routine Git repository setup, lint configuration, dependency install,

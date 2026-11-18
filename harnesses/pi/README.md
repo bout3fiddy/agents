@@ -343,10 +343,11 @@ environment. Install dependencies beforehand. Node dependencies are mounted read
 virtual environments need an explicit future adapter. Network-backed database checks currently fail
 closed.
 
-Write scopes support exact paths, `directory/**`, and `**`. Performance writes must match both the
-accepted scope and its role scope or the adapter's explicit instrumentation paths. Worker changes to
-`.pi/` are forbidden. Root and nearest folder `AGENTS.md` instructions are supplied when reading
-files and assignments.
+Write scopes support exact paths, `directory/**`, and `**`. Pi rejects a new filename wildcard such
+as `tests/unit_*.ts` before dispatch. A prompt-only `revise_tasks` call can omit `writePaths` to
+preserve the registered scope. Performance writes must match both the accepted scope and its role
+scope or the adapter's explicit instrumentation paths. Worker changes to `.pi/` are forbidden. Root
+and nearest folder `AGENTS.md` instructions are supplied when reading files and assignments.
 
 `project_write` and `project_delete` share the same assignment and role scope. Deletion is limited
 to individual files. Private paths are checked using Unicode folding and actual filesystem spelling.

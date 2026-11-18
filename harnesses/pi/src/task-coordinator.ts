@@ -12,6 +12,7 @@ import { Check } from 'typebox/value'
 import {
   resultSchema,
   validateResult,
+  writePathSchema,
   type Checkpoint,
   type Project,
   type Receipt,
@@ -29,6 +30,7 @@ import {
   readBoundedFile,
   snapshotHash,
   validateScope,
+  validateWriteScope,
   writable,
 } from './paths.ts'
 import { instructions, verifyProject } from './project.ts'
@@ -78,7 +80,7 @@ const delegateSchema = Type.Object(
       Type.Literal('performance'),
     ]),
     task: Type.String({ minLength: 1, maxLength: 16000 }),
-    writePaths: Type.Array(Type.String({ minLength: 1, maxLength: 200 }), { maxItems: 50 }),
+    writePaths: Type.Array(writePathSchema, { maxItems: 50 }),
   },
   { additionalProperties: false },
 )
@@ -89,7 +91,7 @@ const coordinatorRole = (request: TaskCoordinatorRequest) =>
   request.kind === 'branch' ? 'branch-orchestrator' : 'task-coordinator'
 
 export function scopeContained(child: string[], parent: string[]): boolean {
-  validateScope(child)
+  validateWriteScope(child)
   validateScope(parent)
   return child.every((scope) =>
     parent.some(

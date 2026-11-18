@@ -46,6 +46,28 @@ test('independent branch fanout rejects intersecting scopes before launching', a
   assert.equal(launches, 0)
 })
 
+test('a filename wildcard rejects the whole batch before dispatch', async (t) => {
+  const setup = await branchRepository(t)
+  const invalid = {
+    ...setup.input.tasks[1]!,
+    writePaths: ['runtime/local/**', 'runtime/test/local_*.test.ts'],
+  }
+  let launches = 0
+  await assert.rejects(
+    startBranchBatch(
+      setup.ctx,
+      { ...setup.input, tasks: [setup.input.tasks[0]!, invalid] },
+      undefined,
+      async () => {
+        launches++
+      },
+    ),
+    /local_\*\.test\.ts.*exact/i,
+  )
+  assert.equal(launches, 0)
+  assert.deepEqual(await setup.jobs.list(), [])
+})
+
 test('fanout discovers checks at the pinned commit before registering any tasks', async (t) => {
   const setup = await branchRepository(t)
   const git = (args: string[]) => gitCommand(setup.root, args)

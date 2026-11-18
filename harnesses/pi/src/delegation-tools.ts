@@ -451,7 +451,7 @@ export function registerDelegation(pi: ExtensionAPI, launch: Launcher = launchDe
     label: 'Revise paused assignments',
     description:
       'Revise prompts and partition existing scope across stopped tasks as one batch. ' +
-      'Supply complete replacement context. Preserve and transfer candidate edits, reject ' +
+      'Supply updated context. Omit writePaths to keep ownership. Transfer edits, reject ' +
       'conflicts, and invalidate old review approvals. Every task remains paused. Branch ' +
       'prompts may change, but moving branch ownership needs replacement tasks.',
     parameters: revisionSchema,

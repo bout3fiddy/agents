@@ -20,6 +20,12 @@ export type WorkerRole = Exclude<
   'orchestrator' | 'design-advisor' | 'task-coordinator' | 'branch-orchestrator'
 >
 
+export const writePathSchema = Type.String({
+  minLength: 1,
+  maxLength: 200,
+  description: 'Use an exact relative filename, directory/** for a subtree, or ** for all paths.',
+})
+
 export const designSchema = Type.Object(
   {
     objective: Type.String({ minLength: 1, maxLength: 2000 }),
@@ -32,7 +38,7 @@ export const designSchema = Type.Object(
       minItems: 1,
       maxItems: 30,
     }),
-    writePaths: Type.Array(Type.String({ minLength: 1, maxLength: 200 }), {
+    writePaths: Type.Array(writePathSchema, {
       minItems: 1,
       maxItems: 50,
     }),

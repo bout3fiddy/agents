@@ -106,6 +106,8 @@
   no routine human approvals. It has no child-call, turn or total-duration ceiling. All agents
   follow this uncapped policy. Keep explicit cancellation, bounded command execution, scopes and
   concurrency controls; turn counts are telemetry only.
+- Reject unsupported asterisk patterns before dispatch. Preserve existing literal reservations on
+  resume and prompt-only revisions. A revision that omits writePaths keeps the registered scope.
 - Validate executable checks on the pinned commit for every task before registering a branch batch.
   Use the same discovery and required kinds when rechecking a branch during integration.
 - Keep Git and publication authority in the host. Branch workers cannot edit Git metadata or project

@@ -128,6 +128,22 @@ export function validateScope(scopes: string[]): void {
   }
 }
 
+/** Validate newly assigned paths without reinterpreting existing reservations. */
+export function validateWriteScope(scopes: string[], retained: string[] = []): void {
+  validateScope(scopes)
+
+  for (const scope of scopes) {
+    const prefix = scope.endsWith('/**') ? scope.slice(0, -3) : scope
+
+    if (scope !== '**' && prefix.includes('*') && !retained.includes(scope)) {
+      throw new Error(
+        `Unsupported wildcard in write scope "${scope}". List exact filenames or an ` +
+          'authorized directory/**. Keep the original ownership boundary.',
+      )
+    }
+  }
+}
+
 export function documentPath(path: string): boolean {
   return ['.md', '.txt', '.rst'].includes(extname(path).toLowerCase())
 }

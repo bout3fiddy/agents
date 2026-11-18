@@ -2,7 +2,7 @@ import { mkdir, open, readFile, rename, rm } from 'node:fs/promises'
 import { realpathSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { randomUUID } from 'node:crypto'
-import { digest, validateScope } from './paths.ts'
+import { digest, validateWriteScope } from './paths.ts'
 import { acquireLock, type ReleaseLock } from './lock.ts'
 import { projectTraces } from './traces.ts'
 import {
@@ -77,7 +77,7 @@ export class StateStore {
 
   async draft(design: Design): Promise<string> {
     validateDesign(design)
-    validateScope(design.writePaths)
+    validateWriteScope(design.writePaths)
     const hash = digest(JSON.stringify(design))
     await atomicJson(join(this.directory, 'draft.json'), { design, hash })
     return hash
@@ -93,7 +93,7 @@ export class StateStore {
     }
 
     validateDesign(draft.design)
-    validateScope(draft.design.writePaths)
+    validateWriteScope(draft.design.writePaths)
 
     if (digest(JSON.stringify(draft.design)) !== draft.hash) {
       throw new Error('Draft integrity check failed')
@@ -107,7 +107,7 @@ export class StateStore {
   /** Freeze worker scope without changing the host conversation. Caller owns the project lock. */
   async pin(design: Design): Promise<Checkpoint> {
     validateDesign(design)
-    validateScope(design.writePaths)
+    validateWriteScope(design.writePaths)
     const previous = await this.checkpoint()
     const checkpoint = {
       ...design,

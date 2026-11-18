@@ -132,16 +132,24 @@ test('paused branches retain worktrees and revalidate revised instructions', asy
   )
   assert.equal(first.status, 'paused', first.error)
   assert.match(await readFile(join(first.candidate!, 'src/one.js'), 'utf8'), /return value \* 2/)
+
+  // Older harnesses stored filename wildcards as literal paths.
+  const legacyPaths = [...request.writePaths, 'runtime/test/local_*.test.ts']
+  await atomicJson(join(delegationDirectory(setup.store, request.id), 'request.json'), {
+    ...request,
+    writePaths: legacyPaths,
+    branch: { ...request.branch, design: { ...request.branch!.design, writePaths: legacyPaths } },
+  })
   const [revised] = await reviseTasks(setup.jobs, {
     tasks: [
       {
         id: request.id,
         task: request.task,
         context: 'Recheck arithmetic after pausing.',
-        writePaths: request.writePaths,
       },
     ],
   })
+  assert.deepEqual(revised!.request.writePaths, legacyPaths)
   assert.equal(revised!.state.candidate, first.candidate)
   await setup.jobs.resume(request.id, setup.origin, async () => {})
   const resumed = await runBranchTask(

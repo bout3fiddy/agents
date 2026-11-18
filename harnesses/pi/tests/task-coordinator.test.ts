@@ -71,6 +71,12 @@ test('scope containment handles exact paths, subtrees and invalid traversal', ()
   assert.equal(scopeContained(['docs/**'], ['docs']), false)
   assert.equal(scopeContained(['docs-more/a.md'], ['docs/**']), false)
   assert.throws(() => scopeContained(['docs/../secret'], ['**']))
+  assert.throws(() => scopeContained(['docs/*/draft.md'], ['docs/**']), /exact filenames/)
+  assert.throws(() => scopeContained(['docs/*/**'], ['docs/**']), /exact filenames/)
+  const legacyParent = ['docs/local/**', 'docs/draft_*.md']
+  assert.ok(scopeContained(['docs/local/a.md'], legacyParent))
+  assert.equal(scopeContained(['docs/draft_a.md'], legacyParent), false)
+  assert.ok(scopeContained(['docs/[slug]/page.md'], ['docs/**']))
 })
 
 test('coordinator exposes bounded delegation and no retained write tools', async (t) => {

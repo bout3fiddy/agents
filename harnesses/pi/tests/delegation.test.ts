@@ -88,6 +88,8 @@ test('invalid or busy implementation dispatch cannot replace recorded scope', as
     for (const bad of [
       { ...implementation, design: { ...design, unresolved: ['Missing decision'] } },
       { ...implementation, design: { ...design, writePaths: ['../outside'] } },
+      { ...implementation, design: { ...design, writePaths: ['src/**/*'] } },
+      { ...input, writePaths: ['handbook_*.md'] },
       { ...input, design },
     ]) {
       await assert.rejects(jobs.start(bad, origin, async () => {}))

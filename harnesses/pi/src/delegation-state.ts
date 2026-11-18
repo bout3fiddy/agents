@@ -6,9 +6,9 @@ import { randomUUID } from 'node:crypto'
 import { setTimeout as delay } from 'node:timers/promises'
 import { StateStore, atomicJson, readJson } from './state.ts'
 import { acquireLock } from './lock.ts'
-import { matches, validateScope } from './paths.ts'
+import { matches, validateWriteScope } from './paths.ts'
 import type { Receipt } from './contracts.ts'
-import { designSchema, validateDesign } from './contracts.ts'
+import { designSchema, validateDesign, writePathSchema } from './contracts.ts'
 import type { BranchPlan, BranchTaskInput } from './branch-contracts.ts'
 import { readProgress, type TaskProgress } from './progress.ts'
 import { hostCapability } from './capabilities.ts'
@@ -25,7 +25,7 @@ export const delegateSchema = Type.Object(
       Type.Literal('maintenance'),
       Type.Literal('implementation'),
     ]),
-    writePaths: Type.Array(Type.String({ maxLength: 200 }), { maxItems: 30 }),
+    writePaths: Type.Array(writePathSchema, { maxItems: 30 }),
     requires: Type.Optional(Type.Array(hostCapability, { maxItems: 4 })),
     design: Type.Optional(designSchema),
     review: Type.Optional(
@@ -276,14 +276,14 @@ export class Delegations {
       throw new Error('Invalid delegated task; provide task, context, kind and writePaths')
     }
 
-    validateScope(input.writePaths)
+    validateWriteScope(input.writePaths)
 
     if (input.design && input.kind !== 'implementation') {
       throw new Error('A design is only valid for implementation tasks')
     }
 
     if (input.design) {
-      validateScope(input.design.writePaths)
+      validateWriteScope(input.design.writePaths)
     }
 
     if (input.requires?.length) {
@@ -400,7 +400,7 @@ export class Delegations {
 
     for (const input of inputs) {
       validateDesign(input.branch.design)
-      validateScope(input.writePaths)
+      validateWriteScope(input.writePaths)
 
       if (
         input.branch.design.unresolved.length ||

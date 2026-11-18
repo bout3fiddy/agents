@@ -12,9 +12,10 @@ import {
   matches,
   safePath,
   snapshotHash,
-  validateScope,
+  validateWriteScope,
   writable,
 } from './paths.ts'
+import { writePathSchema } from './contracts.ts'
 import { changes } from './integration.ts'
 import {
   scopesOverlap,
@@ -31,7 +32,7 @@ export const revisionSchema = Type.Object({
       id: Type.String({ minLength: 36, maxLength: 36 }),
       task: Type.String({ minLength: 1, maxLength: 8000 }),
       context: Type.String({ maxLength: 24000 }),
-      writePaths: Type.Array(Type.String({ maxLength: 200 }), { maxItems: 30 }),
+      writePaths: Type.Optional(Type.Array(writePathSchema, { maxItems: 30 })),
     }),
     { minItems: 1, maxItems: 4 },
   ),
@@ -135,6 +136,10 @@ export async function reviseTasks(jobs: Delegations, raw: Revision) {
       throw new Error('Revise branch tasks and local tasks in separate batches')
     }
 
+    const updates = raw.tasks.map((task, index) => ({
+      ...task,
+      writePaths: task.writePaths ?? selected[index]!.request.writePaths,
+    }))
     const authority = selected.flatMap((job) => job.request.writePaths)
     const previous = await Promise.all(
       selected.map(async (job) => {
@@ -148,11 +153,11 @@ export async function reviseTasks(jobs: Delegations, raw: Revision) {
       }),
     )
     const others = (await jobs.list()).filter(
-      (job) => !raw.tasks.some((task) => task.id === job.request.id) && ownsTaskPaths(job.state),
+      (job) => !updates.some((task) => task.id === job.request.id) && ownsTaskPaths(job.state),
     )
 
-    for (const [index, task] of raw.tasks.entries()) {
-      validateScope(task.writePaths)
+    for (const [index, task] of updates.entries()) {
+      validateWriteScope(task.writePaths, selected[index]!.request.writePaths)
       const kind = selected[index]!.request.kind
 
       if (
@@ -178,9 +183,7 @@ export async function reviseTasks(jobs: Delegations, raw: Revision) {
       )
 
       if (
-        raw.tasks
-          .slice(0, index)
-          .some((other) => scopesOverlap(task.writePaths, other.writePaths)) ||
+        updates.slice(0, index).some((other) => scopesOverlap(task.writePaths, other.writePaths)) ||
         sameMode.some((other) => scopesOverlap(task.writePaths, other.request.writePaths))
       ) {
         throw new Error('Revised tasks still have colliding write scopes')
@@ -242,7 +245,7 @@ export async function reviseTasks(jobs: Delegations, raw: Revision) {
     }
 
     for (const path of retained.keys()) {
-      const owner = raw.tasks.findIndex((task) => writable(path, task.writePaths))
+      const owner = updates.findIndex((task) => writable(path, task.writePaths))
 
       if (owner === -1) {
         throw new Error(`Retained edit has no owner in the revision: ${path}`)
@@ -261,7 +264,7 @@ export async function reviseTasks(jobs: Delegations, raw: Revision) {
     let prepared = false
 
     try {
-      for (const [index, update] of raw.tasks.entries()) {
+      for (const [index, update] of updates.entries()) {
         const job = selected[index]!
         const directory = join(jobs.store.directory, 'delegations', job.request.id)
         const control = await readJson<TaskControls>(join(directory, 'controls.json'))
