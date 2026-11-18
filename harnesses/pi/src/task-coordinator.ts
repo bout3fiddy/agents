@@ -396,6 +396,26 @@ export async function createTaskCoordinatorTools(
         serialize(() => tool.execute(args[0], args[1], signal, args[3], args[4])),
     }))
 
+  tools.push({
+    name: 'report_milestone',
+    label: 'Report a project milestone',
+    description:
+      'Flag a verified outcome or material change of plan for the host. Summarize the current ' +
+      'outcome, evidence and impact in one or two sentences. Routine progress stays private.',
+    parameters: Type.Object({ summary: Type.String({ minLength: 1, maxLength: 400 }) }),
+    async execute(_id, raw) {
+      const { summary } = raw as { summary: string }
+      return serialize(async () => {
+        if (submitted || submitting || !summary.trim()) {
+          throw new Error('An active task and a concrete milestone are required')
+        }
+
+        await progress.update({ milestone: summary.trim() })
+        return textResult({ recorded: true })
+      })
+    },
+  })
+
   if (request.kind === 'branch') {
     tools.push({
       name: 'run_checks',

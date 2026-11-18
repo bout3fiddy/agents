@@ -80,6 +80,9 @@
   meaningful findings, phases or blockers; telemetry remains automatic. Guidance requests are
   exceptional and identify a concrete missing decision or capability. `/workers` exposes live status
   and optional metadata without flooding the orchestrator conversation.
+- Surface meaningful project milestones through one brief host summary at a safe boundary. Batch
+  related outcomes, preserve pending user input, and deduplicate across reload. Routine worker
+  activity stays private.
 - Keep later specialist reviews with the coordinator instead of blocking leaf acceptance on them.
   Completion diagnostics must identify the outstanding role and write scope. Require matching-scope
   clearance and reuse passing reviews when the candidate is unchanged.

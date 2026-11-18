@@ -86,7 +86,7 @@ export type DelegationStatus = {
   progressFile?: string
   hostActions?: WorkerResult['hostActions']
 }
-export type Delegation = { request: DelegationRequest; state: DelegationStatus }
+export type Delegation = { request: DelegationRequest; state: DelegationStatus; milestone?: string }
 export type TaskControls = {
   revision: number
   baseRevision?: number
@@ -236,7 +236,9 @@ export class Delegations {
       }
     }
 
-    const progress = await readProgress(join(directory, state.progressFile ?? 'coordinator.json'))
+    const report = await readProgress(join(directory, state.progressFile ?? 'coordinator.json'))
+    const milestone = report?.milestone
+    const progress = report && { ...report, milestone: undefined }
     const activity = progress?.child?.updatedAt ?? progress?.updatedAt ?? state.updatedAt
     const activityAgeMs = Math.max(0, Date.now() - Date.parse(activity))
     state = {
@@ -251,7 +253,7 @@ export class Delegations {
           ? 'needs_attention'
           : 'stopped',
     }
-    return { request, state }
+    return { request, state, milestone }
   }
 
   async list(): Promise<Delegation[]> {

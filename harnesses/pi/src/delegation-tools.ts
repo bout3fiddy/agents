@@ -9,6 +9,7 @@ import type {
 } from '@earendil-works/pi-coding-agent'
 import { StateStore } from './state.ts'
 import { textResult } from './file-tools.ts'
+import { digest } from './paths.ts'
 import { launchDelegation } from './delegation-process.ts'
 import {
   Delegations,
@@ -55,13 +56,24 @@ function messageIds(details: unknown): string[] {
 const notificationId = (job: Delegation) =>
   job.state.deliveryVersion ? `${job.request.id}:${job.state.deliveryVersion}` : job.request.id
 
+function taskMilestone(job: Delegation) {
+  const { status, commit, branch } = job.state
+
+  if (branch && commit && (status === 'merge_queued' || status === 'merging')) {
+    return { key: 'merge-queue', summary: `Published ${branch} at ${commit}. Integration pending.` }
+  }
+
+  const summary = job.milestone
+  return summary ? { key: digest(summary), summary } : undefined
+}
+
 function resultMessage(jobs: Delegation[]): CustomMessageEntryDraft {
   return {
     type: 'custom_message',
     customType: 'pi-task-result',
     display: false,
     content:
-      'Background task outcome. Briefly acknowledge the outcome and any blocker, ' +
+      'Background task outcome. Combine related outcomes into one short project update, ' +
       'then continue the discussion. For failures, inspect the retained candidate and evidence. ' +
       'Recover within the original authorized scope: handle host-only operations on the host, ' +
       'preserve useful work and rerun relevant checks. Do not repeat a worker lacking the needed ' +
@@ -110,16 +122,17 @@ export function registerDelegation(pi: ExtensionAPI, launch: Launcher = launchDe
                 .join(' · ')
           : undefined,
       )
+      const entries = ctx.sessionManager.getEntries()
       const branch = new Set(ctx.sessionManager.getBranch().map((entry) => entry.id))
       const persisted = new Set(
-        ctx.sessionManager
-          .getEntries()
-          .flatMap((entry) =>
-            entry.type === 'custom_message' &&
-            ['pi-task-result', 'pi-task-progress', 'pi-task-attention'].includes(entry.customType)
-              ? messageIds(entry.details)
-              : [],
-          ),
+        entries.flatMap((entry) =>
+          entry.type === 'custom_message' &&
+          ['pi-task-result', 'pi-task-progress', 'pi-task-attention', 'pi-task-milestone'].includes(
+            entry.customType,
+          )
+            ? messageIds(entry.details)
+            : [],
+        ),
       )
       const ready = jobs.filter(
         (job) =>
@@ -136,24 +149,38 @@ export function registerDelegation(pi: ExtensionAPI, launch: Launcher = launchDe
 
       const messages: CustomMessageEntryDraft[] = ready.length ? [resultMessage(ready)] : []
 
+      const milestones: { id: string; task: string; summary: string }[] = []
+
       for (const job of jobs.filter(
         (item) =>
           activeTask(item.state) &&
           item.request.session === session &&
           (!item.request.originEntry || branch.has(item.request.originEntry)),
       )) {
+        const milestone = taskMilestone(job)
+
+        if (milestone) {
+          const id = `${job.request.id}:milestone:${milestone.key}`
+
+          if (!persisted.has(id) && !delivered.has(`${session}:${id}`)) {
+            milestones.push({
+              id,
+              task: job.request.task.slice(0, 160),
+              summary: milestone.summary,
+            })
+          }
+        }
+
         const progress = job.state.progress
         const activity = progress?.child?.updatedAt ?? progress?.updatedAt ?? job.state.updatedAt
         const attention = job.state.health === 'quiet'
         const id = `${job.request.id}:${attention ? 'attention' : 'progress'}:${activity}`
-        const previous = ctx.sessionManager
-          .getEntries()
-          .findLast(
-            (entry) =>
-              entry.type === 'custom_message' &&
-              entry.customType === 'pi-task-progress' &&
-              (entry.details as { taskId?: string })?.taskId === job.request.id,
-          )
+        const previous = entries.findLast(
+          (entry) =>
+            entry.type === 'custom_message' &&
+            entry.customType === 'pi-task-progress' &&
+            (entry.details as { taskId?: string })?.taskId === job.request.id,
+        )
         const since = previous?.timestamp ?? job.request.createdAt
 
         if (
@@ -185,6 +212,36 @@ export function registerDelegation(pi: ExtensionAPI, launch: Launcher = launchDe
         })
       }
 
+      if (milestones.length) {
+        const previous = entries.findLast(
+          (entry) =>
+            entry.type === 'custom_message' &&
+            entry.customType === 'pi-task-milestone' &&
+            branch.has(entry.id),
+        )
+        const waking = messages.some((message) => message.customType !== 'pi-task-progress')
+
+        if (!previous || waking || Date.now() - Date.parse(previous.timestamp) >= 60000) {
+          const taskIds = milestones.map(({ id }) => id)
+
+          for (const id of taskIds) {
+            delivered.add(`${session}:${id}`)
+          }
+
+          messages.push({
+            type: 'custom_message',
+            customType: 'pi-task-milestone',
+            display: false,
+            content:
+              'Summarize these milestones in one brief update with their impact. ' +
+              'Combine with any concurrent outcomes and answer pending user questions first. ' +
+              'Use the reported evidence, preserve its verification stage and skip repetition.\n' +
+              JSON.stringify(milestones.map(({ task, summary }) => ({ task, summary }))),
+            details: { taskIds },
+          })
+        }
+      }
+
       return messages
     } finally {
       collecting = false
@@ -207,13 +264,16 @@ export function registerDelegation(pi: ExtensionAPI, launch: Launcher = launchDe
       return
     }
 
-    for (const message of messages) {
+    const wake = messages.findLast((message) => message.customType !== 'pi-task-progress')
 
-      // One batch wakes an idle orchestrator once; ordinary polling never invokes a model.
-      pi.sendMessage(message, {
-        triggerTurn: message.customType !== 'pi-task-progress',
-        deliverAs: 'followUp',
-      })
+    for (const message of messages) {
+      if (message !== wake) {
+        pi.sendMessage(message, { triggerTurn: false, deliverAs: 'followUp' })
+      }
+    }
+
+    if (wake) {
+      pi.sendMessage(wake, { triggerTurn: true, deliverAs: 'followUp' })
     }
   }
   const boundary = async (event: BoundaryState, ctx: ExtensionContext) => {

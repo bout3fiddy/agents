@@ -275,8 +275,13 @@ Worker progress is persisted separately from task controls/status, including act
 Codex streaming events and Claude output update activity timestamps; coordinators forward child
 progress. Periodic progress messages enter context privately without waking an idle model. Optional
 `report_progress` summaries capture meaningful findings or phase changes without mandatory chatter.
-A silent task gets one attention notice per unchanged activity point, while completion and genuine
-blockers wake the orchestrator. It must inspect evidence, resolve authorized host-only operations or
-report the actual external blocker; repeated identical incapable workers are not a recovery
-strategy. Recovery first reconciles current project state and user updates; work already completed
-directly must not be retried or overwritten from an old failed candidate.
+A coordinator records its latest `report_milestone` summary in its progress file. The host also
+recognizes an accepted workflow's implementation handoff and a published branch awaiting merge. It
+batches new milestones by originating session and branch, deduplicates using persisted message IDs,
+and groups subsequent updates for up to a minute. An outcome or attention event can flush the batch
+earlier. Only a material event wakes the idle host. A silent task gets one attention notice per
+unchanged activity point, while completion and genuine blockers wake the orchestrator. It must
+inspect evidence, resolve authorized host-only operations or report the actual external blocker;
+repeated identical incapable workers are not a recovery strategy. Recovery first reconciles current
+project state and user updates; work already completed directly must not be retried or overwritten
+from an old failed candidate.

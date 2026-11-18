@@ -9,6 +9,7 @@ export type TaskProgress = {
   message?: string
   child?: TaskProgress
   summary?: string
+  milestone?: string
 }
 
 /** Each process owns one progress file; parent records point to the active child. */
@@ -46,7 +47,14 @@ export async function readProgress(output: string): Promise<TaskProgress | undef
 export function trackDispatch(dispatch: Dispatcher, output: string): Dispatcher {
   const progress = progressReporter(output)
   return async (request, signal, observer) => {
-    await progress.update({ stage: 'child', role: request.role, child: undefined })
+    await progress.update({
+      stage: 'child',
+      role: request.role,
+      child: undefined,
+      ...(request.role === 'reviewer'
+        ? { milestone: `Candidate reached independent review for ${request.checkpoint.objective}.` }
+        : {}),
+    })
 
     try {
       const evidence = await dispatch(request, signal, async (activity) => {

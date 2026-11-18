@@ -13,6 +13,7 @@ import {
   scopeContained,
   type TaskCoordinatorRequest,
 } from '../src/task-coordinator.ts'
+import { readProgress } from '../src/progress.ts'
 import { evidence, fixture, hashes } from './support.ts'
 
 const pass: WorkerResult = {
@@ -111,6 +112,13 @@ test('coordinator exposes bounded delegation and no retained write tools', async
   )
   await invoke(worker.tools, 'delegate_worker', { ...leaf, writePaths: ['src/value.js'] })
   assert.equal(dispatched, 1)
+  const summary = 'The restart test restored all saved entries. Migration work can proceed.'
+  await invoke(worker.tools, 'report_milestone', { summary })
+  await invoke(worker.tools, 'report_progress', { summary: 'Inspecting the follow-up document.' })
+  await worker.progress.update({ stage: 'coordinating' })
+  const progress = await readProgress(request.outputPath)
+  assert.equal(progress?.milestone, summary)
+  assert.equal(progress?.summary, 'Inspecting the follow-up document.')
   await invoke(worker.tools, 'submit_result', pass)
   assert.equal(worker.result()?.verdict, 'pass')
   await assert.rejects(invoke(worker.tools, 'delegate_worker', leaf), /already submitted/)

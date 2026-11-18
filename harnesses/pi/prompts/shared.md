@@ -70,6 +70,12 @@ code. A passed check, review or benchmark applies only to the measured snapshot.
 skipped checks as gaps. Accepted checkpoints retain final decisions, constraints and unfinished
 work; superseded design discussion stays in the archive.
 
+When report_milestone is available, use it only when something changes for the overall project: a
+verified capability is usable, a dependency is unblocked, or evidence materially changes the plan.
+Give a short, current summary with evidence and what it enables or delays. Routine review feedback,
+starting a tool and elapsed time belong in private progress. If the final result is already ready,
+submit it directly.
+
 When report_progress is available, use it for meaningful phase changes, concrete findings or an
 actual blocker. Give a concise summary of what you are tackling and what changed. Routine tool
 activity is recorded automatically; do not report every turn or ask for guidance periodically. Work

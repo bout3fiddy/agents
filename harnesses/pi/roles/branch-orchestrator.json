@@ -14,7 +14,8 @@
     "delegate_worker",
     "run_checks",
     "submit_result",
-    "report_progress"
+    "report_progress",
+    "report_milestone"
   ],
   "writes": [],
   "mayDelegate": true,

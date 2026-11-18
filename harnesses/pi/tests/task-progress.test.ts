@@ -129,6 +129,13 @@ test('accepted workflows expose active worker progress', async () => {
         assert.equal(current.state.progress?.child?.tool, 'project_read')
         assert.equal(current.state.progress?.child?.role, request.role)
         assert.equal(current.state.health, 'active')
+
+        if (request.role === 'reviewer') {
+          assert.match(current.milestone ?? '', /reached independent review/)
+        } else {
+          assert.equal(current.milestone, undefined)
+        }
+
         roles.push(request.role)
         return evidence(request)
       }, output),
@@ -191,4 +198,93 @@ test('a silent task raises one attention notice without cancellation', async () 
     await runtime.settleCredentialWrites()
     await rm(item.base, { recursive: true, force: true })
   }
+})
+
+test('milestones batch, survive reload and yield to final outcomes', async (t) => {
+  const item = await fixture()
+  const calls: string[] = []
+  const { session, runtime } = await captureSession(
+    item.root,
+    item.base,
+    [
+      (pi) => {
+        registerDelegation(pi)
+      },
+    ],
+    async (context) => {
+      calls.push(JSON.stringify(context.messages))
+      return [{ type: 'text', text: 'The recovery checkpoint is ready for the next dependency.' }]
+    },
+  )
+  t.after(async () => {
+    session.dispose()
+    await runtime.settleCredentialWrites()
+    await rm(item.base, { recursive: true, force: true })
+  })
+  const store = new StateStore(item.root)
+  const jobs = new Delegations(store)
+  const owner = { session: session.sessionManager.getSessionId(), model: 'capture/capture' }
+
+  async function start(task: string) {
+    const job = await jobs.start(
+      { task, context: '', kind: 'research', writePaths: [] },
+      owner,
+      async () => {},
+    )
+    const directory = delegationDirectory(store, job.request.id)
+    const state = { ...job.state, status: 'running', pid: process.pid }
+    const setState = (change: object) =>
+      atomicJson(join(directory, 'status.json'), { ...state, ...change })
+    await setState({})
+    return { setState, progress: progressReporter(join(directory, 'coordinator.json')) }
+  }
+
+  async function waitForCalls(count: number) {
+    for (let attempt = 0; attempt < 80 && calls.length < count; attempt++) {
+      await delay(50)
+    }
+
+    await session.waitForIdle()
+    assert.equal(calls.length, count)
+  }
+
+  const notices = () =>
+    session.sessionManager
+      .getEntries()
+      .filter(
+        (entry) => entry.type === 'custom_message' && entry.customType === 'pi-task-milestone',
+      )
+  const first = await start('Recovery')
+  const second = await start('Independent integration')
+  await first.progress.update({ milestone: 'Restart test recovered every committed row.' })
+  await second.setState({ status: 'merge_queued', commit: 'dc5b1af', branch: 'pi/integration' })
+  await waitForCalls(1)
+  assert.equal(notices().length, 1)
+  const notice = notices()[0]
+  assert.ok(notice?.type === 'custom_message' && !notice.display)
+  assert.equal((notice.details as { taskIds: string[] }).taskIds.length, 2)
+  assert.match(calls[0]!, /Restart test recovered every committed row/)
+  assert.match(calls[0]!, /Published pi\/integration at dc5b1af/)
+
+  await first.progress.update({ stage: 'child', message: 'Reading another file.' })
+  await session.reload()
+  await delay(1200)
+  assert.equal(calls.length, 1)
+
+  await first.progress.update({ milestone: 'Replica catch-up verified under load.' })
+  await delay(1200)
+  assert.equal(calls.length, 1, 'Hold nearby updates to combine with other outcomes')
+  await second.progress.update({ milestone: 'Obsolete integration update.' })
+  await second.setState({ status: 'complete', summary: 'Integrated on main.' })
+  await waitForCalls(2)
+  assert.equal(notices().length, 2)
+  assert.match(calls[1]!, /Replica catch-up verified under load/)
+  assert.match(calls[1]!, /Integrated on main/)
+  assert.doesNotMatch(calls[1]!, /Obsolete integration update/)
+  const latest = notices().at(-1)
+  assert.ok(latest?.type === 'custom_message')
+  assert.doesNotMatch(String(latest.content), /Obsolete integration update/)
+  await session.reload()
+  await delay(1200)
+  assert.equal(calls.length, 2)
 })

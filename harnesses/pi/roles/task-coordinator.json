@@ -13,7 +13,8 @@
     "document_check",
     "delegate_worker",
     "submit_result",
-    "report_progress"
+    "report_progress",
+    "report_milestone"
   ],
   "writes": [],
   "mayDelegate": true,
