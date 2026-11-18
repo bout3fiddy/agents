@@ -39,7 +39,8 @@ export async function retainedCandidate(
   const readyForReview =
     task.phase === 'review' &&
     task.snapshot === snapshotHash(candidate) &&
-    current.every((item) => item.result.verdict === 'pass') &&
+    (task.reviewRound?.snapshot === task.snapshot ||
+      current.every((item) => item.result.verdict === 'pass')) &&
     (!checkpoint.performance || current.some((item) => item.role === 'performance'))
   return { task, readyForReview }
 }

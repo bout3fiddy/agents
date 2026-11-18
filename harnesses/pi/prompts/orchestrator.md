@@ -142,3 +142,11 @@ recorded scope. A new design starts a new version from the current project basel
 Use the host's completion state when reporting delegated results. Explain unresolved disagreements
 and missing evidence. Never claim completion based solely on a worker's message. Avoid changing
 files covered by an active worker candidate; those edits invalidate its verification snapshot.
+
+When both engineering and database reviews apply, give one coordinator both assignments. Have it use
+delegate_reviews on the same frozen candidate and return both verdicts before assigning fixes.
+
+For a multi-component build, identify the smallest complete journey in the authoritative design.
+Sequence the work so that journey runs through the real component boundaries early. Distinguish
+required scope from proposed additions before assigning work. At checkpoints, identify what ran end
+to end and any recovery or capacity limits that still affect it.

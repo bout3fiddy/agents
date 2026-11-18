@@ -20,7 +20,7 @@ import {
   type WorkerResult,
   type Role,
 } from './contracts.ts'
-import { dispatcher, type Dispatcher } from './dispatch.ts'
+import { collectWorkerResults, dispatcher, type Dispatcher } from './dispatch.ts'
 import { textResult } from './file-tools.ts'
 import { changes } from './integration.ts'
 import {
@@ -85,6 +85,12 @@ const delegateSchema = Type.Object(
   { additionalProperties: false },
 )
 
+const reviewTask = Type.String({ minLength: 1, maxLength: 16000 })
+const reviewPairSchema = Type.Object(
+  { engineering: reviewTask, database: reviewTask },
+  { additionalProperties: false },
+)
+
 type Delegation = Static<typeof delegateSchema>
 type ChildReceipt = { assignment: Delegation; evidence: WorkerEvidence }
 const coordinatorRole = (request: TaskCoordinatorRequest) =>
@@ -114,6 +120,10 @@ function sameAssignment(left: Delegation, right: Delegation): boolean {
 
 function isReview(role: string): boolean {
   return role === 'reviewer' || role === 'database-reviewer'
+}
+
+function reviewVerdicts(results: WorkerEvidence[]) {
+  return results.map(({ role, model, snapshot, result }) => ({ role, model, snapshot, result }))
 }
 
 function checkChildWrites(
@@ -152,13 +162,19 @@ export async function createTaskCoordinatorTools(
   const worker = createWorkerTools({ ...request, role: 'reviewer' }, role)
   const progress = progressReporter(request.outputPath, role.name)
   const receipts: ChildReceipt[] = []
-  const originals = request.kind === 'branch' ? await inventory(request.originals) : undefined
+  const originals =
+    request.kind === 'branch' || request.kind === 'maintenance'
+      ? await inventory(request.originals)
+      : undefined
   let checks: Receipt[] = []
   let checkedDatabase = false
   let declaredDatabase = request.checkpoint.database
   let submitted: WorkerResult | undefined
   let fatal: unknown
   const failedAssignments = new Set<string>()
+  const missingVerdicts = new Set<string>()
+  let reviewSnapshot: string | undefined
+  let pairedReviewActive = false
   let pending = 0
   let submitting = false
   let revision = 0
@@ -182,7 +198,7 @@ export async function createTaskCoordinatorTools(
     }
   }
 
-  async function delegate(raw: unknown): Promise<WorkerEvidence> {
+  function validateAssignment(raw: unknown): Delegation {
     if (!Check(delegateSchema, raw)) {
       throw new Error('Invalid leaf assignment')
     }
@@ -211,96 +227,86 @@ export async function createTaskCoordinatorTools(
       )
     }
 
-    pending++
-    let recoverableFailure = false
+    return raw
+  }
+
+  async function runChild(raw: Delegation, before: Map<string, Buffer>): Promise<ChildReceipt> {
+    const documentsOnly = request.kind === 'branch' && raw.role === 'task-worker'
     const assignmentKey = JSON.stringify([raw.role, [...raw.writePaths].sort()])
+    let recoverableFailure = false
 
     try {
-      return await serialize(async () => {
-        requireValidCandidate()
-        const childRole = await loadRole(raw.role)
-        const before = await inventory(request.workspace)
-        await progress.update({
-          stage: 'child',
-          role: raw.role,
-          child: undefined,
-          message: raw.task.slice(0, 240),
-        })
-        let child: WorkerEvidence
-
-        try {
-          child = await dispatch(
-            {
-              role: raw.role,
-              documentsOnly,
-              task: JSON.stringify({
-                task: raw.task,
-                parentTask: request.task,
-                context: request.context,
-                kind: request.kind,
-                capabilities: capabilities.workers,
-                execution: { state: 'running', resumed: request.resumed ?? false },
-                authority:
-                  request.kind === 'branch'
-                    ? 'Authorized design-document implementation; resolve reviewer feedback.'
-                    : 'Bounded task scope; this is not an accepted implementation design.',
-                previousFindings: receipts
-                  .filter((receipt) => sameAssignment(receipt.assignment, raw))
-                  .map((receipt) => receipt.evidence.result),
-              }),
-              workspace: request.workspace,
-              project: request.project,
-              checkpoint: { ...request.checkpoint, writePaths: raw.writePaths },
-              model: request.model,
-              baseline: request.baseline,
-              originals: request.originals,
-            },
-            signal,
-            (activity) => progress.update({ stage: 'child', child: activity }),
-          )
-        } catch (error) {
-          checkChildWrites(request, raw, childRole, before, await inventory(request.workspace))
-          recoverableFailure = true
-          failedAssignments.add(assignmentKey)
-          throw error
-        }
-
-        signal.throwIfAborted()
-        const after = await inventory(request.workspace)
-
-        if (child.role !== raw.role || child.snapshot !== snapshotHash(after)) {
-          throw new Error('Stale or mismatched child evidence')
-        }
-
-        validateResult(child.result)
-
-        const expectedModel = childRole.model === 'inherit' ? request.model : childRole.model
-        const actualModel =
-          childRole.backend === 'claude-cli'
-            ? child.model.replace(/^claude-cli\//, '')
-            : child.model
-
-        if (actualModel !== expectedModel) {
-          throw new Error('Child model does not match its configured role')
-        }
-
-        if (!Number.isSafeInteger(child.turns) || child.turns < 1) {
-          throw new Error('Invalid child turn telemetry')
-        }
-
-        checkChildWrites(request, raw, childRole, before, after)
-        failedAssignments.delete(assignmentKey)
-
-        receipts.push({ assignment: raw, evidence: child })
-        await atomicJson(`${request.outputPath}.children.json`, receipts)
-        await progress.update({
-          stage: 'coordinating',
-          role: role.name,
-          child: undefined,
-          message: `${raw.role}: ${child.result.verdict}. ${child.result.summary.slice(0, 200)}`,
-        })
-        return child
+      const childRole = await loadRole(raw.role)
+      await progress.update({
+        stage: 'child',
+        role: raw.role,
+        child: undefined,
+        message: raw.task.slice(0, 240),
       })
+      let child: WorkerEvidence
+
+      try {
+        child = await dispatch(
+          {
+            role: raw.role,
+            documentsOnly,
+            task: JSON.stringify({
+              task: raw.task,
+              parentTask: request.task,
+              context: request.context,
+              kind: request.kind,
+              capabilities: capabilities.workers,
+              execution: { state: 'running', resumed: request.resumed ?? false },
+              authority:
+                request.kind === 'branch'
+                  ? 'Authorized design-document implementation; resolve reviewer feedback.'
+                  : 'Bounded task scope; this is not an accepted implementation design.',
+              previousFindings: receipts
+                .filter((receipt) => sameAssignment(receipt.assignment, raw))
+                .map((receipt) => receipt.evidence.result),
+            }),
+            workspace: request.workspace,
+            project: request.project,
+            checkpoint: { ...request.checkpoint, writePaths: raw.writePaths },
+            model: request.model,
+            baseline: request.baseline,
+            originals: request.originals,
+          },
+          signal,
+          (activity) => progress.update({ stage: 'child', role: raw.role, child: activity }),
+        )
+      } catch (error) {
+        checkChildWrites(request, raw, childRole, before, await inventory(request.workspace))
+        recoverableFailure = true
+        failedAssignments.add(assignmentKey)
+        throw error
+      }
+
+      signal.throwIfAborted()
+      const after = await inventory(request.workspace)
+
+      if (child.role !== raw.role || child.snapshot !== snapshotHash(after)) {
+        throw new Error('Stale or mismatched child evidence')
+      }
+
+      validateResult(child.result)
+
+      const expectedModel = childRole.model === 'inherit' ? request.model : childRole.model
+      const actualModel =
+        childRole.backend === 'claude-cli' ? child.model.replace(/^claude-cli\//, '') : child.model
+
+      if (actualModel !== expectedModel) {
+        throw new Error('Child model does not match its configured role')
+      }
+
+      if (!Number.isSafeInteger(child.turns) || child.turns < 1) {
+        throw new Error('Invalid child turn telemetry')
+      }
+
+      checkChildWrites(request, raw, childRole, before, after)
+      failedAssignments.delete(assignmentKey)
+
+      return { assignment: raw, evidence: child }
     } catch (error) {
       if (!recoverableFailure && !fatal) {
         fatal = error
@@ -308,19 +314,150 @@ export async function createTaskCoordinatorTools(
 
       await progress.update({ stage: 'issue', message: String(error).slice(0, 500) })
       throw error
+    }
+  }
+
+  function reviewed(roleName: string, snapshot: string) {
+    return receipts.findLast(
+      ({ evidence }) => evidence.role === roleName && evidence.snapshot === snapshot,
+    )?.evidence
+  }
+
+  async function delegateRound(assignments: Delegation[]): Promise<WorkerEvidence[]> {
+    if (pairedReviewActive) {
+      throw new Error('Wait for both review verdicts before delegating further work')
+    }
+
+    const paired = assignments.length === 2
+
+    if (paired) {
+      pairedReviewActive = true
+    }
+
+    pending++
+
+    try {
+      return await serialize(async () => {
+        requireValidCandidate()
+        const before = await inventory(request.workspace)
+        const snapshot = snapshotHash(before)
+
+        if (missingVerdicts.size && reviewSnapshot !== snapshot) {
+          throw new Error('Candidate changed while waiting for outstanding review verdicts')
+        }
+
+        if (missingVerdicts.size && assignments.some((item) => !missingVerdicts.has(item.role))) {
+          throw new Error(
+            'Collect only the outstanding review verdicts with delegate_worker: ' +
+              [...missingVerdicts].join(', '),
+          )
+        }
+
+        const single = assignments.length === 1 ? assignments[0] : undefined
+        const requiresBoth =
+          request.kind === 'branch' || (request.kind === 'maintenance' && request.review !== false)
+
+        if (
+          single &&
+          isReview(single.role) &&
+          requiresBoth &&
+          !missingVerdicts.size &&
+          (await needsDatabase(before)) &&
+          !reviewed(single.role === 'reviewer' ? 'database-reviewer' : 'reviewer', snapshot)
+        ) {
+          throw new Error(
+            'Use delegate_reviews for engineering and database review on this candidate',
+          )
+        }
+
+        const completingReview = missingVerdicts.size > 0
+
+        if (paired) {
+          reviewSnapshot = snapshot
+
+          for (const item of assignments) {
+            missingVerdicts.add(item.role)
+          }
+        }
+
+        const finished = await collectWorkerResults(
+          assignments.map((assignment) => runChild(assignment, before)),
+          async (children) => {
+            if (paired && snapshotHash(await inventory(request.workspace)) !== snapshot) {
+              fatal = new Error('Candidate changed during paired review')
+              throw fatal
+            }
+
+            try {
+              await atomicJson(`${request.outputPath}.children.json`, [...receipts, ...children])
+            } catch (error) {
+              fatal = error
+              throw error
+            }
+
+            receipts.push(...children)
+
+            for (const child of children) {
+              missingVerdicts.delete(child.assignment.role)
+            }
+          },
+        )
+
+        if (
+          requiresBoth &&
+          single?.role === 'reviewer' &&
+          finished[0]?.evidence.result.databaseImpact &&
+          !reviewed('database-reviewer', snapshot)
+        ) {
+          reviewSnapshot = snapshot
+          missingVerdicts.add('database-reviewer')
+        }
+
+        await progress.update({
+          stage: 'coordinating',
+          role: role.name,
+          child: undefined,
+          message: finished
+            .map(
+              ({ evidence }) =>
+                `${evidence.role}: ${evidence.result.verdict}. ` +
+                evidence.result.summary.slice(0, 200),
+            )
+            .join(' / '),
+        })
+
+        if (completingReview && missingVerdicts.size === 0) {
+          return [reviewed('reviewer', snapshot)!, reviewed('database-reviewer', snapshot)!]
+        }
+
+        return finished.map((child) => child.evidence)
+      })
+    } catch (error) {
+      if (paired && missingVerdicts.size && !fatal && !signal.aborted) {
+        throw new Error(
+          `${String(error)}. Outstanding reviews: ${[...missingVerdicts].join(', ')}`,
+          { cause: error },
+        )
+      }
+
+      throw error
     } finally {
+      if (paired) {
+        pairedReviewActive = false
+      }
+
       pending--
     }
   }
 
-  async function needsDatabase(): Promise<boolean> {
+  async function needsDatabase(candidate?: Map<string, Buffer>): Promise<boolean> {
     return Boolean(
       declaredDatabase ||
       receipts.some((receipt) => receipt.evidence.result.databaseImpact) ||
       (originals &&
         databaseImpact(
           originals,
-          await inventory(request.workspace),
+          candidate ?? (await inventory(request.workspace)),
           request.project.databasePaths,
         )),
     )
@@ -374,7 +511,7 @@ export async function createTaskCoordinatorTools(
 
     requireValidCandidate()
 
-    if (pending || failedAssignments.size) {
+    if (pending || failedAssignments.size || missingVerdicts.size) {
       throw new Error('Unfinished or failed child execution prevents a passing result')
     }
 
@@ -493,7 +630,27 @@ export async function createTaskCoordinatorTools(
       description: 'Await one scoped leaf worker and resolve its findings autonomously.',
       parameters: delegateSchema,
       async execute(_id, raw) {
-        return textResult(await delegate(raw))
+        const results = await delegateRound([validateAssignment(raw)])
+        return textResult(results.length === 1 ? results[0] : reviewVerdicts(results))
+      },
+    },
+    {
+      name: 'delegate_reviews',
+      label: 'Run engineering and database reviews',
+      description:
+        'Use when both reviews apply. Run both on this frozen candidate and return ' +
+        'both verdicts together before assigning any repairs.',
+      parameters: reviewPairSchema,
+      async execute(_id, raw) {
+        if (!Check(reviewPairSchema, raw)) {
+          throw new Error('Provide engineering and database review assignments')
+        }
+
+        const assignments = [
+          validateAssignment({ role: 'reviewer', task: raw.engineering, writePaths: [] }),
+          validateAssignment({ role: 'database-reviewer', task: raw.database, writePaths: [] }),
+        ]
+        return textResult(reviewVerdicts(await delegateRound(assignments)))
       },
     },
     {

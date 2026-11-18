@@ -119,13 +119,15 @@ workers and coordinators let the SDK finish recovery from transient model failur
 classifying a task. A successful retry continues the same session and uses its submitted result. An
 exhausted or permanent error reaches the host with its provider message.
 
-Leaf calls serialize against its candidate. General task workers may edit only the task scope;
-engineering and DB reviewers are read-only; performance retains its benchmark/instrumentation
-limits. Leaf workers cannot delegate. Child receipts bind role, model and candidate snapshot.
-Requested reviews must pass on the final snapshot; unresolved findings prevent a passing coordinator
-result. Deciding which reviews a prose task requests remains model policy. Substantive maintenance
-requires fresh engineering review; the host may waive that review for routine low-risk maintenance.
-Required executable checks and conditional DB review remain enforced.
+Writable leaf calls serialize against the candidate. The coordinator holds the same reservation
+while engineering and database reviewers work concurrently. It records both outcomes before
+releasing the candidate for fixes. General task workers may edit only the task scope; engineering
+and DB reviewers are read-only; performance retains its benchmark/instrumentation limits. Leaf
+workers cannot delegate. Child receipts bind role, model and candidate snapshot. Requested reviews
+must pass on the final snapshot; unresolved findings prevent a passing coordinator result. Deciding
+which reviews a prose task requests remains model policy. Substantive maintenance requires fresh
+engineering review; the host may waive that review for routine low-risk maintenance. Required
+executable checks and conditional DB review remain enforced.
 
 General task candidates are isolated from the live project. Document changes enforce document-only
 extensions, Markdown formatting, write scope and ignored/private path exclusions. Maintenance runs
@@ -226,8 +228,9 @@ active legacy PID lock is respected during upgrades. Concurrent acquisition and 
 exercised with real processes.
 
 Retained candidates resume only against the same accepted design version and unchanged original
-project baseline. Changed or missing prerequisites stop recovery. Fresh checks and independent
-reviews run before integration. Raw command logs remain in host artifacts; the orchestrator receives
+project baseline. Changed or missing prerequisites stop recovery. Fresh checks run before
+integration. An interrupted review round reuses collected verdicts on the same candidate and
+requests the missing roles. Raw command logs remain in host artifacts; the orchestrator receives
 compact role summaries, findings and check statuses. Worker assignments use bounded receipt excerpts
 and label omitted output explicitly.
 

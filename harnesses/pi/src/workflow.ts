@@ -3,7 +3,7 @@ import { join } from 'node:path'
 import { rm } from 'node:fs/promises'
 import type { Project, Receipt, WorkerEvidence, WorkerRole } from './contracts.ts'
 import { StateStore, atomicJson, type TaskState } from './state.ts'
-import { dispatcher, type Dispatcher } from './dispatch.ts'
+import { collectWorkerResults, dispatcher, type Dispatcher } from './dispatch.ts'
 import { createWorkspace, hasSkippedTests, loadProject, verifyProject } from './project.ts'
 import { changes, integrate, recoverIntegration } from './integration.ts'
 import {
@@ -149,7 +149,8 @@ export async function runWorkflow(
     }
     await store.saveTask(task)
     await atomicJson(join(store.directory, 'tasks', `${task.id}.baseline.json`), fileHashes(before))
-    let needsDatabase = checkpoint.database
+    const resumedRound = retained?.readyForReview ? retained.task.reviewRound : undefined
+    let needsDatabase = checkpoint.database || Boolean(resumedRound?.database)
     let feedback = retained
       ? JSON.stringify({
           assignment:
@@ -165,7 +166,7 @@ export async function runWorkflow(
       baseline,
     )
 
-    async function worker(role: WorkerRole, assignment: string): Promise<WorkerEvidence> {
+    async function dispatchWorker(role: WorkerRole, assignment: string, frozen?: string) {
       signal?.throwIfAborted()
       const evidence = await dispatch(
         {
@@ -181,13 +182,20 @@ export async function runWorkflow(
         signal,
       )
 
+      signal?.throwIfAborted()
+
       if (
         evidence.role !== role ||
-        evidence.snapshot !== snapshotHash(await inventory(workspace))
+        evidence.snapshot !== (frozen ?? snapshotHash(await inventory(workspace)))
       ) {
         throw new Error(`Stale or mismatched ${role} evidence`)
       }
 
+      return evidence
+    }
+
+    async function worker(role: WorkerRole, assignment: string): Promise<WorkerEvidence> {
+      const evidence = await dispatchWorker(role, assignment)
       task!.evidence.push(evidence)
       await store.saveTask(task!)
       return evidence
@@ -276,52 +284,72 @@ export async function runWorkflow(
       }
 
       task.phase = 'review'
+      const frozen = task.snapshot
+      const reviewRound =
+        round === 1 && resumedRound?.snapshot === frozen
+          ? resumedRound
+          : { snapshot: frozen, start: task.evidence.length, database: needsDatabase }
+      task.reviewRound = reviewRound
       await store.saveTask(task)
-      const review = await worker(
-        'reviewer',
-        JSON.stringify({
-          assignment: 'Independently review the complete candidate against the accepted design.',
-          receipts: task.receipts.map(receiptView),
-          changedFiles: changes(before, await inventory(workspace)),
-        }),
-      )
-      needsDatabase ||= review.result.databaseImpact
-
-      // A reviewer can discover database impact after the first verification pass.
-      if (
-        needsDatabase &&
-        !task.receipts.some((item) =>
-          project.checks.some((check) => check.kind === 'database' && check.id === item.check),
+      const reviews = task.evidence
+        .slice(reviewRound.start)
+        .filter(
+          (item) =>
+            item.snapshot === frozen &&
+            (item.role === 'reviewer' || item.role === 'database-reviewer'),
         )
-      ) {
+      const engineeringTask = JSON.stringify({
+        assignment: 'Independently review the complete candidate against the accepted design.',
+        receipts: task.receipts.map(receiptView),
+        changedFiles: changes(before, candidate),
+      })
+      const databaseTask = () =>
+        JSON.stringify({
+          assignment:
+            'Review committed-data recovery, transactions, migration and failure semantics.',
+          receipts: task!.receipts.map(receiptView),
+        })
+      const collect = (attempts: Promise<WorkerEvidence>[]) =>
+        collectWorkerResults(attempts, async (finished) => {
+          if (snapshotHash(await inventory(workspace)) !== frozen) {
+            throw new Error('Candidate changed during review')
+          }
+
+          task!.evidence.push(...finished)
+          reviews.push(...finished)
+          await store.saveTask(task!)
+        })
+      const attempts: Promise<WorkerEvidence>[] = []
+
+      if (!reviews.some((item) => item.role === 'reviewer')) {
+        attempts.push(dispatchWorker('reviewer', engineeringTask, frozen))
+      }
+
+      if (needsDatabase && !reviews.some((item) => item.role === 'database-reviewer')) {
+        attempts.push(dispatchWorker('database-reviewer', databaseTask(), frozen))
+      }
+
+      await collect(attempts)
+
+      // Only engineering can reveal previously unknown impact after verification.
+      if (!needsDatabase && reviews.some((item) => item.result.databaseImpact)) {
+        needsDatabase = true
+        reviewRound.database = true
         task.receipts = await verifyProject(workspace, project, true, signal, lintBaseline)
 
         if (checkpoint.performance) {
           task.receipts.push(...(await benchmarks(workspace, project, signal)))
         }
-      }
 
-      const reviews = [review]
-
-      if (needsDatabase) {
-        reviews.push(
-          await worker(
-            'database-reviewer',
-            JSON.stringify({
-              assignment:
-                'Review committed-data recovery, transactions, migration and failure ' +
-                'semantics.',
-              receipts: task.receipts.map(receiptView),
-            }),
-          ),
-        )
+        await store.saveTask(task)
+        await collect([dispatchWorker('database-reviewer', databaseTask(), frozen)])
       }
 
       const issues = reviews.filter((item) => item.result.verdict !== 'pass')
 
       if (issues.length || failed(task.receipts, project).length) {
         feedback = JSON.stringify({
-          reviews: issues.map((item) => item.result),
+          reviews: reviews.map(({ role, result }) => ({ role, ...result })),
           checks: task.receipts.map(receiptView),
         })
         continue

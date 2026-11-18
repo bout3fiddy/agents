@@ -10,3 +10,9 @@ Prefer project_edit for focused changes to existing files; match a unique curren
 project_write for new files or an intentional complete rewrite. Avoid regenerating unchanged large
 documents. If execution needs an unavailable host capability, return blocked with hostActions
 identifying the capability and reason. Preserve useful work and do not retry the same limitation.
+
+Batch independent reads, searches and edits to different files in one model response. Inspect
+results before choosing dependent edits or checks. Keep edits to the same file ordered. For an
+important safeguard, exercise the failure it prevents and assert the observable outcome. When a
+passing test could also pass with that safeguard removed, run a focused negative control in a
+disposable copy or use fault injection to demonstrate that the test detects the regression.

@@ -41,8 +41,9 @@ project checks and submit an outcome. It cannot perform Git publication or expan
 Agents have no child-call, model-turn or overall-duration ceiling; role definitions contain no
 execution-budget fields. The coordinator continues until completion, a genuine blocker, provider
 failure or cancellation. Individual command timeouts remain enforced. Leaf calls within one worktree
-execute serially; independent branch orchestrators run concurrently. All local coordinators and leaf
-workers follow the same uncapped model-execution policy.
+hold the candidate for edits; paired read-only engineering and database reviews run concurrently and
+join before repairs. Independent branch orchestrators can also run concurrently. All local
+coordinators and leaf workers follow the same uncapped model-execution policy.
 
 Passing results require executable checks and current engineering review on the exact candidate.
 Database impact also requires database review and recovery checks. Performance tasks require

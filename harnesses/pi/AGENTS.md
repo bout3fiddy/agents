@@ -88,6 +88,8 @@
   related outcomes, preserve pending user input, and deduplicate across reload. Routine worker
   activity stays private. Keep only the latest routine progress per task in model context. Preserve
   raw receipts, substantive notices and progress from a later resumption.
+- Pair engineering and database reviews on one frozen candidate whenever both apply. Join both
+  verdicts before fixes. Keep writers exclusive, preserve partial evidence and retry missing roles.
 - Keep later specialist reviews with the coordinator instead of blocking leaf acceptance on them.
   Completion diagnostics must identify the outstanding role and write scope. Require matching-scope
   clearance and reuse passing reviews when the candidate is unchanged.

@@ -46,7 +46,20 @@ export async function readProgress(output: string): Promise<TaskProgress | undef
 /** Accepted workflows use the same parent-visible activity stream as task coordinators. */
 export function trackDispatch(dispatch: Dispatcher, output: string): Dispatcher {
   const progress = progressReporter(output)
+  const active = new Map<string, TaskProgress>()
   return async (request, signal, observer) => {
+    const role = request.role
+    active.set(role, { stage: 'starting', role, updatedAt: new Date().toISOString() })
+    const finish = (stage: string, message: string) => {
+      active.delete(role)
+      const sibling = active.values().next().value
+      return progress.update({
+        stage: sibling ? 'child' : stage,
+        role: sibling?.role ?? role,
+        child: sibling,
+        message,
+      })
+    }
     await progress.update({
       stage: 'child',
       role: request.role,
@@ -58,17 +71,14 @@ export function trackDispatch(dispatch: Dispatcher, output: string): Dispatcher 
 
     try {
       const evidence = await dispatch(request, signal, async (activity) => {
-        await progress.update({ stage: 'child', child: activity })
+        active.set(role, activity)
+        await progress.update({ stage: 'child', role, child: activity })
         await observer?.(activity)
       })
-      await progress.update({
-        stage: 'checking',
-        child: undefined,
-        message: `${request.role}: ${evidence.result.verdict}. ${evidence.result.summary}`,
-      })
+      await finish('checking', `${role}: ${evidence.result.verdict}. ${evidence.result.summary}`)
       return evidence
     } catch (error) {
-      await progress.update({ stage: 'issue', child: undefined, message: String(error) })
+      await finish('issue', String(error))
       throw error
     }
   }

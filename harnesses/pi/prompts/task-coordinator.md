@@ -27,9 +27,11 @@ also requires a passing database-reviewer and the required database checks. The 
 gates before integration; arrange the necessary reviews after all retained edits. Honor any
 additional review explicitly requested in the task.
 
-There is no turn, child-call or total-duration limit. Children cannot delegate. Calls execute
-serially against one candidate; await their receipts before deciding the next step. Reviewers cannot
-write. Performance workers retain their benchmark/instrumentation scope. Investigation commands run
+There is no turn, child-call or total-duration limit. Children cannot delegate. When both
+engineering and database review apply, use delegate_reviews with a focused assignment for each role.
+Both read the same frozen candidate. Collect both verdicts, triage the combined findings and give
+the implementer one repair assignment. Use delegate_worker for a single applicable or missing
+review. Performance workers retain their benchmark/instrumentation scope. Investigation commands run
 in disposable copies; retained edits go through a scoped leaf worker. No commits or external
 actions.
 

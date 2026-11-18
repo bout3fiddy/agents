@@ -148,9 +148,14 @@ test('branch completion requires database and performance evidence when scoped',
   const { request, signal } = await setup(t, { database: true, performance: true })
   const worker = await createTaskCoordinatorTools(request, signal, (child) => receipt(child))
   await assert.rejects(invoke(worker.tools, 'submit_result', pass), /passing reviewer/)
-  await invoke(worker.tools, 'delegate_worker', assignment('reviewer'))
-  await assert.rejects(invoke(worker.tools, 'submit_result', pass), /database-reviewer/)
-  await invoke(worker.tools, 'delegate_worker', assignment('database-reviewer'))
+  await assert.rejects(
+    invoke(worker.tools, 'delegate_worker', assignment('reviewer')),
+    /delegate_reviews/,
+  )
+  await invoke(worker.tools, 'delegate_reviews', {
+    engineering: 'Verify the implementation.',
+    database: 'Verify recovery.',
+  })
   await assert.rejects(invoke(worker.tools, 'submit_result', pass), /performance/)
   await invoke(worker.tools, 'delegate_worker', assignment('performance', ['benchmarks/**']))
   await invoke(worker.tools, 'run_checks')

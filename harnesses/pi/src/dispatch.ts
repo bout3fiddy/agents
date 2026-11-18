@@ -13,6 +13,32 @@ export type Dispatcher = (
   progress?: (value: TaskProgress) => Promise<void>,
 ) => Promise<WorkerEvidence>
 
+/** Hold the candidate until every worker settles, including when a sibling fails. */
+export async function collectWorkerResults<T>(
+  attempts: Promise<T>[],
+  persist: (finished: T[]) => Promise<void>,
+): Promise<T[]> {
+  const outcomes = await Promise.allSettled(attempts)
+  const finished = outcomes.flatMap((outcome) =>
+    outcome.status === 'fulfilled' ? [outcome.value] : [],
+  )
+  await persist(finished)
+  const failures = outcomes.filter((outcome) => outcome.status === 'rejected')
+
+  if (failures.length === 1) {
+    throw failures[0]!.reason
+  }
+
+  if (failures.length) {
+    throw new AggregateError(
+      failures.map((failure) => failure.reason),
+      failures.map((failure) => String(failure.reason)).join(' / '),
+    )
+  }
+
+  return finished
+}
+
 export async function runWorkerProcess(
   argv: string[],
   timeoutMs: number,

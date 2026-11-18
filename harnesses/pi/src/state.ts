@@ -20,6 +20,7 @@ export type TaskState = {
   status: 'running' | 'needs_attention' | 'verified' | 'applying' | 'complete' | 'interrupted'
   phase: string
   round: number
+  reviewRound?: { snapshot: string; start: number; database: boolean }
   candidate?: string
   resumedFrom?: string
   snapshot?: string

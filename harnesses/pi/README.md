@@ -161,11 +161,12 @@ Two ordinary jobs may run concurrently on disjoint paths. Local implementation r
 exclusively through both `workflow` and `delegate_task` with kind `implementation`. Read-only
 research can continue alongside it. For independent concurrent builds, use `delegate_branches` with
 a committed design and the required checks. Coordinators have no child-call or model-turn limit;
-their children run serially on one candidate and cannot delegate further. Explicit file tools and
-Markdown formatting reject writes to active task paths. Shell ownership is a prompt rule; host
-integration also rejects a changed target file. Document tasks preserve unrelated foreground edits.
-Code maintenance and implementation require the complete project baseline to remain unchanged. New
-scope requires a new task. Acceptance/context reset waits for active tasks to finish or cancel.
+their writable children run serially and paired read-only reviews run concurrently. Explicit file
+tools and Markdown formatting reject writes to active task paths. Shell ownership is a prompt rule;
+host integration also rejects a changed target file. Document tasks preserve unrelated foreground
+edits. Code maintenance and implementation require the complete project baseline to remain
+unchanged. New scope requires a new task. Acceptance/context reset waits for active tasks to finish
+or cancel.
 
 Jobs survive `/reload` and Pi exit; their process, controls, status and evidence live under
 `.pi/traces/harness/delegations/<id>/`. Stop a job through `task_control`; an ordinary conversation
@@ -277,16 +278,19 @@ requirements and recovery. For a single local implementation:
    invariants, acceptance criteria, permitted paths and DB/performance flags.
 2. The runtime records a versioned worker scope and returns a background task ID. No acceptance
    command, session switch or conversation pruning is required. Discussion continues immediately.
-3. Astra implementation, applicable Fable performance work, executable checks, Fable engineering
-   review and conditional Fable database review run in order. Findings return to Astra without a
+3. Astra implementation, applicable Fable performance work, executable checks, then independent
+   reviews. When database impact is known, engineering and database reviewers start together on the
+   same verified snapshot. If engineering first discovers database impact, recovery checks and
+   database review follow that finding. Both verdicts reach Astra together for repairs without a
    repair-round ceiling. An unchanged repeated failure returns to the host for diagnosis.
 4. A verified candidate is applied and checked again. Concurrent project edits block integration.
    Avoid editing the candidate's files from the orchestrator while this workflow runs.
 
 An interrupted workflow retains its candidate. Call `workflow` without a design to resume its
-recorded scope: the original project baseline must still match. An unchanged candidate awaiting
-review goes through fresh checks and reviews. Supplying a new design starts a new version from the
-current project baseline. Active or paused conflicting work prevents replacing its scope.
+recorded scope: the original project baseline must still match. An unchanged candidate goes through
+fresh checks and resumes any outstanding reviews from the interrupted round. Supplying a new design
+starts a new version from the current project baseline. Active or paused conflicting work prevents
+replacing its scope.
 
 Reviewers receive the recorded design, changed files, original file snapshots and command receipts.
 They start with fresh context. The performance investigator can measure, instrument and report;

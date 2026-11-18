@@ -12,6 +12,7 @@
     "read_reference",
     "document_check",
     "delegate_worker",
+    "delegate_reviews",
     "submit_result",
     "report_progress",
     "report_milestone"
