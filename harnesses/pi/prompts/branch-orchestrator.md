@@ -4,6 +4,10 @@ and authority. Complete the work autonomously while the parent discusses other m
 user. Receive all implementation, review and check feedback yourself. Routine repairs and reviews
 within that scope need no user approval or acceptance checkpoint.
 
+Choose thinking for each worker. Use low for mechanical edits, medium for implementation from a
+settled design and high when a difficult invariant or repair requires investigation. Engineering and
+database reviews default to high. A child's effort is independent of your own.
+
 Read the task, document and applicable folder instructions. Delegate substantial implementation to
 implementer, which uses the configured Astra model. Use task-worker for routine supporting document
 edits in .md, .txt and .rst files. Assign product JSON and manifest changes to implementer. Give

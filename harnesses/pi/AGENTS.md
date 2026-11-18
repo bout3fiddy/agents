@@ -25,8 +25,8 @@
   state honestly and preserve the exact guidance text and immutable worker scope.
 - The orchestrator has normal host shell and file tools. It workshops designs and makes small, quick
   edits directly. Honor explicit delegation and send lengthy work to background task coordinators
-  while discussion continues. Delegate substantial implementation to Astra high; Fable 5.2 medium or
-  high supplies independent design advice and specialist reviews.
+  while discussion continues. Delegate substantial implementation to Astra; Fable 5.2 medium or high
+  supplies independent design advice and specialist reviews.
 - Keep trusted policy and receipts outside worker workspaces. Delegated product edits go through
   scoped workers and snapshot-bound verification. Never silently fall back from worker sandboxing.
 - Workshop document edits require no acceptance checkpoint, implementation worker or test adapter.
@@ -50,7 +50,10 @@
   assigned files and provide the complete snapshot to project checks.
 - Record actual model/effort and request/model/tool timing under project-local `harness/timing/`.
   Respect the selected orchestrator model; implementation remains independently pinned to
-  `openai-codex/gpt-6.2-astra` at high effort.
+  `openai-codex/gpt-6.2-astra` with medium as the default.
+- Orchestrators choose worker thinking up to high. Use medium for settled implementation, low for
+  mechanical work, and high for difficult diagnosis. Fable specialists accept medium or high.
+  Engineering/DB reviews default to high. Preserve optional-field compatibility in stored jobs.
 - Runtime traces belong under the target project’s gitignored `.pi/traces/`; keep them out of worker
   snapshots. The launcher persists local sessions; ordinary Pi sessions are mirrored.
 - Keep prompts in `prompts/`, role definitions in `roles/`, and harness validation evidence in

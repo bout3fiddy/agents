@@ -8,12 +8,14 @@ import { randomUUID } from 'node:crypto'
 import { Type, type Static } from 'typebox'
 import { Check } from 'typebox/value'
 import { claudeArguments, parseClaudeTrace } from './claude-worker.ts'
+import { specialistThinkingSchema } from './contracts.ts'
 import { loadRole, rolePrompt } from './roles.ts'
 import { atomicJson, readJson, type StateStore } from './state.ts'
 import { readBoundedFile, safePath } from './paths.ts'
 import { instructions } from './project.ts'
 
 export const consultationSchema = Type.Object({
+  thinking: Type.Optional(specialistThinkingSchema),
   question: Type.String({ minLength: 1, maxLength: 16000 }),
   context: Type.Optional(Type.String({ maxLength: 16000 })),
   paths: Type.Optional(Type.Array(Type.String({ maxLength: 300 }), { maxItems: 12 })),
@@ -32,7 +34,7 @@ export const consultationSchema = Type.Object({
 })
 
 export type ConsultationInput = Static<typeof consultationSchema>
-export type Advice = { text: string; model: string; toolsUsed?: string[] }
+export type Advice = { text: string; model: string; thinking?: string; toolsUsed?: string[] }
 export type Consultation = {
   id: string
   session: string
@@ -49,6 +51,7 @@ export type AdviceRunner = (
   input: string,
   signal: AbortSignal,
   tracePath?: string,
+  thinking?: ConsultationInput['thinking'],
 ) => Promise<Advice>
 
 export async function consultationInput(
@@ -114,9 +117,10 @@ export async function runDesignAdvice(
   input: string,
   signal: AbortSignal,
   tracePath?: string,
+  thinking?: ConsultationInput['thinking'],
 ): Promise<Advice> {
   signal.throwIfAborted()
-  const role = await loadRole('design-advisor')
+  const role = await loadRole('design-advisor', thinking)
   const scratch = await mkdtemp(join(tmpdir(), 'pi-design-advice-'))
 
   try {
@@ -135,6 +139,7 @@ export async function runDesignAdvice(
       claudeArguments(role, config, prompt, true),
       {
         cwd: scratch,
+        env: { ...process.env, CLAUDE_CODE_EFFORT_LEVEL: role.thinking },
         signal,
         killSignal: 'SIGKILL',
         maxBuffer: 8_000_000,
@@ -173,6 +178,7 @@ export async function runDesignAdvice(
 
     return {
       text: response.result,
+      thinking: role.thinking,
       model: `claude-cli/${Object.keys(response.modelUsage ?? {})[0] ?? role.model}`,
       toolsUsed,
     }
@@ -210,6 +216,7 @@ export class DesignConsultations {
     notify: (job: Consultation) => void | Promise<void>,
     signal?: AbortSignal,
     epoch = this.epoch,
+    thinking?: ConsultationInput['thinking'],
   ): Promise<Consultation> {
     signal?.throwIfAborted()
 
@@ -242,7 +249,7 @@ export class DesignConsultations {
         await this.persist(`${path}.input.json`, JSON.parse(input))
         await this.persist(path, job)
         controller.signal.throwIfAborted()
-        job.advice = await this.run(input, controller.signal, `${path}.claude.jsonl`)
+        job.advice = await this.run(input, controller.signal, `${path}.claude.jsonl`, thinking)
         controller.signal.throwIfAborted()
         job.status = 'complete'
       } catch (error) {

@@ -204,6 +204,7 @@ export function registerWorkshop(pi: ExtensionAPI, runner?: AdviceRunner) {
         },
         signal,
         epoch,
+        args.thinking,
       )
       revisions.set(job.id, inputRevision)
       return textResult({

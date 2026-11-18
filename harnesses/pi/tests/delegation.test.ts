@@ -141,6 +141,7 @@ test('invalid or busy implementation dispatch cannot replace recorded scope', as
       { ...implementation, design: { ...design, writePaths: ['src/**/*'] } },
       { ...input, writePaths: ['handbook_*.md'] },
       { ...input, design },
+      { ...input, specialistThinking: { reviewer: 'high' as const } },
     ]) {
       await assert.rejects(jobs.start(bad, origin, async () => {}))
       assert.deepEqual(await store.checkpoint(), recorded)
@@ -209,9 +210,10 @@ test('documents preserve unrelated edits without a checkpoint', async () => {
   try {
     await writeFile(join(root, 'decision.md'), '# Decision\n\nPending.\n')
     const jobs = new Delegations(store)
-    const job = await jobs.start(input, origin, async () => {})
+    const job = await jobs.start({ ...input, thinking: 'high' }, origin, async () => {})
     let candidate = ''
     const state = await runDelegation(store, job.request.id, signal(), async (request) => {
+      assert.equal(request.thinking, 'high')
       candidate = request.workspace
       await writeFile(join(request.workspace, 'decision.md'), '# Decision\n\nAccepted.\n')
       await writeFile(join(root, 'discussion.md'), '# New user question\n')

@@ -8,7 +8,13 @@ import { StateStore, atomicJson, readJson } from './state.ts'
 import { acquireLock } from './lock.ts'
 import { matches, validateWriteScope } from './paths.ts'
 import type { Receipt } from './contracts.ts'
-import { designSchema, validateDesign, writePathSchema } from './contracts.ts'
+import {
+  thinkingSchema,
+  workflowSpecialistsSchema,
+  designSchema,
+  validateDesign,
+  writePathSchema,
+} from './contracts.ts'
 import type { BranchPlan, BranchTaskInput } from './branch-contracts.ts'
 import { readProgress, type TaskProgress } from './progress.ts'
 import { hostCapability } from './capabilities.ts'
@@ -19,6 +25,8 @@ export const delegateSchema = Type.Object(
   {
     task: Type.String({ minLength: 1, maxLength: 8000 }),
     context: Type.String({ maxLength: 24000 }),
+    thinking: Type.Optional(thinkingSchema),
+    specialistThinking: Type.Optional(workflowSpecialistsSchema),
     kind: Type.Union([
       Type.Literal('documents'),
       Type.Literal('research'),
@@ -197,6 +205,7 @@ export function delegationView(job: Delegation) {
   const { receipts, ...state } = job.state
   return {
     kind: job.request.kind,
+    thinking: job.request.thinking,
     task: job.request.task.slice(0, 500),
     writePaths: job.request.writePaths,
     ...state,
@@ -312,6 +321,10 @@ export class Delegations {
     }
 
     validateWriteScope(input.writePaths)
+
+    if (input.specialistThinking && input.kind !== 'implementation') {
+      throw new Error('Specialist thinking overrides apply only to implementation workflows')
+    }
 
     if (input.design && input.kind !== 'implementation') {
       throw new Error('A design is only valid for implementation tasks')

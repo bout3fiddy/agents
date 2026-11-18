@@ -2,7 +2,7 @@
   "name": "implementer",
   "prompt": "implementer.md",
   "model": "openai-codex/gpt-6.2-astra",
-  "thinking": "high",
+  "thinking": "medium",
   "skills": ["housekeeping"],
   "tools": [
     "project_read",

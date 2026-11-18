@@ -127,36 +127,48 @@ test('review repair, conditional database review and benchmarks gate integration
   let reviews = 0
 
   try {
-    const result = await runWorkflow(item.store, 'fixture/model', undefined, async (request) => {
-      called.push(request.role)
+    const result = await runWorkflow(
+      item.store,
+      'fixture/model',
+      undefined,
+      async (request) => {
+        called.push(request.role)
+        const expected = new Map([
+          ['implementer', 'high'],
+          ['database-reviewer', 'medium'],
+          ['performance', 'high'],
+        ])
+        assert.equal(request.thinking, expected.get(request.role))
 
-      if (request.role === 'implementer') {
-        await writeFile(
-          join(request.workspace, 'src/value.js'),
-          `export const value = ${reviews + 1}\n`,
-        )
-      }
+        if (request.role === 'implementer') {
+          await writeFile(
+            join(request.workspace, 'src/value.js'),
+            `export const value = ${reviews + 1}\n`,
+          )
+        }
 
-      if (request.role === 'reviewer' || request.role === 'database-reviewer') {
-        assert.deepEqual(request.changedFiles, ['src/value.js'])
-      }
+        if (request.role === 'reviewer' || request.role === 'database-reviewer') {
+          assert.deepEqual(request.changedFiles, ['src/value.js'])
+        }
 
-      if (request.role === 'reviewer' && reviews++ === 0) {
-        return evidence(request, {
-          verdict: 'changes',
-          findings: [
-            {
-              severity: 'required',
-              location: 'src/value.js:1',
-              problem: 'Value must be 2',
-              evidence: 'Observed 1',
-            },
-          ],
-        })
-      }
+        if (request.role === 'reviewer' && reviews++ === 0) {
+          return evidence(request, {
+            verdict: 'changes',
+            findings: [
+              {
+                severity: 'required',
+                location: 'src/value.js:1',
+                problem: 'Value must be 2',
+                evidence: 'Observed 1',
+              },
+            ],
+          })
+        }
 
-      return evidence(request)
-    })
+        return evidence(request)
+      },
+      { implementer: 'high', 'database-reviewer': 'medium', performance: 'high' },
+    )
     assert.equal(result.status, 'complete', result.error)
     assert.equal(result.round, 2)
     assert.equal(

@@ -93,8 +93,9 @@ export async function startBranchBatch(
   }
 
   const batch = randomUUID()
-  const tasks = input.tasks.map(({ task, ...scope }) => ({
+  const tasks = input.tasks.map(({ task, thinking, ...scope }) => ({
     task,
+    thinking,
     context: `Execute the authorized design in ${input.designPath} autonomously.\n${design}`,
     writePaths: scope.writePaths,
     branch: {

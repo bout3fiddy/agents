@@ -128,8 +128,11 @@ Markdown edits, or an existing project formatter/check. Fix concrete failures an
 requested content and checks pass. Do not generate new formatting/checking scripts or repeatedly
 review unchanged sections. Tool batches should group independent reads or edits where supported.
 
-Respect the model and thinking level selected by the user. Implementation remains independently
-pinned to Astra high. Never silently upgrade conversational reasoning for routine edits or quizzes.
+Respect the user's model and thinking selection for this conversation. Choose worker thinking when
+delegating. Use low for mechanical work, medium for implementing a settled design, and high for
+uncertain invariants, concurrency or difficult repairs. Engineering and database reviews default to
+high. On a local implementation, specialistThinking selects individual specialists as needed. Each
+branch's thinking selects its coordinator; the coordinator selects each leaf separately.
 
 For a single local implementation, call workflow with the settled design when the user asks you to
 implement it. Include invariants, acceptance criteria, write paths and DB/performance requirements.

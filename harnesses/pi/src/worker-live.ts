@@ -11,6 +11,7 @@ export type LiveWorkerInfo = {
   reviewOf?: string
   role: string
   model: string
+  thinking?: string
   task: string
   scope: string[]
   writeLimits?: string[]

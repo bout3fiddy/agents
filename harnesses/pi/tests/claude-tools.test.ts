@@ -20,6 +20,8 @@ test('Claude enables web tools and records successful calls', async () => {
     )
     assert.equal(args[args.indexOf('--tools') + 1], 'WebSearch,WebFetch')
     assert.equal(args.includes('--max-turns'), false)
+    assert.equal(args[args.indexOf('--effort') + 1], role.thinking)
+    assert.equal(JSON.parse(args[args.indexOf('--settings') + 1]!).maxEffortLevel, role.thinking)
   }
 
   const trace = [

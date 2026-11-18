@@ -11,6 +11,8 @@ import { Type, type Static } from 'typebox'
 import { Check } from 'typebox/value'
 import {
   resultSchema,
+  thinkingSchema,
+  specialistThinkingSchema,
   validateResult,
   writePathSchema,
   type Checkpoint,
@@ -38,7 +40,7 @@ import { benchmarks, databaseImpact } from './workflow.ts'
 import { receiptView } from './context.ts'
 import { loadRole, rolePrompt } from './roles.ts'
 import { StateStore, atomicJson } from './state.ts'
-import { checkModelOutcome, explicitResources } from './worker.ts'
+import { checkModelOutcome, checkWorkerThinking, explicitResources } from './worker.ts'
 import { createWorkerTools } from './worker-tools.ts'
 import { progressReporter } from './progress.ts'
 import { capabilities } from './capabilities.ts'
@@ -46,6 +48,7 @@ import { LiveWorker } from './worker-live.ts'
 import { attachLiveSession } from './worker-live-session.ts'
 
 export interface TaskCoordinatorRequest {
+  thinking?: Role['thinking']
   task: string
   context: string
   kind: 'documents' | 'research' | 'maintenance' | 'branch'
@@ -62,6 +65,7 @@ export interface TaskCoordinatorRequest {
 }
 
 export interface TaskCoordinatorEvidence {
+  thinking?: string
   result: WorkerResult
   children: WorkerEvidence[]
   model: string
@@ -79,6 +83,7 @@ const delegateSchema = Type.Object(
       Type.Literal('database-reviewer'),
       Type.Literal('performance'),
     ]),
+    thinking: Type.Optional(thinkingSchema),
     task: Type.String({ minLength: 1, maxLength: 16000 }),
     writePaths: Type.Array(writePathSchema, { maxItems: 50 }),
   },
@@ -87,7 +92,12 @@ const delegateSchema = Type.Object(
 
 const reviewTask = Type.String({ minLength: 1, maxLength: 16000 })
 const reviewPairSchema = Type.Object(
-  { engineering: reviewTask, database: reviewTask },
+  {
+    engineering: reviewTask,
+    database: reviewTask,
+    engineeringThinking: Type.Optional(specialistThinkingSchema),
+    databaseThinking: Type.Optional(specialistThinkingSchema),
+  },
   { additionalProperties: false },
 )
 
@@ -123,7 +133,13 @@ function isReview(role: string): boolean {
 }
 
 function reviewVerdicts(results: WorkerEvidence[]) {
-  return results.map(({ role, model, snapshot, result }) => ({ role, model, snapshot, result }))
+  return results.map(({ role, model, thinking, snapshot, result }) => ({
+    role,
+    model,
+    thinking,
+    snapshot,
+    result,
+  }))
 }
 
 function checkChildWrites(
@@ -158,7 +174,7 @@ export async function createTaskCoordinatorTools(
   signal: AbortSignal,
   dispatch: Dispatcher,
 ) {
-  const role = await loadRole(coordinatorRole(request))
+  const role = await loadRole(coordinatorRole(request), request.thinking)
   const worker = createWorkerTools({ ...request, role: 'reviewer' }, role)
   const progress = progressReporter(request.outputPath, role.name)
   const receipts: ChildReceipt[] = []
@@ -253,6 +269,7 @@ export async function createTaskCoordinatorTools(
         child = await dispatch(
           {
             role: raw.role,
+            thinking: raw.thinking,
             documentsOnly,
             task: JSON.stringify({
               task: raw.task,
@@ -633,10 +650,19 @@ export async function createTaskCoordinatorTools(
     {
       name: 'delegate_worker',
       label: 'Delegate bounded leaf task',
-      description: 'Await one scoped leaf worker and resolve its findings autonomously.',
+      description:
+        'Choose thinking for this leaf: low for mechanical tasks, medium for settled designs, ' +
+        'high for unresolved tradeoffs or tricky repairs. Fable specialists support medium/high. ' +
+        'Engineering and database reviews default to high.',
       parameters: delegateSchema,
       async execute(_id, raw) {
-        const results = await delegateRound([validateAssignment(raw)])
+        const child = validateAssignment(raw)
+
+        if (child.thinking !== undefined) {
+          await loadRole(child.role, child.thinking)
+        }
+
+        const results = await delegateRound([child])
         return textResult(results.length === 1 ? results[0] : reviewVerdicts(results))
       },
     },
@@ -653,8 +679,18 @@ export async function createTaskCoordinatorTools(
         }
 
         const assignments = [
-          validateAssignment({ role: 'reviewer', task: raw.engineering, writePaths: [] }),
-          validateAssignment({ role: 'database-reviewer', task: raw.database, writePaths: [] }),
+          validateAssignment({
+            role: 'reviewer',
+            task: raw.engineering,
+            writePaths: [],
+            ...(raw.engineeringThinking && { thinking: raw.engineeringThinking }),
+          }),
+          validateAssignment({
+            role: 'database-reviewer',
+            task: raw.database,
+            writePaths: [],
+            ...(raw.databaseThinking && { thinking: raw.databaseThinking }),
+          }),
         ]
         return textResult(reviewVerdicts(await delegateRound(assignments)))
       },
@@ -743,7 +779,7 @@ export async function runTaskCoordinator(
     throw new Error('Coordinator traces must use the original project private trace directory')
   }
 
-  const role = await loadRole(coordinatorRole(request))
+  const role = await loadRole(coordinatorRole(request), request.thinking)
   const modelId = role.model === 'inherit' ? request.model : role.model
   const split = modelId.indexOf('/')
 
@@ -769,6 +805,7 @@ export async function runTaskCoordinator(
   const live = await LiveWorker.start(request.project.root, {
     role: coordinatorRole(request),
     model: modelId,
+    thinking: role.thinking,
     task: request.task,
     scope: request.checkpoint.writePaths,
     output: request.outputPath,
@@ -921,6 +958,7 @@ export async function runTaskCoordinator(
   }, 300)
 
   try {
+    checkWorkerThinking(session, role.thinking)
     await refreshControls()
     combined.throwIfAborted()
     await session.prompt(
@@ -985,6 +1023,7 @@ export async function runTaskCoordinator(
       result,
       children: worker.children(),
       model: modelId,
+      thinking: session.thinkingLevel,
       turns,
       controlRevision,
       ...(request.kind === 'branch' ? { checks: worker.checks() } : {}),

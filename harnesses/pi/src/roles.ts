@@ -1,10 +1,17 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { harnessRoot } from './project.ts'
-import { roleNames, type Role, type RoleName } from './contracts.ts'
+import { Check } from 'typebox/value'
+import {
+  roleNames,
+  thinkingSchema,
+  specialistThinkingSchema,
+  type Role,
+  type RoleName,
+} from './contracts.ts'
 import { validateScope } from './paths.ts'
 
-export async function loadRole(name: RoleName): Promise<Role> {
+export async function loadRole(name: RoleName, thinking?: Role['thinking']): Promise<Role> {
   if (!roleNames.includes(name)) {
     throw new Error('Unknown role')
   }
@@ -29,7 +36,16 @@ export async function loadRole(name: RoleName): Promise<Role> {
   }
 
   validateScope(role.writes)
-  return role
+  const levels = role.backend === 'claude-cli' ? specialistThinkingSchema : thinkingSchema
+  const selected = thinking === undefined ? role.thinking : thinking
+
+  if (!Check(levels, role.thinking) || !Check(levels, selected)) {
+    throw new Error(
+      `Unsupported thinking for ${name}; allowed: ${levels.anyOf.map((x) => x.const).join(', ')}`,
+    )
+  }
+
+  return { ...role, thinking: selected }
 }
 
 export async function rolePrompt(name: RoleName): Promise<string> {

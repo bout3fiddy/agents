@@ -20,6 +20,22 @@ export type WorkerRole = Exclude<
   'orchestrator' | 'design-advisor' | 'task-coordinator' | 'branch-orchestrator'
 >
 
+export const thinkingSchema = Type.Union([
+  Type.Literal('low'),
+  Type.Literal('medium'),
+  Type.Literal('high'),
+])
+export const specialistThinkingSchema = Type.Union([Type.Literal('medium'), Type.Literal('high')])
+export const workflowSpecialistsSchema = Type.Object(
+  {
+    reviewer: Type.Optional(specialistThinkingSchema),
+    'database-reviewer': Type.Optional(specialistThinkingSchema),
+    performance: Type.Optional(specialistThinkingSchema),
+  },
+  { additionalProperties: false },
+)
+export type WorkerThinking = Static<typeof thinkingSchema>
+
 export const writePathSchema = Type.String({
   minLength: 1,
   maxLength: 200,
@@ -89,7 +105,7 @@ export type Role = {
   backend: 'pi' | 'claude-cli'
   prompt: string
   model: string
-  thinking: 'low' | 'medium' | 'high'
+  thinking: WorkerThinking
   skills: string[]
   tools: string[]
   writes: string[]
@@ -130,6 +146,7 @@ export type Receipt = {
 }
 
 export type WorkerRequest = {
+  thinking?: Role['thinking']
   role: WorkerRole
   task: string
   workspace: string
@@ -147,6 +164,7 @@ export type WorkerRequest = {
 }
 
 export type WorkerEvidence = {
+  thinking?: string
   liveWorkerId?: string
   role: WorkerRole
   snapshot: string

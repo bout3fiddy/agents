@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { join } from 'node:path'
 import { rm } from 'node:fs/promises'
-import type { Project, Receipt, WorkerEvidence, WorkerRole } from './contracts.ts'
+import type { Project, Receipt, WorkerEvidence, WorkerRole, WorkerThinking } from './contracts.ts'
 import { StateStore, atomicJson, type TaskState } from './state.ts'
 import { collectWorkerResults, dispatcher, type Dispatcher } from './dispatch.ts'
 import { createWorkspace, hasSkippedTests, loadProject, verifyProject } from './project.ts'
@@ -95,11 +95,14 @@ export async function benchmarks(
   return receipts
 }
 
+type WorkflowRole = Exclude<WorkerRole, 'task-worker'>
+
 export async function runWorkflow(
   store: StateStore,
   model: string,
   signal?: AbortSignal,
   dispatch: Dispatcher = dispatcher(store),
+  thinking: Partial<Record<WorkflowRole, WorkerThinking>> = {},
 ): Promise<TaskState> {
   const release = await store.lock()
   let task: TaskState | undefined
@@ -167,7 +170,7 @@ export async function runWorkflow(
     )
 
     async function dispatchWorker(
-      role: WorkerRole,
+      role: WorkflowRole,
       assignment: string,
       frozen?: string,
       changedFiles?: string[],
@@ -176,6 +179,7 @@ export async function runWorkflow(
       const evidence = await dispatch(
         {
           role,
+          thinking: thinking[role],
           task: assignment,
           workspace,
           project,
@@ -200,7 +204,7 @@ export async function runWorkflow(
       return evidence
     }
 
-    async function worker(role: WorkerRole, assignment: string): Promise<WorkerEvidence> {
+    async function worker(role: WorkflowRole, assignment: string): Promise<WorkerEvidence> {
       const evidence = await dispatchWorker(role, assignment)
       task!.evidence.push(evidence)
       await store.saveTask(task!)

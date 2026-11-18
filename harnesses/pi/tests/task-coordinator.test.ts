@@ -553,3 +553,35 @@ test('a failed paired dispatch retains its sibling and fences fixes until retry'
   assert.equal(calls.filter((r) => r === 'reviewer').length, 1)
   assert.equal(calls.filter((r) => r === 'database-reviewer').length, 2)
 })
+
+test('coordinator selects effort per child and rejects invalid levels', async (t) => {
+  const { request, controller } = await setup(t)
+  const sent: unknown[] = []
+  const worker = await createTaskCoordinatorTools(request, controller.signal, async (child) => {
+    sent.push([child.role, child.thinking])
+    return receipt(child)
+  })
+  const tool = worker.tools.find((entry) => entry.name === 'delegate_worker')!
+  const run = (role: string, thinking?: string) =>
+    tool.execute(
+      'effort',
+      { ...leaf, role, writePaths: [], ...(thinking ? { thinking } : {}) },
+      undefined,
+      undefined,
+      {} as Parameters<typeof tool.execute>[4],
+    )
+  await assert.rejects(run('reviewer', 'low'), /Unsupported thinking/)
+  await assert.rejects(run('implementer', 'xhigh'), /Invalid leaf assignment/)
+  await assert.rejects(run('database-reviewer', 'low'), /Unsupported thinking/)
+  assert.deepEqual(sent, [])
+  await run('task-worker', 'low')
+  await run('implementer', 'high')
+  await run('reviewer', 'medium')
+  await run('reviewer')
+  assert.deepEqual(sent, [
+    ['task-worker', 'low'],
+    ['implementer', 'high'],
+    ['reviewer', 'medium'],
+    ['reviewer', undefined],
+  ])
+})

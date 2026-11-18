@@ -19,7 +19,9 @@ test('parallel advice persists results and respects session ownership', async ()
   const automaticResult = new Promise<void>((resolve) => {
     observed = resolve
   })
-  const consultations = new DesignConsultations(async (_input, signal) => {
+  const firstInput = JSON.stringify({ question: 'Q1' })
+  const consultations = new DesignConsultations(async (input, signal, _tracePath, thinking) => {
+    assert.equal(thinking, input === firstInput ? 'high' : undefined)
     const abort = new Promise<never>((_resolve, reject) => {
       signal.addEventListener('abort', () => reject(new Error('Cancelled')), { once: true })
     })
@@ -27,10 +29,19 @@ test('parallel advice persists results and respects session ownership', async ()
   })
 
   try {
-    const first = await consultations.start(item.store, 'session-a', '{}', 'Q1', (job) => {
-      delivered.push(job.id)
-      observed()
-    })
+    const first = await consultations.start(
+      item.store,
+      'session-a',
+      firstInput,
+      'Q1',
+      (job) => {
+        delivered.push(job.id)
+        observed()
+      },
+      undefined,
+      undefined,
+      'high',
+    )
     assert.equal(first.status, 'running')
 
     // Starting another task must remain possible before the first model call finishes.
@@ -127,7 +138,7 @@ test('Fable receives bounded user context and permitted documents', async () => 
     assert.equal(withoutHistory.olderUserMessagesOmitted, 1)
     const implementer = await loadRole('implementer')
     assert.equal(implementer.model, 'openai-codex/gpt-6.2-astra')
-    assert.equal(implementer.thinking, 'high')
+    assert.equal(implementer.thinking, 'medium')
     const advisor = await loadRole('design-advisor')
     assert.equal(advisor.model, 'claude-fable-5-2')
     assert.ok(['medium', 'high'].includes(advisor.thinking))

@@ -31,7 +31,12 @@ export function claudeArguments(
     '--setting-sources',
     '',
     '--settings',
-    JSON.stringify({ disableAllHooks: true, autoMemoryEnabled: false, enabledPlugins: {} }),
+    JSON.stringify({
+      disableAllHooks: true,
+      autoMemoryEnabled: false,
+      enabledPlugins: {},
+      maxEffortLevel: role.thinking,
+    }),
     '--tools',
     role.tools.filter((name) => ['WebSearch', 'WebFetch'].includes(name)).join(','),
     '--no-session-persistence',
@@ -102,6 +107,7 @@ export async function runClaudeWorker(request: WorkerRequest, role: Role): Promi
   const live = await LiveWorker.start(request.project.root, {
     role: request.role,
     model: `claude-cli/${role.model}`,
+    thinking: role.thinking,
     task: request.task,
     scope: request.checkpoint.writePaths,
     writeLimits:
@@ -140,7 +146,7 @@ export async function runClaudeWorker(request: WorkerRequest, role: Role): Promi
       claudeArguments(role, configPath, promptPath, true),
       {
         cwd: scratch,
-        env: process.env,
+        env: { ...process.env, CLAUDE_CODE_EFFORT_LEVEL: role.thinking },
         stdio: ['pipe', 'pipe', 'pipe'],
       },
     )
@@ -221,6 +227,7 @@ export async function runClaudeWorker(request: WorkerRequest, role: Role): Promi
       commands: evidence.commands,
       turns: response.num_turns ?? 0,
       model: `claude-cli/${Object.keys(response.modelUsage ?? {})[0] ?? role.model}`,
+      thinking: role.thinking,
     }
   } catch (error) {
     await live.finish('failed', String(error))

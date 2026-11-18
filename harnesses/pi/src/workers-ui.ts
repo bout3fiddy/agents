@@ -364,7 +364,7 @@ export class WorkersView implements Focusable {
     if (this.mode === 'details') {
       text = [
         `Worker: ${row.id}`,
-        `Model: ${row.info.model}`,
+        `Model: ${row.info.model}${row.info.thinking ? ` · ${row.info.thinking}` : ''}`,
         `Delegated by: ${row.delegatedBy}`,
         `Task status: ${row.taskStatus ?? row.state.status}`,
         `Repository: ${row.info.projectRoot}`,

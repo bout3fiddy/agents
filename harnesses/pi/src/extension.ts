@@ -1,7 +1,7 @@
 import { realpath } from 'node:fs/promises'
 import { Type } from 'typebox'
 import type { ExtensionAPI } from '@earendil-works/pi-coding-agent'
-import { designSchema } from './contracts.ts'
+import { designSchema, thinkingSchema, workflowSpecialistsSchema } from './contracts.ts'
 import { fileTools, textResult } from './file-tools.ts'
 import { StateStore } from './state.ts'
 import { loadRole, rolePrompt } from './roles.ts'
@@ -99,12 +99,18 @@ export default function harness(pi: ExtensionAPI): void {
       'Start user-requested implementation, checks and reviews in the background. ' +
       'Supply the settled design for new work; omit it only to resume the recorded scope. ' +
       'Returns immediately and preserves this conversation.',
-    parameters: Type.Object({ design: Type.Optional(designSchema) }),
+    parameters: Type.Object({
+      design: Type.Optional(designSchema),
+      thinking: Type.Optional(thinkingSchema),
+      specialistThinking: Type.Optional(workflowSpecialistsSchema),
+    }),
     async execute(_id, args, _signal, _update, ctx) {
       return delegation.start(ctx, {
         kind: 'implementation',
         task: 'Implement the settled design with its required checks and specialist reviews.',
         ...(args.design ? { design: args.design } : {}),
+        ...(args.thinking ? { thinking: args.thinking } : {}),
+        ...(args.specialistThinking ? { specialistThinking: args.specialistThinking } : {}),
         context: '',
         writePaths: [],
       })

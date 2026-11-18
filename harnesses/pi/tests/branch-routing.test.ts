@@ -111,6 +111,8 @@ test('fanout discovers checks at the pinned commit before registering any tasks'
 
 test('the parent continues discussion while independent branch orchestrators work', async (t) => {
   const setup = await branchRepository(t)
+  setup.input.tasks[0]!.thinking = 'high'
+  setup.input.tasks[1]!.thinking = 'low'
   const controller = new AbortController()
   let release!: () => void
   const paused = new Promise<void>((resolve) => {
@@ -133,6 +135,9 @@ test('the parent continues discussion while independent branch orchestrators wor
         registerBranchTools(pi, async (request) => {
           running.push(
             runBranchTask(setup.store, request, controller.signal, async (assignment) => {
+              const selected = setup.input.tasks.find((task) => task.task === assignment.task)
+              assert.ok(selected)
+              assert.equal(assignment.thinking, selected.thinking)
               started++
 
               if (started === 2) {

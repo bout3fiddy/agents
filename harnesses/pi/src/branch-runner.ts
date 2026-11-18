@@ -195,6 +195,7 @@ export async function runBranchTask(
         const evidence = await coordinate(
           {
             kind: 'branch',
+            thinking: request.thinking,
             task: request.task,
             workspace: branch.workspace,
             project,

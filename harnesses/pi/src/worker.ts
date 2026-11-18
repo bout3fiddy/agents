@@ -9,7 +9,7 @@ import {
   type AgentSession,
   type ResourceLoader,
 } from '@earendil-works/pi-coding-agent'
-import type { WorkerEvidence, WorkerRequest } from './contracts.ts'
+import type { Role, WorkerEvidence, WorkerRequest } from './contracts.ts'
 import { assignment, createWorkerTools } from './worker-tools.ts'
 import { loadRole, rolePrompt } from './roles.ts'
 import { inventory, snapshotHash } from './paths.ts'
@@ -45,9 +45,18 @@ export function checkModelOutcome(session: AgentSession): void {
   }
 }
 
+export function checkWorkerThinking(session: AgentSession, thinking: Role['thinking']) {
+  if (
+    session.thinkingLevel !== thinking ||
+    !session.getAvailableThinkingLevels().includes(thinking)
+  ) {
+    throw new Error(`Worker model does not support the selected thinking level: ${thinking}`)
+  }
+}
+
 export async function runWorker(request: WorkerRequest): Promise<WorkerEvidence> {
   workerAbortSignal.throwIfAborted()
-  const role = await loadRole(request.role)
+  const role = await loadRole(request.role, request.thinking)
 
   if (role.backend === 'claude-cli') {
     return runClaudeWorker(request, role)
@@ -94,6 +103,7 @@ export async function runWorker(request: WorkerRequest): Promise<WorkerEvidence>
   const live = await LiveWorker.start(request.project.root, {
     role: request.role,
     model: modelId,
+    thinking: session.thinkingLevel,
     task: request.task,
     scope: request.checkpoint.writePaths,
     writeLimits: role.writes,
@@ -128,6 +138,7 @@ export async function runWorker(request: WorkerRequest): Promise<WorkerEvidence>
   })
 
   try {
+    checkWorkerThinking(session, role.thinking)
     const task = await assignment(request)
     await progress.update({ stage: 'model', message: 'Executing assigned work' })
     workerAbortSignal.throwIfAborted()
@@ -167,6 +178,7 @@ export async function runWorker(request: WorkerRequest): Promise<WorkerEvidence>
       commands: worker.commands,
       turns,
       model: modelId,
+      thinking: session.thinkingLevel,
     }
   } catch (error) {
     await live.finish(workerAbortSignal.aborted ? 'cancelled' : 'failed', String(error))

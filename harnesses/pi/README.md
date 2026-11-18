@@ -5,24 +5,38 @@ investigation, setup and small quick edits. Background task coordinators handle 
 discussion continues. Substantial implementation uses isolated Astra workers, executable checks and
 independent Fable reviews.
 
-| Role                     | Model / effort       |
-| ------------------------ | -------------------- |
-| Orchestrator             | Codex / medium       |
-| Task coordinator         | Codex / medium       |
-| Branch orchestrator      | Codex / medium       |
-| General task worker      | Codex / medium       |
-| Design advisor           | Fable 5.2 / medium   |
-| Implementer              | GPT 6.2 Astra / high |
-| Engineering reviewer     | Fable 5.2 / high     |
-| Database reviewer        | Fable 5.2 / high     |
-| Performance investigator | Fable 5.2 / medium   |
+| Role                     | Model / default effort |
+| ------------------------ | ---------------------- |
+| Orchestrator             | Codex / medium         |
+| Task coordinator         | Codex / medium         |
+| Branch orchestrator      | Codex / medium         |
+| General task worker      | Codex / medium         |
+| Design advisor           | Fable 5.2 / medium     |
+| Implementer              | GPT 6.2 Astra / medium |
+| Engineering reviewer     | Fable 5.2 / high       |
+| Database reviewer        | Fable 5.2 / high       |
+| Performance investigator | Fable 5.2 / medium     |
 
 The default orchestrator is `openai-codex/gpt-6.1-sol` at medium effort. Pi's current model and
 thinking selection take precedence for the orchestrator; the harness never silently changes them.
 Timing traces record the actual selection. Implementation is pinned to `openai-codex/gpt-6.2-astra`
-at high effort. Change `roles/*.json` to select models, effort, tools, skills and write scopes. The
-orchestrator has normal host shell/file access; the isolated worker boundaries apply to delegated
-execution.
+with medium as its default. Change `roles/*.json` to select models, effort, tools, skills and write
+scopes. The orchestrator has normal host shell/file access; the isolated worker boundaries apply to
+delegated execution. Use `/thinking medium` in a running Pi session for ordinary coordination. The
+current session selection is independent of worker effort.
+
+The orchestrator can select `thinking` for each background job. On `workflow` and implementation
+jobs it selects Astra's effort. The optional `specialistThinking` object selects each applicable
+workflow specialist by role (`reviewer`, `database-reviewer`, `performance`). On other
+`delegate_task` jobs and each `delegate_branches` task it selects the coordinator's effort. Each
+coordinator chooses its children's effort independently with `delegate_worker`. Use low for
+mechanical changes, medium for implementation from a settled design, and high for difficult
+concurrency problems, uncertain invariants or repairs that need diagnosis.
+
+Engineering and database reviews default to high. Fable supports medium or high in this harness. A
+paired review can specify `engineeringThinking` and `databaseThinking` separately.
+`consult_design.thinking` selects the advisor's effort independently of answer length. The maximum
+for all workers is high. Worker receipts and the worker details view show the selected level.
 
 ## Install and run
 
@@ -148,11 +162,11 @@ and .rst documents. Implementers own scoped project manifests and JSON files.
 `delegate_task` accepts a task, complete context, a kind and repository-relative write paths:
 `documents`, read-only `research`, bounded `maintenance`, or scoped `implementation`. It returns a
 task ID immediately. Continue the discussion while a separate Codex coordinator reads the project,
-delegates writable tasks and requests Fable reviews when useful. Document workers use Codex medium;
-substantial implementation uses Astra high. Routine documents need no review call. Substantive code
-maintenance requires passing engineering review; routine low-risk maintenance can set
-`review: false` and retain executable checks. DB changes also require database review and recovery
-checks.
+delegates writable tasks and requests Fable reviews when useful. Document workers can use low effort
+for mechanical edits. Implementation uses Astra medium by default. Routine documents need no review
+call. Substantive code maintenance requires passing engineering review; routine low-risk maintenance
+can set `review: false` and retain executable checks. DB changes also require database review and
+recovery checks.
 
 Leaf acceptance covers its assigned work; the coordinator owns subsequent specialist reviews. When
 completion is blocked by an earlier child result, the error names the exact role and write scope

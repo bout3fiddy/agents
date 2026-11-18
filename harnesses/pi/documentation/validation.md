@@ -5,9 +5,9 @@ Bun 1.3.5.
 
 ## Direct implementation dispatch and GPT 6.2 Astra (0.6.0)
 
-Implementation is pinned to `openai-codex/gpt-6.2-astra` at high effort. The legacy acceptance
-command, proposal tool and acceptance-driven host context filtering are removed. `workflow` records
-the supplied settled scope and starts its background task directly. Existing saved scopes remain
+Version 0.6.0 used `openai-codex/gpt-6.2-astra` at high effort. The legacy acceptance command,
+proposal tool and acceptance-driven host context filtering are removed. `workflow` records the
+supplied settled scope and starts its background task directly. Existing saved scopes remain
 resumable. Scope conflicts, unresolved decisions and an occupied workflow lock reject dispatch
 without replacing the existing scope.
 
