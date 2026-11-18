@@ -35,6 +35,7 @@ test('two branch orchestrators fan out then revalidate against preceding merges'
   const seen: { workspace: string; phase: string; base: string }[] = []
   const tasks = requests.map((request) =>
     runBranchTask(setup.store, request, new AbortController().signal, async (assignment) => {
+      assert.equal(assignment.designPath, setup.input.designPath)
       const context = JSON.parse(assignment.context)
       seen.push({ workspace: assignment.workspace, phase: context.phase, base: context.baseCommit })
       assert.equal(assignment.kind, 'branch')

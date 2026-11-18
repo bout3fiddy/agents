@@ -54,6 +54,7 @@ export interface TaskCoordinatorRequest {
   task: string
   context: string
   kind: 'documents' | 'research' | 'maintenance' | 'branch'
+  designPath?: string
   workspace: string
   project: Project
   checkpoint: Checkpoint
@@ -64,6 +65,28 @@ export interface TaskCoordinatorRequest {
   controlsPath?: string
   review?: boolean
   resumed?: boolean
+}
+
+/** Only the host supplies the pinned path and its authored-file inventory. */
+export function designReference(path: string, baseline: Record<string, string>) {
+  const directory = dirname(path)
+  const pathPrefix = directory === '.' ? '' : directory + '/'
+  const nearbyDocuments: string[] = []
+
+  for (const name of Object.keys(baseline)) {
+    if (name !== path && name.startsWith(pathPrefix) && documentPath(name)) {
+      nearbyDocuments.push(name)
+
+      if (nearbyDocuments.length > 24) {
+        return { path, pathPrefix }
+      }
+    }
+  }
+
+  nearbyDocuments.sort()
+  return Buffer.byteLength(JSON.stringify(nearbyDocuments)) <= 1200
+    ? { path, nearbyDocuments }
+    : { path, pathPrefix }
 }
 
 export interface TaskCoordinatorEvidence {
@@ -1032,6 +1055,10 @@ export async function runTaskCoordinator(
         context: request.context,
         kind: request.kind,
         taskScope: request.checkpoint,
+        ...(request.kind === 'branch' &&
+          request.designPath && {
+            pinnedDesign: designReference(request.designPath, request.baseline),
+          }),
         folderInstructions: await instructions(request.workspace, request.checkpoint.writePaths),
         capabilities: capabilities.workers,
         review: request.review ?? true,

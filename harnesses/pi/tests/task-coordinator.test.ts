@@ -9,6 +9,7 @@ import { loadRole } from '../src/roles.ts'
 import { createWorkerTools } from '../src/worker-tools.ts'
 import {
   createTaskCoordinatorTools,
+  designReference,
   runTaskCoordinator,
   scopeContained,
   type TaskCoordinatorRequest,
@@ -605,4 +606,29 @@ test('hard quota rejection skips repeat review launches until new host guidance'
   worker.invalidateResult()
   await invoke(worker.tools, 'delegate_worker', review)
   assert.equal(dispatched, 2)
+})
+
+test('pinned design lookup includes nearby committed docs and bounds large indexes', () => {
+  const baseline = Object.fromEntries(
+    [
+      'plans/scope.md',
+      'plans/parts/01-core.md',
+      'plans/notes.txt',
+      'plans/src.js',
+      'plans-old/unrelated.md',
+    ].map((path) => [path, 'digest']),
+  )
+  assert.deepEqual(designReference('plans/scope.md', baseline), {
+    path: 'plans/scope.md',
+    nearbyDocuments: ['plans/notes.txt', 'plans/parts/01-core.md'],
+  })
+  const many = Object.fromEntries(Array.from({ length: 25 }, (_, i) => [`plan-${i}.md`, 'hash']))
+  assert.deepEqual(designReference('scope.md', many), { path: 'scope.md', pathPrefix: '' })
+  const long = Object.fromEntries(
+    Array.from({ length: 10 }, (_, i) => [`plans/${'名'.repeat(45)}-${i}.md`, 'hash']),
+  )
+  assert.deepEqual(designReference('plans/scope.md', long), {
+    path: 'plans/scope.md',
+    pathPrefix: 'plans/',
+  })
 })

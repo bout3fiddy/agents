@@ -97,6 +97,15 @@ Remote main advances while the user's original checkout stays unchanged. Pull wh
 before further local implementation. Task branches and worktrees remain as evidence after merging;
 automatic deletion is deliberately absent.
 
+The branch coordinator receives the pinned design path at startup. Small design directories include
+a list of committed document paths, including nested plans. Larger directories provide a search
+prefix. These filenames aid discovery and confer no write authority.
+
+When the sandbox denies the private IPC socket for an npm script invoking `tsx --test`, the check
+receipt identifies the launcher error. The required gate stays failed. The project owner can verify
+the declared command on the host or configure an equivalent `node --import tsx --test` command and
+rerun the gate with the same test selection.
+
 ## Controls and evidence
 
 A blocked branch delivers its coordinator’s requested host capabilities and reasons in the terminal

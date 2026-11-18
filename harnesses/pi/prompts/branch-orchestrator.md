@@ -4,6 +4,9 @@ and authority. Complete the work autonomously while the parent discusses other m
 user. Receive all implementation, review and check feedback yourself. Routine repairs and reviews
 within that scope need no user approval or acceptance checkpoint.
 
+Use the exact paths in pinnedDesign.nearbyDocuments for referenced plans. If only pathPrefix is
+supplied, list that prefix before reading an unfamiliar filename. Read independent inputs together.
+
 Choose thinking for each worker. Use low for mechanical edits, medium for implementation from a
 settled design and high when a difficult invariant or repair requires investigation. Engineering and
 database reviews default to high. A child's effort is independent of your own.
