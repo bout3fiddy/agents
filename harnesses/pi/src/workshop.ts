@@ -163,13 +163,8 @@ export function registerWorkshop(pi: ExtensionAPI, runner?: AdviceRunner) {
       const inputRevision = revision
       const store = new StateStore(ctx.cwd)
       const session = ctx.sessionManager.getSessionId()
-      const checkpoint = await store.checkpoint()
       const users = ctx.sessionManager.getBranch().flatMap((entry) => {
         if (entry.type !== 'message' || entry.message.role !== 'user') {
-          return []
-        }
-
-        if (checkpoint && entry.message.timestamp < Date.parse(checkpoint.acceptedAt)) {
           return []
         }
 

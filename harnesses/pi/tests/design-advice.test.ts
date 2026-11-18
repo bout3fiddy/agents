@@ -126,7 +126,7 @@ test('Fable receives bounded user context and permitted documents', async () => 
     assert.deepEqual(withoutHistory.userMessages, [])
     assert.equal(withoutHistory.olderUserMessagesOmitted, 1)
     const implementer = await loadRole('implementer')
-    assert.equal(implementer.model, 'openai-codex/gpt-6-astra')
+    assert.equal(implementer.model, 'openai-codex/gpt-6.2-astra')
     assert.equal(implementer.thinking, 'high')
     const advisor = await loadRole('design-advisor')
     assert.equal(advisor.model, 'claude-fable-5-2')

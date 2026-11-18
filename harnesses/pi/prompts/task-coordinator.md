@@ -12,9 +12,9 @@ execution state to children when their context mentions a previous pause.
 Use delegate_worker for bounded leaf assignments. Give each child the necessary context, concrete
 acceptance criteria and the smallest useful writePaths subset. Use task-worker for documents,
 research synthesis and routine maintenance; use implementer for actual code changes. Substantial
-implementation requires the host's accepted-design workflow: return blocked when the task reaches
-that boundary. Use reviewer, database-reviewer or performance for requested specialist work or
-substantive concerns. Simple document updates need formatting and content checks, with specialist
+implementation requires the host's workflow with a settled design: return blocked when the task
+reaches that boundary. Use reviewer, database-reviewer or performance for requested specialist work
+or substantive concerns. Simple document updates need formatting and content checks, with specialist
 review only when warranted. Research requiring public sources can use a reviewer with web access.
 Give each leaf only its own acceptance criteria. You arrange later specialist reviews; do not make
 their completion a prerequisite for an editing leaf to pass. Provide existing document_check

@@ -212,7 +212,7 @@ try {
       job.state.children?.some(
         (child) =>
           child.role === 'implementer' &&
-          child.model === 'openai-codex/gpt-6-astra' &&
+          child.model === 'openai-codex/gpt-6.2-astra' &&
           child.verdict === 'pass',
       ),
     )

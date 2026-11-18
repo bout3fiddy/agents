@@ -1,4 +1,3 @@
-import type { AgentMessage } from '@earendil-works/pi-agent-core'
 import type { Checkpoint, Receipt } from './contracts.ts'
 import type { TaskState } from './state.ts'
 
@@ -55,7 +54,7 @@ export function checkpointText(checkpoint: Checkpoint, task?: TaskState): string
 
   return JSON.stringify({
     piCheckpointHash: checkpoint.hash,
-    acceptedDesign: checkpoint,
+    implementationScope: checkpoint,
     work: task && {
       id: task.id,
       status: task.status,
@@ -68,36 +67,5 @@ export function checkpointText(checkpoint: Checkpoint, task?: TaskState): string
         snapshot: item.snapshot,
       })),
     },
-  })
-}
-
-export function projectContext(messages: AgentMessage[], checkpoint?: Checkpoint): AgentMessage[] {
-  if (!checkpoint) {
-    return messages
-  }
-
-  const accepted = Date.parse(checkpoint.acceptedAt)
-
-  return messages.filter((message) => {
-    if (message.role === 'system') {
-      return true
-    }
-
-    // Upstream branch/compaction summaries can contain old exploration. Rebuild from owned state.
-    const advice =
-      message.role === 'custom' &&
-      ['pi-design-advice', 'pi-task-result', 'pi-active-tasks', 'pi-worker-guidance'].includes(
-        message.customType,
-      )
-
-    if (!advice && !['user', 'assistant', 'toolResult'].includes(message.role)) {
-      return false
-    }
-
-    return (
-      'timestamp' in message &&
-      typeof message.timestamp === 'number' &&
-      message.timestamp >= accepted
-    )
   })
 }

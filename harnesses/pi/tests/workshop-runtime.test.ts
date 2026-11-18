@@ -7,7 +7,7 @@ import type { ExtensionFactory } from '@earendil-works/pi-coding-agent'
 import { registerWorkshop } from '../src/workshop.ts'
 import { StateStore } from '../src/state.ts'
 import type { Advice } from '../src/design-advice.ts'
-import { fixture } from './support.ts'
+import { design, fixture } from './support.ts'
 import { captureSession } from './session-support.ts'
 
 for (const mode of ['wait', 'cancel', 'automatic'] as const) {
@@ -21,9 +21,13 @@ for (const mode of ['wait', 'cancel', 'automatic'] as const) {
     let workshop!: ReturnType<typeof registerWorkshop>
     let id = ''
     let step = 0
+    let advisorInput = ''
     const payloads: string[] = []
     const extension: ExtensionFactory = (pi) => {
-      workshop = registerWorkshop(pi, async () => advice)
+      workshop = registerWorkshop(pi, async (input) => {
+        advisorInput = input
+        return advice
+      })
       pi.registerTool({
         name: 'finish_advice',
         label: 'Finish advice',
@@ -101,8 +105,15 @@ for (const mode of ['wait', 'cancel', 'automatic'] as const) {
     })
 
     try {
+      session.sessionManager.appendMessage({
+        role: 'user',
+        content: 'EARLIER_WORKSHOP_CONSTRAINT',
+        timestamp: Date.now() - 10000,
+      })
+      await new StateStore(item.root).pin(design)
       await session.prompt('Workshop a new design question')
       await session.waitForIdle()
+      assert.ok(JSON.parse(advisorInput).userMessages.includes('EARLIER_WORKSHOP_CONSTRAINT'))
       assert.equal(step, lateWait ? 3 : 4, 'No extra reply after completion')
       assert.equal(
         payloads[2]!.split('UNIQUE_ADVICE_MARKER').length - 1,

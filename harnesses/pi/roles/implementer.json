@@ -1,7 +1,7 @@
 {
   "name": "implementer",
   "prompt": "implementer.md",
-  "model": "openai-codex/gpt-6-astra",
+  "model": "openai-codex/gpt-6.2-astra",
   "thinking": "high",
   "skills": ["housekeeping"],
   "tools": [

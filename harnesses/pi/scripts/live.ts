@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict'
-import { spawn, execFile } from 'node:child_process'
-import { promisify } from 'node:util'
+import { spawn } from 'node:child_process'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { homedir } from 'node:os'
@@ -13,7 +12,7 @@ import { Delegations, activeTask } from '../src/delegation-state.ts'
 import { setTimeout as delay } from 'node:timers/promises'
 
 const basic = process.argv.includes('--basic')
-const { root, store, hash } = await (basic ? basicFixture() : liveFixture())
+const { root, store, design } = await (basic ? basicFixture() : liveFixture())
 const model = process.env.PI_HARNESS_LIVE_MODEL ?? 'openai-codex/gpt-6.1-sol'
 const reports = join(harnessRoot, 'reports', new Date().toISOString().replaceAll(':', '-'))
 await mkdir(reports, { recursive: true })
@@ -37,16 +36,7 @@ const environment = {
   PI_CODING_AGENT_DIR: agentDir,
   PI_HARNESS_AGENT_DIR: agentDir,
 }
-const acceptance = promisify(execFile)(
-  process.execPath,
-  [cli, ...flags, '-p', `/accept-design ${hash}`],
-  { cwd: root, env: environment, timeout: 120000 },
-)
-acceptance.child.stdin?.end()
-const accepted = await acceptance
-await writeFile(join(reports, 'acceptance.txt'), accepted.stdout + accepted.stderr)
-assert.doesNotMatch(accepted.stderr, /Extension error/)
-assert.equal((await store.checkpoint())?.hash, hash)
+assert.equal(await store.checkpoint(), undefined)
 const controller = new AbortController()
 process.once('SIGINT', () => controller.abort())
 const timer = setTimeout(() => controller.abort(), 90 * 60 * 1000)
@@ -64,8 +54,9 @@ const child = spawn(
     '--mode',
     'json',
     '-p',
-    'The accepted design is ready. Start workflow now and tell me the task ID. ' +
-      'Return while it runs in the background; do not wait or poll.',
+    'Implement this settled design now. Pass this exact design object to workflow and ' +
+      'tell me the task ID. Return while it runs in the background; do not wait or poll.\n' +
+      JSON.stringify(design),
   ],
   { cwd: root, env: environment, stdio: ['ignore', 'pipe', 'pipe'], signal: controller.signal },
 )
@@ -99,6 +90,10 @@ if (activeTask(job.state)) {
 }
 
 assert.equal(job.state.status, 'complete', job.state.error)
+const checkpoint = await store.checkpoint()
+assert.ok(checkpoint, 'Workflow must record its scope without a separate acceptance step')
+const { hash: _hash, version: _version, acceptedAt: _acceptedAt, ...recorded } = checkpoint
+assert.deepEqual(recorded, design)
 const task = await store.task()
 await atomicJson(join(reports, 'result.json'), {
   code,
@@ -134,8 +129,8 @@ assert.deepEqual(
 assert.ok(task.receipts.every((item) => item.status === 'passed'))
 assert.ok(
   task.evidence.every((item) =>
-    item.model.startsWith(
-      item.role === 'implementer' ? 'openai-codex/' : 'claude-cli/claude-fable-5-2',
-    ),
+    item.role === 'implementer'
+      ? item.model === 'openai-codex/gpt-6.2-astra'
+      : item.model.startsWith('claude-cli/claude-fable-5-2'),
   ),
 )

@@ -3,6 +3,26 @@
 Validated locally on 18 November 2026 with macOS, Node 26.12.1, Pi 1.5.2, Claude Code 2.1.326 and
 Bun 1.3.5.
 
+## Direct implementation dispatch and GPT 6.2 Astra (0.6.0)
+
+Implementation is pinned to `openai-codex/gpt-6.2-astra` at high effort. The legacy acceptance
+command, proposal tool and acceptance-driven host context filtering are removed. `workflow` records
+the supplied settled scope and starts its background task directly. Existing saved scopes remain
+resumable. Scope conflicts, unresolved decisions and an occupied workflow lock reject dispatch
+without replacing the existing scope.
+
+Focused workflow, delegation, model-policy, installation and SDK lifecycle checks passed. They cover
+normal compaction, resume and tree navigation with an older checkpoint, preservation of discussion
+and advisor history, direct scope recording and safe resume. Formatting, lint and type checks pass.
+The initial model-only change also passed the existing 206-test suite; the subsequent acceptance
+removal used only relevant tests. Evidence: `reports/astra-6.2-direct-workflow-tests.log` and the
+final SDK lifecycle rerun at `reports/direct-workflow-context-tests.log`.
+
+The real Codex host dispatched the exact supplied design without any acceptance command, Astra 6.2
+implemented it and Fable reviewed it successfully in one round. Seeded input properties and final
+host checks passed. Evidence: `reports/2026-11-18T10-03-22.714Z/`. The earlier model-only live check
+also passed at `reports/2026-11-18T09-54-35.290Z/`. Both use disposable counter projects.
+
 ## Trace audit: mixed worker generations (0.5.1)
 
 The next trace audit found a 0.4.1 coordinator launching newer execution workers during the 0.5.0

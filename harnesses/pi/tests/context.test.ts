@@ -1,72 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import type { AgentMessage } from '@earendil-works/pi-agent-core'
-import { projectContext, taskView } from '../src/context.ts'
-import { design } from './support.ts'
+import { taskView } from '../src/context.ts'
 import type { TaskState } from '../src/state.ts'
-
-test('accepted context excludes old exploration and preserves new input', () => {
-  const checkpoint = {
-    ...design,
-    version: 1,
-    hash: 'accepted',
-    acceptedAt: new Date(2000).toISOString(),
-  }
-  const messages: AgentMessage[] = [
-    { role: 'user', content: 'REJECTED_DESIGN_MARKER', timestamp: 1000 },
-    { role: 'user', content: 'Keep the new constraint', timestamp: 3000 },
-    {
-      role: 'custom',
-      customType: 'pi-design-advice',
-      content: 'CURRENT_FABLE_ADVICE',
-      display: true,
-      timestamp: 3000,
-    },
-    {
-      role: 'custom',
-      customType: 'pi-design-advice',
-      content: 'REJECTED_DESIGN_MARKER',
-      display: true,
-      timestamp: 1000,
-    },
-    {
-      role: 'branchSummary',
-      summary: 'REJECTED_DESIGN_MARKER',
-      timestamp: 4000,
-      fromId: 'old',
-    } as AgentMessage,
-    {
-      role: 'compactionSummary',
-      summary: 'REJECTED_DESIGN_MARKER',
-      timestamp: 5000,
-      tokensBefore: 100,
-    } as AgentMessage,
-  ]
-  const projected = projectContext(messages, checkpoint)
-  assert.doesNotMatch(JSON.stringify(projected), /REJECTED_DESIGN_MARKER/)
-  assert.match(JSON.stringify(projected), /Keep the new constraint/)
-  assert.match(JSON.stringify(projected), /CURRENT_FABLE_ADVICE/)
-  assert.deepEqual(projectContext(projected, checkpoint), projected)
-  assert.equal(projectContext(messages).length, messages.length)
-})
-
-test('accepted context retains current worker guidance and excludes superseded guidance', () => {
-  const checkpoint = {
-    ...design,
-    version: 1,
-    hash: 'accepted',
-    acceptedAt: new Date(2000).toISOString(),
-  }
-  const messages: AgentMessage[] = [1000, 3000].map((timestamp) => ({
-    role: 'custom',
-    customType: 'pi-worker-guidance',
-    content: `Exact user guidance at ${timestamp}`,
-    display: false,
-    timestamp,
-  }))
-  assert.deepEqual(projectContext(messages, checkpoint), [messages[1]])
-  assert.equal(messages.length, 2, 'The raw guidance history stays intact')
-})
 
 test('orchestrator status excludes raw worker logs from its context', () => {
   const task: TaskState = {

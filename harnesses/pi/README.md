@@ -5,22 +5,22 @@ investigation, setup and small quick edits. Background task coordinators handle 
 discussion continues. Substantial implementation uses isolated Astra workers, executable checks and
 independent Fable reviews.
 
-| Role                     | Model / effort     |
-| ------------------------ | ------------------ |
-| Orchestrator             | Codex / medium     |
-| Task coordinator         | Codex / medium     |
-| Branch orchestrator      | Codex / medium     |
-| General task worker      | Codex / medium     |
-| Design advisor           | Fable 5.2 / medium |
-| Implementer              | GPT 6 Astra / high |
-| Engineering reviewer     | Fable 5.2 / high   |
-| Database reviewer        | Fable 5.2 / high   |
-| Performance investigator | Fable 5.2 / medium |
+| Role                     | Model / effort       |
+| ------------------------ | -------------------- |
+| Orchestrator             | Codex / medium       |
+| Task coordinator         | Codex / medium       |
+| Branch orchestrator      | Codex / medium       |
+| General task worker      | Codex / medium       |
+| Design advisor           | Fable 5.2 / medium   |
+| Implementer              | GPT 6.2 Astra / high |
+| Engineering reviewer     | Fable 5.2 / high     |
+| Database reviewer        | Fable 5.2 / high     |
+| Performance investigator | Fable 5.2 / medium   |
 
 The default orchestrator is `openai-codex/gpt-6.1-sol` at medium effort. Pi's current model and
 thinking selection take precedence for the orchestrator; the harness never silently changes them.
-Timing traces record the actual selection. Implementation is pinned to `openai-codex/gpt-6-astra` at
-high effort. Change `roles/*.json` to select models, effort, tools, skills and write scopes. The
+Timing traces record the actual selection. Implementation is pinned to `openai-codex/gpt-6.2-astra`
+at high effort. Change `roles/*.json` to select models, effort, tools, skills and write scopes. The
 orchestrator has normal host shell/file access; the isolated worker boundaries apply to delegated
 execution.
 
@@ -125,7 +125,7 @@ tool.
 ### Background delegation
 
 `delegate_task` accepts a task, complete context, a kind and repository-relative write paths:
-`documents`, read-only `research`, bounded `maintenance`, or accepted `implementation`. It returns a
+`documents`, read-only `research`, bounded `maintenance`, or scoped `implementation`. It returns a
 task ID immediately. Continue the discussion while a separate Codex coordinator reads the project,
 delegates writable tasks and requests Fable reviews when useful. Document workers use Codex medium;
 substantial implementation uses Astra high. Routine documents need no review call. Substantive code
@@ -256,29 +256,26 @@ Missing design decisions, credentials or repository-policy blockers retain the b
 `needs_attention` result. The user's original checkout stays unchanged as remote main advances.
 
 See [independent branch orchestration](documentation/branches.md) for preparation, traces, GitHub
-requirements and recovery. The following accepted-design workflow remains available for a single
-local implementation:
+requirements and recovery. For a single local implementation:
 
-1. Once you request implementation of a settled scope, Codex uses `propose_design` to record its
+1. Ask for implementation once the scope is settled. Codex calls `workflow` with the design,
    invariants, acceptance criteria, permitted paths and DB/performance flags.
-2. `/accept-design HASH` is an explicit implementation handoff and context checkpoint. It persists
-   that scope and starts a fresh session, preserving current work state. Queued input prevents the
-   switch. This command is optional during ordinary workshop work and never required for documents.
-3. Ask for implementation. The orchestrator invokes `workflow`, which returns a background task ID
-   immediately.
-4. Astra implementation, applicable Fable performance work, executable checks, Fable engineering
+2. The runtime records a versioned worker scope and returns a background task ID. No acceptance
+   command, session switch or conversation pruning is required. Discussion continues immediately.
+3. Astra implementation, applicable Fable performance work, executable checks, Fable engineering
    review and conditional Fable database review run in order. Findings return to Astra without a
    repair-round ceiling. An unchanged repeated failure returns to the host for diagnosis.
-5. A verified candidate is applied and checked again. Concurrent project edits block integration.
+4. A verified candidate is applied and checked again. Concurrent project edits block integration.
    Avoid editing the candidate's files from the orchestrator while this workflow runs.
 
-An interrupted workflow retains its candidate. Run `workflow` again to resume it: the original
-project baseline must still match. An unchanged candidate awaiting review goes through fresh checks
-and reviews. Accepting a new design version starts from the current project instead.
+An interrupted workflow retains its candidate. Call `workflow` without a design to resume its
+recorded scope: the original project baseline must still match. An unchanged candidate awaiting
+review goes through fresh checks and reviews. Supplying a new design starts a new version from the
+current project baseline. Active or paused conflicting work prevents replacing its scope.
 
-Reviewers receive the accepted contract, changed files, original file snapshots and command
-receipts. They start with fresh context. The performance investigator can measure, instrument and
-report; optimization belongs to the implementer. There is no automatic commit, push, publication or
+Reviewers receive the recorded design, changed files, original file snapshots and command receipts.
+They start with fresh context. The performance investigator can measure, instrument and report;
+optimization belongs to the implementer. There is no automatic commit, push, publication or
 deployment.
 
 Use `harness_status` in Pi to inspect progress. For explicit headless control:
@@ -288,8 +285,8 @@ node --import /absolute/agents/harnesses/pi/node_modules/tsx/dist/loader.mjs \
   /absolute/agents/harnesses/pi/src/cli.ts status
 ```
 
-The same CLI supports `draft DESIGN.json`, `accept HASH`, and `run openai-codex/gpt-6.1-sol`. Run
-these from the target project's root.
+The same CLI supports `run openai-codex/gpt-6.1-sol` to resume the recorded scope. Start new work
+through Pi's `workflow` tool. Run CLI commands from the target project's root.
 
 ## Project checks
 
@@ -335,8 +332,8 @@ files and assignments.
 `project_write` and `project_delete` share the same assignment and role scope. Deletion is limited
 to individual files. Private paths are checked using Unicode folding and actual filesystem spelling.
 New paths ignored by the project's Git policy are rejected before integration; update that policy
-before accepting a design that requires such files. Required checks with truncated output fail; use
-concise machine-readable summaries when a test suite is verbose.
+before starting an implementation that requires such files. Required checks with truncated output
+fail; use concise machine-readable summaries when a test suite is verbose.
 
 ## Where the rules live
 
@@ -419,8 +416,8 @@ Failed candidates remain at the path recorded in task state. A cancelled or cras
 report success. A subsequent run recovers a pending integration only if every file still matches its
 recorded before or after value. Unexpected user edits stop recovery.
 
-Old exploration remains in the Pi session archive but is excluded from model requests after
-acceptance, including resume and tree navigation. See [architecture](documentation/architecture.md),
+Implementation scope snapshots preserve discussion history, normal compaction and tree navigation.
+Full raw traces remain available. See [architecture](documentation/architecture.md),
 [sources](documentation/sources.md) and [validation](documentation/validation.md) for details and
 limitations.
 

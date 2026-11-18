@@ -75,7 +75,8 @@ export async function install(agentDir = join(homedir(), '.pi', 'agent'), binDir
       'Workshop designs with Codex and parallel Fable advice; ' +
         'delegate requested or lengthy work in the background and keep quick edits local.',
       'Read applicable repository AGENTS.md files through project_read.',
-      'Use /accept-design HASH only for a settled substantial implementation handoff.',
+      'Call workflow with a settled design when implementation is requested; ' +
+        'no acceptance command.',
       '',
     ].join('\n'),
   )

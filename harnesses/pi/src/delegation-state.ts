@@ -8,7 +8,7 @@ import { StateStore, atomicJson, readJson } from './state.ts'
 import { acquireLock } from './lock.ts'
 import { matches, validateScope } from './paths.ts'
 import type { Receipt } from './contracts.ts'
-import { validateDesign } from './contracts.ts'
+import { designSchema, validateDesign } from './contracts.ts'
 import type { BranchPlan, BranchTaskInput } from './branch-contracts.ts'
 import { readProgress, type TaskProgress } from './progress.ts'
 import { hostCapability } from './capabilities.ts'
@@ -27,6 +27,7 @@ export const delegateSchema = Type.Object(
     ]),
     writePaths: Type.Array(Type.String({ maxLength: 200 }), { maxItems: 30 }),
     requires: Type.Optional(Type.Array(hostCapability, { maxItems: 4 })),
+    design: Type.Optional(designSchema),
     review: Type.Optional(
       Type.Boolean({
         description: 'False only for routine low-risk maintenance; substantive code needs review.',
@@ -275,6 +276,14 @@ export class Delegations {
 
     validateScope(input.writePaths)
 
+    if (input.design && input.kind !== 'implementation') {
+      throw new Error('A design is only valid for implementation tasks')
+    }
+
+    if (input.design) {
+      validateScope(input.design.writePaths)
+    }
+
     if (input.requires?.length) {
       throw new Error(
         `Host capabilities required: ${input.requires.join(', ')}. ` +
@@ -295,15 +304,16 @@ export class Delegations {
 
     return this.locked(async () => {
       const checkpoint = input.kind === 'implementation' ? await this.store.checkpoint() : undefined
+      const design = input.design ?? checkpoint
 
-      if (input.kind === 'implementation' && (!checkpoint || checkpoint.unresolved.length)) {
-        throw new Error('Substantial implementation requires a settled accepted design')
+      if (input.kind === 'implementation' && (!design || design.unresolved.length)) {
+        throw new Error('Supply a settled design to workflow; resolve blockers for this scope')
       }
 
       const request: DelegationRequest = {
         ...input,
         ...origin,
-        writePaths: checkpoint?.writePaths ?? input.writePaths,
+        writePaths: design?.writePaths ?? input.writePaths,
         id: randomUUID(),
         root: this.store.projectRoot,
         createdAt: new Date().toISOString(),
@@ -333,6 +343,17 @@ export class Delegations {
           throw new Error(
             `Files already owned by task ${job.request.id}; send it a message instead`,
           )
+        }
+      }
+
+      if (input.design) {
+        const release = await this.store.lock()
+
+        try {
+          release.assertHeld()
+          request.checkpointHash = (await this.store.pin(input.design)).hash
+        } finally {
+          await release()
         }
       }
 

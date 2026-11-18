@@ -109,7 +109,7 @@ export async function runWorkflow(
     const checkpoint = await store.checkpoint()
 
     if (!checkpoint) {
-      throw new Error('Propose and accept a design before running implementation')
+      throw new Error('Supply a settled design to workflow before running implementation')
     }
 
     if (checkpoint.unresolved.length) {

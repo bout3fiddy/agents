@@ -17,7 +17,7 @@ import { StateStore } from '../src/state.ts'
 import { fixture, design } from './support.ts'
 import { loadRole } from '../src/roles.ts'
 
-test('Pi excludes rejected designs across context lifecycle changes', async () => {
+test('scope snapshots preserve Pi conversation lifecycle', async () => {
   const item = await fixture()
   const store = new StateStore(item.root)
   const payloads: string[] = []
@@ -69,9 +69,9 @@ test('Pi excludes rejected designs across context lifecycle changes', async () =
     },
   })
   const manager = SessionManager.create(item.root, join(item.base, 'sessions'))
-  const oldEntry = manager.appendMessage({
+  manager.appendMessage({
     role: 'user',
-    content: 'REJECTED_SCHEMA_MARKER',
+    content: 'EARLY_USER_CONSTRAINT',
     timestamp: Date.now() - 10000,
   })
   let session: AgentSession | undefined
@@ -124,17 +124,32 @@ test('Pi excludes rejected designs across context lifecycle changes', async () =
   }
 
   try {
+
+    // A pre-upgrade checkpoint must no longer hide earlier conversation on reload.
     await store.draft({ ...design, design: 'FINAL_SCHEMA_MARKER' })
     await store.accept()
     session = await create(manager)
+    const sessionFile = manager.getSessionFile()!
+    assert.equal(session.extensionRunner.getCommand('accept-design'), undefined)
+    assert.ok(!session.getActiveToolNames().includes('propose_design'))
     await session.prompt('PENDING_CONSTRAINT_MARKER')
     assert.match(payloads.at(-1)!, /FINAL_SCHEMA_MARKER/)
-    assert.doesNotMatch(payloads.at(-1)!, /REJECTED_SCHEMA_MARKER/)
-    await session.compact()
-    await session.prompt('Continue after compaction')
+    assert.match(payloads.at(-1)!, /EARLY_USER_CONSTRAINT/)
+    const earlierBranch = session.sessionManager.getLeafId()!
+    await store.pin({ ...design, design: 'UPDATED_SCHEMA_MARKER' })
+    await session.prompt('Continue our discussion after recording the implementation scope')
+    assert.match(payloads.at(-1)!, /UPDATED_SCHEMA_MARKER/)
+    assert.match(payloads.at(-1)!, /EARLY_USER_CONSTRAINT/)
     assert.match(payloads.at(-1)!, /PENDING_CONSTRAINT_MARKER/)
-    assert.doesNotMatch(payloads.at(-1)!, /REJECTED_SCHEMA_MARKER/)
-    const sessionFile = manager.getSessionFile()!
+    assert.equal(manager.getSessionFile(), sessionFile)
+    assert.equal(replacements, 0)
+    const beforeCompact = payloads.length
+    await session.compact()
+    assert.ok(payloads.length > beforeCompact, 'Native Pi compaction must reach its summarizer')
+    assert.match(payloads.slice(beforeCompact).join('\n'), /EARLY_USER_CONSTRAINT/)
+    assert.match(payloads.slice(beforeCompact).join('\n'), /PENDING_CONSTRAINT_MARKER/)
+    await session.prompt('Continue after compaction')
+    assert.match(payloads.at(-1)!, /UPDATED_SCHEMA_MARKER/)
     const mirror = await readFile(
       join(item.root, '.pi/traces/sessions', basename(sessionFile)),
       'utf8',
@@ -143,31 +158,16 @@ test('Pi excludes rejected designs across context lifecycle changes', async () =
     session.dispose()
     session = await create(SessionManager.open(sessionFile))
     await session.prompt('Continue after resume')
-    assert.match(payloads.at(-1)!, /PENDING_CONSTRAINT_MARKER/)
-    assert.doesNotMatch(payloads.at(-1)!, /REJECTED_SCHEMA_MARKER/)
-    await session.navigateTree(oldEntry, { summarize: true })
-    await session.prompt('Continue after navigating the old branch')
-    assert.match(payloads.at(-1)!, /FINAL_SCHEMA_MARKER/)
-    assert.doesNotMatch(payloads.at(-1)!, /REJECTED_SCHEMA_MARKER/)
+    assert.match(payloads.at(-1)!, /UPDATED_SCHEMA_MARKER/)
+    await session.navigateTree(earlierBranch, { summarize: true })
+    await session.prompt('Continue after navigating the earlier branch')
+    assert.match(payloads.at(-1)!, /EARLY_USER_CONSTRAINT/)
+    assert.match(payloads.at(-1)!, /UPDATED_SCHEMA_MARKER/)
     assert.deepEqual(
       session.getActiveToolNames().sort(),
       (await loadRole('orchestrator')).tools.sort(),
     )
-    const originalVersion = (await store.checkpoint())!.version
-    const nextHash = await store.draft({ ...design, design: 'UPDATED_SCHEMA_MARKER' })
-    await session.prompt('/accept-design')
-    assert.equal((await store.checkpoint())!.version, originalVersion)
-    await session.followUp('QUEUED_INPUT_MARKER')
-    await session.prompt(`/accept-design ${nextHash}`)
-    assert.equal((await store.checkpoint())!.version, originalVersion)
     assert.equal(replacements, 0)
-    assert.equal(session.clearQueue().followUp.length, 1)
-    await session.prompt(`/accept-design ${nextHash}`)
-    assert.equal((await store.checkpoint())!.version, originalVersion + 1)
-    assert.equal(replacements, 1)
-    const seed = JSON.stringify(session.sessionManager.getBranch())
-    assert.match(seed, /UPDATED_SCHEMA_MARKER/)
-    assert.doesNotMatch(seed, /REJECTED_SCHEMA_MARKER|PENDING_CONSTRAINT_MARKER/)
   } finally {
     session?.dispose()
     await modelRuntime.settleCredentialWrites()

@@ -1,9 +1,9 @@
-import { access, readFile, realpath, mkdtemp, rm } from 'node:fs/promises'
+import { access, realpath, mkdtemp, rm } from 'node:fs/promises'
 import { homedir, tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { ModelRuntime } from '@earendil-works/pi-coding-agent'
 import { StateStore } from './state.ts'
-import { roleNames, validateDesign } from './contracts.ts'
+import { roleNames } from './contracts.ts'
 import { loadRole, rolePrompt } from './roles.ts'
 import { harnessRoot, loadProject } from './project.ts'
 import { runSandboxed } from './sandbox.ts'
@@ -66,28 +66,6 @@ if (process.argv[1] && resolve(process.argv[1]) === new URL(import.meta.url).pat
     case 'doctor':
       console.log(JSON.stringify(await doctor(argument), null, 2))
       break
-    case 'draft':
-      if (!argument) {
-        throw new Error('Usage: cli.ts draft DESIGN.json')
-      }
-
-      console.log(await store.draft(validateDesign(JSON.parse(await readFile(argument, 'utf8')))))
-      break
-    case 'accept': {
-      if (!argument || argument.length < 12) {
-        throw new Error('Usage: cli.ts accept DESIGN_HASH')
-      }
-
-      const release = await store.lock()
-
-      try {
-        console.log(JSON.stringify(await store.accept(argument), null, 2))
-      } finally {
-        await release()
-      }
-
-      break
-    }
     case 'run': {
       const controller = new AbortController()
       process.once('SIGINT', () => controller.abort())
@@ -116,6 +94,6 @@ if (process.argv[1] && resolve(process.argv[1]) === new URL(import.meta.url).pat
       )
       break
     default:
-      throw new Error('Commands: doctor, draft FILE, accept HASH, run [provider/model], status')
+      throw new Error('Commands: doctor, run [provider/model], status')
   }
 }

@@ -50,7 +50,7 @@ test('canonical counts round trip and malformed inputs fail', () => {
     ],
   })
   const store = new StateStore(root)
-  const hash = await store.draft({
+  const design = {
     objective: 'Validate a bounded canonical decimal count',
     design:
       'Export parseCount(input) from src/count.mjs. Accept strings containing canonical ' +
@@ -63,6 +63,6 @@ test('canonical counts round trip and malformed inputs fail', () => {
     database: false,
     performance: false,
     unresolved: [],
-  })
-  return { root, store, hash }
+  }
+  return { root, store, design }
 }

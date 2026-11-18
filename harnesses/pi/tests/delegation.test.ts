@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFile, writeFile, rm } from 'node:fs/promises'
 import { join } from 'node:path'
-import { fixture } from './support.ts'
+import { design, fixture } from './support.ts'
 import { StateStore, atomicJson } from '../src/state.ts'
 import {
   Delegations,
@@ -36,6 +36,81 @@ const result = (): TaskCoordinatorEvidence => ({
   model: 'test/model',
   turns: 1,
   controlRevision: 0,
+})
+
+test('implementation dispatch records scope and resumes without manual acceptance', async () => {
+  const { base, root } = await fixture()
+  const store = new StateStore(root)
+  const jobs = new Delegations(store)
+  const implementation: DelegateInput = { ...input, kind: 'implementation', writePaths: [] }
+
+  try {
+    assert.equal(await store.checkpoint(), undefined)
+    await assert.rejects(
+      jobs.start(implementation, origin, async () => {}),
+      /settled design/,
+    )
+    const job = await jobs.start({ ...implementation, design }, origin, async (request) => {
+      const recorded = await store.checkpoint()
+      assert.equal(request.checkpointHash, recorded?.hash)
+      assert.deepEqual(request.writePaths, design.writePaths)
+      assert.equal(recorded?.version, 1)
+    })
+    const recorded = await store.checkpoint()
+    await assert.rejects(
+      jobs.start(
+        { ...implementation, design: { ...design, design: 'A conflicting new assignment' } },
+        origin,
+        async () => {},
+      ),
+      /already owned/,
+    )
+    assert.deepEqual(await store.checkpoint(), recorded, 'Conflict must preserve existing scope')
+    await atomicJson(join(delegationDirectory(store, job.request.id), 'status.json'), {
+      ...job.state,
+      status: 'needs_attention',
+    })
+    const resumed = await jobs.start(implementation, origin, async () => {})
+    assert.equal(resumed.request.checkpointHash, recorded?.hash)
+    assert.equal((await store.checkpoint())?.version, 1, 'Resume must retain the candidate version')
+  } finally {
+    await rm(base, { recursive: true, force: true })
+  }
+})
+
+test('invalid or busy implementation dispatch cannot replace recorded scope', async () => {
+  const { base, root, store } = await fixture()
+  const jobs = new Delegations(store)
+  const implementation: DelegateInput = { ...input, kind: 'implementation', writePaths: [] }
+  const recorded = await store.checkpoint()
+
+  try {
+    for (const bad of [
+      { ...implementation, design: { ...design, unresolved: ['Missing decision'] } },
+      { ...implementation, design: { ...design, writePaths: ['../outside'] } },
+      { ...input, design },
+    ]) {
+      await assert.rejects(jobs.start(bad, origin, async () => {}))
+      assert.deepEqual(await store.checkpoint(), recorded)
+    }
+
+    const release = await store.lock()
+
+    try {
+      await assert.rejects(
+        jobs.start({ ...implementation, design }, origin, async () => {}),
+        /already running/,
+      )
+    } finally {
+      await release()
+    }
+
+    assert.deepEqual(await store.checkpoint(), recorded)
+    assert.deepEqual(await jobs.list(), [])
+    assert.equal(await readFile(join(root, 'src/value.js'), 'utf8'), 'export const value = 0\n')
+  } finally {
+    await rm(base, { recursive: true, force: true })
+  }
 })
 
 test('registry bounds jobs, protects aliases and recovers ownership', async () => {

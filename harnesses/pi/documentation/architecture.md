@@ -64,8 +64,8 @@ and cannot accept or write a design.
 
 Document changes use a background task when delegated or lengthy, and ordinary tools for small quick
 edits. They require no accepted checkpoint and can retain open questions. Only substantial
-implementation uses the following checkpoint mechanism; no document save accepts a design or starts
-a new session.
+implementation uses the following scope snapshot mechanism; saving a document preserves the current
+session.
 
 The orchestrator's context uses append-only `context_edit` entries to excerpt bulky successful
 file/search tool results and historical write/edit/shell arguments after four newer model steps.
@@ -80,25 +80,22 @@ constraints, bounded at 48 KB. The original user wording is separate from Codex'
 The 350/700-word response targets and consultation triggers are prompt policy. Live behavioral cases
 check that simple choices, quiz presentation and document splits avoid unnecessary calls.
 
-The draft contains objective, final design, invariants, acceptance conditions, write scope,
-specialist flags and unresolved questions. User acceptance writes a versioned checkpoint atomically
-and switches to a new Pi session. Queued input prevents that switch. The old session is retained for
-human inspection.
+When the user requests implementation, `workflow` receives the settled design, invariants,
+acceptance conditions, write scope and specialist flags. Delegation validates the design and checks
+active/paused path ownership before recording a versioned scope under the project lock. Missing or
+unresolved implementation decisions reject dispatch without replacing the existing scope. The worker
+sees that immutable snapshot; changes to its scope invalidate candidate verification.
 
-Every model request projects conversation messages through the accepted epoch. Old
-user/assistant/tool messages are excluded. Upstream compaction and branch summaries are excluded
-because they can contain superseded exploration. The current checkpoint and workflow state are
-rebuilt from host records.
+No separate acceptance command or proposal tool exists. Starting implementation does not switch
+sessions, cancel design advice or filter conversation history. Normal Pi compaction and tree
+navigation remain available, and consultations retain recent user messages from before the worker
+scope was recorded. Historical `accepted.json` checkpoints remain readable for resumable work but no
+longer establish a host conversation cutoff.
 
-Compaction records post-acceptance user requests verbatim, bounded at 48 KB, alongside the accepted
-checkpoint and work state. The context hook restores those requests from the current branch's
-matching compaction details. If that bound is exceeded, compaction stops and requests an updated
-design checkpoint. This favors preserving user constraints over silently truncating them.
-
-Acceptance is explicit. The runtime cannot decide on its own which tentative conversation statements
-the user considers final. An unresolved checkpoint question blocks that implementation scope; future
-workshop questions can remain in the document. A changed accepted design invalidates an in-flight
-candidate.
+Omitting design from `workflow` resumes the recorded scope and candidate. Supplying design starts a
+new version from the current project baseline. Existing task ownership and the workflow lock guard
+concurrent dispatch. A failed process launch retains its recorded scope and failed-task evidence so
+the host can recover without asking for acceptance again.
 
 ## Background task coordination
 

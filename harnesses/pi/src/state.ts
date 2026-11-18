@@ -99,16 +99,24 @@ export class StateStore {
       throw new Error('Draft integrity check failed')
     }
 
+    const checkpoint = await this.pin(draft.design)
+    await rm(join(this.directory, 'draft.json'))
+    return checkpoint
+  }
+
+  /** Freeze worker scope without changing the host conversation. Caller owns the project lock. */
+  async pin(design: Design): Promise<Checkpoint> {
+    validateDesign(design)
+    validateScope(design.writePaths)
     const previous = await this.checkpoint()
     const checkpoint = {
-      ...draft.design,
+      ...design,
       version: (previous?.version ?? 0) + 1,
-      hash: draft.hash,
+      hash: digest(JSON.stringify(design)),
       acceptedAt: new Date().toISOString(),
     }
     await atomicJson(join(this.directory, 'designs', `${checkpoint.version}.json`), checkpoint)
     await atomicJson(join(this.directory, 'accepted.json'), checkpoint)
-    await rm(join(this.directory, 'draft.json'))
     return checkpoint
   }
 

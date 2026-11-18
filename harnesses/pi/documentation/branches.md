@@ -19,8 +19,9 @@ four tasks. Each task has `task`, disjoint `writePaths`, `invariants`, `acceptan
 `performance`. The optional `mergeToMain` flag defaults to false and may be set only for an explicit
 user merge request. Otherwise `merge_branches` later authorizes merging of the published task IDs
 and resumes their existing worktrees. Repeated merge requests are idempotent. All tasks in a batch
-start from the same fetched main commit and pinned document contents. There is no `/accept-design`
-checkpoint for this mode. Dependent tasks should share one orchestrator or execute in later batches.
+start from the same fetched main commit and pinned document contents. There is no manual design
+acceptance checkpoint for this mode. Dependent tasks should share one orchestrator or execute in
+later batches.
 
 The initial design is limited to 16,000 characters. Required test checks must exist before model
 dispatch; database and performance tasks also require the corresponding project checks. GitHub

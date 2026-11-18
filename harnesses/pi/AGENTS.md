@@ -30,10 +30,10 @@
 - Keep trusted policy and receipts outside worker workspaces. Delegated product edits go through
   scoped workers and snapshot-bound verification. Never silently fall back from worker sandboxing.
 - Workshop document edits require no acceptance checkpoint, implementation worker or test adapter.
-  Preserve workshop conversation; reserve `propose_design` and `/accept-design` for a settled
-  implementation handoff. Persist accepted implementation scope before explicit pruning. Preserve
-  pending user input. Archived exploration must not re-enter a request through resume, tree
-  navigation or compaction.
+  Preserve workshop conversation and pending user input. `workflow` takes a settled design when the
+  user requests implementation, records its scope and starts work without a separate acceptance
+  command. Scope snapshots must not reset sessions or filter host/advisor conversation by date. Keep
+  normal Pi compaction and tree navigation; preserve compatibility with stored worker scope.
 - Deliver consultation results once at the next safe model/tool boundary. Persist consumption for
   late waits, discard obsolete automatic delivery after newer user input, and preserve raw advice.
   Test delivery with actual Pi runtime events; boundary messages emit `entry_appended`.
@@ -45,8 +45,8 @@
   formatting separately; retain the independent line-width check and path protections. Do not load
   executable project formatter configuration.
 - Record actual model/effort and request/model/tool timing under project-local `harness/timing/`.
-  Respect the selected orchestrator model; implementation remains independently pinned to Astra
-  high.
+  Respect the selected orchestrator model; implementation remains independently pinned to
+  `openai-codex/gpt-6.2-astra` at high effort.
 - Runtime traces belong under the target project’s gitignored `.pi/traces/`; keep them out of worker
   snapshots. The launcher persists local sessions; ordinary Pi sessions are mirrored.
 - Keep prompts in `prompts/`, role definitions in `roles/`, and harness validation evidence in

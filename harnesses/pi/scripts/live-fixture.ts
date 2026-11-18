@@ -129,7 +129,7 @@ export async function liveFixture() {
     ) + '\n',
   )
   const store = new StateStore(root)
-  const hash = await store.draft({
+  const design = {
     objective: 'Make a SQLite ledger replay-safe and measure performance.',
     design: [
       'Keep openLedger(path), apply(id, amount), balance(), close().',
@@ -157,6 +157,6 @@ export async function liveFixture() {
     database: true,
     performance: true,
     unresolved: [],
-  })
-  return { root, store, hash }
+  }
+  return { root, store, design }
 }
