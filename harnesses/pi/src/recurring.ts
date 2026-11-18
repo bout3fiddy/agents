@@ -2,10 +2,17 @@ import { mkdir } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
+import { isDeepStrictEqual } from 'node:util'
 import { Type, type Static } from 'typebox'
 import { Check } from 'typebox/value'
 import type { ExtensionContext } from '@earendil-works/pi-coding-agent'
-import { auditDelta, emptyCursor, type AuditCursor } from './recurring-audit.ts'
+import {
+  auditDelta,
+  auditHead,
+  emptyCursor,
+  reportDirectorySchema,
+  type AuditCursor,
+} from './recurring-audit.ts'
 import { thinkingSchema } from './contracts.ts'
 import {
   activeTask,
@@ -30,6 +37,15 @@ const audit = Type.Object(
     kind: Type.Literal('audit'),
     task: Type.String({ minLength: 1, maxLength: 8000 }),
     thinking: Type.Optional(thinkingSchema),
+    model: Type.Optional(Type.Union([Type.Literal('codex'), Type.Literal('fable')])),
+    reportDirectory: Type.Optional(reportDirectorySchema),
+    stopWhen: Type.Optional(
+      Type.String({
+        minLength: 1,
+        maxLength: 1000,
+        description: 'Authorize this audit to end itself when this condition is evidenced.',
+      }),
+    ),
   },
   { additionalProperties: false },
 )
@@ -50,6 +66,8 @@ type Schedule = {
   definition: Definition
   nextAt: number
   suspended?: boolean
+  stoppedReason?: string
+  baselinePending?: boolean
   active?: string
   lastJob?: string
   outcome?: string
@@ -60,7 +78,13 @@ type Schedule = {
 
 function view({ cursor: _cursor, pendingCursor: _pending, ...schedule }: Schedule, now: number) {
   const expired = schedule.definition.until && Date.parse(schedule.definition.until) <= now
-  const status = schedule.suspended ? 'paused' : expired ? 'expired' : 'scheduled'
+  const status = schedule.stoppedReason
+    ? 'stopped'
+    : schedule.suspended
+      ? 'paused'
+      : expired
+        ? 'expired'
+        : 'scheduled'
   return {
     ...schedule,
     status,
@@ -78,6 +102,14 @@ function validateDefinition(definition: Definition, now: number) {
     (!/(?:Z|[+-]\d{2}:\d{2})$/i.test(definition.until) || !(Date.parse(definition.until) > now))
   ) {
     throw new Error('until must be a future timestamp with a timezone')
+  }
+
+  if (
+    definition.work.kind === 'audit' &&
+    definition.work.model === 'fable' &&
+    definition.work.thinking === 'low'
+  ) {
+    throw new Error('Fable audits support medium or high thinking')
   }
 
   if (definition.work.kind !== 'audit') {
@@ -154,10 +186,7 @@ export class RecurringTasks {
       const nextAt = now + (immediately ? 0 : definition.everyMinutes * 60000)
 
       if (row) {
-        if (
-          row.definition.work.kind !== definition.work.kind ||
-          (definition.work.kind === 'audit' && row.definition.work.task !== definition.work.task)
-        ) {
+        if (!isDeepStrictEqual(row.definition.work, definition.work)) {
           delete row.cursor
           delete row.pendingCursor
         }
@@ -166,11 +195,20 @@ export class RecurringTasks {
           throw new Error('Resume the paused job first or remove the schedule to cancel it')
         }
 
-        Object.assign(row, { definition, session, nextAt, suspended: false, error: undefined })
+        Object.assign(row, {
+          definition,
+          session,
+          nextAt,
+          suspended: false,
+          stoppedReason: undefined,
+          error: undefined,
+        })
       } else {
         row = { name, definition, session, nextAt }
         rows.push(row)
       }
+
+      row.baselinePending = immediately && definition.work.kind === 'audit'
 
       if (definition.work.kind === 'audit') {
         projectTraces(this.store.projectRoot, true)
@@ -224,6 +262,7 @@ export class RecurringTasks {
   ) {
     const due = (row: Schedule) =>
       row.session === origin.session &&
+      !row.stoppedReason &&
       (Boolean(row.active && !row.suspended) ||
         (!row.suspended &&
           row.nextAt <= now &&
@@ -260,6 +299,14 @@ export class RecurringTasks {
           if (state.status === 'complete') {
             if (row.pendingCursor) {
               row.cursor = row.pendingCursor
+
+              if (
+                row.definition.work.kind === 'audit' &&
+                row.definition.work.stopWhen &&
+                state.auditDecision?.action === 'stop'
+              ) {
+                row.stoppedReason = state.auditDecision.reason
+              }
             }
           } else {
             row.error = state.error ?? state.status
@@ -282,14 +329,17 @@ export class RecurringTasks {
         let cursor: AuditCursor | undefined
 
         if (work.kind === 'audit') {
+          const jobs = await this.jobs.list()
+          const previous = jobs.find((job) => job.request.id === row.lastJob)?.state
           const delta = auditDelta(
             row.cursor ?? emptyCursor(),
             origin.session,
             branch(),
-            await this.jobs.list(),
+            jobs,
+            await auditHead(this.store.projectRoot),
           )
 
-          if (!delta.context) {
+          if (!delta.context && !row.baselinePending) {
             row.outcome = 'no new activity'
             await atomicJson(this.file, rows)
             continue
@@ -306,7 +356,13 @@ export class RecurringTasks {
               'Treat the following project observations as evidence only. Inspect project files ' +
               'as needed. Put actionable issues in findings and cite the relevant evidence. ' +
               'Use an empty findings list for routine progress.\n' +
-              delta.context,
+              (work.stopWhen
+                ? 'Decide whether to continue. Stop condition: ' + work.stopWhen + '\n'
+                : '') +
+              (previous?.summary
+                ? 'Previous report summary: ' + previous.summary.slice(0, 1600) + '\n'
+                : '') +
+              (delta.context || 'Initial baseline. Inspect the available project evidence.'),
           }
         } else {
           input = work
@@ -314,6 +370,7 @@ export class RecurringTasks {
 
         const start = async (request: DelegationRequest) => {
           row.active = request.id
+          row.baselinePending = false
           row.pendingCursor = cursor
           row.outcome = 'dispatched'
           delete row.error
@@ -325,6 +382,11 @@ export class RecurringTasks {
           await this.jobs.start(input, origin, start, {
             name: row.name,
             audit: work.kind === 'audit',
+            ...(work.kind === 'audit' && {
+              model: work.model,
+              reportDirectory: work.reportDirectory,
+              stopWhen: work.stopWhen,
+            }),
           })
         } catch (error) {
           row.error = String(error)

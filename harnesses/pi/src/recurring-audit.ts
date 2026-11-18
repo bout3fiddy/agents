@@ -1,13 +1,27 @@
+import { existsSync } from 'node:fs'
 import { lstat, mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
+import { Type } from 'typebox'
+import { Check } from 'typebox/value'
 import type { ExtensionContext } from '@earendil-works/pi-coding-agent'
 import type { Delegation, DelegationRequest } from './delegation-state.ts'
 import type { WorkerResult } from './contracts.ts'
 import { digest } from './paths.ts'
-import { atomicJson } from './state.ts'
+import { atomicJson, atomicText } from './state.ts'
+import { gitCommand } from './git-branches.ts'
 import { projectTraces } from './traces.ts'
 
-export type AuditCursor = { sessions: Record<string, string>; jobs: Record<string, string> }
+export const reportDirectorySchema = Type.String({
+  maxLength: 160,
+  pattern: '^\\.pi/audits?(?:/[a-z0-9][a-z0-9_-]{0,63}){0,2}/?$',
+  description: 'Private Markdown report folder, e.g. .pi/audits/progress.',
+})
+
+export type AuditCursor = {
+  head?: string
+  sessions: Record<string, string>
+  jobs: Record<string, string>
+}
 export const emptyCursor = (): AuditCursor => ({ sessions: {}, jobs: {} })
 
 type Branch = ReturnType<ExtensionContext['sessionManager']['getBranch']>
@@ -48,11 +62,20 @@ function discussions(entries: Branch) {
   return turns
 }
 
+export async function auditHead(root: string) {
+  if (!existsSync(join(root, '.git'))) {
+    return undefined
+  }
+
+  return gitCommand(root, ['rev-parse', '--verify', 'HEAD']).catch(() => undefined)
+}
+
 export function auditDelta(
   previous: AuditCursor,
   session: string,
   entries: Branch,
   jobs: Delegation[],
+  head?: string,
 ) {
   const cursor = structuredClone(previous)
   const retained = new Set(jobs.map((job) => job.request.id))
@@ -76,6 +99,11 @@ export function auditDelta(
     rows.push(row)
     remaining -= row.length + 1
     return true
+  }
+
+  if (head && previous.head !== head) {
+    add({ head, previousHead: previous.head })
+    cursor.head = head
   }
 
   for (const { request, state, milestone } of jobs) {
@@ -125,28 +153,79 @@ export function auditDelta(
   return { cursor, context: rows.join('\n') }
 }
 
-export async function writeAuditReport(request: DelegationRequest, result: WorkerResult) {
-  projectTraces(request.root, true)
-  const directory = join(request.root, '.pi', 'audit')
-  await mkdir(directory, { recursive: true, mode: 0o700 })
+export async function writeAuditReport(
+  request: DelegationRequest,
+  result: WorkerResult,
+  model?: string,
+  thinking?: string,
+) {
+  const target = request.recurring?.reportDirectory
 
-  if (!(await lstat(directory)).isDirectory()) {
-    throw new Error('Audit output requires a real .pi/audit directory')
+  if (target !== undefined && !Check(reportDirectorySchema, target)) {
+    throw new Error('Invalid private audit report directory')
   }
 
-  const relative = `.pi/audit/${request.id}.json`
-  await atomicJson(join(directory, `${request.id}.json`), {
-    schedule: request.recurring?.name,
-    job: request.id,
-    startedAt: request.createdAt,
-    reportedAt: new Date().toISOString(),
-    task: request.task,
-    result,
-  })
+  projectTraces(request.root, true)
+  const folder = target?.replace(/\/$/, '') ?? '.pi/audit'
+  let directory = join(request.root, '.pi')
+
+  for (const part of folder.split('/').slice(1)) {
+    directory = join(directory, part)
+    await mkdir(directory, { recursive: true, mode: 0o700 })
+
+    if (!(await lstat(directory)).isDirectory()) {
+      throw new Error('Audit output requires a real ' + folder + ' directory')
+    }
+  }
+
+  const reportedAt = new Date().toISOString()
+  const stamp = new Date(request.createdAt).toISOString().replaceAll(':', '-')
+  const relative = target
+    ? folder + '/' + stamp + '-' + request.id + '.md'
+    : folder + '/' + request.id + '.json'
+
+  if (target) {
+    const lines = [
+      '# ' + request.recurring!.name + ' · ' + reportedAt,
+      '',
+      result.summary,
+      ...result.findings.flatMap((f) => [
+        '',
+        '- ' + f.location + ' — ' + f.problem,
+        '  ' + f.evidence,
+      ]),
+      ...(result.evidence.length
+        ? ['', '## Evidence', '', ...result.evidence.map((e) => '- ' + e)]
+        : []),
+      ...(result.continuation
+        ? ['', '## Next audit', '', result.continuation.action + ' — ' + result.continuation.reason]
+        : []),
+      '',
+      'Job ' + request.id + (model ? ' · ' + model : '') + (thinking ? ' · ' + thinking : ''),
+      '',
+    ]
+    await atomicText(join(request.root, relative), lines.join('\n'))
+  } else {
+    await atomicJson(join(request.root, relative), {
+      schedule: request.recurring?.name,
+      job: request.id,
+      startedAt: request.createdAt,
+      reportedAt,
+      model,
+      thinking,
+      task: request.task,
+      result,
+    })
+  }
+
   return {
     auditReport: relative,
+    auditDecision: result.continuation,
     auditAttention: Boolean(
-      result.findings.length || result.hostActions?.length || result.verdict !== 'pass',
+      result.continuation?.action === 'stop' ||
+      result.findings.length ||
+      result.hostActions?.length ||
+      result.verdict !== 'pass',
     ),
   }
 }

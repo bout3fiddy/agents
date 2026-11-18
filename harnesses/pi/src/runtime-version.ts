@@ -53,6 +53,7 @@ export type LoadedRuntime = typeof build & {
   session: string
   pid: number
   activeTools: string[]
+  toolWarning?: string
   registeredTools: string[]
 }
 
@@ -60,7 +61,14 @@ export function runtimeVersion(pi: ExtensionAPI) {
   let loaded: LoadedRuntime | undefined
   return {
     current: () => loaded,
-    async record(ctx: ExtensionContext, reason: string) {
+    async record(ctx: ExtensionContext, reason: string, expected: string[]) {
+      const activeTools = pi.getActiveTools().sort()
+      const missing = expected.filter((name) => !activeTools.includes(name))
+      const toolWarning = missing.length
+        ? 'Missing role tools: ' +
+          missing.join(', ') +
+          '. Resume from this project with ~/.pi/agent/bin/pi-harness --continue.'
+        : undefined
       loaded = {
         ...build,
         loadId: randomUUID(),
@@ -68,7 +76,8 @@ export function runtimeVersion(pi: ExtensionAPI) {
         reason,
         session: ctx.sessionManager.getSessionId(),
         pid: process.pid,
-        activeTools: pi.getActiveTools().sort(),
+        activeTools,
+        ...(toolWarning && { toolWarning }),
         registeredTools: pi
           .getAllTools()
           .map((tool) => tool.name)
@@ -80,6 +89,11 @@ export function runtimeVersion(pi: ExtensionAPI) {
         mode: 0o600,
       })
       pi.appendEntry('pi-harness-load', loaded)
+
+      if (toolWarning) {
+        ctx.ui.notify(toolWarning, 'warning')
+      }
+
       ctx.ui.setStatus(
         'pi-harness',
         `Pi harness ${loaded.version} · ${loaded.sourceHash.slice(0, 10)} · orchestrator`,

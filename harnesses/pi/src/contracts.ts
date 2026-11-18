@@ -5,6 +5,7 @@ import { hostCapability } from './capabilities.ts'
 export const roleNames = [
   'orchestrator',
   'design-advisor',
+  'progress-auditor',
   'task-coordinator',
   'branch-orchestrator',
   'task-worker',
@@ -116,7 +117,22 @@ export class ProviderQuotaError extends Error {
   }
 }
 
-export type WorkerResult = Static<typeof resultSchema>
+export const auditResultSchema = Type.Object(
+  {
+    ...resultSchema.properties,
+    continuation: Type.Object(
+      {
+        action: Type.Union([Type.Literal('continue'), Type.Literal('stop')]),
+        reason: Type.String({ minLength: 1, maxLength: 1000 }),
+      },
+      { additionalProperties: false },
+    ),
+  },
+  { additionalProperties: false },
+)
+export type WorkerResult = Static<typeof resultSchema> & {
+  continuation?: Static<typeof auditResultSchema>['continuation']
+}
 export type Role = {
   name: RoleName
   backend: 'pi' | 'claude-cli'
@@ -163,6 +179,7 @@ export type Receipt = {
 }
 
 export type WorkerRequest = {
+  decideContinuation?: boolean
   thinking?: Role['thinking']
   role: WorkerRole
   task: string
@@ -203,8 +220,8 @@ export function validateDesign(value: unknown): Design {
   return value
 }
 
-export function validateResult(value: unknown): WorkerResult {
-  if (!Check(resultSchema, value)) {
+export function validateResult(value: unknown, decideContinuation = false): WorkerResult {
+  if (!Check(decideContinuation ? auditResultSchema : resultSchema, value)) {
     throw new Error('Invalid worker result')
   }
 

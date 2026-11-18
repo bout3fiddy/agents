@@ -28,9 +28,11 @@ export async function checkDelegation(
   evidence: TaskCoordinatorEvidence,
   signal: AbortSignal,
 ): Promise<Receipt[]> {
-  validateResult(evidence.result)
+  const audit = request.kind === 'research' && request.recurring?.audit
+  validateResult(evidence.result, Boolean(audit && request.recurring?.stopWhen))
 
-  if (evidence.result.verdict !== 'pass') {
+  // Read-only audit findings and blockers go into the report after scope verification.
+  if (!audit && evidence.result.verdict !== 'pass') {
     throw new Error(`Coordinator reported ${evidence.result.verdict}: ${evidence.result.summary}`)
   }
 

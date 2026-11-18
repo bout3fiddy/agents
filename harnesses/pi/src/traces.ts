@@ -36,7 +36,7 @@ export function projectTraces(root: string, includeAudit = false): string {
   }
 
   const rules = contents.split(/\r?\n/)
-  const required = includeAudit ? ['/traces/', '/audit/'] : ['/traces/']
+  const required = includeAudit ? ['/traces/', '/audit/', '/audits/'] : ['/traces/']
   const missing = required.filter((rule) => !rules.includes(rule))
 
   if (missing.length) {

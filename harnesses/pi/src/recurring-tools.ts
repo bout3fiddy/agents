@@ -74,7 +74,8 @@ export function registerRecurring(pi: ExtensionAPI, pollMs = 5000) {
     label: 'Manage recurring background tasks',
     description:
       'List, set (create or replace), or remove a named project schedule. ' +
-      'Runs while Pi is open. Audits skip unchanged activity and write .pi/audit reports. ' +
+      'Runs while Pi is open. For progress audits set work.kind=audit, model, thinking, ' +
+      'reportDirectory and optional stopWhen. startImmediately runs the baseline. ' +
       'Other work uses normal scoped background delegation. Remove cancels outstanding work.',
     parameters: Type.Object(
       {

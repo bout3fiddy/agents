@@ -173,12 +173,20 @@ The orchestrator uses `recurring_task` to list, set or remove named schedules. A
 one interval unless `startImmediately` is true. Setting an existing name replaces its definition for
 subsequent runs. Removing it cancels an outstanding job and preserves its receipts.
 
-Use `work: { kind: "audit", task: "Check progress and flag blockers" }` for a read-only Pi Codex
-audit. It sees new completed discussion turns from the observing session and changed project task
-summaries, milestones and checks. Idle intervals use no model calls. Pi saves the worker's report
-under `.pi/audit/<job-id>.json`. Findings and failures reach the orchestrator through normal task
-delivery. Ordinary progress stays in the report. Other recurring work takes the same scoped task
-definition as `delegate_task`; recurring implementation requires an explicit settled design.
+For a Fable progress audit, ask “Audit progress hourly with Fable Medium, run a baseline now, write
+scorecards under `.pi/audits/progress/`, and stop when the release evidence is complete.” The host
+uses `work.kind = "audit"` with `model: "fable"` and `thinking: "medium"`. A single read-only Fable
+worker inspects the project snapshot and can verify public evidence with web tools. The default
+audit uses Codex. Both receive changed task summaries and checks, completed discussion turns, and
+the current Git commit when it changes. An immediate baseline also runs in a fresh session. Later
+idle intervals use no model calls.
+
+Set `reportDirectory` under `.pi/audit/` or `.pi/audits/` for dated Markdown scorecards. The default
+output is `.pi/audit/<job-id>.json`. With `stopWhen`, a completed audit supplies an explicit
+continue or stop decision with evidence. The host records the reason and disables the schedule on
+stop. A later set can reactivate it. Project findings and final decisions reach the orchestrator.
+Other recurring work takes the same scoped definition as `delegate_task`. Recurring implementation
+requires an explicit settled design.
 
 Schedules are private to the local Pi installation and keyed by the project’s canonical path. The
 creating session dispatches the work and receives its findings. Reload or reopen that session to
@@ -186,6 +194,10 @@ resume. Setting the schedule from another session in the project transfers futur
 Pi is closed, already dispatched workers can finish. Missed intervals coalesce at reopening. A busy
 queue defers dispatch; a failed run pauses the schedule for inspection. Use `/workers` for a running
 job and ask the orchestrator to list schedules for its last outcome and next run.
+
+The installed launcher takes its active tool list from the loaded role on each reload. Older
+launchers pinned a process-wide tool list. If `/harness-version` reports missing role tools, exit Pi
+once and use `~/.pi/agent/bin/pi-harness --continue` from the project to resume that conversation.
 
 ### Background delegation
 

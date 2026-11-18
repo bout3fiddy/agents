@@ -214,8 +214,12 @@ Recurring task definitions and cursors live under the local Pi agent directory i
 project-specific lock through dispatch and records the job ID before starting its supervisor.
 Projects cannot enable schedules by supplying a file. Occurrences share the ordinary task queue,
 write reservations, subprocess controls and result delivery. An audit advances its evidence cursor
-after successful completion. The host publishes its structured result in the gitignored `.pi/audit/`
-directory, which scoped workers cannot read or write.
+after successful completion. Explicit Fable audits dispatch a read-only progress-auditor directly
+through the existing Claude CLI worker adapter. The host publishes JSON in `.pi/audit/` by default
+or dated Markdown in configured private report folders under `.pi/audit/` and `.pi/audits/`. Workers
+receive bounded trace observations and the preceding report summary. Both report trees are excluded
+from worker reads and edits. An authorized, evidence-backed stop decision from a completed
+occurrence retires its schedule. Revising the work invalidates a pending decision.
 
 Execution evidence is project-local under `.pi/traces/`, ignored through `.pi/.gitignore`.
 Conversations live in `sessions/`; checkpoints, attempts, consultations and receipts live in

@@ -18,6 +18,7 @@ import { acquireLock } from './lock.ts'
 import { runWorkflow } from './workflow.ts'
 import { checkDelegation, DelegationChecksFailed } from './delegation-checks.ts'
 import { writeAuditReport } from './recurring-audit.ts'
+import { runProgressAuditor } from './progress-auditor.ts'
 import { runTaskCoordinator } from './task-coordinator.ts'
 import type { Checkpoint } from './contracts.ts'
 import { runBranchTask } from './branch-runner.ts'
@@ -166,11 +167,14 @@ export async function runDelegation(
     await save({ candidate: workspace })
     await atomicJson(join(directory, 'baseline.json'), fileHashes(before))
     await atomicJson(join(directory, 'workspace.json'), { workspace, originals })
-    const evidence = await coordinate(
+    const audit = request.recurring?.audit ? request.recurring : undefined
+    const execute = audit?.model === 'fable' ? runProgressAuditor : coordinate
+    const evidence = await execute(
       {
         task: request.task,
         context: request.context,
         kind: request.kind,
+        decideContinuation: Boolean(audit?.stopWhen),
         thinking: request.thinking,
         workspace,
         project,
@@ -203,12 +207,8 @@ export async function runDelegation(
         evidence.children.flatMap((child) => child.result.hostActions ?? []),
     })
 
-    if (request.recurring?.audit) {
-      if (request.kind !== 'research' || state.changedPaths?.length) {
-        throw new Error('A recurring audit requires a read-only research worker')
-      }
-
-      await save(await writeAuditReport(request, evidence.result))
+    if (audit && (request.kind !== 'research' || state.changedPaths?.length)) {
+      throw new Error('A recurring audit requires a read-only research worker')
     }
 
     const receipts = await checkDelegation(
@@ -263,7 +263,23 @@ export async function runDelegation(
           await integrate(store, before, after, request.writePaths)
         }
 
-        await save({ status: 'complete' })
+        if (audit) {
+          const report = await writeAuditReport(
+            request,
+            evidence.result,
+            evidence.model,
+            evidence.thinking,
+          )
+
+          if (evidence.result.verdict === 'blocked') {
+            await save(report)
+            throw new Error('Auditor reported blocked: ' + evidence.result.summary)
+          }
+
+          await save({ ...report, status: 'complete' })
+        } else {
+          await save({ status: 'complete' })
+        }
       })
     } finally {
       await release?.()

@@ -10,6 +10,7 @@ import {
 import { Type, type Static } from 'typebox'
 import { Check } from 'typebox/value'
 import {
+  auditResultSchema,
   resultSchema,
   thinkingSchema,
   specialistThinkingSchema,
@@ -54,6 +55,7 @@ export interface TaskCoordinatorRequest {
   task: string
   context: string
   kind: 'documents' | 'research' | 'maintenance' | 'branch'
+  decideContinuation?: boolean
   designPath?: string
   workspace: string
   project: Project
@@ -786,7 +788,7 @@ export async function createTaskCoordinatorTools(
       name: 'submit_result',
       label: 'Submit coordinated task result',
       description: 'Submit only after all children finish and required findings are resolved.',
-      parameters: resultSchema,
+      parameters: request.decideContinuation ? auditResultSchema : resultSchema,
       async execute(_id, raw) {
         signal.throwIfAborted()
 
@@ -794,7 +796,7 @@ export async function createTaskCoordinatorTools(
           throw new Error('Wait for all child workers before submitting')
         }
 
-        const result = validateResult(raw)
+        const result = validateResult(raw, request.decideContinuation)
         declaredDatabase ||= result.databaseImpact
         const submittedRevision = revision
         submitting = true

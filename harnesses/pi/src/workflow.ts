@@ -134,7 +134,7 @@ export async function benchmarks(
   return receipts
 }
 
-type WorkflowRole = Exclude<WorkerRole, 'task-worker'>
+type WorkflowRole = Exclude<WorkerRole, 'task-worker' | 'progress-auditor'>
 
 export async function runWorkflow(
   store: StateStore,

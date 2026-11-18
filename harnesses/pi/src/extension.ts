@@ -36,8 +36,9 @@ export default function harness(pi: ExtensionAPI): void {
   const storeFor = async (cwd: string) => new StateStore(await realpath(cwd))
 
   pi.on('session_start', async (event, ctx) => {
-    pi.setActiveTools((await orchestratorPolicy)[0].tools)
-    await runtime.record(ctx, event.reason)
+    const [role] = await orchestratorPolicy
+    pi.setActiveTools(role.tools)
+    await runtime.record(ctx, event.reason, role.tools)
   })
   registerTraces(pi)
 
@@ -66,6 +67,7 @@ export default function harness(pi: ExtensionAPI): void {
     return {
       systemPrompt: [
         prompt,
+        runtime.current()?.toolWarning,
         await instructions(ctx.cwd, []),
         checkpoint
           ? checkpointText(checkpoint, await store.task())

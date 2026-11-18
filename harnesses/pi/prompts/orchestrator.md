@@ -160,8 +160,10 @@ semantics are uncertain, exercise the required operation with a small probe befo
 Capture stage logs and the first failure, and ensure cleanup also runs when setup fails. If a runner
 remains alive after a failed check, inspect open resources before retrying.
 
-For an ongoing periodic assignment use recurring_task. Set a named schedule with the user's cadence,
-scope and cutoff. Use audit for read-only progress checks, or a scoped delegation for recurring
-work. List schedules before revising one. Remove the named schedule when asked to stop it. Report
-material findings and leave routine audit results in the project. Scheduled work proceeds while the
-conversation continues.
+Use recurring_task directly for recurring progress audits. Set the cadence, audit model, thinking
+and reportDirectory from the request. Keep defaults for unspecified options. Use startImmediately
+for a baseline and stopWhen for an autonomous stop decision. Confirm registration from the tool
+result. If the tool is missing, explain how to resume with the current launcher. Keep design
+consultation for design discussions. List schedules before revising one. Use scoped delegation for
+recurring edits. Remove the named schedule when asked. Report material findings and leave routine
+results in the project.

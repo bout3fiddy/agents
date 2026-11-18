@@ -30,12 +30,16 @@ export type TaskState = {
 }
 
 export async function atomicJson(path: string, value: unknown): Promise<void> {
+  await atomicText(path, JSON.stringify(value, null, 2) + '\n')
+}
+
+export async function atomicText(path: string, text: string): Promise<void> {
   await mkdir(dirname(path), { recursive: true, mode: 0o700 })
   const temporary = `${path}.${randomUUID()}.tmp`
   const file = await open(temporary, 'wx', 0o600)
 
   try {
-    await file.writeFile(`${JSON.stringify(value, null, 2)}\n`)
+    await file.writeFile(text)
     await file.sync()
   } finally {
     await file.close()

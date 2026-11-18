@@ -25,15 +25,22 @@ test('project traces stay local, ignored and excluded from worker snapshots', as
     assert.equal(await readFile(ignore, 'utf8'), '/traces/\n')
     projectTraces(root, true)
     projectTraces(root, true)
-    assert.equal(await readFile(ignore, 'utf8'), '/traces/\n/audit/\n')
+    assert.equal(await readFile(ignore, 'utf8'), '/traces/\n/audit/\n/audits/\n')
     await promisify(execFile)('git', ['init', '-q', root])
     const ignored = await promisify(execFile)(
       'git',
-      ['check-ignore', '.pi/traces/harness/accepted.json', '.pi/audit/test.json'],
+      [
+        'check-ignore',
+        '.pi/traces/harness/accepted.json',
+        '.pi/audit/test.json',
+        '.pi/audits/progress/a.md',
+      ],
       { cwd: root },
     )
     assert.match(ignored.stdout, /accepted.json/)
     assert.match(ignored.stdout, /audit\/test.json/)
+    assert.match(ignored.stdout, /audits\/progress\/a.md/)
+    assert.equal(sensitive('.PI/AUDITS/progress/a.md'), true)
     const files = await inventory(root)
     assert.ok(![...files.keys()].some((path) => path.includes('traces/')))
     assert.equal(sensitive('.PI/TRACES/harness/accepted.json'), true)

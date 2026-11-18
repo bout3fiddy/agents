@@ -3,6 +3,7 @@ import test, { type TestContext } from 'node:test'
 import { mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
+import { gitCommand } from '../src/git-branches.ts'
 import { fixture } from './support.ts'
 import { coordinatorEvidence } from './branch-support.ts'
 import { captureSession } from './session-support.ts'
@@ -147,7 +148,7 @@ test('audits report once per activity change and only findings wake the Pi sessi
   })
   const origin = { ...owner, session: session.sessionManager.getSessionId() }
   const poll = (at: number) => schedules.tick(origin, () => session.sessionManager.getBranch(), at)
-  await schedules.set('progress', audit, origin.session, true, now)
+  await schedules.set('progress', audit, origin.session, false, now)
   await poll(now)
   assert.equal(started.length, 0)
   await session.prompt('The first milestone passed')
@@ -304,4 +305,166 @@ test('a missing job receipt leaves the schedule removable', async (t) => {
   assert.equal(removed.removed, true)
   assert.match(removed.cancellationError!, /No delegated task/)
   assert.deepEqual(await schedules.list(), [])
+})
+
+test('immediate audits persist their stop reason across reopen', async (t) => {
+  const { root, store, schedules, started, now, tick, open } = await setup(t)
+  const work = {
+    ...audit.work,
+    reportDirectory: '.pi/audits/scorecards/',
+    stopWhen: 'Delivery proved',
+  }
+  await schedules.set('progress', { ...audit, work }, owner.session, true, now)
+  await tick(now)
+  assert.equal(started.length, 1)
+  assert.match(started[0]!.context, /Initial baseline/)
+  const reason = 'The independent receipt proves completion.'
+  const state = await runDelegation(store, started[0]!.id, new AbortController().signal, (req) =>
+    coordinatorEvidence(req, { continuation: { action: 'stop', reason } }, []),
+  )
+  assert.equal(state.status, 'complete', state.error)
+  assert.equal(state.auditAttention, true)
+  assert.match(state.auditReport!, /^\.pi\/audits\/scorecards\/.*\.md$/)
+  assert.ok((await readFile(join(root, state.auditReport!), 'utf8')).includes(reason))
+  await tick(now + 10)
+  await open().tick(owner, () => [], now + 2 * interval)
+  assert.equal(started.length, 1)
+  assert.equal((await open().list())[0]?.status, 'stopped')
+  assert.equal((await open().list())[0]?.stoppedReason, reason)
+  assert.equal((await open().list())[0]?.nextAt, undefined)
+  assert.ok(!(await inventory(root)).has(state.auditReport!))
+})
+
+test('revised audits ignore stale stop decisions and report project defects', async (t) => {
+  const { store, schedules, started, now, tick } = await setup(t)
+  const first = { ...audit, work: { ...audit.work, stopWhen: 'All items complete' } }
+  await schedules.set('progress', first, owner.session, true, now)
+  await tick(now)
+  const second = { ...first, work: { ...first.work, stopWhen: 'Independently verified' } }
+  await schedules.set('progress', second, owner.session, true, now + 2)
+  await runDelegation(store, started[0]!.id, new AbortController().signal, (req) =>
+    coordinatorEvidence(req, { continuation: { action: 'stop', reason: 'Old condition met' } }, []),
+  )
+  await tick(now + 3)
+  assert.equal((await schedules.list())[0]?.status, 'scheduled')
+  await tick(now + 4)
+  assert.equal(started.length, 2)
+  const state = await runDelegation(store, started[1]!.id, new AbortController().signal, (req) =>
+    coordinatorEvidence(
+      req,
+      {
+        verdict: 'changes',
+        continuation: { action: 'continue', reason: 'Awaiting evidence' },
+        findings: [
+          {
+            severity: 'required',
+            location: 'build',
+            problem: 'Missing receipt',
+            evidence: 'status.md',
+          },
+        ],
+      },
+      [],
+    ),
+  )
+  assert.equal(state.status, 'complete', state.error)
+  await tick(now + 5)
+  assert.equal((await schedules.list())[0]?.status, 'scheduled')
+})
+
+test('audit destinations reject traversal and linked parents', async (t) => {
+  const { base, root, schedules, store, tick, now, started } = await setup(t)
+
+  for (const path of ['../outside', '.pi/audits/../traces', '.pi/traces', '.pi/audits//bad']) {
+    await assert.rejects(
+      schedules.set(
+        'progress',
+        { ...audit, work: { ...audit.work, reportDirectory: path } },
+        owner.session,
+      ),
+    )
+  }
+
+  await assert.rejects(
+    schedules.set(
+      'progress',
+      { ...audit, work: { ...audit.work, model: 'fable', thinking: 'low' } },
+      owner.session,
+    ),
+    /medium or high/,
+  )
+  const work = { ...audit.work, reportDirectory: '.pi/audits/reports' }
+  await schedules.set('progress', { ...audit, work }, owner.session, true, now)
+  await mkdir(join(base, 'outside'))
+  await symlink(join(base, 'outside'), join(root, '.pi/audits'))
+  await tick(now)
+  const job = await runDelegation(store, started[0]!.id, new AbortController().signal, (req) =>
+    coordinatorEvidence(req, {}, []),
+  )
+  assert.equal(job.status, 'needs_attention')
+  assert.match(job.error!, /real .pi\/audits/)
+  await assert.rejects(readFile(join(base, 'outside/reports')), { code: 'ENOENT' })
+})
+
+test('a new Git commit wakes an idle audit once', async (t) => {
+  const { root, store, schedules, started, now, tick } = await setup(t)
+  await gitCommand(root, ['init', '-q'])
+  const commit = () =>
+    gitCommand(root, [
+      '-c',
+      'user.name=Fixture',
+      '-c',
+      'user.email=fixture@example.test',
+      'commit',
+      '--allow-empty',
+      '-qm',
+      'fixture',
+    ])
+  await commit()
+  await schedules.set('progress', audit, owner.session, false, now)
+  await tick(now + interval)
+  assert.equal(started.length, 1)
+  assert.ok(started[0]!.context.includes(await gitCommand(root, ['rev-parse', 'HEAD'])))
+  await runDelegation(store, started[0]!.id, new AbortController().signal, (req) =>
+    coordinatorEvidence(req, {}, []),
+  )
+  await tick(now + interval + 1)
+  await tick(now + interval * 2)
+  assert.equal(started.length, 1)
+  await commit()
+  await tick(now + interval * 3)
+  assert.equal(started.length, 2)
+  assert.ok(started[1]!.context.includes(await gitCommand(root, ['rev-parse', 'HEAD'])))
+})
+
+test('late audit guidance prevents publication of an obsolete stop decision', async (t) => {
+  const { root, schedules, store, tick, now, started } = await setup(t)
+  await schedules.set(
+    'progress',
+    {
+      ...audit,
+      work: { ...audit.work, stopWhen: 'Complete', reportDirectory: '.pi/audits/progress' },
+    },
+    owner.session,
+    true,
+    now,
+  )
+  await tick(now)
+  const job = await runDelegation(
+    store,
+    started[0]!.id,
+    new AbortController().signal,
+    async (req) => {
+      await schedules.jobs.control(started[0]!.id, 'message', 'A second milestone is outstanding')
+      return coordinatorEvidence(
+        req,
+        { continuation: { action: 'stop', reason: 'Initial gate met' } },
+        [],
+      )
+    },
+  )
+  assert.equal(job.status, 'needs_attention')
+  assert.match(job.error!, /late task update/)
+  assert.equal(job.auditReport, undefined)
+  await assert.rejects(readFile(join(root, '.pi/audits/progress')), { code: 'ENOENT' })
 })

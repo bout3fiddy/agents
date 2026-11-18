@@ -54,7 +54,13 @@ export type DelegationRequest = Omit<DelegateInput, 'kind'> & {
   originEntry?: string
   model: string
   createdAt: string
-  recurring?: { name: string; audit: boolean }
+  recurring?: {
+    name: string
+    audit: boolean
+    model?: 'codex' | 'fable'
+    reportDirectory?: string
+    stopWhen?: string
+  }
   checkpointHash?: string
 }
 export type DelegationStatus = {
@@ -99,6 +105,7 @@ export type DelegationStatus = {
   health?: 'active' | 'quiet' | 'stopped' | 'needs_attention'
   auditReport?: string
   auditAttention?: boolean
+  auditDecision?: WorkerResult['continuation']
   progressFile?: string
   hostActions?: WorkerResult['hostActions']
 }

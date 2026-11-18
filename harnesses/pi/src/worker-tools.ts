@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { Type } from 'typebox'
 import type { ToolDefinition } from '@earendil-works/pi-coding-agent'
 import {
+  auditResultSchema,
   resultSchema,
   validateResult,
   type CommandResult,
@@ -184,9 +185,9 @@ export function createWorkerTools(request: WorkerRequest, role: Role) {
       name: 'submit_result',
       label: 'Submit worker result',
       description: 'Submit a verdict and evidence. Required findings prevent pass.',
-      parameters: resultSchema,
+      parameters: request.decideContinuation ? auditResultSchema : resultSchema,
       async execute(id, raw) {
-        submitted = validateResult(raw)
+        submitted = validateResult(raw, request.decideContinuation)
         return textResult({ submitted: true, call: id })
       },
     },
@@ -221,7 +222,9 @@ export async function assignment(request: WorkerRequest) {
     ...(request.documentsOnly ? { retainedFileTypes: ['.md', '.txt', '.rst'] } : {}),
     folderInstructions: await instructions(request.workspace, request.checkpoint.writePaths),
     output:
-      'Use submit_result when finished. If a host capability is required, return blocked ' +
-      'with hostActions immediately. Do not retry unavailable operations in the sandbox.',
+      request.role === 'progress-auditor'
+        ? 'Submit a dated scorecard with evidence and identify missing proof.'
+        : 'Use submit_result when finished. If a host capability is required, return blocked ' +
+          'with hostActions immediately. Do not retry unavailable operations in the sandbox.',
   }
 }

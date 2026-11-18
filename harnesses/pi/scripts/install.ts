@@ -105,8 +105,6 @@ export async function install(agentDir = join(homedir(), '.pi', 'agent'), binDir
     '--no-approve',
     '--session-dir',
     '"$PWD/.pi/traces/sessions"',
-    '--tools',
-    shellQuote(role.tools.join(',')),
     '"$@"',
   ].join(' ')
   await writeFile(

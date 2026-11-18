@@ -21,7 +21,7 @@ const generated = new Set(['package-lock.json', 'bun.lock', 'uv.lock'])
 export async function sourceFiles(root) {
   const files = []
   const ignoredPath = (name) =>
-    /(?:^|\/)\.pi\/(?:traces|audit)(?:\/|$)/i.test(name.normalize('NFKC')) ||
+    /(?:^|\/)\.pi\/(?:traces|audits?)(?:\/|$)/i.test(name.normalize('NFKC')) ||
     name
       .split('/')
       .some((part) => ignored.has(part) || generated.has(part) || /^\.env(?:\.|$)/.test(part))

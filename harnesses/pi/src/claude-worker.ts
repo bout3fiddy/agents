@@ -250,7 +250,7 @@ export async function runClaudeWorker(request: WorkerRequest, role: Role): Promi
       role: request.role,
       liveWorkerId: live.info.id,
       snapshot: snapshotHash(await inventory(request.workspace)),
-      result: validateResult(evidence.result),
+      result: validateResult(evidence.result, request.decideContinuation),
       commands: evidence.commands,
       turns: response.num_turns ?? 0,
       model: `claude-cli/${Object.keys(response.modelUsage ?? {})[0] ?? role.model}`,

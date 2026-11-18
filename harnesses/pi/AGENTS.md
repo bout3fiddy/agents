@@ -61,9 +61,12 @@
 - Preserve exit status, required skips, cancellation and stale evidence as distinct outcomes.
 - Benchmarks measure real public behavior. Instrumentation must preserve disabled behavior.
 - Recurring schedules use the host-only recurring_task tool and private per-project definitions.
-  Keep reports in .pi/audit outside worker snapshots. Skip idle audits, serialize claims across Pi
-  hosts, and route new occurrences through ordinary delegation, cancellation and verification.
-  Exercise the full scheduler with `npm run test:live:recurring` in a disposable project.
+  Keep .pi/audit and .pi/audits private. Run requested immediate baselines. Skip idle intervals,
+  serialize claims and use ordinary delegation controls. Fable audits use the read-only
+  progress-auditor. Bind stop decisions to the configured work and the completed occurrence. Test
+  Codex and Fable with `npm run test:live:recurring` and its `-- --fable` option.
+- The launcher lets the role select active tools at reload. Diagnose missing role tools from the
+  registry and tell the user how to resume a session with a legacy startup allowlist.
 - Background task processes survive reload and session exit. Keep project-wide file reservations,
   scoped coordinator children, steering/cancellation, and per-task private evidence. Deliver
   completion once at a safe boundary and wake an idle orchestrator for a brief acknowledgement.
