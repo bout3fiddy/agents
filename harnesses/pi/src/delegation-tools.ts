@@ -73,8 +73,10 @@ function resultMessage(jobs: Delegation[]): CustomMessageEntryDraft {
     customType: 'pi-task-result',
     display: false,
     content:
-      'Background task outcome. Combine related outcomes into one short project update, ' +
-      'then continue the discussion. For failures, inspect the retained candidate and evidence. ' +
+      'Background task outcome. Handle routine completions privately. ' +
+      'When an outcome changes what the user can use, decide or expect, combine related ' +
+      'results into one short update. Answer pending questions first. ' +
+      'For failures, inspect the retained candidate and evidence. ' +
       'Recover within the original authorized scope: handle host-only operations on the host, ' +
       'preserve useful work and rerun relevant checks. Do not repeat a worker lacking the needed ' +
       'capability or expand permission. Paused work is preserved: inspect, revise and resume it ' +
@@ -233,9 +235,10 @@ export function registerDelegation(pi: ExtensionAPI, launch: Launcher = launchDe
             customType: 'pi-task-milestone',
             display: false,
             content:
-              'Summarize these milestones in one brief update with their impact. ' +
-              'Combine with any concurrent outcomes and answer pending user questions first. ' +
-              'Use the reported evidence, preserve its verification stage and skip repetition.\n' +
+              'Assess these milestones against what the user already knows. ' +
+              'If anything changes what they can use, decide or expect, give one brief update ' +
+              'with the evidence and its impact. Handle routine or repeated facts privately. ' +
+              'Combine concurrent outcomes and answer pending user questions first.\n' +
               JSON.stringify(milestones.map(({ task, summary }) => ({ task, summary }))),
             details: { taskIds },
           })

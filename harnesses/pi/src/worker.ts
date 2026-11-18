@@ -6,6 +6,7 @@ import {
   ModelRuntime,
   SessionManager,
   SettingsManager,
+  type AgentSession,
   type ResourceLoader,
 } from '@earendil-works/pi-coding-agent'
 import type { WorkerEvidence, WorkerRequest } from './contracts.ts'
@@ -32,6 +33,15 @@ export function explicitResources(prompt: string): ResourceLoader {
     getAppendSystemPromptSources: () => [],
     extendResources: () => {},
     reload: async () => {},
+  }
+}
+
+// Read the settled prompt outcome after the SDK has finished automatic retries.
+export function checkModelOutcome(session: AgentSession): void {
+  const reply = session.messages.findLast((message) => message.role === 'assistant')
+
+  if (reply?.stopReason === 'error') {
+    throw new Error(reply.errorMessage ?? 'Worker model request failed')
   }
 }
 
@@ -94,7 +104,6 @@ export async function runWorker(request: WorkerRequest): Promise<WorkerEvidence>
     reviewOf: request.reviewOf,
   })
   const liveSession = attachLiveSession(session, live, worker.invalidateResult)
-  let modelError: string | undefined
   const abort = () => {
     void session.abort()
   }
@@ -113,14 +122,6 @@ export async function runWorker(request: WorkerRequest): Promise<WorkerEvidence>
         .catch(() => {})
     }
 
-    if (
-      event.type === 'message_end' &&
-      event.message.role === 'assistant' &&
-      event.message.stopReason === 'error'
-    ) {
-      modelError = event.message.errorMessage ?? 'Worker model request failed'
-    }
-
     if (event.type === 'turn_end') {
       turns++
     }
@@ -135,13 +136,10 @@ export async function runWorker(request: WorkerRequest): Promise<WorkerEvidence>
 
     while (true) {
       await liveSession.settleGuidance()
+      checkModelOutcome(session)
 
       if (worker.result() && (await live.mailbox.seal())) {
         break
-      }
-
-      if (modelError) {
-        throw new Error(modelError)
       }
 
       await session.prompt(
@@ -152,8 +150,8 @@ export async function runWorker(request: WorkerRequest): Promise<WorkerEvidence>
 
     workerAbortSignal.throwIfAborted()
 
-    if (modelError || !worker.result()) {
-      throw new Error(modelError ?? 'Worker did not produce a result')
+    if (!worker.result()) {
+      throw new Error('Worker did not produce a result')
     }
 
     await progress.update({ stage: 'complete', message: worker.result()!.summary })

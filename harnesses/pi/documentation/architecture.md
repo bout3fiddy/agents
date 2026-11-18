@@ -114,7 +114,11 @@ orchestrator's unrestricted shell obeys the same rule through its prompt. Task c
 separately from supervisor status, so foreground updates cannot overwrite worker progress.
 
 A fresh Codex coordinator gets a bounded explicit assignment, shared/role prompts and scoped folder
-instructions. It can inspect the candidate and delegate children without a call or turn ceiling.
+instructions. It can inspect the candidate and delegate children without a call or turn ceiling. Pi
+workers and coordinators let the SDK finish recovery from transient model failures before
+classifying a task. A successful retry continues the same session and uses its submitted result. An
+exhausted or permanent error reaches the host with its provider message.
+
 Leaf calls serialize against its candidate. General task workers may edit only the task scope;
 engineering and DB reviewers are read-only; performance retains its benchmark/instrumentation
 limits. Leaf workers cannot delegate. Child receipts bind role, model and candidate snapshot.

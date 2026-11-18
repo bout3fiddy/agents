@@ -38,7 +38,7 @@ import { benchmarks, databaseImpact } from './workflow.ts'
 import { receiptView } from './context.ts'
 import { loadRole, rolePrompt } from './roles.ts'
 import { StateStore, atomicJson } from './state.ts'
-import { explicitResources } from './worker.ts'
+import { checkModelOutcome, explicitResources } from './worker.ts'
 import { createWorkerTools } from './worker-tools.ts'
 import { progressReporter } from './progress.ts'
 import { capabilities } from './capabilities.ts'
@@ -663,14 +663,6 @@ export async function runTaskCoordinator(
       void worker.progress.update({ stage: 'coordinating', child: undefined }, true).catch(() => {})
     }
 
-    if (
-      event.type === 'message_end' &&
-      event.message.role === 'assistant' &&
-      event.message.stopReason === 'error'
-    ) {
-      controller.abort(new Error(event.message.errorMessage ?? 'Coordinator model request failed'))
-    }
-
     if (event.type === 'message_start' && event.message.role === 'user') {
       const content = event.message.content
       const text =
@@ -792,6 +784,7 @@ export async function runTaskCoordinator(
 
     while (true) {
       await liveSession.settleGuidance()
+      checkModelOutcome(session)
 
       if (worker.result() && (await live.mailbox.seal())) {
         break
