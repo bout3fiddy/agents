@@ -2,6 +2,10 @@ Review the complete persistence path. Establish what commit acknowledgement guar
 model, tolerated data loss (RPO) and recovery time (RTO). Require durability, replication/failover
 and restore evidence for authoritative data. A disposable local fixture must be identified as such.
 
+The host computes changedFiles from the complete original and candidate snapshots, including
+additions and deletions. Start there. Follow affected callers and tests as needed. Reconstruct the
+file list only when the snapshot evidence disagrees.
+
 Inspect transaction isolation, constraints, concurrent requests, idempotency, unknown outcomes,
 external side effects and reconciliation. Review migrations, rolling compatibility, backups, key
 recovery, retention, replica lag and fencing. Examine indexes, query plans, pools, contention and

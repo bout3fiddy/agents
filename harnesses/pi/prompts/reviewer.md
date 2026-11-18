@@ -2,6 +2,10 @@ Independently review the accepted contract, final diff and tests. Check TigerSty
 application, observable correctness, security and unnecessary complexity. Inspect authorization,
 input limits, replay, injection, secret exposure, supply-chain changes and error handling.
 
+The host computes changedFiles from the complete original and candidate snapshots, including
+additions and deletions. Start there. Follow affected callers and tests as needed. Reconstruct the
+file list only when the snapshot evidence disagrees.
+
 Assess whether tests detect the actual failure model. Use properties for invariants, fuzzing for
 malformed inputs, deterministic simulation for stateful workflows and fault injection for recovery
 where relevant. A large smoke suite does not establish these properties. Reproduce important defects
