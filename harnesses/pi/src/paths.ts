@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { lstat, mkdir, open, readdir, realpath, writeFile } from 'node:fs/promises'
-import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
+import { dirname, extname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 
 const excluded = new Set([
   '.git',
@@ -128,11 +128,16 @@ export function validateScope(scopes: string[]): void {
   }
 }
 
-export function writable(path: string, scopes: string[]): boolean {
+export function documentPath(path: string): boolean {
+  return ['.md', '.txt', '.rst'].includes(extname(path).toLowerCase())
+}
+
+export function writable(path: string, scopes: string[], documentsOnly = false): boolean {
   relativePath(path)
   const normalized = folded(path)
 
   return (
+    (!documentsOnly || documentPath(path)) &&
     normalized !== '.pi' &&
     !normalized.startsWith('.pi/') &&
     !normalized.endsWith('agents.override.md') &&

@@ -1,3 +1,4 @@
+import assert from 'node:assert/strict'
 import { mkdir, mkdtemp, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -94,6 +95,8 @@ export async function branchFixture(github?: string) {
     await writeFile(join(root, path), content)
   }
 
+  await writeFile(join(root, '.prettierignore'), '/upstream.md\n')
+  await writeFile(join(root, 'upstream.md'), 'Preserved upstream material. '.repeat(5) + '\n')
   await writeFile(join(root, 'DESIGN.md'), branchDesign)
   await writeFile(join(root, '.pi/.gitignore'), '/traces/\n')
   await writeFile(
@@ -142,5 +145,11 @@ export async function branchFixture(github?: string) {
   await gitCommand(root, ['commit', '-m', 'Seed independent branch workflow fixture'])
   await gitCommand(root, ['push', 'origin', 'HEAD:main'])
   const pinned = await resolveRemote(root)
-  return { directory, root, remote, github, pinned, baselineFiles }
+  return { directory, root, remote, github, pinned }
+}
+
+export async function verifyBranchFixtureFiles(root: string, base: string, main: string) {
+  const changed = await gitCommand(root, ['diff', '--name-only', base, main])
+  assert.deepEqual(changed.split('\n').sort(), Object.keys(baselineFiles).sort())
+  await gitCommand(root, ['diff', '--exit-code', base, '--', '.'])
 }

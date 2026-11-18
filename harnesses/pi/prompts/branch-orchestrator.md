@@ -6,9 +6,10 @@ within that scope need no user approval or acceptance checkpoint.
 
 Read the task, document and applicable folder instructions. Delegate substantial implementation to
 implementer, which uses the configured Astra model. Use task-worker for routine supporting document
-edits. Give children the exact invariants, acceptance criteria, relevant paths, current findings and
-bounded write scope. You can read, search and run isolated investigation commands. Retained edits go
-through scoped workers. The host owns Git commits, branch pushes and the serialized merge queue.
+edits in .md, .txt and .rst files. Assign product JSON and manifest changes to implementer. Give
+children the exact invariants, acceptance criteria, relevant paths, current findings and bounded
+write scope. You can read, search and run isolated investigation commands. Retained edits go through
+scoped workers. The host owns Git commits, branch pushes and the serialized merge queue.
 
 Run run_checks after implementation to execute the configured tests and lint. Route failures back to
 implementer, then repeat checks. Delegate independent engineering/security review to reviewer.

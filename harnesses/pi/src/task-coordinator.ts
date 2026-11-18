@@ -1,4 +1,4 @@
-import { dirname, extname, join, resolve, sep } from 'node:path'
+import { dirname, join, resolve, sep } from 'node:path'
 import { homedir } from 'node:os'
 import {
   createAgentSession,
@@ -23,6 +23,7 @@ import { dispatcher, type Dispatcher } from './dispatch.ts'
 import { textResult } from './file-tools.ts'
 import { changes } from './integration.ts'
 import {
+  documentPath,
   inventory,
   matches,
   readBoundedFile,
@@ -126,11 +127,7 @@ function checkChildWrites(
       : role.writes
 
   for (const path of changes(before, after)) {
-    if (
-      request.kind === 'branch' &&
-      assignment.role === 'task-worker' &&
-      !['.md', '.txt', '.rst'].includes(extname(path).toLowerCase())
-    ) {
+    if (request.kind === 'branch' && assignment.role === 'task-worker' && !documentPath(path)) {
       throw new Error('Branch code implementation requires the implementer role')
     }
 
@@ -174,6 +171,15 @@ export async function createTaskCoordinatorTools(
     return next
   }
 
+  function requireValidCandidate() {
+    if (fatal) {
+      throw new Error(
+        `Previous failed child execution invalidated this candidate: ${String(fatal)}. ` +
+          'Submit blocked with the cause and retained evidence so the host can recover.',
+      )
+    }
+  }
+
   async function delegate(raw: unknown): Promise<WorkerEvidence> {
     if (!Check(delegateSchema, raw)) {
       throw new Error('Invalid leaf assignment')
@@ -191,12 +197,25 @@ export async function createTaskCoordinatorTools(
       throw new Error('Review workers require an empty write scope')
     }
 
+    const documentsOnly = request.kind === 'branch' && raw.role === 'task-worker'
+
+    if (
+      documentsOnly &&
+      raw.writePaths.some((path) => path !== '**' && !path.endsWith('/**') && !documentPath(path))
+    ) {
+      throw new Error(
+        'Assign branch JSON, manifests and code to implementer. ' +
+          'The branch task-worker can edit .md, .txt and .rst documents.',
+      )
+    }
+
     pending++
     let recoverableFailure = false
     const assignmentKey = JSON.stringify([raw.role, [...raw.writePaths].sort()])
 
     try {
       return await serialize(async () => {
+        requireValidCandidate()
         const childRole = await loadRole(raw.role)
         const before = await inventory(request.workspace)
         await progress.update({
@@ -211,6 +230,7 @@ export async function createTaskCoordinatorTools(
           child = await dispatch(
             {
               role: raw.role,
+              documentsOnly,
               task: JSON.stringify({
                 task: raw.task,
                 parentTask: request.task,
@@ -280,7 +300,7 @@ export async function createTaskCoordinatorTools(
         return child
       })
     } catch (error) {
-      if (!recoverableFailure) {
+      if (!recoverableFailure && !fatal) {
         fatal = error
       }
 
@@ -350,7 +370,9 @@ export async function createTaskCoordinatorTools(
   async function validatePass(): Promise<void> {
     signal.throwIfAborted()
 
-    if (pending || fatal || failedAssignments.size) {
+    requireValidCandidate()
+
+    if (pending || failedAssignments.size) {
       throw new Error('Unfinished or failed child execution prevents a passing result')
     }
 
@@ -433,6 +455,7 @@ export async function createTaskCoordinatorTools(
               throw new Error('Task is already submitted')
             }
 
+            requireValidCandidate()
             checks = []
             checkedDatabase = false
             checkedDatabase = await needsDatabase()
@@ -441,6 +464,7 @@ export async function createTaskCoordinatorTools(
               request.project,
               checkedDatabase,
               signal,
+              { files: originals!, writePaths: request.checkpoint.writePaths },
             )
 
             if (

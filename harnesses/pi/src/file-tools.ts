@@ -18,6 +18,7 @@ export function fileTools(
   root: string,
   scopes?: string[],
   roleScopes?: string[],
+  documentsOnly = false,
 ): ToolDefinition[] {
   const read: ToolDefinition = {
     name: 'project_read',
@@ -99,7 +100,7 @@ export function fileTools(
           newText: string
         }
 
-        if (!writable(path, scopes) || !writable(path, roleScopes)) {
+        if (!writable(path, scopes, documentsOnly) || !writable(path, roleScopes)) {
           throw new Error('Path is outside this worker assignment')
         }
 
@@ -128,7 +129,7 @@ export function fileTools(
       async execute(id, raw) {
         const { path, content } = raw as { path: string; content: string }
 
-        if (!writable(path, scopes) || !writable(path, roleScopes)) {
+        if (!writable(path, scopes, documentsOnly) || !writable(path, roleScopes)) {
           throw new Error('Path is outside this worker assignment')
         }
 
@@ -147,7 +148,7 @@ export function fileTools(
       async execute(id, raw) {
         const { path } = raw as { path: string }
 
-        if (!writable(path, scopes) || !writable(path, roleScopes)) {
+        if (!writable(path, scopes, documentsOnly) || !writable(path, roleScopes)) {
           throw new Error('Path is outside this worker assignment')
         }
 

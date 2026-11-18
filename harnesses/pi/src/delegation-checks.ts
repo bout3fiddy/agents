@@ -86,7 +86,10 @@ export async function checkDelegation(
     }
   }
 
-  const receipts = await verifyProject(workspace, project, database, signal)
+  const receipts = await verifyProject(workspace, project, database, signal, {
+    files: before,
+    writePaths: request.writePaths,
+  })
 
   if (performance) {
     receipts.push(...(await benchmarks(workspace, project, signal)))

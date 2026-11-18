@@ -133,6 +133,7 @@ export type WorkerRequest = {
   outputPath: string
   baseline: Record<string, string>
   originals?: string
+  documentsOnly?: boolean
   parentWorkerId?: string
   liveWorkerId?: string
   reviewOf?: string

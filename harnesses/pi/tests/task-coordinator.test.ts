@@ -124,6 +124,25 @@ test('coordinator exposes bounded delegation and no retained write tools', async
   await assert.rejects(invoke(worker.tools, 'delegate_worker', leaf), /already submitted/)
 })
 
+test('mixed unsupported formatting leaves earlier files intact', async (t) => {
+  const { request } = await setup(t)
+  const worker = createWorkerTools(
+    { ...request, role: 'implementer' },
+    await loadRole('implementer'),
+  )
+  const path = join(request.workspace, 'src/value.js')
+  const source = 'export const value=1;\n'
+  await writeFile(path, source)
+  await writeFile(join(request.workspace, 'src/value.py'), 'value = 1\n')
+  await assert.rejects(
+    invoke(worker.tools, 'project_format', {
+      paths: ['src/value.js', 'src/value.py'],
+    }),
+    /No parser/,
+  )
+  assert.equal(await readFile(path, 'utf8'), source)
+})
+
 test('task-worker can retain scoped edits but cannot delegate', async (t) => {
   const { request } = await setup(t)
   const role = await loadRole('task-worker')

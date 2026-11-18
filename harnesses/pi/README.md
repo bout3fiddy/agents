@@ -125,6 +125,12 @@ including the document integration gate. Results list these paths in `formatting
 independent 100-column check still applies. Formatter configuration code is never loaded by this
 tool.
 
+During scoped verification, Pi records inherited line-width findings on unchanged Markdown listed in
+the original root `.prettierignore` outside the task's write scope. The receipt names each affected
+file. All project checks receive the complete candidate. Direct lint, document checks, new or edited
+text, in-scope files and code retain the full rules. On a branch, task-workers can edit .md, .txt
+and .rst documents. Implementers own scoped project manifests and JSON files.
+
 ### Background delegation
 
 `delegate_task` accepts a task, complete context, a kind and repository-relative write paths:

@@ -3,6 +3,8 @@ import { addReadabilitySpacing } from './readability.mjs'
 import { resolve, dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { spawnSync } from 'node:child_process'
+import { readFile } from 'node:fs/promises'
+import { getFileInfo } from 'prettier'
 
 export async function check(root, options = {}) {
   const failures = []
@@ -17,13 +19,35 @@ export async function check(root, options = {}) {
       continue
     }
 
+    const widthFindings = []
+
     for (const [index, line] of file.source.split(/\r?\n/).entries()) {
       if (file.name.endsWith('.md') && /^\s*(?:\[[^\]]+\]:\s*)?https?:\/\/\S+$/.test(line)) {
         continue
       }
 
       if ([...line].length > 100) {
-        failures.push(`${file.name}:${index + 1}: line exceeds 100 columns`)
+        widthFindings.push(`${file.name}:${index + 1}: line exceeds 100 columns`)
+      }
+    }
+
+    if (
+      widthFindings.length &&
+      options.retainedMarkdown?.has(file.name) &&
+      file.name.endsWith('.md') &&
+      (
+        await getFileInfo(file.path, {
+          ignorePath: join(root, '.prettierignore'),
+          resolveConfig: false,
+        })
+      ).ignored
+    ) {
+      const count = widthFindings.length
+      const label = count === 1 ? 'finding' : 'findings'
+      options.inherited.push(`${file.name}: ${count} inherited line-width ${label}`)
+    } else {
+      for (const finding of widthFindings) {
+        failures.push(finding)
       }
     }
 
@@ -57,11 +81,23 @@ export async function check(root, options = {}) {
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const failures = await check(resolve(process.argv[2] || '.'))
+  const root = resolve(process.argv[2] || '.')
+  const retainedMarkdown =
+    process.argv[3] === '--retained-markdown'
+      ? new Set(JSON.parse(await readFile(join(root, process.argv[4]), 'utf8')))
+      : undefined
+  const inherited = []
+  const failures = await check(root, { retainedMarkdown, inherited })
+
+  for (const finding of inherited) {
+    console.log(finding)
+  }
 
   if (failures.length) {
     console.error(failures.join('\n'))
     process.exitCode = 1
+  } else if (inherited.length) {
+    console.log('Scoped lint passed with inherited reference findings.')
   } else {
     console.log('Readability, JSON and 100-column checks passed')
   }

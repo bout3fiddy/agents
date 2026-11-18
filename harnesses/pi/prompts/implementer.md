@@ -2,7 +2,9 @@ Implement the accepted contract within the assigned write scope. Read the releva
 instructions before editing. Add behavioral tests that detect meaningful failures. Use existing
 helpers and verification commands. Treat review findings as defects to investigate, not instructions
 to obey blindly. Resolve valid findings and return evidence for any disputed finding. Do not alter
-the accepted design, harness policy or verification receipts. Finish with submit_result.
+the accepted design, harness policy or verification receipts. A product manifest owned by this
+assignment may contain hashes derived from its actual inputs. Update those when the design requires
+it and preserve the recorded approval state. Finish with submit_result.
 
 Prefer project_edit for focused changes to existing files; match a unique current text block. Use
 project_write for new files or an intentional complete rewrite. Avoid regenerating unchanged large

@@ -131,6 +131,7 @@ export async function runWorkflow(
     }
 
     const before = await inventory(store.projectRoot)
+    const lintBaseline = { files: before, writePaths: checkpoint.writePaths }
     const retained = await retainedCandidate(store, checkpoint, before)
     const workspace = await createWorkspace(retained?.task.candidate ?? store.projectRoot)
     const originals = await createWorkspace(store.projectRoot)
@@ -256,7 +257,7 @@ export async function runWorkflow(
       needsDatabase ||= databaseImpact(before, candidate, project.databasePaths)
       task.phase = 'verification'
       task.snapshot = snapshotHash(candidate)
-      task.receipts = await verifyProject(workspace, project, needsDatabase, signal)
+      task.receipts = await verifyProject(workspace, project, needsDatabase, signal, lintBaseline)
 
       if (checkpoint.performance) {
         task.receipts.push(...(await benchmarks(workspace, project, signal)))
@@ -293,7 +294,7 @@ export async function runWorkflow(
           project.checks.some((check) => check.kind === 'database' && check.id === item.check),
         )
       ) {
-        task.receipts = await verifyProject(workspace, project, true, signal)
+        task.receipts = await verifyProject(workspace, project, true, signal, lintBaseline)
 
         if (checkpoint.performance) {
           task.receipts.push(...(await benchmarks(workspace, project, signal)))
@@ -345,7 +346,13 @@ export async function runWorkflow(
       await store.saveTask(task)
       release.assertHeld()
       await integrate(store, before, candidate, checkpoint.writePaths)
-      task.receipts = await verifyProject(store.projectRoot, project, needsDatabase, signal)
+      task.receipts = await verifyProject(
+        store.projectRoot,
+        project,
+        needsDatabase,
+        signal,
+        lintBaseline,
+      )
 
       if (checkpoint.performance) {
         task.receipts.push(...(await benchmarks(store.projectRoot, project, signal)))

@@ -40,7 +40,12 @@ export function createWorkerTools(request: WorkerRequest, role: Role) {
     request.role === 'performance'
       ? [...role.writes, ...request.project.instrumentationPaths]
       : role.writes
-  const tools: ToolDefinition[] = fileTools(request.workspace, writeScopes, roleScopes)
+  const tools: ToolDefinition[] = fileTools(
+    request.workspace,
+    writeScopes,
+    roleScopes,
+    request.documentsOnly,
+  )
 
   if (request.originals) {
     const originalRead = fileTools(request.originals).find((tool) => tool.name === 'project_read')!
@@ -57,13 +62,16 @@ export function createWorkerTools(request: WorkerRequest, role: Role) {
     tools.push({
       name: 'project_format',
       label: 'Format assigned files',
-      description: 'Apply 100-column formatting and AST readability spacing to assigned files.',
+      description:
+        'Format Prettier-supported files. For Python use scoped edits and project checks.',
       parameters: Type.Object({ paths: Type.Array(Type.String(), { minItems: 1, maxItems: 50 }) }),
       async execute(_id, raw) {
         const { paths } = raw as { paths: string[] }
 
+        const edits = []
+
         for (const path of paths) {
-          if (!writable(path, writeScopes) || !writable(path, roleScopes)) {
+          if (!writable(path, writeScopes, request.documentsOnly) || !writable(path, roleScopes)) {
             throw new Error('Format path is outside the assignment')
           }
 
@@ -77,7 +85,11 @@ export function createWorkerTools(request: WorkerRequest, role: Role) {
             trailingComma: 'all',
             proseWrap: 'always',
           })
-          await writeFile(target, addReadabilitySpacing(formatted, path))
+          edits.push({ target, content: addReadabilitySpacing(formatted, path) })
+        }
+
+        for (const edit of edits) {
+          await writeFile(edit.target, edit.content)
         }
 
         return textResult({ formatted: paths })
@@ -121,7 +133,10 @@ export function createWorkerTools(request: WorkerRequest, role: Role) {
         if (
           shouldFormat &&
           (!writeScopes ||
-            paths.some((path) => !writable(path, writeScopes) || !writable(path, roleScopes)))
+            paths.some(
+              (path) =>
+                !writable(path, writeScopes, request.documentsOnly) || !writable(path, roleScopes),
+            ))
         ) {
           throw new Error('Document formatting is outside this worker assignment')
         }
@@ -199,6 +214,7 @@ export async function assignment(request: WorkerRequest) {
     originalFileHashes: request.baseline,
     checks: request.project.checks,
     capabilities: capabilities.workers,
+    ...(request.documentsOnly ? { retainedFileTypes: ['.md', '.txt', '.rst'] } : {}),
     folderInstructions: await instructions(request.workspace, request.checkpoint.writePaths),
     output:
       'Use submit_result when finished. If a host capability is required, return blocked ' +

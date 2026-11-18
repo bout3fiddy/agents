@@ -6,6 +6,7 @@ import type { ToolDefinition } from '@earendil-works/pi-coding-agent'
 import type { WorkerResult } from '../src/contracts.ts'
 import type { Dispatcher } from '../src/dispatch.ts'
 import { loadRole } from '../src/roles.ts'
+import { createWorkerTools } from '../src/worker-tools.ts'
 import { createWorkspace, loadProject } from '../src/project.ts'
 import { createTaskCoordinatorTools, type TaskCoordinatorRequest } from '../src/task-coordinator.ts'
 import { evidence, fixture, hashes } from './support.ts'
@@ -174,9 +175,53 @@ test('newly detected database changes invalidate checks lacking recovery coverag
   await invoke(worker.tools, 'submit_result', pass)
 })
 
+test('branch document scopes reject misrouted manifests before any write', async (t) => {
+  const { request, signal } = await setup(t)
+  const manifest = 'src/artifact.receipt.json'
+  let dispatched = 0
+  const worker = await createTaskCoordinatorTools(request, signal, async (child) => {
+    dispatched++
+
+    if (child.role === 'task-worker') {
+      const role = await loadRole(child.role)
+      const leaf = createWorkerTools({ ...child, outputPath: request.outputPath }, role)
+
+      for (const [tool, args] of [
+        ['project_write', { path: manifest, content: '{}' }],
+        ['project_edit', { path: manifest, oldText: '{}', newText: '[]' }],
+        ['project_delete', { path: manifest }],
+        ['project_format', { paths: [manifest] }],
+      ] as const) {
+        await assert.rejects(invoke(leaf.tools, tool, args), /outside/)
+      }
+
+      await invoke(leaf.tools, 'project_write', { path: 'src/note.md', content: '# Note\n' })
+    }
+
+    if (child.role === 'implementer') {
+      await writeFile(join(request.workspace, manifest), '{}\n')
+    }
+
+    return receipt(child)
+  })
+  await assert.rejects(
+    invoke(worker.tools, 'delegate_worker', assignment('task-worker', [manifest])),
+    /implementer/,
+  )
+  assert.equal(dispatched, 0)
+  await invoke(worker.tools, 'delegate_worker', assignment('task-worker', ['src/**']))
+  await invoke(worker.tools, 'delegate_worker', assignment('implementer', [manifest]))
+  await invoke(worker.tools, 'run_checks')
+  await invoke(worker.tools, 'delegate_worker', assignment('reviewer'))
+  await invoke(worker.tools, 'submit_result', pass)
+  assert.equal(worker.result()?.verdict, 'pass')
+})
+
 test('branch edits cannot use a general task worker to bypass the implementer', async (t) => {
   const { request, signal } = await setup(t)
+  let dispatched = 0
   const worker = await createTaskCoordinatorTools(request, signal, async (child) => {
+    dispatched++
     await writeFile(join(request.workspace, 'src/value.js'), 'export const value = 7\n')
     return receipt(child)
   })
@@ -184,7 +229,15 @@ test('branch edits cannot use a general task worker to bypass the implementer', 
     invoke(worker.tools, 'delegate_worker', assignment('task-worker', ['src/**'])),
     /requires the implementer/,
   )
+  await assert.rejects(
+    invoke(worker.tools, 'delegate_worker', assignment('reviewer')),
+    /requires the implementer.*Submit blocked/,
+  )
+  await assert.rejects(invoke(worker.tools, 'run_checks'), /Submit blocked/)
+  assert.equal(dispatched, 1)
   await assert.rejects(invoke(worker.tools, 'submit_result', pass), /failed child execution/)
+  await invoke(worker.tools, 'submit_result', { ...pass, verdict: 'blocked' })
+  assert.equal(worker.result()?.verdict, 'blocked')
 })
 
 test('coordinator-reported database impact also requires fresh recovery evidence', async (t) => {

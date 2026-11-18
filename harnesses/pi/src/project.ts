@@ -4,13 +4,14 @@ import { dirname, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
   copySnapshot,
+  matches,
   inventory,
   safePath,
   snapshotHash,
   validateScope,
   readBoundedFile,
 } from './paths.ts'
-import { readJson } from './state.ts'
+import { atomicJson, readJson } from './state.ts'
 import type { Project, ProjectCheck, Receipt } from './contracts.ts'
 import { runSandboxed } from './sandbox.ts'
 
@@ -97,9 +98,12 @@ export async function loadProject(
   return { root: resolve(root), checks, instrumentationPaths, databasePaths }
 }
 
-export async function createWorkspace(root: string): Promise<string> {
+export async function createWorkspace(
+  root: string,
+  snapshot?: Map<string, Buffer>,
+): Promise<string> {
   const workspace = await mkdtemp(join(tmpdir(), 'pi-workspace-'))
-  const files = await inventory(root)
+  const files = snapshot ?? (await inventory(root))
   await copySnapshot(files, workspace)
 
   for (const name of files.keys()) {
@@ -166,8 +170,22 @@ export async function verifyProject(
   project: Project,
   database: boolean,
   signal?: AbortSignal,
+  baseline?: { files: Map<string, Buffer>; writePaths: string[] },
 ): Promise<Receipt[]> {
-  const hash = snapshotHash(await inventory(workspace))
+  const files = await inventory(workspace)
+  const hash = snapshotHash(files)
+  const ignore = files.get('.prettierignore')
+  const retained =
+    baseline && ignore && baseline.files.get('.prettierignore')?.equals(ignore)
+      ? [...files]
+          .filter(
+            ([name, bytes]) =>
+              name.endsWith('.md') &&
+              baseline.files.get(name)?.equals(bytes) &&
+              !baseline.writePaths.some((scope) => matches(name, scope)),
+          )
+          .map(([name]) => name)
+      : []
   const checks: ProjectCheck[] = [
     {
       id: 'harness-lint',
@@ -183,14 +201,27 @@ export async function verifyProject(
   for (const check of checks) {
 
     // Every command receives a disposable copy, so test code cannot alter the reviewed candidate.
-    const probe = await createWorkspace(workspace)
-    const result = await runSandboxed(probe, check.argv, check.timeoutMs, signal).finally(() =>
-      rm(probe, { recursive: true, force: true }),
-    )
+    const probe = await createWorkspace(workspace, files)
+    let result
+
+    try {
+      let argv = check.argv
+
+      if (check === checks[0] && retained.length) {
+        const manifest = '.pi/traces/retained-markdown.json'
+        await atomicJson(join(probe, manifest), retained)
+        argv = [...argv, '--retained-markdown', manifest]
+      }
+
+      result = await runSandboxed(probe, argv, check.timeoutMs, signal)
+    } finally {
+      await rm(probe, { recursive: true, force: true })
+    }
+
     const status =
       result.exitCode !== 0 || result.timedOut || result.aborted || result.truncated
         ? 'failed'
-        : hasSkippedTests(result.output)
+        : check !== checks[0] && hasSkippedTests(result.output)
           ? 'skipped'
           : 'passed'
     receipts.push({ snapshot: hash, check: check.id, status, result })

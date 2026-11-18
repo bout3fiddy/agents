@@ -44,6 +44,9 @@
 - Honor root `.prettierignore` in document tools and document integration checks. Report skipped
   formatting separately; retain the independent line-width check and path protections. Do not load
   executable project formatter configuration.
+- For scoped verification, report inherited width findings on byte-identical out-of-scope Markdown
+  excluded by the unchanged baseline formatting policy. Keep full checks on added, edited or
+  assigned files and provide the complete snapshot to project checks.
 - Record actual model/effort and request/model/tool timing under project-local `harness/timing/`.
   Respect the selected orchestrator model; implementation remains independently pinned to
   `openai-codex/gpt-6.2-astra` at high effort.
@@ -91,6 +94,9 @@
   conflicts and scope expansion. Invalidate approvals after revisions. Published branch ownership
   stays fixed; use replacement tasks for changed branch ownership. Test process stopping, retained
   edits, recovery and notification delivery across resume.
+- Branch task-workers may retain .md, .txt and .rst only. Validate exact assignments before dispatch
+  and enforce the same restriction at the file tool for wildcard scopes. Route project manifests to
+  the implementer and keep harness verification evidence host-owned.
 - Capture runtime source identity at module load. Record startup/reload IDs, reasons and actual tool
   inventories under project-local `harness/runtime/`; attach the load ID to request timing. Never
   report a newer disk revision as the version already loaded in a process. Keep role/prompt policy

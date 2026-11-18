@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { mkdir, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
@@ -16,7 +16,7 @@ import { StateStore, atomicJson } from '../src/state.ts'
 import { Delegations, activeTask } from '../src/delegation-state.ts'
 import { gitCommand, resolveRemote } from '../src/git-branches.ts'
 import { loadRole } from '../src/roles.ts'
-import { branchFixture } from '../tests/branch-fixture.ts'
+import { branchFixture, verifyBranchFixtureFiles } from '../tests/branch-fixture.ts'
 
 const githubIndex = process.argv.indexOf('--github')
 const github = githubIndex < 0 ? undefined : process.argv[githubIndex + 1]
@@ -224,6 +224,9 @@ try {
           child.verdict === 'pass',
       ),
     )
+    const lint = job.state.receipts?.find((receipt) => receipt.check === 'harness-lint')
+    assert.equal(lint?.status, 'passed')
+    assert.match(lint.result.output, /upstream\.md: 1 inherited line-width finding/)
     assert.ok(
       job.state.receipts?.some(
         (receipt) => receipt.check === 'behavior' && receipt.status === 'passed',
@@ -263,11 +266,7 @@ try {
     }
   }
 
-  for (const [path, content] of Object.entries(fixture.baselineFiles)) {
-    assert.equal(await readFile(join(root, path), 'utf8'), content)
-    assert.notEqual(await gitCommand(root, ['show', `${main}:${path}`]), content.trimEnd())
-  }
-
+  await verifyBranchFixtureFiles(root, fixture.pinned.base, main)
   assert.equal(await gitCommand(root, ['rev-parse', 'HEAD']), fixture.pinned.base)
   const completedSteps = modelSteps
   const completedAcknowledgements = notifications().length

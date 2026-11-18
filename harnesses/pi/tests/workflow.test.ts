@@ -50,6 +50,57 @@ test('skip detection covers test runners and accepts explicit zero counts', () =
   }
 })
 
+test('scoped lint distinguishes preserved reference prose from authored changes', async (t) => {
+  const item = await fixture()
+  t.after(() => rm(item.base, { recursive: true, force: true }))
+  const reference = join(item.root, 'external.md')
+  const original = 'a'.repeat(101) + '\n'
+  await writeFile(reference, original)
+  await writeFile(join(item.root, '.prettierignore'), '/external.md\n/added.md\n*.js\n')
+  const files = await inventory(item.root)
+  const project = await loadProject(item.root)
+  project.checks[0]!.argv = [
+    'node',
+    '-e',
+    'if (require("fs").readFileSync("external.md", "utf8").length !== 102) throw 1',
+  ]
+  const scoped = (writePaths = ['src/**']) =>
+    verifyProject(item.root, project, false, undefined, { files, writePaths })
+  const passed = await scoped()
+  assert.deepEqual(
+    passed.map((entry) => entry.status),
+    ['passed', 'passed'],
+  )
+  assert.match(passed[0]!.result.output, /external\.md/)
+  assert.equal((await verifyProject(item.root, project, false))[0]!.status, 'failed')
+  assert.equal((await scoped(['external.md']))[0]!.status, 'failed')
+  await writeFile(reference, 'b' + original)
+  assert.equal((await scoped())[0]!.status, 'failed')
+  await writeFile(reference, original)
+  await writeFile(join(item.root, 'added.md'), original)
+  assert.equal((await scoped())[0]!.status, 'failed')
+  await rm(join(item.root, 'added.md'))
+  await writeFile(join(item.root, 'src/value.js'), '// ' + original)
+  assert.equal((await scoped())[0]!.status, 'failed')
+  await writeFile(join(item.root, 'src/value.js'), 'export const value = 0\n')
+  const ordinary = join(item.root, 'ordinary.md')
+  await writeFile(ordinary, original)
+  const ordinaryBase = { files: await inventory(item.root), writePaths: ['src/**'] }
+  const ordinaryResult = await verifyProject(item.root, project, false, undefined, ordinaryBase)
+  assert.equal(ordinaryResult[0]!.status, 'failed')
+  assert.match(ordinaryResult[0]!.result.output, /ordinary\.md:1: line exceeds/)
+  await rm(ordinary)
+  const script = join(item.root, 'external.js')
+  await writeFile(script, '// ' + original)
+  const codeBase = { files: await inventory(item.root), writePaths: ['src/**'] }
+  const codeResult = await verifyProject(item.root, project, false, undefined, codeBase)
+  assert.equal(codeResult[0]!.status, 'failed')
+  assert.match(codeResult[0]!.result.output, /external\.js:1: line exceeds/)
+  await rm(script)
+  await writeFile(join(item.root, '.prettierignore'), '*.md\n')
+  assert.equal((await scoped())[0]!.status, 'failed')
+})
+
 test('truncated required-check output cannot hide a skipped test', async () => {
   const item = await fixture()
 
