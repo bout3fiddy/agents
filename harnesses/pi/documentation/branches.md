@@ -10,7 +10,7 @@ merging begins only when the user explicitly requests merging to main.
 ## Preparation and authority
 
 Start Pi at the Git repository root. Commit and push a settled Markdown/text design document and the
-required `.pi/harness.json` checks to remote `main`. The local design document must match that
+applicable executable project checks to remote `main`. The local design document must match that
 remote revision; unrelated local edits are preserved. A design can reference other committed
 documents. Supply only resolved decisions for the requested scope; future work can remain open.
 
@@ -24,9 +24,12 @@ acceptance checkpoint for this mode. Dependent tasks should share one orchestrat
 later batches.
 
 The initial design is limited to 16,000 characters. Required test checks must exist before model
-dispatch; database and performance tasks also require the corresponding project checks. GitHub
-remotes additionally require an authenticated `gh` CLI with repository access and permission to
-create PRs and publish branches. Provider authentication stays with the existing Pi/Claude setup.
+dispatch. The host validates the pinned commit once for the batch before registering tasks or
+creating worktrees, and each runner rechecks the integration baseline. Database and performance
+tasks also require their corresponding checks. See
+[project check discovery](../README.md#project-checks). GitHub remotes additionally require an
+authenticated `gh` CLI with repository access and permission to create PRs and publish branches.
+Provider authentication stays with the existing Pi/Claude setup.
 
 ## Execution
 

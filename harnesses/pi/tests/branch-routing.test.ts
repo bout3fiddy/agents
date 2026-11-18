@@ -7,7 +7,8 @@ import { startBranchBatch, registerBranchTools } from '../src/branch-tools.ts'
 import { registerDelegation } from '../src/delegation-tools.ts'
 import { activeTask, type DelegationStatus } from '../src/delegation-state.ts'
 import { runBranchTask } from '../src/branch-runner.ts'
-import { resolveRemote } from '../src/git-branches.ts'
+import { gitCommand, resolveRemote } from '../src/git-branches.ts'
+import { loadProject } from '../src/project.ts'
 import { captureSession } from './session-support.ts'
 import { branchRepository, coordinatorEvidence, writeFeature } from './branch-support.ts'
 
@@ -43,6 +44,47 @@ test('independent branch fanout rejects intersecting scopes before launching', a
     /disjoint write scopes/,
   )
   assert.equal(launches, 0)
+})
+
+test('fanout discovers checks at the pinned commit before registering any tasks', async (t) => {
+  const setup = await branchRepository(t)
+  const git = (args: string[]) => gitCommand(setup.root, args)
+  await git(['rm', '.pi/harness.json'])
+  const scripts = { check: 'node --test', 'test:scaffold': 'node --test' }
+  const manifest = join(setup.root, 'package.json')
+  await writeFile(manifest, JSON.stringify({ scripts }))
+  await git(['add', 'package.json'])
+  await git(['commit', '-m', 'Use executable project scripts'])
+  await git(['push', 'origin', 'HEAD:main'])
+  await writeFile(
+    manifest,
+    JSON.stringify({ scripts: { ...scripts, 'test:recovery': 'node --test' } }),
+  )
+  const storage = { ...setup.input.tasks[1]!, database: true }
+  await assert.rejects(
+    setup.launch({ ...setup.input, tasks: [setup.input.tasks[0]!, storage] }),
+    /Missing required database check on pinned main/,
+  )
+  assert.deepEqual(await setup.jobs.list(), [])
+  assert.equal((await git(['worktree', 'list', '--porcelain'])).split('worktree ').length, 2)
+  await writeFile(manifest, JSON.stringify({ scripts: { check: 'node --test' } }))
+  assert.deepEqual((await loadProject(setup.root)).checks, [], 'check alone is not a test receipt')
+  const { requests } = await setup.launch()
+  assert.equal(requests.length, 2, 'Committed scaffold tests qualify both ordinary tasks')
+  await writeFile(
+    manifest,
+    JSON.stringify({
+      scripts: { ...scripts, test: 'node --test', 'test:recovery': 'node --test' },
+    }),
+  )
+  const project = await loadProject(setup.root)
+  assert.deepEqual(
+    project.checks.map((c) => [c.kind, c.argv]),
+    [
+      ['test', ['npm', 'run', 'test']],
+      ['database', ['npm', 'run', 'test:recovery']],
+    ],
+  )
 })
 
 test('the parent continues discussion while independent branch orchestrators work', async (t) => {

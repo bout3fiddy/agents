@@ -23,12 +23,17 @@ export const defaultDatabasePaths = [
   'infra/**',
 ]
 
-export async function loadProject(root: string): Promise<Project> {
-  const adapter = await readJson<{
+type ReadMetadata = <T>(path: string) => Promise<T | undefined>
+
+export async function loadProject(
+  root: string,
+  read: ReadMetadata = (path) => readJson(join(root, path)),
+): Promise<Project> {
+  const adapter = await read<{
     checks?: ProjectCheck[]
     instrumentationPaths?: string[]
     databasePaths?: string[]
-  }>(join(root, '.pi', 'harness.json'))
+  }>('.pi/harness.json')
   const checks = adapter?.checks ?? []
 
   if (
@@ -41,15 +46,24 @@ export async function loadProject(root: string): Promise<Project> {
   }
 
   if (!adapter) {
-    const pkg = await readJson<{ scripts?: Record<string, string> }>(join(root, 'package.json'))
+    const pkg = await read<{ scripts?: Record<string, string> }>('package.json')
+    const scripts = pkg?.scripts ?? {}
+    const candidates = [
+      ['static', 'verify'],
+      ['test', 'test', 'test:unit', 'test:scaffold'],
+      ['database', 'test:database', 'test:recovery'],
+      ['benchmark', 'benchmark', 'test:performance'],
+    ] as const
 
-    for (const id of ['verify', 'test']) {
-      if (pkg?.scripts?.[id]) {
+    for (const [kind, ...names] of candidates) {
+      const name = names.find((key) => typeof scripts[key] === 'string' && scripts[key].trim())
+
+      if (name) {
         checks.push({
-          id,
-          argv: ['npm', 'run', id],
+          id: name.replaceAll(':', '-'),
+          argv: ['npm', 'run', name],
           required: true,
-          kind: id === 'test' ? 'test' : 'static',
+          kind,
           timeoutMs: 120_000,
         })
       }

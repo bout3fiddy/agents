@@ -25,6 +25,7 @@ import {
   DelegationRepairRequired,
 } from './delegation-checks.ts'
 import { loadProject } from './project.ts'
+import { requireBranchChecks } from './branch-contracts.ts'
 import { changes } from './integration.ts'
 import { digest, fileHashes, inventory, snapshotHash, readBoundedFile, safePath } from './paths.ts'
 import { validateDesign } from './contracts.ts'
@@ -174,17 +175,7 @@ export async function runBranchTask(
       }
 
       const project = { ...(await loadProject(originals)), root: request.root }
-      const required = [
-        'test',
-        ...(plan!.design.database ? ['database'] : []),
-        ...(plan!.design.performance ? ['benchmark'] : []),
-      ]
-
-      for (const kind of required) {
-        if (!project.checks.some((check) => check.required && check.kind === kind)) {
-          throw new Error(`Configure a required ${kind} check on main before branch execution`)
-        }
-      }
+      requireBranchChecks(project, plan!.design)
 
       const checkpoint = {
         ...plan!.design,

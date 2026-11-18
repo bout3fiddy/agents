@@ -290,10 +290,20 @@ through Pi's `workflow` tool. Run CLI commands from the target project's root.
 
 ## Project checks
 
-Add `.pi/harness.json` to the target project before implementation. The harness reads and freezes it
-outside worker control. Without an adapter, npm `verify` and `test` scripts are inferred when
-present. Missing required evidence blocks completion. Database work requires an explicit
-recovery/integration check; performance work requires an explicit benchmark check.
+Pi reads the project's committed check configuration before branch dispatch. An explicit
+`.pi/harness.json` takes precedence. Without it, each row below uses the first executable npm script
+present in the listed order. Receipts still require the command to run and pass.
+
+| Check kind   | npm scripts                          |
+| ------------ | ------------------------------------ |
+| General test | `test`, `test:unit`, `test:scaffold` |
+| Static       | `verify`                             |
+| Database     | `test:database`, `test:recovery`     |
+| Benchmark    | `benchmark`, `test:performance`      |
+
+A generic `check` script can combine arbitrary steps and does not establish test coverage by itself.
+Database and performance assignments require their respective check kinds. Use an adapter for other
+command names or custom timeouts. Example:
 
 ```json
 {

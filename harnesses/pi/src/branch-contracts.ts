@@ -1,5 +1,5 @@
 import { Type, type Static } from 'typebox'
-import type { Design } from './contracts.ts'
+import type { Design, Project } from './contracts.ts'
 
 export const branchTaskSchema = Type.Object(
   {
@@ -50,4 +50,26 @@ export type BranchTaskInput = {
   context: string
   writePaths: string[]
   branch: BranchPlan
+}
+
+export function requireBranchChecks(
+  project: Project,
+  scope: Pick<Design, 'database' | 'performance'>,
+) {
+  const kinds = [
+    'test',
+    ...(scope.database ? ['database'] : []),
+    ...(scope.performance ? ['benchmark'] : []),
+  ]
+  const missing = kinds.filter(
+    (kind) => !project.checks.some((check) => check.required && check.kind === kind),
+  )
+
+  if (missing.length) {
+    throw new Error(
+      `Missing required ${missing.join(', ')} check on pinned main. ` +
+        'Use executable npm scripts or declare the commands in .pi/harness.json. ' +
+        'Dispatch independent tasks with available checks separately.',
+    )
+  }
 }
