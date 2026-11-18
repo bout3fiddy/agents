@@ -78,6 +78,56 @@ test('implementation dispatch records scope and resumes without manual acceptanc
   }
 })
 
+test('local implementation reports disjoint and overlapping reservations', async (t) => {
+  const { base, store } = await fixture()
+  t.after(() => rm(base, { recursive: true, force: true }))
+  const jobs = new Delegations(store)
+  const implementation = (path: string): DelegateInput => ({
+    ...input,
+    kind: 'implementation',
+    writePaths: [path],
+    design: { ...design, writePaths: [path] },
+  })
+  const launch = async () => {}
+  const storage = await jobs.start(implementation('packages/storage/**'), origin, launch)
+  const api = implementation('apps/api/**')
+  const busy = (id: string) => (error: Error) => {
+    assert.match(error.message, /exclusive local writes/i)
+    assert.ok(error.message.includes(id))
+    assert.match(error.message, /delegate_branches/)
+    assert.doesNotMatch(error.message, /already owned|send it a message/i)
+    return true
+  }
+  await assert.rejects(jobs.start(api, origin, launch), busy(storage.request.id))
+  await assert.rejects(jobs.start(input, origin, launch), busy(storage.request.id))
+  await assert.rejects(
+    jobs.start(implementation('packages/storage/migrations.ts'), origin, launch),
+    (error: Error) => {
+      assert.match(error.message, /already owned/)
+      assert.ok(error.message.includes(storage.request.id))
+      assert.doesNotMatch(error.message, /send it a message/)
+      return true
+    },
+  )
+  assert.equal((await store.checkpoint())?.hash, storage.request.checkpointHash)
+  assert.equal((await jobs.list()).length, 1)
+  const directory = delegationDirectory(store, storage.request.id)
+  await atomicJson(join(directory, 'status.json'), { ...storage.state, status: 'paused' })
+  await assert.rejects(jobs.start(api, origin, launch), busy(storage.request.id))
+  await atomicJson(join(directory, 'status.json'), { ...storage.state, status: 'needs_attention' })
+  const owner = await jobs.start(api, origin, launch)
+  await assert.rejects(jobs.resume(storage.request.id, origin, launch), busy(owner.request.id))
+  assert.equal((await jobs.get(storage.request.id)).state.status, 'needs_attention')
+  assert.equal((await store.checkpoint())?.hash, owner.request.checkpointHash)
+  const reader = await jobs.start({ ...input, kind: 'research', writePaths: [] }, origin, launch)
+  assert.equal(reader.state.status, 'queued')
+  await assert.rejects(jobs.resume(storage.request.id, origin, launch), busy(owner.request.id))
+  await assert.rejects(
+    jobs.control(owner.request.id, 'message', 'Change the design'),
+    /fixed design/,
+  )
+})
+
 test('invalid or busy implementation dispatch cannot replace recorded scope', async () => {
   const { base, root, store } = await fixture()
   const jobs = new Delegations(store)

@@ -154,9 +154,12 @@ discussion. Simultaneous completions are batched, queued user input takes priori
 not repeat the notification. Routine progress does not start model calls. Recovery within the
 original authorization is permitted; unrelated work and publication need their own authorization.
 
-Two jobs may run concurrently on disjoint paths. Coordinators have no child-call or model-turn
-limit; their children run serially on one candidate and cannot delegate further. Explicit file tools
-and Markdown formatting reject writes to active task paths. Shell ownership is a prompt rule; host
+Two ordinary jobs may run concurrently on disjoint paths. Local implementation reserves writes
+exclusively through both `workflow` and `delegate_task` with kind `implementation`. Read-only
+research can continue alongside it. For independent concurrent builds, use `delegate_branches` with
+a committed design and the required checks. Coordinators have no child-call or model-turn limit;
+their children run serially on one candidate and cannot delegate further. Explicit file tools and
+Markdown formatting reject writes to active task paths. Shell ownership is a prompt rule; host
 integration also rejects a changed target file. Document tasks preserve unrelated foreground edits.
 Code maintenance and implementation require the complete project baseline to remain unchanged. New
 scope requires a new task. Acceptance/context reset waits for active tasks to finish or cancel.

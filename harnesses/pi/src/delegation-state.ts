@@ -158,6 +158,41 @@ export function scopesOverlap(left: string[], right: string[]): boolean {
   )
 }
 
+function checkWriteReservations(request: DelegationRequest, previous: Delegation[]): void {
+  if (!request.writePaths.length) {
+    return
+  }
+
+  const owners = previous.filter(
+    (job) =>
+      ownsTaskPaths(job.state) &&
+      (job.request.kind === 'branch') === (request.kind === 'branch') &&
+      job.request.writePaths.length > 0,
+  )
+  const overlap = owners.find((job) => scopesOverlap(request.writePaths, job.request.writePaths))
+
+  if (overlap) {
+    throw new Error(
+      `Files already owned by task ${overlap.request.id} (${overlap.request.kind}, ` +
+        `${overlap.state.status}). Inspect task_status before scheduling work on these paths.`,
+    )
+  }
+
+  const writer = owners.find(
+    (job) => request.kind === 'implementation' || job.request.kind === 'implementation',
+  )
+
+  if (writer) {
+    throw new Error(
+      'The shared implementation workflow requires exclusive local writes. ' +
+        `Task ${writer.request.id} (${writer.request.kind}, ${writer.state.status}) ` +
+        'holds a reservation on different paths. Both workflow and implementation through ' +
+        'delegate_task use the same checkpoint. Continue after the reservation is released, ' +
+        'or use delegate_branches for new independent work with a committed design and checks.',
+    )
+  }
+}
+
 export function delegationView(job: Delegation) {
   const { receipts, ...state } = job.state
   return {
@@ -327,25 +362,12 @@ export class Delegations {
         (job) => activeTask(job.state) && job.request.kind !== 'branch',
       )
 
+      checkWriteReservations(request, previous)
+
       if (active.length >= 2) {
         throw new Error(
           'Two background tasks are active; finish or cancel one before starting more',
         )
-      }
-
-      for (const job of previous.filter(
-        (entry) => ownsTaskPaths(entry.state) && entry.request.kind !== 'branch',
-      )) {
-        const exclusive = [request.kind, job.request.kind].includes('implementation')
-
-        if (
-          (exclusive && request.writePaths.length && job.request.writePaths.length) ||
-          scopesOverlap(request.writePaths, job.request.writePaths)
-        ) {
-          throw new Error(
-            `Files already owned by task ${job.request.id}; send it a message instead`,
-          )
-        }
       }
 
       if (input.design) {
@@ -583,18 +605,12 @@ export class Delegations {
       )
       const limit = job.request.kind === 'branch' ? 4 : 2
 
-      if (
-        others.filter((other) => activeTask(other.state)).length >= limit ||
-        others.some(
-          (other) =>
-            ownsTaskPaths(other.state) &&
-            (scopesOverlap(other.request.writePaths, job.request.writePaths) ||
-              ([other.request.kind, job.request.kind].includes('implementation') &&
-                other.request.writePaths.length &&
-                job.request.writePaths.length)),
+      checkWriteReservations(job.request, others)
+
+      if (others.filter((other) => activeTask(other.state)).length >= limit) {
+        throw new Error(
+          `Wait for an active task to finish before resuming; the concurrency limit is ${limit}`,
         )
-      ) {
-        throw new Error('Resume would collide with another task; pause and revise ownership first')
       }
 
       const directory = delegationDirectory(this.store, id)
@@ -672,7 +688,10 @@ export class Delegations {
         }
 
         if (job.request.kind === 'implementation') {
-          throw new Error('Cancel and accept updated scope before changing an implementation task')
+          throw new Error(
+            'This implementation task has a fixed design. Inspect task_status, then use ' +
+              'workflow with the revised design after the current reservation is released.',
+          )
         }
 
         controls.revision++

@@ -64,7 +64,10 @@ tools; their shell has no network or home access, and its generated files are di
 install dependencies, retain generated lockfiles, configure host policy, initialize Git or publish.
 Perform those authorized operations yourself and delegate only the compatible portion. Declare host
 requirements with requires when using delegate_task; preflight will reject incompatible work. Branch
-publication is a separate host-managed capability of delegate_branches.
+publication is a separate host-managed capability of delegate_branches. Local workflow and
+delegate_task with kind implementation share one checkpoint and require exclusive local writes.
+Route independent builds with a committed design and available checks through delegate_branches.
+When its checks are unavailable, keep the pending assignment until the local reservation releases.
 
 Give the user a short summary when a meaningful checkpoint changes what they can use, decide, or
 expect. This applies to your own work and delegated work. Combine related outcomes across branches,

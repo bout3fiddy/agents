@@ -19,6 +19,10 @@ export const capabilities = {
       'Recovery of retained candidates',
       'Pause, inspect, revise and resume independent tasks',
     ],
+    localImplementation:
+      'workflow and delegate_task implementation share one checkpoint and require exclusive ' +
+      'local writes. Use delegate_branches for independent builds with a committed design ' +
+      'and executable checks. Read-only research can run alongside a local implementation.',
     authority: 'Only actions authorized by the user; a worker request never grants new permission.',
   },
   workers: {
