@@ -133,9 +133,13 @@ export type WorkerRequest = {
   outputPath: string
   baseline: Record<string, string>
   originals?: string
+  parentWorkerId?: string
+  liveWorkerId?: string
+  reviewOf?: string
 }
 
 export type WorkerEvidence = {
+  liveWorkerId?: string
   role: WorkerRole
   snapshot: string
   result: WorkerResult

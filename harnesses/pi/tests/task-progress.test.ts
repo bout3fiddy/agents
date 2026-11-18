@@ -25,7 +25,10 @@ test('periodic progress reaches an idle orchestrator without a new model turn', 
     ],
     async (context) => {
       requests++
-      observed = JSON.stringify(context.messages).includes('Applying a focused edit')
+      const text = JSON.stringify(context.messages)
+      observed =
+        text.includes('Applying a focused edit') &&
+        text.includes('Recovery decisions are documented')
       return [{ type: 'text', text: 'Discussion continues with current worker progress.' }]
     },
   )
@@ -60,6 +63,10 @@ test('periodic progress reaches an idle orchestrator without a new model turn', 
         updatedAt: new Date().toISOString(),
       },
     })
+    await atomicJson(join(directory, 'coordinator.json.summary.json'), {
+      summary: 'Recovery decisions are documented',
+      updatedAt: new Date().toISOString(),
+    })
     const notices = () =>
       session.sessionManager
         .getEntries()
@@ -72,6 +79,8 @@ test('periodic progress reaches an idle orchestrator without a new model turn', 
     }
 
     assert.equal(notices().length, 1)
+    const notice = notices()[0]
+    assert.equal(notice?.type === 'custom_message' && notice.display, false)
     assert.equal(requests, 0, 'Routine progress must not interrupt or wake the model')
     assert.equal((await jobs.get(job.request.id)).state.progress?.child?.tool, 'project_edit')
     await session.prompt('Continue discussing the next choice.')

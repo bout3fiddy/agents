@@ -158,6 +158,32 @@ Other readers may observe a partially replayed batch, but all participants remai
 Revision baselines supersede archived steering without reusing review authorization. Branch tasks
 keep their worktree and fixed scope; changing branch ownership requires replacement tasks.
 
+## Live worker observation and guidance
+
+Each new coordinator and execution worker owns a UUID directory under `harness/workers/`. Immutable
+metadata records role, assigned model, task, scope, candidate path, process and parent. Review links
+point to the latest author whose candidate is being reviewed. Mutable state and normalized visible
+conversation entries mirror real SDK/Claude events; raw provider traces remain intact. Hidden model
+reasoning is not copied into the viewer. Streaming state writes are throttled to twice per second.
+The viewer reads complete JSONL records, bounds displayed history, sanitizes terminal controls and
+isolates damaged records. A dead owner process yields a stopped state rather than perpetual running.
+
+The picker and optional noncapturing overlay poll these files without opening another provider
+session or changing the active host session. Active/Past filtering retains relevant ancestors and
+reviewed authors. New workers support a persistent guidance mailbox protected by an OS lock. Pi
+steering queues the exact text and acknowledges actual user-message consumption. The Claude MCP
+bridge returns new guidance before the next proposed tool, or alongside the result of a tool already
+in progress. Long tools never hold the mailbox lock. Final result acceptance shares that lock with
+sending, so a send either blocks premature completion or explicitly fails as too late. These are
+delivery receipts; task application still requires ordinary completion gates.
+
+Direct child guidance is mirrored into the task coordinator's existing revision controls, and the
+foreground receives a hidden next-turn context entry without a wakeup. Mailboxes preserve up to 32
+undelivered messages and the latest 100 delivered receipts; raw conversations preserve consumed
+messages. Guidance cannot alter immutable write/tool scope. Legacy task rows show the saved
+coordinator session and route messages through existing task controls. Standalone design advice
+keeps its consultation inspection and cancellation path.
+
 ## Workflow and persistence
 
 Independent remote-branch execution is described in [branches.md](branches.md). A parent Pi session
@@ -243,9 +269,10 @@ and matching hash.
 
 Worker progress is persisted separately from task controls/status, including active child and tool.
 Codex streaming events and Claude output update activity timestamps; coordinators forward child
-progress. Periodic progress messages enter context without waking an idle model. A silent task gets
-one attention notice per unchanged activity point, while completion and genuine blockers wake the
-orchestrator. It must inspect evidence, resolve authorized host-only operations or report the actual
-external blocker; repeated identical incapable workers are not a recovery strategy. Recovery first
-reconciles current project state and user updates; work already completed directly must not be
-retried or overwritten from an old failed candidate.
+progress. Periodic progress messages enter context privately without waking an idle model. Optional
+`report_progress` summaries capture meaningful findings or phase changes without mandatory chatter.
+A silent task gets one attention notice per unchanged activity point, while completion and genuine
+blockers wake the orchestrator. It must inspect evidence, resolve authorized host-only operations or
+report the actual external blocker; repeated identical incapable workers are not a recovery
+strategy. Recovery first reconciles current project state and user updates; work already completed
+directly must not be retried or overwritten from an old failed candidate.

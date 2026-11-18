@@ -59,7 +59,7 @@ function resultMessage(jobs: Delegation[]): CustomMessageEntryDraft {
   return {
     type: 'custom_message',
     customType: 'pi-task-result',
-    display: true,
+    display: false,
     content:
       'Background task outcome. Briefly acknowledge the outcome and any blocker, ' +
       'then continue the discussion. For failures, inspect the retained candidate and evidence. ' +
@@ -74,6 +74,7 @@ function resultMessage(jobs: Delegation[]): CustomMessageEntryDraft {
 }
 
 export function registerDelegation(pi: ExtensionAPI, launch: Launcher = launchDelegation) {
+  pi.registerMessageRenderer('pi-task-progress', () => ({ render: () => [], invalidate() {} }))
   let current: ExtensionContext | undefined
   let closed = false
   let collecting = false
@@ -167,7 +168,7 @@ export function registerDelegation(pi: ExtensionAPI, launch: Launcher = launchDe
         messages.push({
           type: 'custom_message',
           customType: attention ? 'pi-task-attention' : 'pi-task-progress',
-          display: true,
+          display: false,
           content:
             (attention
               ? 'Task has no recorded activity for three minutes. Inspect status and traces; ' +

@@ -16,6 +16,8 @@ import { atomicJson, readJson } from './state.ts'
 import { runClaudeWorker } from './claude-worker.ts'
 import { workerAbortSignal } from './sandbox.ts'
 import { progressReporter } from './progress.ts'
+import { LiveWorker } from './worker-live.ts'
+import { attachLiveSession } from './worker-live-session.ts'
 
 export function explicitResources(prompt: string): ResourceLoader {
   return {
@@ -79,6 +81,19 @@ export async function runWorker(request: WorkerRequest): Promise<WorkerEvidence>
     }),
     sessionManager: SessionManager.create(request.workspace, `${request.outputPath}.sessions`),
   })
+  const live = await LiveWorker.start(request.project.root, {
+    role: request.role,
+    model: modelId,
+    task: request.task,
+    scope: request.checkpoint.writePaths,
+    writeLimits: role.writes,
+    output: request.outputPath,
+    workspace: request.workspace,
+    backend: 'pi',
+    parentId: request.parentWorkerId,
+    reviewOf: request.reviewOf,
+  })
+  const liveSession = attachLiveSession(session, live, worker.invalidateResult)
   let modelError: string | undefined
   const abort = () => {
     void session.abort()
@@ -118,7 +133,13 @@ export async function runWorker(request: WorkerRequest): Promise<WorkerEvidence>
     await session.prompt(JSON.stringify(task))
     workerAbortSignal.throwIfAborted()
 
-    while (!worker.result()) {
+    while (true) {
+      await liveSession.settleGuidance()
+
+      if (worker.result() && (await live.mailbox.seal())) {
+        break
+      }
+
       if (modelError) {
         throw new Error(modelError)
       }
@@ -136,17 +157,26 @@ export async function runWorker(request: WorkerRequest): Promise<WorkerEvidence>
     }
 
     await progress.update({ stage: 'complete', message: worker.result()!.summary })
+    await live.finish(
+      worker.result()!.verdict === 'pass' ? 'complete' : 'needs_attention',
+      worker.result()!.summary,
+    )
     return {
       role: request.role,
+      liveWorkerId: live.info.id,
       snapshot: snapshotHash(await inventory(request.workspace)),
       result: worker.result()!,
       commands: worker.commands,
       turns,
       model: modelId,
     }
+  } catch (error) {
+    await live.finish(workerAbortSignal.aborted ? 'cancelled' : 'failed', String(error))
+    throw error
   } finally {
     workerAbortSignal.removeEventListener('abort', abort)
     session.dispose()
+    await liveSession.dispose()
     await progress.settle()
     await modelRuntime.settleCredentialWrites()
   }

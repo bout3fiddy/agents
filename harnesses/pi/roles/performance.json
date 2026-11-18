@@ -17,7 +17,8 @@
     "original_read",
     "WebSearch",
     "WebFetch",
-    "document_check"
+    "document_check",
+    "report_progress"
   ],
   "writes": ["benchmark/**", "benchmarks/**", "scaffolding/**", "tests/performance/**"],
   "mayDelegate": false,

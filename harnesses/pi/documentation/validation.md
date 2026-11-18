@@ -3,6 +3,30 @@
 Validated locally on 18 November 2026 with macOS, Node 26.12.1, Pi 1.5.2, Claude Code 2.1.326 and
 Bun 1.3.5.
 
+## Live worker conversations and hierarchy (0.5.0)
+
+All 203 Pi tests pass with no skips, including formatting, executable lint and strict TypeScript
+checks. Repository-wide code lint passes. Actual SDK tests open the picker and noncapturing panel
+while the host model is streaming, preserve its session and request count, and consume worker
+guidance without aborting a model request. Tests race guidance against completion, deliver during
+long tools, preserve text/Unicode, isolate damaged traces, retain reviewed authors in the Active
+tree and mirror child guidance into coordinator controls. Private progress includes meaningful
+summaries without waking the model or rendering raw progress blocks.
+
+The real Codex/Fable guidance run passed in 141.1 seconds. Dispatch returned in 11.8 seconds and the
+host answered another discussion prompt in 4.7 seconds while work continued. Guidance changed queue
+capacity from 100 to 120 in the live document worker, then reached the independent reviewer. Both
+delivery receipts were recorded and the correct document integrated. Evidence:
+`reports/workers-1794960236442/`. The accepted implementation workflow also passed in one round with
+real Astra and Fable: `reports/2026-11-18T00-12-19.283Z/`.
+
+The installed CLI passed a disposable PTY test with explicitly synthetic workers at 140, 80 and 40
+columns. It exercised hierarchy, Active/Past, conversation, metadata, task prompt, guidance, host
+input with the panel open, narrow-terminal hiding and reload identity. Screen captures and raw ANSI
+output are retained under `reports/terminal-1794961119/`. Direct child guidance requires newly
+started workers; legacy jobs expose coordinator control. The panel uses an overlay and can cover
+underlying text. Standalone design consultations retain their existing inspection tools.
+
 ## Trace audit: document exclusions and completion diagnostics (0.4.1)
 
 The hourly audit found eleven excluded design files incorrectly reported as requiring formatting.

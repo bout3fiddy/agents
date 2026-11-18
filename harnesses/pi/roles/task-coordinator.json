@@ -12,7 +12,8 @@
     "read_reference",
     "document_check",
     "delegate_worker",
-    "submit_result"
+    "submit_result",
+    "report_progress"
   ],
   "writes": [],
   "mayDelegate": true,

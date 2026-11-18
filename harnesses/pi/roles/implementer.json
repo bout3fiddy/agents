@@ -15,7 +15,8 @@
     "read_reference",
     "project_format",
     "original_read",
-    "document_check"
+    "document_check",
+    "report_progress"
   ],
   "writes": ["**"],
   "mayDelegate": false,

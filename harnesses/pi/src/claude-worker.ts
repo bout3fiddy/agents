@@ -9,6 +9,8 @@ import { rolePrompt } from './roles.ts'
 import { assignment } from './worker-tools.ts'
 import { inventory, snapshotHash } from './paths.ts'
 import { progressReporter } from './progress.ts'
+import { LiveWorker } from './worker-live.ts'
+import { ClaudeLiveTrace } from './worker-live-claude.ts'
 import {
   validateResult,
   type CommandResult,
@@ -45,7 +47,7 @@ export function claudeArguments(
     role.thinking,
     '--output-format',
     stream ? 'stream-json' : 'json',
-    ...(stream ? ['--verbose'] : []),
+    ...(stream ? ['--verbose', '--include-partial-messages'] : []),
     '-p',
   ]
 }
@@ -97,7 +99,22 @@ export async function runClaudeWorker(request: WorkerRequest, role: Role): Promi
   const requestPath = `${request.outputPath}.request.json`
   const configPath = join(scratch, 'mcp.json')
   const promptPath = join(scratch, 'system.txt')
-  await atomicJson(requestPath, request)
+  const live = await LiveWorker.start(request.project.root, {
+    role: request.role,
+    model: `claude-cli/${role.model}`,
+    task: request.task,
+    scope: request.checkpoint.writePaths,
+    writeLimits:
+      request.role === 'performance'
+        ? [...role.writes, ...request.project.instrumentationPaths]
+        : role.writes,
+    output: request.outputPath,
+    workspace: request.workspace,
+    backend: 'claude',
+    parentId: request.parentWorkerId,
+    reviewOf: request.reviewOf,
+  })
+  await atomicJson(requestPath, { ...request, liveWorkerId: live.info.id })
   await atomicJson(configPath, {
     mcpServers: {
       piworker: {
@@ -130,6 +147,7 @@ export async function runClaudeWorker(request: WorkerRequest, role: Role): Promi
     let overflow = false
     let outputBytes = 0
     let traceError: unknown
+    const liveTrace = new ClaudeLiveTrace(live)
     child.stdout.on('data', (chunk: Buffer) => {
       void progress
         .update({ stage: 'model', message: 'Claude activity received' }, true)
@@ -150,6 +168,7 @@ export async function runClaudeWorker(request: WorkerRequest, role: Role): Promi
 
         // Append raw bytes as they arrive, preserving UTF-8 boundaries and live crash evidence.
         appendFileSync(tracePath, chunk)
+        liveTrace.push(chunk)
       } catch (error) {
         traceError = error
         child.kill('SIGKILL')
@@ -190,15 +209,24 @@ export async function runClaudeWorker(request: WorkerRequest, role: Role): Promi
     }
 
     await progress.update({ stage: 'complete', message: evidence.result.summary })
+    await live.finish(
+      evidence.result.verdict === 'pass' ? 'complete' : 'needs_attention',
+      evidence.result.summary,
+    )
     return {
       role: request.role,
+      liveWorkerId: live.info.id,
       snapshot: snapshotHash(await inventory(request.workspace)),
       result: validateResult(evidence.result),
       commands: evidence.commands,
       turns: response.num_turns ?? 0,
       model: `claude-cli/${Object.keys(response.modelUsage ?? {})[0] ?? role.model}`,
     }
+  } catch (error) {
+    await live.finish('failed', String(error))
+    throw error
   } finally {
+    await live.settle()
     await progress.settle()
     await rm(scratch, { recursive: true, force: true })
   }

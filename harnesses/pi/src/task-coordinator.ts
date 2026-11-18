@@ -39,6 +39,8 @@ import { explicitResources } from './worker.ts'
 import { createWorkerTools } from './worker-tools.ts'
 import { progressReporter } from './progress.ts'
 import { capabilities } from './capabilities.ts'
+import { LiveWorker } from './worker-live.ts'
+import { attachLiveSession } from './worker-live-session.ts'
 
 export interface TaskCoordinatorRequest {
   task: string
@@ -555,7 +557,35 @@ export async function runTaskCoordinator(
   const controller = new AbortController()
   const combined = AbortSignal.any([signal, controller.signal])
   const store = new StateStore(request.project.root, dirname(request.outputPath))
-  const worker = await createTaskCoordinatorTools(request, combined, dispatcher(store))
+  const live = await LiveWorker.start(request.project.root, {
+    role: coordinatorRole(request),
+    model: modelId,
+    task: request.task,
+    scope: request.checkpoint.writePaths,
+    output: request.outputPath,
+    workspace: request.workspace,
+    backend: 'pi',
+  })
+  const dispatch = dispatcher(store)
+  let lastAuthor: string | undefined
+  const worker = await createTaskCoordinatorTools(
+    request,
+    combined,
+    async (child, abortSignal, progress) => {
+      const review = ['reviewer', 'database-reviewer', 'performance'].includes(child.role)
+      const evidence = await dispatch(
+        { ...child, parentWorkerId: live.info.id, reviewOf: review ? lastAuthor : undefined },
+        abortSignal,
+        progress,
+      )
+
+      if (['implementer', 'task-worker'].includes(child.role)) {
+        lastAuthor = evidence.liveWorkerId
+      }
+
+      return evidence
+    },
+  )
   const { session } = await createAgentSession({
     cwd: request.workspace,
     agentDir,
@@ -571,6 +601,7 @@ export async function runTaskCoordinator(
     }),
     sessionManager: SessionManager.create(request.workspace, `${request.outputPath}.sessions`),
   })
+  const liveSession = attachLiveSession(session, live, worker.invalidateResult)
   let turns = 0
   let controlRevision = 0
   let queuedRevision = 0
@@ -713,7 +744,13 @@ export async function runTaskCoordinator(
     await refreshControls()
     combined.throwIfAborted()
 
-    while (!worker.result()) {
+    while (true) {
+      await liveSession.settleGuidance()
+
+      if (worker.result() && (await live.mailbox.seal())) {
+        break
+      }
+
       await session.prompt(
         request.kind === 'branch'
           ? 'Continue autonomous implementation, repairs, checks and reviews within the design. ' +
@@ -741,6 +778,7 @@ export async function runTaskCoordinator(
       throw new Error('Task controls changed before completion; a fresh result is required')
     }
 
+    await live.finish(result.verdict === 'pass' ? 'complete' : 'needs_attention', result.summary)
     return {
       result,
       children: worker.children(),
@@ -749,6 +787,9 @@ export async function runTaskCoordinator(
       controlRevision,
       ...(request.kind === 'branch' ? { checks: worker.checks() } : {}),
     }
+  } catch (error) {
+    await live.finish(combined.aborted ? 'cancelled' : 'failed', String(error))
+    throw error
   } finally {
     clearInterval(controlsTimer)
     combined.removeEventListener('abort', abort)
@@ -757,6 +798,7 @@ export async function runTaskCoordinator(
     await session.abort()
     await worker.settle()
     session.dispose()
+    await liveSession.dispose()
     await worker.progress.settle()
     await modelRuntime.settleCredentialWrites()
   }

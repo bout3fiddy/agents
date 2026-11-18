@@ -17,6 +17,7 @@ import { safePath, writable } from './paths.ts'
 import { format } from 'prettier'
 import { checkDocuments } from './document-tools.ts'
 import { capabilities } from './capabilities.ts'
+import { atomicJson } from './state.ts'
 
 // @ts-expect-error Shared formatting code is JavaScript.
 import { addReadabilitySpacing } from '../scripts/linting/readability.mjs'
@@ -85,6 +86,22 @@ export function createWorkerTools(request: WorkerRequest, role: Role) {
   }
 
   tools.push(
+    {
+      name: 'report_progress',
+      label: 'Report meaningful progress',
+      description:
+        'Update a concise summary after a meaningful finding, phase change or blocker. ' +
+        'Do not call every turn. This updates private status without interrupting discussion.',
+      parameters: Type.Object({ summary: Type.String({ minLength: 1, maxLength: 400 }) }),
+      async execute(_id, raw) {
+        const { summary } = raw as { summary: string }
+        await atomicJson(`${request.outputPath}.summary.json`, {
+          summary,
+          updatedAt: new Date().toISOString(),
+        })
+        return textResult({ recorded: true })
+      },
+    },
     {
       name: 'document_check',
       label: 'Check assigned Markdown documents',
@@ -169,6 +186,9 @@ export function createWorkerTools(request: WorkerRequest, role: Role) {
     tools: tools.filter((tool) => role.tools.includes(tool.name)),
     commands,
     result: () => submitted,
+    invalidateResult: () => {
+      submitted = undefined
+    },
   }
 }
 

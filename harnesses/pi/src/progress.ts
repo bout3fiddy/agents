@@ -8,6 +8,7 @@ export type TaskProgress = {
   tool?: string
   message?: string
   child?: TaskProgress
+  summary?: string
 }
 
 /** Each process owns one progress file; parent records point to the active child. */
@@ -36,7 +37,9 @@ export function progressReporter(output: string, role?: string) {
 }
 
 export async function readProgress(output: string): Promise<TaskProgress | undefined> {
-  return readJson<TaskProgress>(`${output}.progress.json`)
+  const progress = await readJson<TaskProgress>(`${output}.progress.json`)
+  const summary = await readJson<{ summary: string }>(`${output}.summary.json`)
+  return progress ? { ...progress, ...(summary ? { summary: summary.summary } : {}) } : undefined
 }
 
 /** Accepted workflows use the same parent-visible activity stream as task coordinators. */

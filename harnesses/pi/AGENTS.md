@@ -18,6 +18,11 @@
 - Run `npm run test:live:host` for host/delegation routing and `npm run test:live:recovery` for
   pause, scope reassignment and resumption. These fixtures use disposable projects and preserve
   their reports under `reports/`; never use active user work as an interruption test fixture.
+- Run `npm run test:live:workers` for live conversation, guidance or worker hierarchy changes. Use
+  `scripts/check-workers-terminal.py` as documented in README for actual CLI navigation and layout.
+  Keep viewing separate from session switching, cancellation and resumption. Group coordinator
+  children and related reviews; retain completed ancestors as context when needed. Show delivery
+  state honestly and preserve the exact guidance text and immutable worker scope.
 - The orchestrator has normal host shell and file tools. It workshops designs and makes small, quick
   edits directly. Honor explicit delegation and send lengthy work to background task coordinators
   while discussion continues. Delegate substantial implementation to Astra high; Fable 5.2 medium or
@@ -71,6 +76,10 @@
   attention notice when activity is absent, inspect the cause, and recover within original
   authority. Silence alone never cancels work. Test progress delivery and reload deduplication with
   the real SDK.
+- Keep internal progress messages hidden from the user. Worker-authored summaries describe
+  meaningful findings, phases or blockers; telemetry remains automatic. Guidance requests are
+  exceptional and identify a concrete missing decision or capability. `/workers` exposes live status
+  and optional metadata without flooding the orchestrator conversation.
 - Keep later specialist reviews with the coordinator instead of blocking leaf acceptance on them.
   Completion diagnostics must identify the outstanding role and write scope. Require matching-scope
   clearance and reuse passing reviews when the candidate is unchanged.

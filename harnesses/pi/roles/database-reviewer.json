@@ -11,7 +11,8 @@
     "submit_result",
     "original_read",
     "WebSearch",
-    "WebFetch"
+    "WebFetch",
+    "report_progress"
   ],
   "writes": [],
   "mayDelegate": false,

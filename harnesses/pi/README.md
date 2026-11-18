@@ -106,11 +106,13 @@ capability is encountered. The host inspects retained work and completes authori
 instead of repeating the same blocked worker.
 
 Active workers persist phase/tool/child progress. At most once per minute, fresh progress is added
-to the orchestrator context without interrupting discussion or triggering a model turn. Three
-minutes without recorded activity produces one attention notice for that activity point; age alone
-never cancels work. `task_status` exposes progress and activity age. Completion and real blockers
-wake the orchestrator for acknowledgement and authorized recovery. Worker `project_edit` changes one
-unique text block, avoiding regeneration of unchanged large files.
+privately to orchestrator context without a model turn or visible progress block. Workers use
+`report_progress` for meaningful findings, phase changes or concrete blockers. Ordinary activity is
+recorded automatically; workers need no periodic status calls or guidance questions. Three minutes
+without recorded activity produces one attention notice for that activity point; age alone never
+cancels work. `task_status` exposes progress and activity age. Completion and real blockers wake the
+orchestrator for acknowledgement and authorized recovery. Worker `project_edit` changes one unique
+text block, avoiding regeneration of unchanged large files.
 
 The orchestrator keeps `bash`, `read`, `write`, `edit`, `grep`, `find` and `ls`. It applies
 repository lint and appropriate checks to its own changes. `document_check` checks or formats
@@ -176,6 +178,44 @@ and their results are recorded in the Claude JSONL trace. Research supplements p
 
 Run `npm run test:live:delegation -- --automatic` to exercise document routing from an ordinary
 request, concurrent discussion, completion acknowledgement and reload receipts.
+
+## Browse subagents
+
+`/workers` opens a live picker with Active and Past tabs. Coordinators group their children; reviews
+sit beneath the worker whose candidate they inspect. A completed worker remains visible as context
+while its review runs. Separate coordinators retain separate groups. Opening or closing the picker
+keeps the existing host and worker sessions running.
+
+| Key                 | Action                                                                    |
+| ------------------- | ------------------------------------------------------------------------- |
+| Tab or Left/Right   | Switch Active/Past                                                        |
+| Up/Down, Enter      | Select and open a conversation                                            |
+| g                   | Compose guidance; Enter sends, Escape cancels input                       |
+| d                   | Toggle model, delegator, repository, worktree/candidate, branch and scope |
+| p                   | Toggle the complete delegated task prompt                                 |
+| PgUp/PgDn, Home/End | Scroll history or return to latest activity                               |
+| l                   | Load older conversation history                                           |
+| Escape              | Return to the picker, then to the orchestrator                            |
+| Ctrl+O              | Return directly to the orchestrator                                       |
+
+`/workers panel` toggles a compact, noncapturing panel at the upper right. It lists active subagents
+with the same hierarchy and leaves keyboard focus in the host input. Pi's extension API supplies an
+overlay, so it can cover text beneath it; it does not reserve a permanent sidebar column. The panel
+hides below 120 terminal columns and shows an overflow count when more workers exist than fit.
+
+Guidance goes directly to the selected existing worker. Pi workers consume it through SDK steering;
+Claude workers receive it at their next scoped tool boundary. A tool already running continues.
+Queued and delivered states are distinct; delivery means the worker received the message, without
+claiming the requested change is finished. Final submission cannot pass with accepted, undelivered
+guidance. A stopped worker retains undelivered messages visibly. The parent task coordinator
+receives child guidance too, and the host retains it privately for the next discussion turn.
+Guidance keeps the original file and tool authority; scope changes still use the task revision
+workflow.
+
+Workers started before this feature expose their saved coordinator conversation and task controls;
+the picker labels guidance as routed to that coordinator. Direct child channels are available for
+workers started with this version. Design consultations remain available through
+`design_consultation`; the picker covers execution workers and their coordinators/reviewers.
 
 ## Verify the loaded runtime
 
@@ -319,6 +359,7 @@ npm run test:live
 npm run test:live:basic
 npm run test:live:workshop
 npm run test:live:web
+npm run test:live:workers
 ```
 
 The live test uses real model calls and a disposable SQLite ledger. It exercises seeded
@@ -335,6 +376,18 @@ engineering reviewer, including source citations and the scoped MCP result hando
 
 The basic live case exercises a seeded parser contract and confirms that database and performance
 roles stay inactive when the accepted design does not need them.
+
+The workers live case sends guidance to real Codex and Fable workers while the host continues a
+separate discussion. It checks delivery, final integration and the Past view. The deterministic
+terminal fixture exercises the installed CLI, keyboard focus, hierarchy, guidance, metadata, panel
+and resizing without model requests:
+
+```sh
+uv run --with pexpect --with pyte --with pillow python scripts/check-workers-terminal.py
+```
+
+Its synthetic workers and PTY live in a disposable project; screen captures and raw terminal output
+remain under `reports/terminal-*/`. It never opens or changes the user's existing terminal sessions.
 
 Project-local traces live in `.pi/traces/` under the directory where Pi starts:
 

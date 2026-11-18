@@ -17,11 +17,13 @@ import { Delegations, activeTask, delegationView } from './delegation-state.ts'
 import { runtimeVersion } from './runtime-version.ts'
 import { registerBranchTools } from './branch-tools.ts'
 import { capabilities } from './capabilities.ts'
+import { registerWorkers } from './workers-command.ts'
 
 // A running generation keeps matching code, prompts and tool policy until a real reload.
 const orchestratorPolicy = Promise.all([loadRole('orchestrator'), rolePrompt('orchestrator')])
 
 export default function harness(pi: ExtensionAPI): void {
+  registerWorkers(pi)
   const workshop = registerWorkshop(pi)
   registerWorkshopContext(pi)
   registerDocumentTools(pi)

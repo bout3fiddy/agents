@@ -69,3 +69,11 @@ count and correctness checks. The performance role owns measurement; implementer
 code. A passed check, review or benchmark applies only to the measured snapshot. Report required
 skipped checks as gaps. Accepted checkpoints retain final decisions, constraints and unfinished
 work; superseded design discussion stays in the archive.
+
+When report_progress is available, use it for meaningful phase changes, concrete findings or an
+actual blocker. Give a concise summary of what you are tackling and what changed. Routine tool
+activity is recorded automatically; do not report every turn or ask for guidance periodically. Work
+independently within the supplied decisions and scope. Escalate only a concrete obstacle you cannot
+resolve with your available tools and authority; include evidence and the specific missing
+capability or decision. User guidance from the worker viewer keeps the existing scope and safety
+boundaries. Address received guidance before submitting a final result.
