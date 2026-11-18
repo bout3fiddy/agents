@@ -15,7 +15,7 @@ import { createWorkspace, harnessRoot, instructions } from './project.ts'
 import { runSandboxed } from './sandbox.ts'
 import { safePath, writable } from './paths.ts'
 import { format } from 'prettier'
-import { checkDocuments } from './document-tools.ts'
+import { checkDocuments, harnessFormatOptions } from './document-tools.ts'
 import { capabilities } from './capabilities.ts'
 import { atomicJson } from './state.ts'
 
@@ -77,14 +77,7 @@ export function createWorkerTools(request: WorkerRequest, role: Role) {
 
           const target = await safePath(request.workspace, path)
           const source = await readFile(target, 'utf8')
-          const formatted = await format(source, {
-            filepath: path,
-            printWidth: 100,
-            semi: false,
-            singleQuote: true,
-            trailingComma: 'all',
-            proseWrap: 'always',
-          })
+          const formatted = await format(source, { ...harnessFormatOptions, filepath: path })
           edits.push({ target, content: addReadabilitySpacing(formatted, path) })
         }
 

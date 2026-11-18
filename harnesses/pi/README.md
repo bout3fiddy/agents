@@ -122,11 +122,11 @@ of unchanged large files.
 
 The orchestrator keeps `bash`, `read`, `write`, `edit`, `grep`, `find` and `ls`. It applies
 repository lint and appropriate checks to its own changes. `document_check` checks or formats
-selected Markdown files with the pinned formatter and 100-column policy. Content correctness and
-links still need review. Root `.prettierignore` exclusions skip formatting checks and writes,
-including the document integration gate. Results list these paths in `formattingSkipped`; the
-independent 100-column check still applies. Formatter configuration code is never loaded by this
-tool.
+selected Markdown files with the pinned formatter and 100-column policy. Fenced code examples use
+the same Prettier settings as source files formatted by workers. Content correctness and links still
+need review. Root `.prettierignore` exclusions skip formatting checks and writes, including the
+document integration gate. Results list these paths in `formattingSkipped`; the independent
+100-column check still applies. Formatter configuration code is never loaded by this tool.
 
 During scoped verification, Pi records inherited line-width findings on unchanged Markdown listed in
 the original root `.prettierignore` outside the task's write scope. The receipt names each affected

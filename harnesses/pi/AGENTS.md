@@ -43,7 +43,8 @@
   historical tool payloads from working context.
 - Honor root `.prettierignore` in document tools and document integration checks. Report skipped
   formatting separately; retain the independent line-width check and path protections. Do not load
-  executable project formatter configuration.
+  executable project formatter configuration. Use the same pinned Prettier options for Markdown code
+  fences, source formatting and the document integration gate.
 - For scoped verification, report inherited width findings on byte-identical out-of-scope Markdown
   excluded by the unchanged baseline formatting policy. Keep full checks on added, edited or
   assigned files and provide the complete snapshot to project checks.

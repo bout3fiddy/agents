@@ -5,6 +5,14 @@ import type { ExtensionAPI } from '@earendil-works/pi-coding-agent'
 import { readBoundedFile, safePath } from './paths.ts'
 import { textResult } from './file-tools.ts'
 
+export const harnessFormatOptions = {
+  printWidth: 100,
+  semi: false,
+  singleQuote: true,
+  trailingComma: 'all',
+  proseWrap: 'always',
+} satisfies prettier.Options
+
 export async function checkDocuments(root: string, paths: string[], format: boolean) {
   if (!paths.length || paths.length > 24 || new Set(paths).size !== paths.length) {
     throw new Error('Select 1–24 distinct Markdown files')
@@ -35,11 +43,7 @@ export async function checkDocuments(root: string, paths: string[], format: bool
       })
       const formatted = ignored
         ? source
-        : await prettier.format(source, {
-            parser: 'markdown',
-            printWidth: 100,
-            proseWrap: 'always',
-          })
+        : await prettier.format(source, { ...harnessFormatOptions, parser: 'markdown' })
       return { path, absolute, source, formatted, ignored }
     }),
   )

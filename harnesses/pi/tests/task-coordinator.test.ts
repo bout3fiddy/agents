@@ -149,6 +149,32 @@ test('mixed unsupported formatting leaves earlier files intact', async (t) => {
   assert.equal(await readFile(path, 'utf8'), source)
 })
 
+test('Markdown and source formatters agree on fenced TypeScript', async (t) => {
+  const { request } = await setup(t)
+  const worker = createWorkerTools(
+    { ...request, role: 'task-worker' },
+    await loadRole('task-worker'),
+  )
+  const path = 'src/guide.md'
+  const absolute = join(request.workspace, path)
+  const canonical = ['# Usage', '', '```ts', "client.release('pending')", '```', ''].join('\n')
+  const unformatted = canonical.replace("release('pending')", 'release("pending");')
+
+  await writeFile(absolute, unformatted)
+  await invoke(worker.tools, 'project_format', { paths: [path] })
+  assert.equal(await readFile(absolute, 'utf8'), canonical)
+  const checked = await invoke(worker.tools, 'document_check', { paths: [path] })
+  const report = checked.content[0]
+  assert.ok(report?.type === 'text')
+  assert.equal(JSON.parse(report.text).status, 'passed')
+
+  await writeFile(absolute, unformatted)
+  await invoke(worker.tools, 'document_check', { paths: [path], format: true })
+  assert.equal(await readFile(absolute, 'utf8'), canonical)
+  await invoke(worker.tools, 'project_format', { paths: [path] })
+  assert.equal(await readFile(absolute, 'utf8'), canonical)
+})
+
 test('task-worker can retain scoped edits but cannot delegate', async (t) => {
   const { request } = await setup(t)
   const role = await loadRole('task-worker')
