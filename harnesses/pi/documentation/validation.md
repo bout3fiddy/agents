@@ -20,9 +20,8 @@ pending delivery continues when leaving the composer, and superseded guidance re
 Escape during delivery and accepted-context preservation. The live Codex/Fable guidance case passed
 in 150.1 seconds, with a 3.4-second concurrent discussion response:
 `reports/workers-1794961598399/`. Terminal navigation, resizing and reload checks passed at
-`reports/terminal-1794961722/`.
-The accepted implementation workflow passed in one round with real Astra and Fable at
-`reports/2026-11-18T00-30-23.849Z/`.
+`reports/terminal-1794961722/`. The accepted implementation workflow passed in one round with real
+Astra and Fable at `reports/2026-11-18T00-30-23.849Z/`.
 
 The monitored assignment continued through productive drafting, review and repairs. Its new host
 turns spent 607.3 seconds in model requests and 2.7 seconds in tools; one substantive consultation
