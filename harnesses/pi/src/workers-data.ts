@@ -22,6 +22,7 @@ export type WorkerRow = {
   branch?: string
   delegatedBy: string
   legacy?: boolean
+  inferredRelationship?: boolean
   transcript?: string
   guidance: Guidance[]
 }
@@ -41,6 +42,33 @@ function processExists(pid: number): boolean {
     return true
   } catch (error) {
     return (error as NodeJS.ErrnoException).code !== 'ESRCH'
+  }
+}
+
+/** Old coordinators can launch newly installed children without recording their parent IDs. */
+function groupLegacyChildren(parent: WorkerRow, children: WorkerRow[]): void {
+  for (const row of children) {
+    if (row.info.parentId) {
+      continue
+    }
+
+    const author = ['reviewer', 'database-reviewer', 'performance'].includes(row.info.role)
+      ? children
+          .filter(
+            (candidate) =>
+              ['implementer', 'task-worker'].includes(candidate.info.role) &&
+              candidate.info.workspace === row.info.workspace &&
+              candidate.state.status === 'complete' &&
+              candidate.state.updatedAt <= row.info.startedAt,
+          )
+          .sort((left, right) => right.info.startedAt.localeCompare(left.info.startedAt))[0]
+      : undefined
+    row.info = {
+      ...row.info,
+      parentId: parent.id,
+      reviewOf: row.info.reviewOf ?? author?.id,
+    }
+    row.inferredRelationship = true
   }
 }
 
@@ -164,19 +192,30 @@ export class WorkersCatalog {
       }
     }
 
+    for (const job of jobs) {
+      const children = rows.filter((row) => row.info.taskId === job.request.id)
+      const covered = children.some((row) =>
+        ['task-coordinator', 'branch-orchestrator'].includes(row.info.role),
+      )
+
+      if (covered || (job.request.kind === 'implementation' && children.length)) {
+        continue
+      }
+
+      try {
+        const parent = await this.legacy(job)
+        rows.push(parent)
+        groupLegacyChildren(parent, children)
+      } catch (error) {
+        this.warnings.push(`${job.request.id.slice(0, 8)}: ${String(error)}`)
+      }
+    }
+
     for (const row of rows) {
       const parent = rows.find((candidate) => candidate.id === row.info.parentId)
 
       if (parent) {
-        row.delegatedBy = `${parent.info.role} · ${parent.id.slice(0, 8)}`
-      }
-    }
-
-    for (const job of jobs) {
-      const covered = rows.some((row) => row.info.taskId === job.request.id)
-
-      if (!covered) {
-        rows.push(await this.legacy(job))
+        row.delegatedBy = `${parent.info.role} · ${parent.info.id.slice(0, 8)}`
       }
     }
 

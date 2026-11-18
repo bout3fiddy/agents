@@ -3,6 +3,32 @@
 Validated locally on 18 November 2026 with macOS, Node 26.12.1, Pi 1.5.2, Claude Code 2.1.326 and
 Bun 1.3.5.
 
+## Trace audit: mixed worker generations (0.5.1)
+
+The next trace audit found a 0.4.1 coordinator launching newer execution workers during the 0.5.0
+rollout. The 0.5.0 picker suppressed its legacy coordinator row whenever any live child existed,
+leaving workers ungrouped and omitting coordinator notification for direct child guidance. Read-only
+replay of task `be43487b-7939-427e-94ee-aa72d7478a69` reproduced the defect. The catalog now
+preserves that coordinator and reconstructs missing relationships from task/candidate history.
+Explicit links remain authoritative, inferred placement is labelled and original metadata is
+unchanged.
+
+Regression validation also exposed Escape being ignored during an asynchronous guidance send, and
+the accepted-context allowlist dropping the host copy of current worker guidance. Both are fixed;
+pending delivery continues when leaving the composer, and superseded guidance remains excluded. All
+206 tests pass, including same-candidate review grouping, coordinator notification, exact text,
+Escape during delivery and accepted-context preservation. The live Codex/Fable guidance case passed
+in 150.1 seconds, with a 3.4-second concurrent discussion response:
+`reports/workers-1794961598399/`. Terminal navigation, resizing and reload checks passed at
+`reports/terminal-1794961722/`.
+The accepted implementation workflow passed in one round with real Astra and Fable at
+`reports/2026-11-18T00-30-23.849Z/`.
+
+The monitored assignment continued through productive drafting, review and repairs. Its new host
+turns spent 607.3 seconds in model requests and 2.7 seconds in tools; one substantive consultation
+and one background task were dispatched. The audit changed no assignment files or live task controls
+and forced no reload. Detailed evidence and consumed offsets remain under `reports/trace-audit/`.
+
 ## Live worker conversations and hierarchy (0.5.0)
 
 All 203 Pi tests pass with no skips, including formatting, executable lint and strict TypeScript

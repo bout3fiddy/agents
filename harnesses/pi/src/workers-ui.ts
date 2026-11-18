@@ -198,7 +198,9 @@ export class WorkersView implements Focusable {
     if (this.composing) {
       this.input.focused = this.hasFocus
 
-      if (!this.sending) {
+      if (matchesKey(data, 'escape')) {
+        this.composing = false
+      } else if (!this.sending) {
         this.input.handleInput(data)
       }
 
@@ -377,6 +379,9 @@ export class WorkersView implements Focusable {
         `Prompt: press p to view the complete delegated prompt.`,
         `Trace: ${row.transcript ?? row.info.output}`,
         row.info.reviewOf ? `Reviewing the candidate after worker ${row.info.reviewOf}` : '',
+        row.inferredRelationship
+          ? 'Legacy relationship reconstructed from task, candidate and worker order.'
+          : '',
         row.legacy
           ? 'Legacy run: guidance goes to the task coordinator.'
           : 'Guidance goes to this worker at a safe boundary; its write scope stays unchanged.',

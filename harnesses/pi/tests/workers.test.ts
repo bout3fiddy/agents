@@ -393,3 +393,104 @@ test('child guidance informs its coordinator and preserves scope and text', asyn
   await child.finish('complete', 'Done')
   await parent.finish('complete', 'Done')
 })
+
+test('new children retain their legacy coordinator group and guidance route', async (t) => {
+  const item = await fixture()
+  t.after(() => rm(item.base, { recursive: true, force: true }))
+  const jobs = new Delegations(new StateStore(item.root))
+  const job = await jobs.start(
+    { task: 'Document the queue', context: '', kind: 'documents', writePaths: ['design.md'] },
+    { session: 'legacy-parent', model: 'test/model' },
+    async () => {},
+  )
+  const directory = delegationDirectory(jobs.store, job.request.id)
+  await atomicJson(join(directory, 'status.json'), {
+    ...job.state,
+    status: 'running',
+    pid: process.pid,
+  })
+  let index = 0
+  const start = (role: string, workspace = item.root) =>
+    LiveWorker.start(item.root, {
+      role,
+      model: 'test/model',
+      task: 'Document the queue',
+      scope: ['design.md'],
+      output: join(directory, `child-${index++}.json`),
+      workspace,
+      backend: 'pi',
+    })
+  const author = await start('task-worker')
+  await author.finish('complete', 'Ready for review')
+  const differentCandidate = await start('task-worker', join(item.root, 'other-candidate'))
+  await differentCandidate.finish('complete', 'Different candidate')
+  const reviewer = await start('reviewer')
+  const catalog = new WorkersCatalog(item.root)
+
+  for (let iteration = 0; iteration < 2; iteration++) {
+    const tree = workerTree(await catalog.list(), true)
+    assert.deepEqual(
+      tree.map(({ row, depth, context }) => [row.id, depth, context]),
+      [
+        [`task:${job.request.id}`, 0, false],
+        [author.info.id, 1, true],
+        [reviewer.info.id, 2, false],
+      ],
+    )
+    assert.equal(tree[2]?.row.inferredRelationship, true)
+  }
+
+  const text = 'Verify recovery without adding writes.'
+  await catalog.send(reviewer.info.id, text)
+  assert.equal((await reviewer.mailbox.read()).messages[0]?.text, text)
+  const controls = await readJson<TaskControls>(join(directory, 'controls.json'))
+  assert.equal(controls?.messages.at(-1)?.text, text)
+  const info = await readJson<{ parentId?: string }>(join(reviewer.directory, 'info.json'))
+  assert.equal(info?.parentId, undefined, 'Display reconstruction must not rewrite worker metadata')
+  await reviewer.finish('complete', 'Reviewed')
+})
+
+test('Escape leaves the guidance composer while delivery is pending', async (t) => {
+  const item = await fixture()
+  t.after(() => rm(item.base, { recursive: true, force: true }))
+  const worker = await live(item.root)
+  const rows = await new WorkersCatalog(item.root).list()
+  let release!: () => void
+  const pending = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  let closed = false
+  const view = new WorkersView(
+    {
+      list: async () => rows,
+      conversation: async () => ({ entries: [], truncated: false }),
+      warnings: [],
+      send: async () => {
+        await pending
+        return 'Guidance queued.'
+      },
+    },
+    plainTheme,
+    () => 24,
+    () => {},
+    () => {
+      closed = true
+    },
+    false,
+    false,
+  )
+  t.after(() => view.dispose())
+  await view.refresh()
+  view.handleInput('\r')
+  view.handleInput('g')
+  view.input.setValue('Please check recovery.')
+  view.handleInput('\r')
+  assert.equal(view.notice, 'Sending guidance…')
+  view.handleInput('\x1b')
+  assert.equal(view.composing, false)
+  view.handleInput('\x0f')
+  assert.equal(closed, true)
+  release()
+  await delay(10)
+  await worker.finish('complete', 'Done')
+})

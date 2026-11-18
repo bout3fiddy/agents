@@ -184,6 +184,13 @@ messages. Guidance cannot alter immutable write/tool scope. Legacy task rows sho
 coordinator session and route messages through existing task controls. Standalone design advice
 keeps its consultation inspection and cancellation path.
 
+Mixed-generation tasks retain a legacy coordinator row even when new children have live metadata.
+Missing parent links are reconstructed in the display from the durable task ID. A legacy review can
+be grouped beneath the latest completed author in that task's same candidate, with an explicit
+Details label. Reconstruction never rewrites worker metadata or creates review authorization.
+Guidance to such a child also updates its real coordinator's task controls. A live coordinator's
+explicit links take precedence; accepted workflows with live leaves gain no fictitious coordinator.
+
 ## Workflow and persistence
 
 Independent remote-branch execution is described in [branches.md](branches.md). A parent Pi session

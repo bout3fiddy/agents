@@ -217,6 +217,11 @@ the picker labels guidance as routed to that coordinator. Direct child channels 
 workers started with this version. Design consultations remain available through
 `design_consultation`; the picker covers execution workers and their coordinators/reviewers.
 
+An older coordinator can also start newer children after an installation update. The picker keeps
+that coordinator visible, reconstructs missing parent links from the durable task ID and routes
+child guidance back to it. For old records, review placement uses the preceding completed author in
+the same task and candidate; Details labels this reconstruction. Original metadata stays intact.
+
 ## Verify the loaded runtime
 
 Run `/harness-version` to inspect the currently loaded version, Git revision, source digest, load

@@ -50,6 +50,24 @@ test('accepted context excludes old exploration and preserves new input', () => 
   assert.equal(projectContext(messages).length, messages.length)
 })
 
+test('accepted context retains current worker guidance and excludes superseded guidance', () => {
+  const checkpoint = {
+    ...design,
+    version: 1,
+    hash: 'accepted',
+    acceptedAt: new Date(2000).toISOString(),
+  }
+  const messages: AgentMessage[] = [1000, 3000].map((timestamp) => ({
+    role: 'custom',
+    customType: 'pi-worker-guidance',
+    content: `Exact user guidance at ${timestamp}`,
+    display: false,
+    timestamp,
+  }))
+  assert.deepEqual(projectContext(messages, checkpoint), [messages[1]])
+  assert.equal(messages.length, 2, 'The raw guidance history stays intact')
+})
+
 test('orchestrator status excludes raw worker logs from its context', () => {
   const task: TaskState = {
     id: 'probe',
