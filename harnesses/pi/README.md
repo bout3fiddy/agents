@@ -165,6 +165,28 @@ file. All project checks receive the complete candidate. Direct lint, document c
 text, in-scope files and code retain the full rules. On a branch, task-workers can edit .md, .txt
 and .rst documents. Implementers own scoped project manifests and JSON files.
 
+### Recurring background tasks
+
+Ask the orchestrator “Every hour, audit progress and flag blockers” or “Stop the progress audit.”
+The orchestrator uses `recurring_task` to list, set or remove named schedules. A definition has
+`everyMinutes`, an optional `until` timestamp with timezone, and `work`. The first run is due after
+one interval unless `startImmediately` is true. Setting an existing name replaces its definition for
+subsequent runs. Removing it cancels an outstanding job and preserves its receipts.
+
+Use `work: { kind: "audit", task: "Check progress and flag blockers" }` for a read-only Pi Codex
+audit. It sees new completed discussion turns from the observing session and changed project task
+summaries, milestones and checks. Idle intervals use no model calls. Pi saves the worker's report
+under `.pi/audit/<job-id>.json`. Findings and failures reach the orchestrator through normal task
+delivery. Ordinary progress stays in the report. Other recurring work takes the same scoped task
+definition as `delegate_task`; recurring implementation requires an explicit settled design.
+
+Schedules are private to the local Pi installation and keyed by the project’s canonical path. The
+creating session dispatches the work and receives its findings. Reload or reopen that session to
+resume. Setting the schedule from another session in the project transfers future runs to it. While
+Pi is closed, already dispatched workers can finish. Missed intervals coalesce at reopening. A busy
+queue defers dispatch; a failed run pauses the schedule for inspection. Use `/workers` for a running
+job and ask the orchestrator to list schedules for its last outcome and next run.
+
 ### Background delegation
 
 `delegate_task` accepts a task, complete context, a kind and repository-relative write paths:

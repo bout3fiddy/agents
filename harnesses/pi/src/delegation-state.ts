@@ -54,6 +54,7 @@ export type DelegationRequest = Omit<DelegateInput, 'kind'> & {
   originEntry?: string
   model: string
   createdAt: string
+  recurring?: { name: string; audit: boolean }
   checkpointHash?: string
 }
 export type DelegationStatus = {
@@ -96,6 +97,8 @@ export type DelegationStatus = {
   progress?: TaskProgress
   activityAgeMs?: number
   health?: 'active' | 'quiet' | 'stopped' | 'needs_attention'
+  auditReport?: string
+  auditAttention?: boolean
   progressFile?: string
   hostActions?: WorkerResult['hostActions']
 }
@@ -171,6 +174,8 @@ export function scopesOverlap(left: string[], right: string[]): boolean {
   )
 }
 
+export class DelegationBusy extends Error {}
+
 function checkWriteReservations(request: DelegationRequest, previous: Delegation[]): void {
   if (!request.writePaths.length) {
     return
@@ -185,7 +190,7 @@ function checkWriteReservations(request: DelegationRequest, previous: Delegation
   const overlap = owners.find((job) => scopesOverlap(request.writePaths, job.request.writePaths))
 
   if (overlap) {
-    throw new Error(
+    throw new DelegationBusy(
       `Files already owned by task ${overlap.request.id} (${overlap.request.kind}, ` +
         `${overlap.state.status}). Inspect task_status before scheduling work on these paths.`,
     )
@@ -196,7 +201,7 @@ function checkWriteReservations(request: DelegationRequest, previous: Delegation
   )
 
   if (writer) {
-    throw new Error(
+    throw new DelegationBusy(
       'The shared implementation workflow requires exclusive local writes. ' +
         `Task ${writer.request.id} (${writer.request.kind}, ${writer.state.status}) ` +
         'holds a reservation on different paths. Both workflow and implementation through ' +
@@ -210,6 +215,7 @@ export function delegationView(job: Delegation) {
   const { receipts, ...state } = job.state
   return {
     kind: job.request.kind,
+    ...(job.request.recurring && { schedule: job.request.recurring.name }),
     thinking: job.request.thinking,
     task: job.request.task.slice(0, 500),
     writePaths: job.request.writePaths,
@@ -219,6 +225,41 @@ export function delegationView(job: Delegation) {
       status: receipt.status,
       snapshot: receipt.snapshot,
     })),
+  }
+}
+
+export function validateDelegation(input: DelegateInput): void {
+  if (!Check(delegateSchema, input)) {
+    throw new Error('Invalid delegated task; provide task, context, kind and writePaths')
+  }
+
+  validateWriteScope(input.writePaths)
+
+  if (input.specialistThinking && input.kind !== 'implementation') {
+    throw new Error('Specialist thinking overrides apply only to implementation workflows')
+  }
+
+  if (input.design && input.kind !== 'implementation') {
+    throw new Error('A design is only valid for implementation tasks')
+  }
+
+  if (input.design) {
+    validateWriteScope(input.design.writePaths)
+  }
+
+  if (input.requires?.length) {
+    throw new Error(
+      `Host capabilities required: ${input.requires.join(', ')}. ` +
+        'Perform these authorized operations on the host; delegate only worker-compatible work.',
+    )
+  }
+
+  if (input.kind === 'research' && input.writePaths.length) {
+    throw new Error('Research tasks have no write scope')
+  }
+
+  if (input.kind === 'documents' && (!input.writePaths.length || input.writePaths.includes('**'))) {
+    throw new Error('Document tasks need specific files or document directories')
   }
 }
 
@@ -320,42 +361,9 @@ export class Delegations {
     input: DelegateInput,
     origin: DelegationOrigin,
     launch: (request: DelegationRequest) => Promise<void>,
+    recurring?: DelegationRequest['recurring'],
   ): Promise<Delegation> {
-    if (!Check(delegateSchema, input)) {
-      throw new Error('Invalid delegated task; provide task, context, kind and writePaths')
-    }
-
-    validateWriteScope(input.writePaths)
-
-    if (input.specialistThinking && input.kind !== 'implementation') {
-      throw new Error('Specialist thinking overrides apply only to implementation workflows')
-    }
-
-    if (input.design && input.kind !== 'implementation') {
-      throw new Error('A design is only valid for implementation tasks')
-    }
-
-    if (input.design) {
-      validateWriteScope(input.design.writePaths)
-    }
-
-    if (input.requires?.length) {
-      throw new Error(
-        `Host capabilities required: ${input.requires.join(', ')}. ` +
-          'Perform these authorized operations on the host; delegate only worker-compatible work.',
-      )
-    }
-
-    if (input.kind === 'research' && input.writePaths.length) {
-      throw new Error('Research tasks have no write scope')
-    }
-
-    if (
-      input.kind === 'documents' &&
-      (!input.writePaths.length || input.writePaths.includes('**'))
-    ) {
-      throw new Error('Document tasks need specific files or document directories')
-    }
+    validateDelegation(input)
 
     return this.locked(async () => {
       const checkpoint = input.kind === 'implementation' ? await this.store.checkpoint() : undefined
@@ -368,6 +376,7 @@ export class Delegations {
       const request: DelegationRequest = {
         ...input,
         ...origin,
+        ...(recurring && { recurring }),
         writePaths: design?.writePaths ?? input.writePaths,
         id: randomUUID(),
         root: this.store.projectRoot,
@@ -383,7 +392,7 @@ export class Delegations {
       checkWriteReservations(request, previous)
 
       if (active.length >= 2) {
-        throw new Error(
+        throw new DelegationBusy(
           'Two background tasks are active; finish or cancel one before starting more',
         )
       }

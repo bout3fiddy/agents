@@ -4,7 +4,7 @@ import { basename, join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import type { ExtensionAPI, ExtensionContext } from '@earendil-works/pi-coding-agent'
 
-export function projectTraces(root: string): string {
+export function projectTraces(root: string, includeAudit = false): string {
   const directory = join(root, '.pi', 'traces')
 
   for (const path of [
@@ -35,8 +35,15 @@ export function projectTraces(root: string): string {
     }
   }
 
-  if (!contents.split(/\r?\n/).includes('/traces/')) {
-    appendFileSync(ignore, `${contents && !contents.endsWith('\n') ? '\n' : ''}/traces/\n`)
+  const rules = contents.split(/\r?\n/)
+  const required = includeAudit ? ['/traces/', '/audit/'] : ['/traces/']
+  const missing = required.filter((rule) => !rules.includes(rule))
+
+  if (missing.length) {
+    appendFileSync(
+      ignore,
+      `${contents && !contents.endsWith('\n') ? '\n' : ''}${missing.join('\n')}\n`,
+    )
   }
 
   return directory

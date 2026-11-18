@@ -60,6 +60,10 @@
   ignored `reports/`. The installer backs up changed Pi assets and never reads credential contents.
 - Preserve exit status, required skips, cancellation and stale evidence as distinct outcomes.
 - Benchmarks measure real public behavior. Instrumentation must preserve disabled behavior.
+- Recurring schedules use the host-only recurring_task tool and private per-project definitions.
+  Keep reports in .pi/audit outside worker snapshots. Skip idle audits, serialize claims across Pi
+  hosts, and route new occurrences through ordinary delegation, cancellation and verification.
+  Exercise the full scheduler with `npm run test:live:recurring` in a disposable project.
 - Background task processes survive reload and session exit. Keep project-wide file reservations,
   scoped coordinator children, steering/cancellation, and per-task private evidence. Deliver
   completion once at a safe boundary and wake an idle orchestrator for a brief acknowledgement.

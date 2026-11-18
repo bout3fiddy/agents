@@ -209,14 +209,22 @@ implementation repair-round or overall-duration ceiling. External GitHub review 
 user's separate maximum of five observe/triage/fix/push rounds, with durable accounting and
 current-head matching. The parent session remains available for conversation.
 
-Runtime state is project-local under `.pi/traces/`, ignored through `.pi/.gitignore`. Conversations
-live in `sessions/`; checkpoints, attempts, consultations and receipts live in `harness/`. Worker
-snapshots and scoped reads exclude this private tree, including case/Unicode aliases. The launcher
-sets Pi's session directory directly. When ordinary Pi stores a session elsewhere, the extension
-mirrors it after turns and lifecycle events, and compares filesystem device/inode identities to
-avoid replacing Pi's own live session file. Codex workers persist complete Pi session traces; Claude
-workers capture streamed JSONL events, bounded at 16 MB per attempt. Oversized output fails
-explicitly.
+Recurring task definitions and cursors live under the local Pi agent directory in
+`recurring/<project-path-hash>/schedules.json`. The owning session observes due times, holds a
+project-specific lock through dispatch and records the job ID before starting its supervisor.
+Projects cannot enable schedules by supplying a file. Occurrences share the ordinary task queue,
+write reservations, subprocess controls and result delivery. An audit advances its evidence cursor
+after successful completion. The host publishes its structured result in the gitignored `.pi/audit/`
+directory, which scoped workers cannot read or write.
+
+Execution evidence is project-local under `.pi/traces/`, ignored through `.pi/.gitignore`.
+Conversations live in `sessions/`; checkpoints, attempts, consultations and receipts live in
+`harness/`. Worker snapshots and scoped reads exclude this private tree, including case/Unicode
+aliases. The launcher sets Pi's session directory directly. When ordinary Pi stores a session
+elsewhere, the extension mirrors it after turns and lifecycle events, and compares filesystem
+device/inode identities to avoid replacing Pi's own live session file. Codex workers persist
+complete Pi session traces; Claude workers capture streamed JSONL events, bounded at 16 MB per
+attempt. Oversized output fails explicitly.
 
 Each local accepted-design workflow has one project lock and no repair-round ceiling. Repeating an
 identical failure with an unchanged candidate produces an actionable blocker. Commands, output size,

@@ -17,6 +17,7 @@ import { changes, integrate } from './integration.ts'
 import { acquireLock } from './lock.ts'
 import { runWorkflow } from './workflow.ts'
 import { checkDelegation, DelegationChecksFailed } from './delegation-checks.ts'
+import { writeAuditReport } from './recurring-audit.ts'
 import { runTaskCoordinator } from './task-coordinator.ts'
 import type { Checkpoint } from './contracts.ts'
 import { runBranchTask } from './branch-runner.ts'
@@ -201,6 +202,15 @@ export async function runDelegation(
         evidence.result.hostActions ??
         evidence.children.flatMap((child) => child.result.hostActions ?? []),
     })
+
+    if (request.recurring?.audit) {
+      if (request.kind !== 'research' || state.changedPaths?.length) {
+        throw new Error('A recurring audit requires a read-only research worker')
+      }
+
+      await save(await writeAuditReport(request, evidence.result))
+    }
+
     const receipts = await checkDelegation(
       request,
       workspace,

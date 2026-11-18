@@ -159,3 +159,9 @@ and permission-sensitive test files. Export finished evidence to the host mount.
 semantics are uncertain, exercise the required operation with a small probe before the full suite.
 Capture stage logs and the first failure, and ensure cleanup also runs when setup fails. If a runner
 remains alive after a failed check, inspect open resources before retrying.
+
+For an ongoing periodic assignment use recurring_task. Set a named schedule with the user's cadence,
+scope and cutoff. Use audit for read-only progress checks, or a scoped delegation for recurring
+work. List schedules before revising one. Remove the named schedule when asked to stop it. Report
+material findings and leave routine audit results in the project. Scheduled work proceeds while the
+conversation continues.

@@ -139,6 +139,11 @@ export function registerDelegation(pi: ExtensionAPI, launch: Launcher = launchDe
       const ready = jobs.filter(
         (job) =>
           !activeTask(job.state) &&
+          !(
+            job.request.recurring?.audit &&
+            (job.state.status === 'cancelled' ||
+              (job.state.status === 'complete' && job.state.auditAttention === false))
+          ) &&
           job.request.session === session &&
           (!job.request.originEntry || branch.has(job.request.originEntry)) &&
           !persisted.has(notificationId(job)) &&
@@ -156,6 +161,7 @@ export function registerDelegation(pi: ExtensionAPI, launch: Launcher = launchDe
       for (const job of jobs.filter(
         (item) =>
           activeTask(item.state) &&
+          !item.request.recurring?.audit &&
           item.request.session === session &&
           (!item.request.originEntry || branch.has(item.request.originEntry)),
       )) {

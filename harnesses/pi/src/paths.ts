@@ -41,7 +41,9 @@ function folded(path: string): string {
 export function sensitive(path: string): boolean {
   const parts = path.split('/').map(folded)
   return (
-    parts.some((part, index) => part === '.pi' && parts[index + 1] === 'traces') ||
+    parts.some(
+      (part, index) => part === '.pi' && ['traces', 'audit'].includes(parts[index + 1] ?? ''),
+    ) ||
     parts.some(
       (part) =>
         excluded.has(part) ||
