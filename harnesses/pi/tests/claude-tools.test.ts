@@ -202,3 +202,23 @@ test('Claude traces retain live output and enforce a byte budget for Unicode', a
     await rm(item.base, { recursive: true, force: true })
   }
 })
+
+test('only a terminal provider quota rejection carries a retry time', () => {
+  const limit = { type: 'rate_limit_event', rate_limit_info: { status: 'rejected', resetsAt: 42 } }
+  const assistant = { type: 'assistant', error: 'rate_limit' }
+  const failed = { type: 'result', is_error: true }
+  const retry = (...rows: object[]) =>
+    parseClaudeTrace(rows.map((r) => JSON.stringify(r)).join('\n')).retryAt
+  assert.equal(retry(limit, assistant, failed), 42000)
+  assert.equal(retry(limit, { type: 'assistant' }, failed), undefined)
+  assert.equal(retry(limit, assistant, { type: 'result', is_error: false }), undefined)
+  assert.equal(
+    retry(
+      limit,
+      { ...limit, rate_limit_info: { status: 'allowed_warning', resetsAt: 42 } },
+      assistant,
+      failed,
+    ),
+    undefined,
+  )
+})

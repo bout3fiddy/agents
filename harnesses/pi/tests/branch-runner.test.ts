@@ -3,7 +3,11 @@ import { access, readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import test from 'node:test'
 import { runBranchTask } from '../src/branch-runner.ts'
-import { delegationDirectory, type DelegationRequest } from '../src/delegation-state.ts'
+import {
+  delegationDirectory,
+  delegationView,
+  type DelegationRequest,
+} from '../src/delegation-state.ts'
 import { atomicJson } from '../src/state.ts'
 import { reviseTasks } from '../src/task-recovery.ts'
 import { gitCommand, resolveRemote } from '../src/git-branches.ts'
@@ -374,4 +378,54 @@ test('active implementation accepts merge authority without another supervisor',
     controller.abort()
     await running
   }
+})
+
+test('a blocked branch delivers its current host actions and clears them on resume', async (t) => {
+  const setup = await branchRepository(t)
+  const {
+    requests: [request],
+  } = await setup.launch({ ...setup.input, tasks: setup.input.tasks.slice(0, 1) })
+  const actions = [
+    { capability: 'dependencies' as const, reason: 'Verify the pinned compiler on the host.' },
+    { capability: 'project-policy' as const, reason: 'Run the repository-owned release check.' },
+  ]
+  const state = await runBranchTask(
+    setup.store,
+    request!,
+    new AbortController().signal,
+    async (assignment) => {
+      const evidence = await coordinatorEvidence(assignment, {
+        verdict: 'blocked',
+        summary: 'Host verification required.',
+        hostActions: actions,
+      })
+      evidence.children[0]!.result.hostActions = [
+        { capability: 'git', reason: 'Superseded child proposal.' },
+      ]
+      return evidence
+    },
+  )
+  assert.equal(state.status, 'needs_attention')
+  const delivered = delegationView(await setup.jobs.get(request!.id))
+  assert.deepEqual(delivered.hostActions, actions)
+  assert.match(delivered.error!, /Host verification required/)
+  const original = join(delegationDirectory(setup.store, request!.id), state.progressFile!)
+  const originalReceipt = await readFile(original)
+  const resumed = await setup.jobs.resume(request!.id, setup.origin, async () => {})
+  assert.equal(delegationView(resumed).hostActions, undefined)
+  const interrupted = new AbortController()
+  const cancelled = await runBranchTask(
+    setup.store,
+    request!,
+    interrupted.signal,
+    async (assignment) => {
+      interrupted.abort()
+      return coordinatorEvidence(assignment, { verdict: 'blocked', hostActions: actions })
+    },
+  )
+  assert.equal(cancelled.status, 'cancelled')
+  assert.equal(cancelled.hostActions, undefined)
+  assert.notEqual(cancelled.progressFile, state.progressFile)
+  assert.deepEqual(await readFile(original), originalReceipt)
+  assert.equal((await resolveRemote(setup.root)).base, setup.initial)
 })

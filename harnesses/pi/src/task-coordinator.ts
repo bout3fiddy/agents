@@ -13,6 +13,7 @@ import {
   resultSchema,
   thinkingSchema,
   specialistThinkingSchema,
+  ProviderQuotaError,
   validateResult,
   writePathSchema,
   type Checkpoint,
@@ -199,6 +200,7 @@ export async function createTaskCoordinatorTools(
   let submitted: WorkerResult | undefined
   let fatal: unknown
   const failedAssignments = new Set<string>()
+  const rejectedModels = new Map<string, ProviderQuotaError>()
   const missingVerdicts = new Set<string>()
   let reviewSnapshot: string | undefined
   let pairedReviewActive = false
@@ -277,6 +279,12 @@ export async function createTaskCoordinatorTools(
       let child: WorkerEvidence
 
       try {
+        const rejected = rejectedModels.get(childRole.model)
+
+        if (rejected && rejected.retryAt > Date.now()) {
+          throw rejected
+        }
+
         child = await dispatch(
           {
             role: raw.role,
@@ -311,6 +319,11 @@ export async function createTaskCoordinatorTools(
         )
       } catch (error) {
         checkChildWrites(request, raw, childRole, before, await inventory(request.workspace))
+
+        if (error instanceof ProviderQuotaError) {
+          rejectedModels.set(childRole.model, error)
+        }
+
         recoverableFailure = true
         failedAssignments.add(assignmentKey)
         throw error
@@ -792,6 +805,7 @@ export async function createTaskCoordinatorTools(
     result: () => submitted,
     invalidateResult: () => {
       submitted = undefined
+      rejectedModels.clear()
       revision++
     },
     settle: async () => {

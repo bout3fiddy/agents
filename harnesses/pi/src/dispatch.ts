@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto'
 import { atomicJson, readJson, type StateStore } from './state.ts'
 import { harnessRoot } from './project.ts'
 import { loadRole } from './roles.ts'
-import type { WorkerEvidence, WorkerRequest } from './contracts.ts'
+import { ProviderQuotaError, type WorkerEvidence, type WorkerRequest } from './contracts.ts'
 import { readProgress, type TaskProgress } from './progress.ts'
 
 export type Dispatcher = (
@@ -171,10 +171,18 @@ export function dispatcher(store: StateStore): Dispatcher {
         status: outcome.code === 0 ? 'finished' : 'failed',
         code: outcome.code,
       })
-      const output = await readJson<{ evidence?: WorkerEvidence; error?: string }>(outputPath)
+      const output = await readJson<{
+        evidence?: WorkerEvidence
+        error?: string
+        quotaRetryAt?: number
+      }>(outputPath)
       signal?.throwIfAborted()
 
       if (outcome.code !== 0 || !output?.evidence) {
+        if (output?.error && output.quotaRetryAt && Number.isSafeInteger(output.quotaRetryAt)) {
+          throw new ProviderQuotaError(output.error, output.quotaRetryAt)
+        }
+
         throw new Error(output?.error ?? `Worker exited without a result: ${outcome.diagnostics}`)
       }
 

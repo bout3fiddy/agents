@@ -67,9 +67,11 @@ export async function runBranchTask(
     ...(await readJson<DelegationStatus>(join(directory, 'status.json'))),
     id: request.id,
     status: 'running',
+    hostActions: undefined,
     pid: process.pid,
     updatedAt: new Date().toISOString(),
   }
+  let blockedActions: DelegationStatus['hostActions']
   const save = async (update: Partial<DelegationStatus>) => {
     state = { ...state, ...update, updatedAt: new Date().toISOString() }
     await atomicJson(join(directory, 'status.json'), state)
@@ -190,8 +192,10 @@ export async function runBranchTask(
         await controls()
         revision++
         await save({ status: 'running', mergeBase: base, error: undefined })
-        const outputPath = join(directory, `orchestrator-${validation}-${revision}.json`)
-        await save({ progressFile: `orchestrator-${validation}-${revision}.json` })
+        const generation = state.deliveryVersion ? `-run-${state.deliveryVersion}` : ''
+        const progressFile = `orchestrator-${validation}-${revision}${generation}.json`
+        const outputPath = join(directory, progressFile)
+        await save({ progressFile })
         const evidence = await coordinate(
           {
             kind: 'branch',
@@ -233,6 +237,7 @@ export async function runBranchTask(
         await save({ children, summary: evidence.result.summary, status: 'checking' })
 
         if (evidence.result.verdict === 'blocked') {
+          blockedActions = evidence.result.hostActions
           throw new Error(`Autonomous orchestrator blocked: ${evidence.result.summary}`)
         }
 
@@ -453,6 +458,8 @@ export async function runBranchTask(
         : signal.aborted || control?.cancelled
           ? 'cancelled'
           : 'needs_attention',
+      hostActions:
+        control?.paused || signal.aborted || control?.cancelled ? undefined : blockedActions,
       error: String(error),
     })
     return state

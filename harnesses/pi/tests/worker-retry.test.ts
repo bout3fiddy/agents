@@ -47,7 +47,7 @@ for (const role of ['implementer', 'task-coordinator'] as const) {
         return [{ type: 'text', text: 'Submitted.' }]
       })
       t.after(() => session.dispose())
-      const model = runtime.getModel('capture', 'capture')!
+      const model = { ...runtime.getModel('capture', 'capture')!, reasoning: true }
       t.mock.method(runtime, 'getModel', () => model)
       t.mock.method(ModelRuntime, 'create', async () => runtime)
       const workspace = join(base, 'candidate')

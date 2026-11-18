@@ -9,7 +9,12 @@ import {
   type AgentSession,
   type ResourceLoader,
 } from '@earendil-works/pi-coding-agent'
-import type { Role, WorkerEvidence, WorkerRequest } from './contracts.ts'
+import {
+  ProviderQuotaError,
+  type Role,
+  type WorkerEvidence,
+  type WorkerRequest,
+} from './contracts.ts'
 import { assignment, createWorkerTools } from './worker-tools.ts'
 import { loadRole, rolePrompt } from './roles.ts'
 import { inventory, snapshotHash } from './paths.ts'
@@ -205,6 +210,7 @@ if (process.argv[2] === '--worker') {
   } catch (error) {
     await atomicJson(request.outputPath, {
       error: error instanceof Error ? error.message : String(error),
+      ...(error instanceof ProviderQuotaError && { quotaRetryAt: error.retryAt }),
     })
     process.exitCode = 1
   }

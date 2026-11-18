@@ -99,6 +99,13 @@ automatic deletion is deliberately absent.
 
 ## Controls and evidence
 
+A blocked branch delivers its coordinator’s requested host capabilities and reasons in the terminal
+notification and task status. Resume clears the previous handoff and starts a separate receipt and
+transcript directory for the new execution. During a coordinator run, a confirmed Claude quota
+rejection with a future reset suppresses repeat launches of the same model. New host guidance, a
+resumed coordinator, or the provider reset allows another attempt. Transient errors and usage
+warnings retain ordinary recovery behavior.
+
 `task_status` reports queued, running, checking, publishing, published, merge-queued, merging and
 terminal outcomes. `task_control` can send a scoped clarification, pause or cancel work. A scope
 expansion requires a new task. Detached supervisors survive parent reload/exit; completion reaches

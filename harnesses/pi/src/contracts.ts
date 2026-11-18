@@ -107,6 +107,15 @@ export const resultSchema = Type.Object(
   { additionalProperties: false },
 )
 
+export class ProviderQuotaError extends Error {
+  constructor(
+    message: string,
+    readonly retryAt: number,
+  ) {
+    super(message)
+  }
+}
+
 export type WorkerResult = Static<typeof resultSchema>
 export type Role = {
   name: RoleName

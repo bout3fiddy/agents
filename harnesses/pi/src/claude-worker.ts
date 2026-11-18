@@ -13,6 +13,7 @@ import { LiveWorker } from './worker-live.ts'
 import { ClaudeLiveTrace } from './worker-live-claude.ts'
 import {
   validateResult,
+  ProviderQuotaError,
   type CommandResult,
   type Role,
   type WorkerEvidence,
@@ -62,6 +63,8 @@ export function parseClaudeTrace(output: string) {
     type?: string
     is_error?: boolean
     result?: string
+    error?: string
+    rate_limit_info?: { status?: string; resetsAt?: number }
     num_turns?: number
     modelUsage?: Record<string, unknown>
     message?: {
@@ -85,8 +88,21 @@ export function parseClaudeTrace(output: string) {
       .filter((part) => part.type === 'tool_result' && !part.is_error)
       .map((part) => part.tool_use_id),
   )
+  const response = events.findLast((event) => event.type === 'result')
+  const limit = events.findLast((event) => event.type === 'rate_limit_event')?.rate_limit_info
+  const lastAssistant = events.findLast((event) => event.type === 'assistant')
+  const reset = typeof limit?.resetsAt === 'number' ? limit.resetsAt * 1000 : 0
   return {
-    response: events.findLast((event) => event.type === 'result'),
+    response,
+    retryAt:
+      response?.is_error &&
+      lastAssistant?.error === 'rate_limit' &&
+      limit?.status === 'rejected' &&
+      Number.isSafeInteger(reset) &&
+      reset > 0 &&
+      reset <= 8.64e15
+        ? reset
+        : undefined,
     toolsUsed: [
       ...new Set(
         content
@@ -200,10 +216,21 @@ export async function runClaudeWorker(request: WorkerRequest, role: Role): Promi
     }
 
     const output = await readFile(tracePath, 'utf8')
-    const { response } = parseClaudeTrace(output)
+    const { response, retryAt } = parseClaudeTrace(output)
 
     if (exitCode !== 0 || !response || response.is_error) {
-      throw new Error(`Claude worker failed: ${response?.result ?? diagnostics}`)
+      const message = `Claude worker failed: ${response?.result ?? diagnostics}`
+
+      if (retryAt) {
+        throw new ProviderQuotaError(
+          message +
+            ' Report blocked if this review is required. ' +
+            'Resume after availability returns or new host guidance confirms access.',
+          retryAt,
+        )
+      }
+
+      throw new Error(message)
     }
 
     const evidence = await readJson<{ commands: CommandResult[]; result?: WorkerResult }>(

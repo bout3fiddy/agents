@@ -3,7 +3,7 @@ import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import test, { type TestContext } from 'node:test'
 import type { ToolDefinition } from '@earendil-works/pi-coding-agent'
-import type { WorkerResult } from '../src/contracts.ts'
+import { ProviderQuotaError, type WorkerResult } from '../src/contracts.ts'
 import type { Dispatcher } from '../src/dispatch.ts'
 import { loadRole } from '../src/roles.ts'
 import { createWorkerTools } from '../src/worker-tools.ts'
@@ -584,4 +584,25 @@ test('coordinator selects effort per child and rejects invalid levels', async (t
     ['reviewer', 'medium'],
     ['reviewer', undefined],
   ])
+})
+
+test('hard quota rejection skips repeat review launches until new host guidance', async (t) => {
+  const { request, controller } = await setup(t)
+  let dispatched = 0
+  const worker = await createTaskCoordinatorTools(request, controller.signal, async (child) => {
+    dispatched++
+
+    if (dispatched === 1) {
+      throw new ProviderQuotaError('Reviewer quota exhausted', Date.now() + 86400000)
+    }
+
+    return receipt(child)
+  })
+  const review = { role: 'reviewer', task: 'Review the candidate', writePaths: [] }
+  await assert.rejects(invoke(worker.tools, 'delegate_worker', review), /quota exhausted/)
+  await assert.rejects(invoke(worker.tools, 'delegate_worker', review), /quota exhausted/)
+  assert.equal(dispatched, 1)
+  worker.invalidateResult()
+  await invoke(worker.tools, 'delegate_worker', review)
+  assert.equal(dispatched, 2)
 })
