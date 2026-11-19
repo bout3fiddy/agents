@@ -18,6 +18,7 @@ export type WorkerRow = {
   active: boolean
   directory?: string
   accepting: boolean
+  title?: string
   taskStatus?: string
   branch?: string
   delegatedBy: string
@@ -181,6 +182,7 @@ export class WorkersCatalog {
           active: state.status === 'running',
           accepting:
             state.status === 'running' && mailbox.accepting && (!job || activeTask(job.state)),
+          title: job?.request.title ?? job?.request.design?.objective,
           taskStatus: job?.state.status,
           branch: job?.state.branch,
           delegatedBy: info.parentId ? `Worker ${info.parentId.slice(0, 8)}` : 'Orchestrator',
@@ -234,6 +236,7 @@ export class WorkersCatalog {
     return {
       id: `task:${job.request.id}`,
       legacy: true,
+      title: job.request.title ?? job.request.design?.objective,
       active: activeTask(job.state),
       accepting: activeTask(job.state),
       taskStatus: job.state.status,

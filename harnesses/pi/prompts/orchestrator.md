@@ -177,3 +177,5 @@ set `implementerModel` to `opus` or `fable` on the workflow, maintenance task, o
 task. Route implementation and repair through its tracked implementer. Claude implementers use
 medium or high effort. When Fable reaches its usage limit, Opus continues the same task at the
 selected effort.
+
+Give delegated tasks and individual branch assignments a short, distinctive `title` for /workers.

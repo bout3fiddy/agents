@@ -62,6 +62,7 @@ export class WorkersView implements Focusable {
   private truncated = false
   private bytes = 131072
   private offset = 0
+  private collapsed = new Set<string>()
   private lastBodyLines = 0
   private refreshPromise?: Promise<void>
   private sending = false
@@ -130,7 +131,7 @@ export class WorkersView implements Focusable {
       }
 
       this.rows = rows
-      const nodes = workerTree(rows, this.activeTab)
+      const nodes = this.visibleNodes()
 
       if (!nodes.some((node) => node.row.id === this.selectedId)) {
         this.selectedId = nodes[0]?.row.id
@@ -219,15 +220,28 @@ export class WorkersView implements Focusable {
     } else if (this.conversationId) {
       this.chatInput(data)
     } else {
-      const nodes = workerTree(this.rows, this.activeTab)
+      const nodes = this.visibleNodes()
       const index = Math.max(
         0,
         nodes.findIndex((node) => node.row.id === this.selectedId),
       )
 
-      if (matchesKey(data, 'tab') || matchesKey(data, 'left') || matchesKey(data, 'right')) {
+      if (matchesKey(data, 'tab')) {
         this.activeTab = !this.activeTab
-        this.selectedId = workerTree(this.rows, this.activeTab)[0]?.row.id
+        this.selectedId = this.visibleNodes()[0]?.row.id
+      } else if (matchesKey(data, 'left') || matchesKey(data, 'right')) {
+        const node = nodes[index]
+
+        if (node && matchesKey(data, 'left')) {
+          if (node.hasChildren && !this.collapsed.has(node.row.id)) {
+            this.collapsed.add(node.row.id)
+          } else {
+            this.selectedId =
+              nodes.slice(0, index).findLast((n) => n.depth < node.depth)?.row.id ?? node.row.id
+          }
+        } else if (node?.hasChildren && !this.collapsed.delete(node.row.id)) {
+          this.selectedId = nodes[index + 1]?.row.id
+        }
       } else if (matchesKey(data, 'up') || matchesKey(data, 'down')) {
         const next = index + (matchesKey(data, 'up') ? -1 : 1)
         this.selectedId = nodes[Math.max(0, Math.min(nodes.length - 1, next))]?.row.id
@@ -306,33 +320,91 @@ export class WorkersView implements Focusable {
     ]
   }
 
+  private visibleNodes() {
+    const tree = workerTree(this.rows, this.activeTab)
+    let hiddenBelow = Infinity
+    return tree.flatMap((node, index) => {
+      if (node.depth > hiddenBelow) {
+        return []
+      }
+
+      hiddenBelow = this.collapsed.has(node.row.id) ? node.depth : Infinity
+      return [{ ...node, hasChildren: (tree[index + 1]?.depth ?? 0) > node.depth }]
+    })
+  }
+
   private renderList(width: number): string[] {
-    const nodes = workerTree(this.rows, this.activeTab)
+    const nodes = this.visibleNodes()
     const selected = Math.max(
       0,
       nodes.findIndex((node) => node.row.id === this.selectedId),
     )
-    const count = Math.max(1, Math.floor((this.height() - 6) / 3))
+    const help = wrapTextWithAnsi(
+      '←→ Fold/unfold · ↑↓ Select · Tab Active/Past · Enter Open · Esc Back',
+      width,
+    )
+    const count = Math.max(1, this.height() - 6 - help.length - Number(Boolean(this.notice)))
     const start = Math.max(0, selected - count + 1)
-    const lines: string[] = ['']
+    const updatedWidth = width >= 80 ? 8 : 0
+    const statusWidth = Math.min(15, Math.max(7, Math.floor(width / 4)))
+    const taskWidth =
+      width < 46 ? Math.max(1, width - statusWidth - 2) : Math.min(62, Math.floor(width * 0.39))
+    const activityWidth = Math.max(
+      0,
+      width - taskWidth - statusWidth - 4 - (updatedWidth ? updatedWidth + 2 : 0),
+    )
+    const cell = (text: string, size: number) => {
+      const clipped = truncateToWidth(terminalText(text).replace(/[\r\n]+/g, ' '), size)
+      return clipped + ' '.repeat(Math.max(0, size - visibleWidth(clipped)))
+    }
+    const columns = (task: string, state: string, activity: string, updated: string) =>
+      [
+        cell(task, taskWidth),
+        cell(state, statusWidth),
+        ...(activityWidth ? [cell(activity, activityWidth)] : []),
+        ...(updatedWidth ? [cell(updated, updatedWidth)] : []),
+      ].join('  ')
+    const lines = [
+      this.theme.fg('muted', columns('Task / worker', 'Status', 'Latest activity', 'Updated')),
+    ]
 
-    for (const node of nodes.slice(start, start + count)) {
-      const { row, depth, context } = node
-      const indent = `  ${'  '.repeat(depth)}`
-      const prefix = `${row.id === this.selectedId ? '›' : ' '}${indent.slice(1)}`
-      const title = `${prefix}${depth ? '↳ ' : ''}${names[row.info.role] ?? row.info.role}`
+    for (const { row, depth, hasChildren, context } of nodes.slice(start, start + count)) {
+      const role = names[row.info.role] ?? row.info.role
+      const title = depth ? role : row.title || taskTitle(row.info.task) || role
+      const marker = hasChildren ? (this.collapsed.has(row.id) ? '▸' : '▾') : depth ? '↳' : '·'
+      const prefix = (row.id === this.selectedId ? '›' : ' ') + '  '.repeat(Math.min(depth, 5))
+      const coordinator = ['task-coordinator', 'branch-orchestrator'].includes(row.info.role)
+      const state =
+        (row.legacy || (coordinator && row.active)) && row.taskStatus
+          ? row.taskStatus
+          : row.state.status
+      const activity =
+        row.state.summary ||
+        row.state.tool ||
+        (row.active && row.state.stage === 'model' ? 'Model working' : row.state.stage)
+      const text = columns(
+        prefix + marker + ' ' + title,
+        state === 'needs_attention' ? 'Attention' : state.replaceAll('_', ' '),
+        activity,
+        age(row.state.updatedAt) + ' ago',
+      )
       lines.push(
         this.theme.fg(
-          context ? 'dim' : row.active ? 'accent' : 'text',
-          terminalText(`${title} · ${status(row)}${context ? ' (context)' : ''}`),
+          row.id === this.selectedId
+            ? 'accent'
+            : state === 'needs_attention' || state === 'failed'
+              ? 'warning'
+              : context
+                ? 'muted'
+                : 'text',
+          text,
         ),
       )
-      lines.push(terminalText(`${indent}   ${taskTitle(row.info.task).split('\n')[0]}`))
-      lines.push(
-        row.state.summary
-          ? this.theme.fg('muted', terminalText(`${indent}   ${row.state.summary}`))
-          : '',
-      )
+    }
+
+    if (!activityWidth && nodes[selected]) {
+      const { state } = nodes[selected].row
+      lines.push(terminalText(state.summary || state.tool || state.stage).replace(/[\r\n]+/g, ' '))
     }
 
     if (!nodes.length) {
@@ -343,7 +415,7 @@ export class WorkersView implements Focusable {
       lines.push(`${start + 1}–${Math.min(start + count, nodes.length)} / ${nodes.length}`)
     }
 
-    lines.push(this.theme.fg('dim', 'Tab Active/Past · ↑↓ Select · Enter Open · Esc Orchestrator'))
+    lines.push(...help.map((line) => this.theme.fg('dim', line)))
 
     if (this.notice) {
       lines.push(terminalText(this.notice))

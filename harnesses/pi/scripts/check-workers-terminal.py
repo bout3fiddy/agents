@@ -129,7 +129,18 @@ def main():
         keys("/workers\r", 2)
         active = capture("01-active")
         assert "Active 4" in active and "Past 1" in active, active
-        assert "Coordinator" in active and "Review" in active, active
+        assert "Task / worker" in active and "Latest activity" in active and "Updated" in active
+        assert "Queue design and independent review" in active and "Review" in active, active
+        keys("\x1b[D")
+        folded = capture("01-folded")
+        assert "Independent benchmark branch" in folded and "Performance" not in folded, folded
+        assert "Queue design and independent review" in folded and "Review" in folded, folded
+        keys("\x1b[C")
+        assert "Performance" in capture("01-expanded")
+        keys("\x1b[B\x1b[B\x1b[B\x1b[D")
+        author_folded = capture("01-author-folded")
+        assert "Review " not in author_folded and "Changes ready for review." in author_folded
+        keys("\x1b[C")
         keys("\t")
         assert "[Past 1]" in capture("02-past")
         keys("\t")
@@ -166,7 +177,8 @@ def main():
         child.setwinsize(24, 40)
         screen.resize(lines=24, columns=40)
         read(1)
-        capture("12-small-picker")
+        narrow = capture("12-small-picker")
+        assert "Task / worker" in narrow and "Status" in narrow and "Updated" not in narrow
         keys("\x0f")
         keys("/workers panel\r")
         child.setwinsize(42, 140)

@@ -96,8 +96,9 @@ export async function startBranchBatch(
   const design =
     document.length <= 16000 ? document : pinnedDesignInstruction(input.designPath, designHash)
   const batch = randomUUID()
-  const tasks = input.tasks.map(({ task, thinking, implementerModel, ...scope }) => ({
+  const tasks = input.tasks.map(({ task, title, thinking, implementerModel, ...scope }) => ({
     task,
+    title,
     thinking,
     implementerModel,
     context: `Execute the authorized design in ${input.designPath} autonomously.\n${design}`,

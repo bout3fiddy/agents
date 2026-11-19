@@ -41,6 +41,12 @@ export const workflowSpecialistsSchema = Type.Object(
 )
 export type WorkerThinking = Static<typeof thinkingSchema>
 
+export const taskTitleSchema = Type.String({
+  minLength: 1,
+  maxLength: 80,
+  description: 'Short, distinctive task name for the worker tree, such as AWS rehearsal preflight.',
+})
+
 export const writePathSchema = Type.String({
   minLength: 1,
   maxLength: 200,

@@ -10,6 +10,7 @@ import { matches, validateWriteScope } from './paths.ts'
 import type { Receipt, WorkerEvidence } from './contracts.ts'
 import {
   implementerModelSchema,
+  taskTitleSchema,
   thinkingSchema,
   workflowSpecialistsSchema,
   designSchema,
@@ -26,6 +27,7 @@ export const delegateSchema = Type.Object(
   {
     task: Type.String({ minLength: 1, maxLength: 8000 }),
     context: Type.String({ maxLength: 24000 }),
+    title: Type.Optional(taskTitleSchema),
     implementerModel: Type.Optional(implementerModelSchema),
     thinking: Type.Optional(thinkingSchema),
     specialistThinking: Type.Optional(workflowSpecialistsSchema),

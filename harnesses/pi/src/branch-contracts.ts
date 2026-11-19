@@ -1,6 +1,7 @@
 import { Type, type Static } from 'typebox'
 import {
   implementerModelSchema,
+  taskTitleSchema,
   thinkingSchema,
   type WorkerThinking,
   writePathSchema,
@@ -10,6 +11,7 @@ import {
 
 export const branchTaskSchema = Type.Object(
   {
+    title: Type.Optional(taskTitleSchema),
     implementerModel: Type.Optional(implementerModelSchema),
     thinking: Type.Optional(thinkingSchema),
     task: Type.String({ minLength: 1, maxLength: 2000 }),
@@ -59,6 +61,7 @@ export function pinnedDesignInstruction(path: string, hash: string) {
 }
 
 export type BranchTaskInput = {
+  title?: string
   implementerModel?: Static<typeof implementerModelSchema>
   thinking?: WorkerThinking
   task: string

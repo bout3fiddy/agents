@@ -148,6 +148,7 @@ test('review repair, conditional database review and benchmarks gate integration
         }
 
         if (request.role === 'reviewer' || request.role === 'database-reviewer') {
+          assert.equal(request.reviewOf, 'fixture-author')
           assert.deepEqual(request.changedFiles, ['src/value.js'])
         }
 
@@ -165,7 +166,10 @@ test('review repair, conditional database review and benchmarks gate integration
           })
         }
 
-        return evidence(request)
+        return {
+          ...(await evidence(request)),
+          liveWorkerId: request.role === 'implementer' ? 'fixture-author' : 'fixture-worker',
+        }
       },
       { implementer: 'high', 'database-reviewer': 'medium', performance: 'high' },
     )

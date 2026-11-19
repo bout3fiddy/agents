@@ -279,14 +279,16 @@ request, concurrent discussion, completion acknowledgement and reload receipts.
 
 ## Browse subagents
 
-`/workers` opens a live picker with Active and Past tabs. Coordinators group their children; reviews
-sit beneath the worker whose candidate they inspect. A completed worker remains visible as context
-while its review runs. Separate coordinators retain separate groups. Opening or closing the picker
-keeps the existing host and worker sessions running.
+`/workers` opens a tree table with task, status, latest activity and update age. It has Active and
+Past tabs. Coordinators group their children; reviews sit beneath the worker whose candidate they
+inspect. A completed worker remains visible as context while its review runs. Separate coordinators
+retain separate groups. Opening or closing the picker keeps the existing host and worker sessions
+running.
 
 | Key                 | Action                                                                    |
 | ------------------- | ------------------------------------------------------------------------- |
-| Tab or Left/Right   | Switch Active/Past                                                        |
+| Left/Right          | Collapse or expand a branch, or move to its parent or first child         |
+| Tab                 | Switch Active/Past                                                        |
 | Up/Down, Enter      | Select and open a conversation                                            |
 | g                   | Compose guidance; Enter sends, Escape cancels input                       |
 | d                   | Toggle model, delegator, repository, worktree/candidate, branch and scope |

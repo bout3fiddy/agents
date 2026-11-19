@@ -228,10 +228,16 @@ export async function runWorkflow(
       changedFiles?: string[],
     ) {
       signal?.throwIfAborted()
+      const implementer = task?.evidence.findLast((item) => item.role === 'implementer')
+      const measurement =
+        frozen &&
+        task?.evidence.findLast((item) => item.role === 'performance' && item.snapshot === frozen)
+      const author = measurement && implementer?.snapshot !== frozen ? measurement : implementer
       const evidence = await dispatch(
         {
           role,
           ...(role === 'implementer' && { implementerModel }),
+          reviewOf: frozen || role === 'performance' ? author?.liveWorkerId : undefined,
           thinking: thinking[role],
           task: assignment,
           workspace,
