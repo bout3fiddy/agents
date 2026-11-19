@@ -505,3 +505,51 @@ test('audits retain host verification after task delivery and ignore their own w
   assert.equal(first.cursor.sessions[owner.session], 'verified')
   assert.equal(auditDelta(first.cursor, owner.session, entries, jobs).context, '')
 })
+
+test('scheduled audit carries host verification without waking itself', () => {
+  const entries = JSON.parse(
+    JSON.stringify([
+      {
+        type: 'custom_message',
+        customType: 'pi-task-result',
+        id: 'audit',
+        details: { taskIds: ['audit-id:0'] },
+      },
+      {
+        type: 'message',
+        id: 'check',
+        message: { role: 'toolResult', toolName: 'bash', isError: false },
+      },
+      {
+        type: 'message',
+        id: 'verified',
+        message: {
+          role: 'assistant',
+          stopReason: 'stop',
+          content: [{ type: 'text', text: 'Seven checks passed on revision abc.' }],
+        },
+      },
+    ]),
+  )
+  const jobs = JSON.parse(
+    JSON.stringify([{ request: { id: 'audit-id', recurring: { audit: true } } }]),
+  )
+  const cursor = { ...emptyCursor(), head: 'abc' }
+  assert.equal(auditDelta(cursor, 's', entries, jobs, 'abc').context, '')
+  entries.push(
+    { type: 'message', id: 'question', message: { role: 'user', content: 'Status?' } },
+    {
+      type: 'message',
+      id: 'answer',
+      message: {
+        role: 'assistant',
+        stopReason: 'stop',
+        content: [{ type: 'text', text: 'Ready.' }],
+      },
+    },
+  )
+  const next = auditDelta(cursor, 's', entries, jobs, 'abc')
+  assert.match(next.context, /Seven checks passed on revision abc/)
+  assert.match(next.context, /"head":"abc"/)
+  assert.equal(auditDelta(next.cursor, 's', entries, jobs, 'abc').context, '')
+})

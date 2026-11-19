@@ -173,6 +173,9 @@ The orchestrator uses `recurring_task` to list, set or remove named schedules. A
 one interval unless `startImmediately` is true. Setting an existing name replaces its definition for
 subsequent runs. Removing it cancels an outstanding job and preserves its receipts.
 
+Each dispatched audit receives the current Git head when available and the latest host summary from
+an audit wake that ran a successful shell command. These summaries alone do not trigger runs.
+
 For a Fable progress audit, ask “Audit progress hourly with Fable Medium, run a baseline now, write
 scorecards under `.pi/audits/progress/`, and stop when the release evidence is complete.” The host
 uses `work.kind = "audit"` with `model: "fable"` and `thinking: "medium"`. A single read-only Fable

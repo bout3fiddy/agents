@@ -73,6 +73,51 @@ function discussions(entries: Branch, taskIds: Set<string>) {
   return turns
 }
 
+/** Keep the host's reported outcome separate from the head observed at the next dispatch. */
+function latestAuditFollowup(entries: Branch, jobs: Delegation[]) {
+  const auditIds = new Set(
+    jobs.filter((job) => job.request.recurring?.audit).map((job) => job.request.id),
+  )
+  let auditWake = false
+  let shellCompleted = false
+  let latest: { id: string; hostReport: string } | undefined
+
+  for (const entry of entries) {
+    if (entry.type === 'custom_message' && entry.customType === 'pi-task-result') {
+      const ids = (entry.details as { taskIds?: unknown } | undefined)?.taskIds
+      auditWake =
+        Array.isArray(ids) &&
+        ids.some((id) => typeof id === 'string' && auditIds.has(id.split(':')[0]!))
+      shellCompleted = false
+    }
+
+    if (!auditWake || entry.type !== 'message') {
+      continue
+    }
+
+    const message = entry.message
+
+    if (message.role === 'user') {
+      auditWake = false
+    } else if (message.role === 'toolResult' && message.toolName === 'bash' && !message.isError) {
+      shellCompleted = true
+    } else if (message.role === 'assistant' && message.stopReason === 'stop') {
+      const hostReport = message.content
+        .flatMap((part) => (part.type === 'text' ? [part.text] : []))
+        .join('\n')
+        .slice(0, 1400)
+
+      if (shellCompleted && hostReport) {
+        latest = { id: entry.id, hostReport }
+      }
+
+      auditWake = false
+    }
+  }
+
+  return latest
+}
+
 export async function auditHead(root: string) {
   if (!existsSync(join(root, '.git'))) {
     return undefined
@@ -98,7 +143,9 @@ export function auditDelta(
   }
 
   const rows: string[] = []
-  let remaining = 18000
+  const followup = latestAuditFollowup(entries, jobs)
+  const reference = JSON.stringify({ head, latestAuditFollowup: followup })
+  let remaining = 18000 - reference.length - 1
 
   function add(value: unknown) {
     const row = JSON.stringify(value)
@@ -163,6 +210,10 @@ export function auditDelta(
     if (previous.jobs[request.id] !== fingerprint && add(observed)) {
       cursor.jobs[request.id] = fingerprint
     }
+  }
+
+  if (rows.length && (head || followup)) {
+    rows.unshift(reference)
   }
 
   return { cursor, context: rows.join('\n') }
