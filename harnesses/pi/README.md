@@ -208,7 +208,9 @@ delegates writable tasks and requests Fable reviews when useful. Document worker
 for mechanical edits. Implementation uses Astra medium by default. Routine documents need no review
 call. Substantive code maintenance requires passing engineering review; routine low-risk maintenance
 can set `review: false` and retain executable checks. DB changes also require database review and
-recovery checks.
+recovery checks. A read-only research report can complete with required findings. A blocked research
+assignment still needs attention. Delegated implementation workers record their task ID so the
+worker picker and traces identify the owning task.
 
 Leaf acceptance covers its assigned work; the coordinator owns subsequent specialist reviews. When
 completion is blocked by an earlier child result, the error names the exact role and write scope

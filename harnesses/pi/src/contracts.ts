@@ -220,6 +220,11 @@ export function validateDesign(value: unknown): Design {
   return value
 }
 
+/** Read-only reports may complete while identifying required changes in the subject. */
+export function completedResult(verdict: WorkerResult['verdict'], readOnlyReport: boolean) {
+  return verdict === 'pass' || (readOnlyReport && verdict === 'changes')
+}
+
 export function validateResult(value: unknown, decideContinuation = false): WorkerResult {
   if (!Check(decideContinuation ? auditResultSchema : resultSchema, value)) {
     throw new Error('Invalid worker result')

@@ -15,6 +15,7 @@ import {
   thinkingSchema,
   specialistThinkingSchema,
   ProviderQuotaError,
+  completedResult,
   validateResult,
   writePathSchema,
   type Checkpoint,
@@ -1112,7 +1113,8 @@ export async function runTaskCoordinator(
       throw new Error('Task controls changed before completion; a fresh result is required')
     }
 
-    await live.finish(result.verdict === 'pass' ? 'complete' : 'needs_attention', result.summary)
+    const completed = completedResult(result.verdict, request.kind === 'research')
+    await live.finish(completed ? 'complete' : 'needs_attention', result.summary)
     return {
       result,
       children: worker.children(),

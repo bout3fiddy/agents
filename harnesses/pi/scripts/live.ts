@@ -4,6 +4,7 @@ import { mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { homedir } from 'node:os'
 import { harnessRoot } from '../src/project.ts'
+import { WorkersCatalog } from '../src/workers-data.ts'
 import { atomicJson } from '../src/state.ts'
 import { liveFixture } from './live-fixture.ts'
 import { basicFixture } from './live-basic-fixture.ts'
@@ -128,7 +129,14 @@ assert.deepEqual(
 )
 assert.ok(task.receipts.every((item) => item.status === 'passed'))
 
+const workers = await new WorkersCatalog(root).list()
+
 for (const item of task.evidence) {
+  if (!item.closedReview) {
+    const worker = workers.find((row) => row.id === item.liveWorkerId)
+    assert.equal(worker?.info.taskId, job.request.id, 'Worker must belong to the delegated task')
+  }
+
   if (item.closedReview) {
     assert.equal(item.model, 'harness/formatter')
     assert.equal(item.turns, 0)

@@ -4,7 +4,7 @@ import { changes } from './integration.ts'
 import { snapshotHash, writable, rejectIgnoredAdditions } from './paths.ts'
 import { verifyProject } from './project.ts'
 import { benchmarks, databaseImpact } from './workflow.ts'
-import { validateResult, type Project, type Receipt } from './contracts.ts'
+import { completedResult, validateResult, type Project, type Receipt } from './contracts.ts'
 import type { DelegationRequest } from './delegation-state.ts'
 import type { TaskCoordinatorEvidence } from './task-coordinator.ts'
 
@@ -32,7 +32,7 @@ export async function checkDelegation(
   validateResult(evidence.result, Boolean(audit && request.recurring?.stopWhen))
 
   // Read-only audit findings and blockers go into the report after scope verification.
-  if (!audit && evidence.result.verdict !== 'pass') {
+  if (!audit && !completedResult(evidence.result.verdict, request.kind === 'research')) {
     throw new Error(`Coordinator reported ${evidence.result.verdict}: ${evidence.result.summary}`)
   }
 

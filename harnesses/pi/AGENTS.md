@@ -128,6 +128,10 @@
   no routine human approvals. It has no child-call, turn or total-duration ceiling. All agents
   follow this uncapped policy. Keep explicit cancellation, bounded command execution, scopes and
   concurrency controls; turn counts are telemetry only.
+- Store delegated implementation attempts under their owning task so the worker picker and traces
+  can identify the task. Keep the project checkpoint shared with foreground workflows.
+- Read-only research completes when it reports findings. Preserve its original verdict and keep
+  blocked reports actionable. Writable jobs still require a passing verdict.
 - Local implementation uses one project checkpoint and reserves local writes exclusively. On
   dispatch and resume, distinguish that reservation from overlapping paths and from a full
   background queue. Route new independent builds through branch worktrees when their design and

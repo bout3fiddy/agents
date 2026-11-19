@@ -12,6 +12,7 @@ import { progressReporter } from './progress.ts'
 import { LiveWorker } from './worker-live.ts'
 import { ClaudeLiveTrace } from './worker-live-claude.ts'
 import {
+  completedResult,
   validateResult,
   ProviderQuotaError,
   type CommandResult,
@@ -243,7 +244,9 @@ export async function runClaudeWorker(request: WorkerRequest, role: Role): Promi
 
     await progress.update({ stage: 'complete', message: evidence.result.summary })
     await live.finish(
-      evidence.result.verdict === 'pass' ? 'complete' : 'needs_attention',
+      completedResult(evidence.result.verdict, request.role === 'progress-auditor')
+        ? 'complete'
+        : 'needs_attention',
       evidence.result.summary,
     )
     return {

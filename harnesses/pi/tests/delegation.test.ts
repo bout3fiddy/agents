@@ -555,3 +555,32 @@ test('blocked workers preserve actionable host requirements', async () => {
     await rm(base, { recursive: true, force: true })
   }
 })
+
+test('research delivers findings and preserves blockers', async (t) => {
+  const { base, store } = await fixture()
+  t.after(() => rm(base, { recursive: true, force: true }))
+  const jobs = new Delegations(store)
+
+  for (const verdict of ['changes', 'blocked'] as const) {
+    const job = await jobs.start(
+      { ...input, kind: 'research', writePaths: [] },
+      origin,
+      async () => {},
+    )
+    const evidence = result()
+    evidence.result.verdict = verdict
+    evidence.result.summary = 'Independent research report'
+    evidence.result.findings.push({
+      severity: 'required',
+      location: 'src/value.js',
+      problem: 'The fixture value differs from the requested value',
+      evidence: 'The file exports zero',
+    })
+    const state = await runDelegation(store, job.request.id, signal(), async () => evidence)
+    assert.equal(state.status, verdict === 'changes' ? 'complete' : 'needs_attention')
+    assert.equal(state.summary, evidence.result.summary)
+    const directory = delegationDirectory(store, job.request.id)
+    const saved = JSON.parse(await readFile(join(directory, 'evidence.json'), 'utf8'))
+    assert.deepEqual(saved.result, evidence.result)
+  }
+})
