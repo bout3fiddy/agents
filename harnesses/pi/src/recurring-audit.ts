@@ -26,11 +26,22 @@ export const emptyCursor = (): AuditCursor => ({ sessions: {}, jobs: {} })
 
 type Branch = ReturnType<ExtensionContext['sessionManager']['getBranch']>
 
-function discussions(entries: Branch) {
-  const turns: { id: string; user: string; answer: string }[] = []
-  let user: { id: string; text: string } | undefined
+function discussions(entries: Branch, taskIds: Set<string>) {
+  const turns: { id: string; user?: string; trigger?: string; answer: string }[] = []
+  let origin: { user?: string; trigger?: string } | undefined
 
   for (const entry of entries) {
+    if (entry.type === 'custom_message' && entry.customType === 'pi-task-result') {
+      const details = entry.details as { taskIds?: unknown } | undefined
+
+      if (
+        Array.isArray(details?.taskIds) &&
+        details.taskIds.some((id) => typeof id === 'string' && taskIds.has(id.split(':')[0]!))
+      ) {
+        origin ??= { trigger: 'background task outcome' }
+      }
+    }
+
     if (entry.type !== 'message') {
       continue
     }
@@ -43,19 +54,19 @@ function discussions(entries: Branch) {
         typeof content === 'string'
           ? content
           : content.flatMap((part) => (part.type === 'text' ? [part.text] : [])).join('\n')
-      user = { id: entry.id, text: text.slice(0, 1000) }
+      origin = { user: text.slice(0, 1000) }
     }
 
-    if (user && message.role === 'assistant' && message.stopReason === 'stop') {
+    if (origin && message.role === 'assistant' && message.stopReason === 'stop') {
       turns.push({
-        id: user.id,
-        user: user.text,
+        id: entry.id,
+        ...origin,
         answer: message.content
           .flatMap((part) => (part.type === 'text' ? [part.text] : []))
           .join('\n')
           .slice(0, 1400),
       })
-      user = undefined
+      origin = undefined
     }
   }
 
@@ -106,6 +117,21 @@ export function auditDelta(
     cursor.head = head
   }
 
+  // Keep host verification and integration outcomes ahead of verbose worker status.
+  const taskIds = new Set(
+    jobs.filter((job) => !job.request.recurring?.audit).map((job) => job.request.id),
+  )
+  const last = previous.sessions[session]
+  const start = last ? entries.findLastIndex((entry) => entry.id === last) + 1 : 0
+
+  for (const turn of discussions(entries.slice(start), taskIds)) {
+    if (!add({ session, ...turn })) {
+      break
+    }
+
+    cursor.sessions[session] = turn.id
+  }
+
   for (const { request, state, milestone } of jobs) {
     if (request.recurring?.audit) {
       continue
@@ -137,17 +163,6 @@ export function auditDelta(
     if (previous.jobs[request.id] !== fingerprint && add(observed)) {
       cursor.jobs[request.id] = fingerprint
     }
-  }
-
-  const last = previous.sessions[session]
-  const start = last ? entries.findLastIndex((entry) => entry.id === last) + 1 : 0
-
-  for (const turn of discussions(entries.slice(start))) {
-    if (!add({ session, ...turn })) {
-      break
-    }
-
-    cursor.sessions[session] = turn.id
   }
 
   return { cursor, context: rows.join('\n') }

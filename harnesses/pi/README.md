@@ -177,9 +177,9 @@ For a Fable progress audit, ask “Audit progress hourly with Fable Medium, run 
 scorecards under `.pi/audits/progress/`, and stop when the release evidence is complete.” The host
 uses `work.kind = "audit"` with `model: "fable"` and `thinking: "medium"`. A single read-only Fable
 worker inspects the project snapshot and can verify public evidence with web tools. The default
-audit uses Codex. Both receive changed task summaries and checks, completed discussion turns, and
-the current Git commit when it changes. An immediate baseline also runs in a fresh session. Later
-idle intervals use no model calls.
+audit uses Codex. Both receive host summaries of completed background work, discussions, changed
+task checks, and the current Git commit when it changes. An immediate baseline also runs in a fresh
+session. Later idle intervals use no model calls.
 
 Set `reportDirectory` under `.pi/audit/` or `.pi/audits/` for dated Markdown scorecards. The default
 output is `.pi/audit/<job-id>.json`. With `stopWhen`, a completed audit supplies an explicit

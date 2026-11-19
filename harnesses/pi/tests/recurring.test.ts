@@ -9,6 +9,7 @@ import { coordinatorEvidence } from './branch-support.ts'
 import { captureSession } from './session-support.ts'
 import { registerRecurring } from '../src/recurring-tools.ts'
 import { RecurringTasks } from '../src/recurring.ts'
+import { auditDelta, emptyCursor } from '../src/recurring-audit.ts'
 import { runDelegation } from '../src/delegation-runner.ts'
 import { registerDelegation } from '../src/delegation-tools.ts'
 import { delegationDirectory, type DelegationRequest } from '../src/delegation-state.ts'
@@ -467,4 +468,40 @@ test('late audit guidance prevents publication of an obsolete stop decision', as
   assert.match(job.error!, /late task update/)
   assert.equal(job.auditReport, undefined)
   await assert.rejects(readFile(join(root, '.pi/audits/progress')), { code: 'ENOENT' })
+})
+
+test('audits retain host verification after task delivery and ignore their own wake', async (t) => {
+  const { schedules } = await setup(t)
+  const task = await schedules.jobs.start(documents.work, owner, async () => {})
+  const auditJob = await schedules.jobs.start(
+    { kind: 'research', task: 'Audit progress', context: '', writePaths: [] },
+    owner,
+    async () => {},
+    { name: 'progress', audit: true },
+  )
+  const outcome = (id: string, taskId: string) => ({
+    type: 'custom_message',
+    customType: 'pi-task-result',
+    id,
+    details: { taskIds: [taskId] },
+  })
+  const answer = (id: string, text: string) => ({
+    type: 'message',
+    id,
+    message: { role: 'assistant', stopReason: 'stop', content: [{ type: 'text', text }] },
+  })
+  const entries = JSON.parse(
+    JSON.stringify([
+      outcome('task', task.request.id + ':1'),
+      answer('verified', 'All 212 tests passed on main'),
+      outcome('audit', auditJob.request.id),
+      answer('reply', 'Audit acknowledgement'),
+    ]),
+  )
+  const jobs = [task, auditJob]
+  const first = auditDelta(emptyCursor(), owner.session, entries, jobs)
+  assert.match(first.context, /All 212 tests passed on main/)
+  assert.doesNotMatch(first.context, /Audit acknowledgement/)
+  assert.equal(first.cursor.sessions[owner.session], 'verified')
+  assert.equal(auditDelta(first.cursor, owner.session, entries, jobs).context, '')
 })
