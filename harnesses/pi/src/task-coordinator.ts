@@ -379,9 +379,10 @@ export async function createTaskCoordinatorTools(
 
       const validFallback =
         childRole.backend === 'claude-cli' &&
-        raw.role !== 'implementer' &&
+        expectedModel === 'claude-fable-5-2' &&
+        (raw.role !== 'implementer' || child.thinking === childRole.thinking) &&
         child.quotaFallbackFrom === expectedModel &&
-        /^claude-opus-/.test(actualModel)
+        /^claude-cli\/claude-opus-/.test(child.model)
 
       if (actualModel !== expectedModel && !validFallback) {
         throw new Error('Child model does not match its configured role')

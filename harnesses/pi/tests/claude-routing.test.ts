@@ -58,7 +58,9 @@ test('Fable quota shares cooldown and restores preference after reset', async (t
   )
 })
 
-test('manual Claude implementers retain scope and never substitute another writer', async () => {
+test('Fable writers retain effort and scope on quota fallback', async (t) => {
+  const directory = await mkdtemp(join(tmpdir(), 'pi-writer-quota-'))
+  t.after(() => rm(directory, { recursive: true, force: true }))
   const defaultRole = await loadRole('implementer')
   assert.equal(defaultRole.model, 'openai-codex/gpt-6.2-astra')
 
@@ -66,17 +68,33 @@ test('manual Claude implementers retain scope and never substitute another write
     const role = await loadRole('implementer', 'high', selection)
     const model = selection === 'opus' ? 'claude-opus-5-5' : 'claude-fable-5-2'
     assert.deepEqual(role, { ...defaultRole, backend: 'claude-cli', model, thinking: 'high' })
-    let attempts = 0
+    const attempts: string[] = []
     const limit = new ProviderQuotaError('quota', Date.now() + 60000)
-    await assert.rejects(
-      routeClaude(role, async (selected) => {
-        attempts++
-        assert.equal(selected.model, model)
-        throw limit
-      }),
-      (error) => error === limit,
-    )
-    assert.equal(attempts, 1)
+    const run = () =>
+      routeClaude(
+        role,
+        async (selected, retry) => {
+          attempts.push(selected.model)
+          assert.deepEqual(selected, { ...role, model: selected.model })
+
+          if (selected.model === 'opus') {
+            return retry
+          }
+
+          throw limit
+        },
+        directory,
+      )
+
+    if (selection === 'fable') {
+      assert.equal(await run(), true)
+      assert.equal(await run(), false)
+      assert.deepEqual(attempts, [model, 'opus', 'opus'])
+    } else {
+      await assert.rejects(run(), (error) => error === limit)
+      assert.deepEqual(attempts, [model])
+    }
+
     await assert.rejects(loadRole('reviewer', 'medium', selection), /implementer role/)
     await assert.rejects(loadRole('implementer', 'low', selection), /Unsupported thinking/)
   }

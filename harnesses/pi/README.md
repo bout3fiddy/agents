@@ -31,7 +31,8 @@ current session selection is independent of worker effort.
 Astra implements by default. When the user explicitly requests Opus or Fable to implement a design,
 set `implementerModel` to `opus` or `fable` on the workflow, maintenance task, or individual branch
 task. Route implementation and repair through its tracked implementer. Claude implementers use
-medium or high effort. A named implementer stays pinned on quota failure.
+medium or high effort. When Fable reaches its usage limit, Opus continues the same task at the
+selected effort.
 
 The orchestrator can select `thinking` for each background job. On `workflow` and implementation
 jobs it selects Astra's effort. The optional `specialistThinking` object selects each applicable

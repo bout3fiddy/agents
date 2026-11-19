@@ -705,3 +705,29 @@ test('coordinator accepts an Opus review only with matching fallback provenance'
     }
   }
 })
+
+test('branch accepts a Fable writer fallback with matching provenance and effort', async (t) => {
+  const { request, controller } = await setup(t)
+  request.kind = 'branch'
+  request.implementerModel = 'fable'
+
+  for (const thinking of ['high', 'medium'] as const) {
+    const worker = await createTaskCoordinatorTools(request, controller.signal, async (child) => ({
+      ...(await evidence(child)),
+      model: 'claude-cli/claude-opus-5-5',
+      quotaFallbackFrom: 'claude-fable-5-2',
+      thinking,
+    }))
+    const attempt = invoke(worker.tools, 'delegate_worker', {
+      ...leaf,
+      role: 'implementer',
+      thinking: 'high',
+    })
+
+    if (thinking === 'high') {
+      await attempt
+    } else {
+      await assert.rejects(attempt, /model does not match/)
+    }
+  }
+})

@@ -167,7 +167,11 @@ async function runClaudeAttempt(
     role.model === 'opus'
       ? '\nYou are Opus, the authorized quota fallback. Apply the assignment criteria as written.'
       : ''
-  await writeFile(promptPath, system + identity)
+  const continuation =
+    retry && role.name === 'implementer'
+      ? '\nInspect the current scoped files for retained work from Fable and continue the task.'
+      : ''
+  await writeFile(promptPath, system + identity + continuation)
 
   try {
     let diagnostics = ''

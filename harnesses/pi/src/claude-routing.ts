@@ -9,7 +9,7 @@ export async function routeClaude<T>(
   attempt: (selected: Role, retry: boolean) => Promise<T>,
   directory = process.env.PI_CODING_AGENT_DIR ?? join(homedir(), '.pi', 'agent'),
 ): Promise<T> {
-  if (role.name === 'implementer' || role.model !== 'claude-fable-5-2') {
+  if (role.model !== 'claude-fable-5-2') {
     return attempt(role, false)
   }
 

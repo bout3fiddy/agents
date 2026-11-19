@@ -155,6 +155,11 @@ for (const item of task.evidence) {
           /^claude-cli\/(?:claude-fable-5-2|(?:claude-)?opus)(?:-|$)/.test(original.model),
       ),
     )
+  } else if (item.role === 'implementer' && item.quotaFallbackFrom) {
+    assert.equal(implementer, 'fable')
+    assert.equal(item.quotaFallbackFrom, 'claude-fable-5-2')
+    assert.match(item.model, /^claude-cli\/claude-opus-/)
+    assert.equal(item.thinking, job.request.thinking ?? 'medium')
   } else if (item.role === 'implementer') {
     assert.equal(
       item.model,
