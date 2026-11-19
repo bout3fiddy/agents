@@ -531,3 +531,14 @@ test('a candidate change during paired review invalidates both verdicts', async 
   )
   assert.equal(await readFile(join(item.root, 'src/value.js'), 'utf8'), 'export const value = 0\n')
 })
+
+test('a blocked implementation persists the current host handoff', async (t) => {
+  const { base, store } = await fixture()
+  t.after(() => rm(base, { recursive: true, force: true }))
+  const hostActions = [{ capability: 'dependencies' as const, reason: 'Prepare the pinned SDK' }]
+  const task = await runWorkflow(store, 'fixture/model', undefined, (request) =>
+    evidence(request, { verdict: 'blocked', hostActions }),
+  )
+  assert.equal(task.status, 'needs_attention')
+  assert.deepEqual((await store.task())?.hostActions, hostActions)
+})

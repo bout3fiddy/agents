@@ -11,6 +11,7 @@ import {
   type Design,
   type Receipt,
   type WorkerEvidence,
+  type WorkerResult,
 } from './contracts.ts'
 
 export type TaskState = {
@@ -20,6 +21,7 @@ export type TaskState = {
   status: 'running' | 'needs_attention' | 'verified' | 'applying' | 'complete' | 'interrupted'
   phase: string
   round: number
+  hostActions?: WorkerResult['hostActions']
   reviewRound?: { snapshot: string; start: number; database: boolean }
   candidate?: string
   resumedFrom?: string

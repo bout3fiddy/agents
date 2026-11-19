@@ -134,6 +134,7 @@ export async function runDelegation(
                 : 'needs_attention',
         summary: task.evidence.at(-1)?.result.summary,
         error: task.error,
+        hostActions: task.hostActions,
         candidate: task.candidate,
         receipts: task.receipts,
         children: task.evidence.map((child) => ({

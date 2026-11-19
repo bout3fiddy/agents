@@ -276,6 +276,7 @@ export async function runWorkflow(
         const implementation = await worker('implementer', feedback)
 
         if (implementation.result.verdict === 'blocked') {
+          task.hostActions = implementation.result.hostActions
           throw new Error(`Implementation blocked: ${implementation.result.summary}`)
         }
 

@@ -210,7 +210,8 @@ call. Substantive code maintenance requires passing engineering review; routine 
 can set `review: false` and retain executable checks. DB changes also require database review and
 recovery checks. A read-only research report can complete with required findings. A blocked research
 assignment still needs attention. Delegated implementation workers record their task ID so the
-worker picker and traces identify the owning task.
+worker picker and traces identify the owning task. Blocked implementation results include the
+worker’s structured requests for host actions.
 
 Leaf acceptance covers its assigned work; the coordinator owns subsequent specialist reviews. When
 completion is blocked by an earlier child result, the error names the exact role and write scope
