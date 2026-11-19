@@ -155,3 +155,6 @@
   rounds. Skip absent reviewers; use adaptive waits for detected work. Persist round counts and
   comment versions, resume interrupted repairs, and retain normal required CI/protection gates. Keep
   this five-round merge policy separate from uncapped implementation orchestration.
+
+Claude specialists prefer Fable 5.2. On a confirmed usage limit the harness selects Opus with the
+same role and effort until the reported reset. Attribute results to the recorded model.

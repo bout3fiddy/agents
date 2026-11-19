@@ -60,3 +60,6 @@ semantics, including a changed durability boundary outside conventional database
 
 When a required reviewer reports a confirmed provider quota rejection, preserve the candidate and
 return blocked with the missing host action. A host update or provider reset can restore review.
+
+Claude specialists prefer Fable 5.2. On a confirmed usage limit the harness selects Opus with the
+same role and effort until the reported reset. Attribute results to the recorded model.

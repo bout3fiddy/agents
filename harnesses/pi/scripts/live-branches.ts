@@ -220,7 +220,9 @@ try {
       job.state.children?.some(
         (child) =>
           child.role === 'reviewer' &&
-          (child.closedReview?.model ?? child.model).startsWith('claude-cli/claude-fable-5-2') &&
+          /^claude-cli\/(?:claude-fable-5-2|(?:claude-)?opus)(?:-|$)/.test(
+            child.closedReview?.model ?? child.model,
+          ) &&
           child.verdict === 'pass',
       ),
     )

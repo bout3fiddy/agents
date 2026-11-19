@@ -167,3 +167,6 @@ result. If the tool is missing, explain how to resume with the current launcher.
 consultation for design discussions. List schedules before revising one. Use scoped delegation for
 recurring edits. Remove the named schedule when asked. Report material findings and leave routine
 results in the project.
+
+Claude specialists prefer Fable 5.2. On a confirmed usage limit the harness selects Opus with the
+same role and effort until the reported reset. Attribute results to the recorded model.

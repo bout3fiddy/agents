@@ -8,7 +8,8 @@ import { randomUUID } from 'node:crypto'
 import { Type, type Static } from 'typebox'
 import { Check } from 'typebox/value'
 import { claudeArguments, parseClaudeTrace } from './claude-worker.ts'
-import { specialistThinkingSchema } from './contracts.ts'
+import { routeClaude } from './claude-routing.ts'
+import { ProviderQuotaError, type Role, specialistThinkingSchema } from './contracts.ts'
 import { loadRole, rolePrompt } from './roles.ts'
 import { atomicJson, readJson, type StateStore } from './state.ts'
 import { readBoundedFile, safePath } from './paths.ts'
@@ -121,6 +122,23 @@ export async function runDesignAdvice(
 ): Promise<Advice> {
   signal.throwIfAborted()
   const role = await loadRole('design-advisor', thinking)
+  return routeClaude(role, (selected, retry) =>
+    runAdviceAttempt(
+      input,
+      signal,
+      selected,
+      tracePath && retry ? tracePath + '.opus.jsonl' : tracePath,
+    ),
+  )
+}
+
+async function runAdviceAttempt(
+  input: string,
+  signal: AbortSignal,
+  role: Role,
+  tracePath?: string,
+): Promise<Advice> {
+  signal.throwIfAborted()
   const scratch = await mkdtemp(join(tmpdir(), 'pi-design-advice-'))
 
   try {
@@ -158,14 +176,32 @@ export async function runDesignAdvice(
     })
     invocation.child.stdin?.on('error', () => {})
     invocation.child.stdin?.end(input)
-    const { stdout } = await invocation
+    const { stdout } = await invocation.catch(
+      (error: NodeJS.ErrnoException & { stdout?: string }) => {
+        signal.throwIfAborted()
+
+        if (!traceError && typeof error.code === 'number' && error.stdout) {
+          const { retryAt, response } = parseClaudeTrace(error.stdout)
+
+          if (retryAt) {
+            throw new ProviderQuotaError(response?.result ?? 'Claude usage limit', retryAt)
+          }
+        }
+
+        throw traceError ?? error
+      },
+    )
     signal.throwIfAborted()
 
     if (traceError) {
       throw traceError
     }
 
-    const { response, toolsUsed } = parseClaudeTrace(stdout)
+    const { response, toolsUsed, retryAt } = parseClaudeTrace(stdout)
+
+    if (retryAt) {
+      throw new ProviderQuotaError(response?.result ?? 'Claude usage limit', retryAt)
+    }
 
     if (
       !response ||
@@ -173,7 +209,7 @@ export async function runDesignAdvice(
       !response.result?.trim() ||
       response.result.length > 32000
     ) {
-      throw new Error('Fable returned an error, empty advice or advice exceeding 32 KB')
+      throw new Error('Claude returned an error, empty advice or advice exceeding 32 KB')
     }
 
     return {

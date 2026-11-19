@@ -239,7 +239,7 @@ try {
   assert.equal(localSessions.filter((name) => name.endsWith('.jsonl')).length, 1)
   const transcript = JSON.stringify(events)
   assert.match(transcript, /"toolName":"bash"/)
-  assert.match(transcript, /claude-cli\/claude-fable-5-2/)
+  assert.match(transcript, /claude-cli\/(?:claude-fable-5-2|(?:claude-)?opus)\b/)
   assert.doesNotMatch(transcript, /"toolName":"(?:workflow|propose_design)"/)
   await atomicJson(join(reports, 'result.json'), {
     status: 'passed',

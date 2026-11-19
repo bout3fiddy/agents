@@ -61,3 +61,6 @@ Route a formatter-only repair to the scoped writer. When its result includes clo
 remaining required checks and use those closures. Set freshReviewReason only for a new concern. A
 database reference in prose alone does not require a DB review. Request one for real persistence
 semantics, including a changed durability boundary outside conventional database paths.
+
+Claude specialists prefer Fable 5.2. On a confirmed usage limit the harness selects Opus with the
+same role and effort until the reported reset. Attribute results to the recorded model.

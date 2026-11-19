@@ -17,6 +17,9 @@ independent Fable reviews.
 | Database reviewer        | Fable 5.2 / high       |
 | Performance investigator | Fable 5.2 / medium     |
 
+Claude specialists prefer Fable 5.2. On a confirmed usage limit the harness selects Opus with the
+same role and effort until the reported reset. Attribute results to the recorded model.
+
 The default orchestrator is `openai-codex/gpt-6.1-sol` at medium effort. Pi's current model and
 thinking selection take precedence for the orchestrator; the harness never silently changes them.
 Timing traces record the actual selection. Implementation is pinned to `openai-codex/gpt-6.2-astra`

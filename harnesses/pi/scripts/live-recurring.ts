@@ -108,7 +108,7 @@ try {
     'Set a recurring progress audit named build-audit, every hour, ' +
       'starting immediately. Read status.md and the new task observations, report any blocker. ' +
       (fable
-        ? 'Use Fable Medium directly. Write Markdown scorecards under .pi/audits/progress. ' +
+        ? 'Fable Medium, Opus fallback. Save Markdown under .pi/audits/progress. ' +
           'Read status.md and receipt.json. Quote the receipt ID. Stop when receipt.json has ' +
           'that ID, result passed, exitCode 0, and the named artifact exists. ' +
           'Record why. Just confirm setup.'
@@ -137,7 +137,10 @@ try {
     assert.match(job.state.auditReport, /^\.pi\/audits\/progress\/.*\.md$/)
     assert.ok(raw.includes(marker))
     assert.equal(job.state.children?.[0]?.role, 'progress-auditor')
-    assert.match(job.state.children[0]!.model, /claude-cli\/.*fable/)
+    assert.match(
+      job.state.children[0]!.model,
+      /^claude-cli\/(?:claude-fable-5-2|(?:claude-)?opus)(?:-|$)/,
+    )
     assert.match(raw, /medium/)
     assert.equal(job.state.auditDecision?.action, 'stop', job.state.auditDecision?.reason)
 
@@ -177,6 +180,7 @@ try {
   console.log(JSON.stringify(result))
 } finally {
   await schedules.remove('build-audit')
+  await session.waitForIdle()
   session.dispose()
   await runtime.settleCredentialWrites()
 }

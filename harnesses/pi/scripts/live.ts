@@ -146,12 +146,12 @@ for (const item of task.evidence) {
           original.role === item.role &&
           original.snapshot === item.closedReview!.snapshot &&
           original.model === item.closedReview!.model &&
-          original.model.startsWith('claude-cli/claude-fable-5-2'),
+          /^claude-cli\/(?:claude-fable-5-2|(?:claude-)?opus)(?:-|$)/.test(original.model),
       ),
     )
   } else if (item.role === 'implementer') {
     assert.equal(item.model, 'openai-codex/gpt-6.2-astra')
   } else {
-    assert.ok(item.model.startsWith('claude-cli/claude-fable-5-2'))
+    assert.ok(/^claude-cli\/(?:claude-fable-5-2|(?:claude-)?opus)(?:-|$)/.test(item.model))
   }
 }

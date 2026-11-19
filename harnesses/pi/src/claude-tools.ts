@@ -75,7 +75,7 @@ server.setRequestHandler(CallToolRequestSchema, async (call, context) => {
       }
     }
 
-    await atomicJson(`${request.outputPath}.tools.json`, {
+    await atomicJson(`${process.argv[3] ?? request.outputPath}.tools.json`, {
       commands: worker.commands,
       result: worker.result(),
       calls,

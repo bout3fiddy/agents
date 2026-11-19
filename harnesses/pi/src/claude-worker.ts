@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { atomicJson, readJson } from './state.ts'
 import { harnessRoot } from './project.ts'
+import { routeClaude } from './claude-routing.ts'
 import { rolePrompt } from './roles.ts'
 import { assignment } from './worker-tools.ts'
 import { inventory, snapshotHash } from './paths.ts'
@@ -115,10 +116,19 @@ export function parseClaudeTrace(output: string) {
 }
 
 export async function runClaudeWorker(request: WorkerRequest, role: Role): Promise<WorkerEvidence> {
+  return routeClaude(role, (selected, retry) => runClaudeAttempt(request, selected, retry))
+}
+
+async function runClaudeAttempt(
+  request: WorkerRequest,
+  role: Role,
+  retry: boolean,
+): Promise<WorkerEvidence> {
   const progress = progressReporter(request.outputPath, request.role)
+  const attemptPath = retry ? request.outputPath + '.opus' : request.outputPath
   await progress.update({ stage: 'model', message: 'Claude worker starting' })
   const scratch = await mkdtemp(join(tmpdir(), 'pi-claude-'))
-  const requestPath = `${request.outputPath}.request.json`
+  const requestPath = `${attemptPath}.request.json`
   const configPath = join(scratch, 'mcp.json')
   const promptPath = join(scratch, 'system.txt')
   const live = await LiveWorker.start(request.project.root, {
@@ -147,16 +157,22 @@ export async function runClaudeWorker(request: WorkerRequest, role: Role): Promi
           join(harnessRoot, 'node_modules/tsx/dist/loader.mjs'),
           join(harnessRoot, 'src/claude-tools.ts'),
           requestPath,
+          attemptPath,
         ],
       },
     },
   })
-  await writeFile(promptPath, await rolePrompt(request.role))
+  const system = await rolePrompt(request.role)
+  const identity =
+    role.model === 'opus'
+      ? '\nYou are Opus, the authorized quota fallback. Apply the assignment criteria as written.'
+      : ''
+  await writeFile(promptPath, system + identity)
 
   try {
     let diagnostics = ''
     const input = JSON.stringify(await assignment(request))
-    const tracePath = `${request.outputPath}.claude.jsonl`
+    const tracePath = `${attemptPath}.claude.jsonl`
     await writeFile(tracePath, '', { mode: 0o600 })
     const child = spawn(
       process.env.PI_HARNESS_CLAUDE_BIN ?? 'claude',
@@ -235,7 +251,7 @@ export async function runClaudeWorker(request: WorkerRequest, role: Role): Promi
     }
 
     const evidence = await readJson<{ commands: CommandResult[]; result?: WorkerResult }>(
-      `${request.outputPath}.tools.json`,
+      `${attemptPath}.tools.json`,
     )
 
     if (!evidence?.result) {

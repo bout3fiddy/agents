@@ -27,7 +27,7 @@ function adviceMessage(result: Consultation): CustomMessageEntryDraft {
     type: 'custom_message',
     customType: 'pi-design-advice',
     content:
-      `Fable design consultation · ${result.status}\n` +
+      `Claude design consultation · ${result.status}\n` +
       `Model: ${result.advice?.model ?? 'claude-cli'}\n\n` +
       `Question: ${result.question}\n\n` +
       (result.status === 'complete' ? result.advice!.text : `Error: ${result.error}`),
@@ -48,7 +48,7 @@ export function registerWorkshop(pi: ExtensionAPI, runner?: AdviceRunner) {
     if (!closed) {
       current?.ui.setStatus(
         'pi-design',
-        count ? `Fable · ${count} active consultation${count === 1 ? '' : 's'}` : undefined,
+        count ? `Claude · ${count} active consultation${count === 1 ? '' : 's'}` : undefined,
       )
     }
   })
@@ -150,9 +150,9 @@ export function registerWorkshop(pi: ExtensionAPI, runner?: AdviceRunner) {
   pi.on('session_before_fork', async (_event, ctx) => cancel(ctx))
   pi.registerTool({
     name: 'consult_design',
-    label: 'Consult Fable on design',
+    label: 'Consult Claude on design',
     description:
-      'Consult Fable for a material new decision, conflict, feasibility question or explicit ' +
+      'Consult Claude for a material new decision, conflict, feasibility question or explicit ' +
       'second opinion. Routine choices and document edits reuse existing advice. Supply the ' +
       'user question, confirmed constraints and small document excerpts. Advice arrives between ' +
       'model steps; default 350 words. Continue your own analysis.',
@@ -209,13 +209,13 @@ export function registerWorkshop(pi: ExtensionAPI, runner?: AdviceRunner) {
       revisions.set(job.id, inputRevision)
       return textResult({
         ...job,
-        next: 'Continue your own analysis; Fable will report automatically.',
+        next: 'Continue your own analysis; Claude will report automatically.',
       })
     },
   })
   pi.registerTool({
     name: 'design_consultation',
-    label: 'Inspect Fable consultation',
+    label: 'Inspect Claude consultation',
     description: 'Read, await, or cancel a design consultation by ID. Prefer automatic delivery.',
     parameters: Type.Object({
       id: Type.String(),
