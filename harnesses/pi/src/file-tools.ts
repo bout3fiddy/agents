@@ -81,6 +81,7 @@ export function fileTools(
   scopes?: string[],
   roleScopes?: string[],
   documentsOnly = false,
+  resolveFile = safePath,
 ): ToolDefinition[] {
   let deliveredInstructions = ''
 
@@ -102,7 +103,7 @@ export function fileTools(
     parameters: readParameters,
     async execute(id, raw) {
       const args = raw as Static<typeof readParameters>
-      const source = await readBoundedFile(await safePath(root, args.path))
+      const source = await readBoundedFile(await resolveFile(root, args.path))
       const rules = await instructions(root, [args.path])
       return textResult({
         ...readWindow(source.toString('utf8'), args),
@@ -198,7 +199,7 @@ export function fileTools(
           throw new Error('Path is outside this worker assignment')
         }
 
-        const target = await safePath(root, path)
+        const target = await resolveFile(root, path)
         let content = (await readBoundedFile(target)).toString('utf8')
 
         for (const [index, edit] of [{ oldText, newText }, ...additionalEdits].entries()) {
@@ -239,7 +240,7 @@ export function fileTools(
           throw new Error('Path is outside this worker assignment')
         }
 
-        const target = await safePath(root, path)
+        const target = await resolveFile(root, path)
         const rules = await instructions(root, [path])
         await mkdir(dirname(target), { recursive: true })
         await writeFile(target, content)
@@ -259,7 +260,7 @@ export function fileTools(
           throw new Error('Path is outside this worker assignment')
         }
 
-        await unlink(await safePath(root, path))
+        await unlink(await resolveFile(root, path))
         return textResult({ deleted: path, call: id })
       },
     })

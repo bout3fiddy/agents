@@ -14,7 +14,7 @@ import {
 import { fileTools, textResult } from './file-tools.ts'
 import { createWorkspace, harnessRoot, instructions } from './project.ts'
 import { runSandboxed } from './sandbox.ts'
-import { fileHashes, inventory, safePath, writable } from './paths.ts'
+import { fileHashes, inventory, snapshotPath, writable } from './paths.ts'
 import { checkDocuments } from './document-tools.ts'
 import { capabilities } from './capabilities.ts'
 import { atomicJson } from './state.ts'
@@ -44,10 +44,17 @@ export function createWorkerTools(request: WorkerRequest, role: Role) {
     writeScopes,
     roleScopes,
     request.documentsOnly,
+    snapshotPath,
   )
 
   if (request.originals) {
-    const originalRead = fileTools(request.originals).find((tool) => tool.name === 'project_read')!
+    const originalRead = fileTools(
+      request.originals,
+      undefined,
+      undefined,
+      false,
+      snapshotPath,
+    ).find((tool) => tool.name === 'project_read')!
     tools.push({
       ...originalRead,
       name: 'original_read',
@@ -76,7 +83,7 @@ export function createWorkerTools(request: WorkerRequest, role: Role) {
             throw new Error('Format path is outside the assignment')
           }
 
-          const target = await safePath(request.workspace, path)
+          const target = await snapshotPath(request.workspace, path)
           const source = await readFile(target, 'utf8')
           const formatted = await formatSource(source, path)
           edits.push({ target, content: formatted })
@@ -134,6 +141,10 @@ export function createWorkerTools(request: WorkerRequest, role: Role) {
             ))
         ) {
           throw new Error('Document formatting is outside this worker assignment')
+        }
+
+        for (const path of paths) {
+          await snapshotPath(request.workspace, path)
         }
 
         const result = await checkDocuments(request.workspace, paths, shouldFormat)

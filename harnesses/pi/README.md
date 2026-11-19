@@ -381,6 +381,9 @@ node --import /absolute/agents/harnesses/pi/node_modules/tsx/dist/loader.mjs \
 The same CLI supports `run openai-codex/gpt-6.1-sol` to resume the recorded scope. Start new work
 through Pi's `workflow` tool. Run CLI commands from the target project's root.
 
+In Git worktrees, worker file tools reject untracked paths excluded by Git ignore rules. Tracked
+source remains available when a later ignore rule matches it.
+
 ## Project checks
 
 Pi reads the project's committed check configuration before branch dispatch. An explicit

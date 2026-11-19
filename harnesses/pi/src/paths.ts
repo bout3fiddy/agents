@@ -303,7 +303,17 @@ export async function rejectIgnoredAdditions(
 ): Promise<void> {
   const added = [...after.keys()].filter((name) => !before.has(name))
 
-  if (!added.length) {
+  await rejectIgnoredPaths(root, added)
+}
+
+export async function snapshotPath(root: string, name: string): Promise<string> {
+  const target = await safePath(root, name)
+  await rejectIgnoredPaths(root, [name])
+  return target
+}
+
+async function rejectIgnoredPaths(root: string, paths: string[]): Promise<void> {
+  if (!paths.length) {
     return
   }
 
@@ -315,7 +325,7 @@ export async function rejectIgnoredAdditions(
     },
   )
   command.child.stdin?.on('error', () => {})
-  command.child.stdin?.end(added.join('\0') + '\0')
+  command.child.stdin?.end(paths.join('\0') + '\0')
   let ignored: string
 
   try {
@@ -328,7 +338,7 @@ export async function rejectIgnoredAdditions(
     throw error
   }
 
-  throw new Error(`New files are ignored by project policy: ${ignored.replaceAll('\0', ', ')}`)
+  throw new Error(`Files are ignored by project policy: ${ignored.replaceAll('\0', ', ')}`)
 }
 
 export function fileHashes(files: Map<string, Buffer>): Record<string, string> {

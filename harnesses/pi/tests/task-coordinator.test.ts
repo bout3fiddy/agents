@@ -5,6 +5,7 @@ import test, { type TestContext } from 'node:test'
 import type { ToolDefinition } from '@earendil-works/pi-coding-agent'
 import { ProviderQuotaError, type WorkerResult } from '../src/contracts.ts'
 import type { Dispatcher } from '../src/dispatch.ts'
+import { gitCommand } from '../src/git-branches.ts'
 import { loadRole } from '../src/roles.ts'
 import { createWorkerTools } from '../src/worker-tools.ts'
 import {
@@ -631,4 +632,34 @@ test('pinned design lookup includes nearby committed docs and bounds large index
     path: 'plans/scope.md',
     pathPrefix: 'plans/',
   })
+})
+
+test('retained worker files must participate in the reviewed Git snapshot', async (t) => {
+  const { request } = await setup(t)
+  const root = request.workspace
+  await gitCommand(root, ['init', '-q'])
+  await gitCommand(root, ['add', 'src/value.js'])
+  await writeFile(join(root, '.gitignore'), 'src/\n')
+  const worker = createWorkerTools(
+    { ...request, role: 'implementer' },
+    await loadRole('implementer'),
+  )
+  const path = 'src/report.md'
+  await assert.rejects(invoke(worker.tools, 'project_write', { path, content: 'lost' }), /ignored/)
+  await assert.rejects(readFile(join(root, path)), { code: 'ENOENT' })
+  await writeFile(join(root, path), 'existing')
+
+  for (const [name, args] of [
+    ['project_read', { path }],
+    ['project_edit', { path, oldText: 'existing', newText: 'changed' }],
+    ['project_delete', { path }],
+    ['project_format', { paths: [path] }],
+    ['document_check', { paths: [path], format: true }],
+  ] as const) {
+    await assert.rejects(invoke(worker.tools, name, args), /ignored/)
+  }
+
+  assert.equal(await readFile(join(root, path), 'utf8'), 'existing')
+  await invoke(worker.tools, 'project_write', { path: 'src/value.js', content: 'tracked' })
+  assert.equal(await readFile(join(root, 'src/value.js'), 'utf8'), 'tracked')
 })
