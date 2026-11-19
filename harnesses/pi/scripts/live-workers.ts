@@ -209,6 +209,7 @@ try {
     join(reports, 'host-events.jsonl'),
     events.map((event) => JSON.stringify(event)).join('\n'),
   )
+  await session.waitForIdle()
   session.dispose()
   await runtime.settleCredentialWrites()
 }
