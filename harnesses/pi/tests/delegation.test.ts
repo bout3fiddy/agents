@@ -584,3 +584,37 @@ test('research delivers findings and preserves blockers', async (t) => {
     assert.deepEqual(saved.result, evidence.result)
   }
 })
+
+test('completed documents omit resolved child blockers from the host handoff', async (t) => {
+  const { base, store } = await fixture()
+  t.after(() => rm(base, { recursive: true, force: true }))
+  const jobs = new Delegations(store)
+  const job = await jobs.start(input, origin, async () => {})
+  const output = result()
+  const child = {
+    role: 'task-worker' as const,
+    model: 'fixture',
+    snapshot: 'verified',
+    commands: [],
+    turns: 1,
+    result: output.result,
+  }
+  output.children.push(
+    {
+      ...child,
+      result: {
+        ...output.result,
+        verdict: 'blocked',
+        hostActions: [{ capability: 'dependencies', reason: 'Check the missing tool' }],
+      },
+    },
+    child,
+  )
+  const state = await runDelegation(store, job.request.id, signal(), async () => output)
+  assert.equal(state.status, 'complete')
+  assert.deepEqual(state.hostActions, [])
+  assert.deepEqual(
+    state.children?.map((item) => item.verdict),
+    ['blocked', 'pass'],
+  )
+})

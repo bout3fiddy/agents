@@ -208,7 +208,9 @@ export async function runDelegation(
       })),
       hostActions:
         evidence.result.hostActions ??
-        evidence.children.flatMap((child) => child.result.hostActions ?? []),
+        evidence.children
+          .filter((child) => evidence.result.verdict !== 'pass' || child.result.verdict === 'pass')
+          .flatMap((child) => child.result.hostActions ?? []),
     })
 
     if (audit && (request.kind !== 'research' || state.changedPaths?.length)) {
