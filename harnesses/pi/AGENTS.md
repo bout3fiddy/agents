@@ -158,3 +158,8 @@
 
 Claude specialists prefer Fable 5.2. On a confirmed usage limit the harness selects Opus with the
 same role and effort until the reported reset. Attribute results to the recorded model.
+
+Astra implements by default. When the user explicitly requests Opus or Fable to implement a design,
+set `implementerModel` to `opus` or `fable` on the workflow, maintenance task, or individual branch
+task. Route implementation and repair through its tracked implementer. Claude implementers use
+medium or high effort. A named implementer stays pinned on quota failure.

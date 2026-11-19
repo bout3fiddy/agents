@@ -16,7 +16,7 @@ if (!request) {
   throw new Error('Missing Claude tool assignment')
 }
 
-const role = await loadRole(request.role)
+const role = await loadRole(request.role, request.thinking, request.implementerModel)
 const worker = createWorkerTools(request, role)
 const mailbox = request.liveWorkerId
   ? new WorkerMailbox(workerDirectory(request.project.root, request.liveWorkerId))

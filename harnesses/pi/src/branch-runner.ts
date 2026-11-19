@@ -207,6 +207,7 @@ export async function runBranchTask(
             kind: 'branch',
             designPath: plan!.designPath,
             thinking: request.thinking,
+            implementerModel: request.implementerModel,
             task: request.task,
             workspace: branch.workspace,
             project,

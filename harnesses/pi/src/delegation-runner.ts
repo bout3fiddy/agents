@@ -121,6 +121,7 @@ export async function runDelegation(
           join(directory, state.progressFile ?? 'coordinator.json'),
         ),
         { ...request.specialistThinking, implementer: request.thinking },
+        request.implementerModel,
       )
       const control = await controls()
       await save({
@@ -178,6 +179,7 @@ export async function runDelegation(
         task: request.task,
         context: request.context,
         kind: request.kind,
+        implementerModel: request.implementerModel,
         decideContinuation: Boolean(audit?.stopWhen),
         thinking: request.thinking,
         workspace,

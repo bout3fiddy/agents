@@ -26,6 +26,10 @@ export const thinkingSchema = Type.Union([
   Type.Literal('medium'),
   Type.Literal('high'),
 ])
+export const implementerModelSchema = Type.Union([Type.Literal('opus'), Type.Literal('fable')], {
+  description: 'Only set when the user explicitly requests this Claude implementation model.',
+})
+export type ImplementerModel = Static<typeof implementerModelSchema>
 export const specialistThinkingSchema = Type.Union([Type.Literal('medium'), Type.Literal('high')])
 export const workflowSpecialistsSchema = Type.Object(
   {
@@ -179,6 +183,7 @@ export type Receipt = {
 }
 
 export type WorkerRequest = {
+  implementerModel?: ImplementerModel
   decideContinuation?: boolean
   thinking?: Role['thinking']
   role: WorkerRole
@@ -198,6 +203,7 @@ export type WorkerRequest = {
 }
 
 export type WorkerEvidence = {
+  quotaFallbackFrom?: string
   formatterProof?: { path: string; before: string; after: string }[]
   closedReview?: { snapshot: string; model: string; paths: string[] }
   thinking?: string

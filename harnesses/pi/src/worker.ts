@@ -61,7 +61,7 @@ export function checkWorkerThinking(session: AgentSession, thinking: Role['think
 
 export async function runWorker(request: WorkerRequest): Promise<WorkerEvidence> {
   workerAbortSignal.throwIfAborted()
-  const role = await loadRole(request.role, request.thinking)
+  const role = await loadRole(request.role, request.thinking, request.implementerModel)
 
   if (role.backend === 'claude-cli') {
     return runClaudeWorker(request, role)

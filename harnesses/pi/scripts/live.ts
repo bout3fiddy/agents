@@ -12,6 +12,11 @@ import { loadRole } from '../src/roles.ts'
 import { Delegations, activeTask } from '../src/delegation-state.ts'
 import { setTimeout as delay } from 'node:timers/promises'
 
+const implementer = process.argv.includes('--opus')
+  ? 'opus'
+  : process.argv.includes('--fable')
+    ? 'fable'
+    : undefined
 const basic = process.argv.includes('--basic')
 const { root, store, design } = await (basic ? basicFixture() : liveFixture())
 const model = process.env.PI_HARNESS_LIVE_MODEL ?? 'openai-codex/gpt-6.1-sol'
@@ -55,7 +60,8 @@ const child = spawn(
     '--mode',
     'json',
     '-p',
-    'Implement this settled design now. Pass this exact design object to workflow and ' +
+    (implementer ? `Use ${implementer} to implement this design. ` : '') +
+      'Implement this settled design now. Pass this exact design object to workflow and ' +
       'tell me the task ID. Return while it runs in the background; do not wait or poll.\n' +
       JSON.stringify(design),
   ],
@@ -150,7 +156,13 @@ for (const item of task.evidence) {
       ),
     )
   } else if (item.role === 'implementer') {
-    assert.equal(item.model, 'openai-codex/gpt-6.2-astra')
+    assert.equal(
+      item.model,
+      (await loadRole('implementer', undefined, implementer)).model.replace(
+        /^claude-/,
+        'claude-cli/claude-',
+      ),
+    )
   } else {
     assert.ok(/^claude-cli\/(?:claude-fable-5-2|(?:claude-)?opus)(?:-|$)/.test(item.model))
   }

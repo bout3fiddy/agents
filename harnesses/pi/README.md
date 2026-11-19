@@ -22,11 +22,16 @@ same role and effort until the reported reset. Attribute results to the recorded
 
 The default orchestrator is `openai-codex/gpt-6.1-sol` at medium effort. Pi's current model and
 thinking selection take precedence for the orchestrator; the harness never silently changes them.
-Timing traces record the actual selection. Implementation is pinned to `openai-codex/gpt-6.2-astra`
+Timing traces record the actual selection. Implementation defaults to `openai-codex/gpt-6.2-astra`
 with medium as its default. Change `roles/*.json` to select models, effort, tools, skills and write
 scopes. The orchestrator has normal host shell/file access; the isolated worker boundaries apply to
 delegated execution. Use `/thinking medium` in a running Pi session for ordinary coordination. The
 current session selection is independent of worker effort.
+
+Astra implements by default. When the user explicitly requests Opus or Fable to implement a design,
+set `implementerModel` to `opus` or `fable` on the workflow, maintenance task, or individual branch
+task. Route implementation and repair through its tracked implementer. Claude implementers use
+medium or high effort. A named implementer stays pinned on quota failure.
 
 The orchestrator can select `thinking` for each background job. On `workflow` and implementation
 jobs it selects Astra's effort. The optional `specialistThinking` object selects each applicable

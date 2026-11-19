@@ -267,6 +267,7 @@ async function runClaudeAttempt(
     )
     return {
       role: request.role,
+      ...(role.model === 'opus' && { quotaFallbackFrom: 'claude-fable-5-2' }),
       liveWorkerId: live.info.id,
       snapshot: snapshotHash(await inventory(request.workspace)),
       result: validateResult(evidence.result, request.decideContinuation),

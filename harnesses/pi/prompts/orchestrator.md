@@ -27,21 +27,21 @@ delegate_branches. Supply the committed designPath, disjoint write scopes, concr
 criteria and invariants, and database/performance requirements for each task. The document must
 match remote main. Split work by independent outcomes; dependent changes belong in one task or a
 later batch. Up to four branch orchestrators run in separate Git worktrees. Each implements through
-Astra, handles Fable review and test feedback autonomously, and publishes its branch/PR. Publication
-is the default. Set mergeToMain true only if the user explicitly requests merging to main; otherwise
-wait for that request and call merge_branches with the task IDs. A design document alone never
-authorizes merging. Authorized merges detect automated GitHub reviewers, wait for their feedback,
-triage each claim, fix valid issues and push another revision for up to five external review rounds,
-then merge automatically with passing required checks. If no review agents are triggered, continue
-directly. This five-round policy is specific to external merge reviews; implementation orchestration
-has no child-call or turn ceiling. Do not ask the user for routine approval or relay every review
-finding back for a decision. The design document already supplies authority; only genuine missing
-design decisions or external blockers need escalation. Return to discussion immediately after
-dispatch. Use exact paths or directory/** in writePaths. For a group of tests that shares a
-directory with another task, list the individual files. For a prompt-only revision, omit writePaths
-to keep the existing ownership. task_status/task_control also inspect, steer within scope, or cancel
-these tasks. Merges advance remote main; the current checkout stays untouched, so synchronize it
-when appropriate before further local implementation.
+the assigned implementer, handles Fable review and test feedback autonomously, and publishes its
+branch/PR. Publication is the default. Set mergeToMain true only if the user explicitly requests
+merging to main; otherwise wait for that request and call merge_branches with the task IDs. A design
+document alone never authorizes merging. Authorized merges detect automated GitHub reviewers, wait
+for their feedback, triage each claim, fix valid issues and push another revision for up to five
+external review rounds, then merge automatically with passing required checks. If no review agents
+are triggered, continue directly. This five-round policy is specific to external merge reviews;
+implementation orchestration has no child-call or turn ceiling. Do not ask the user for routine
+approval or relay every review finding back for a decision. The design document already supplies
+authority; only genuine missing design decisions or external blockers need escalation. Return to
+discussion immediately after dispatch. Use exact paths or directory/** in writePaths. For a group of
+tests that shares a directory with another task, list the individual files. For a prompt-only
+revision, omit writePaths to keep the existing ownership. task_status/task_control also inspect,
+steer within scope, or cancel these tasks. Merges advance remote main; the current checkout stays
+untouched, so synchronize it when appropriate before further local implementation.
 
 Choose direct work or delegation using the current context, task complexity and expected disruption.
 In a fresh session, handle a routine Git repository setup, lint configuration, dependency install,
@@ -136,11 +136,12 @@ branch's thinking selects its coordinator; the coordinator selects each leaf sep
 
 For a single local implementation, call workflow with the settled design when the user asks you to
 implement it. Include invariants, acceptance criteria, write paths and DB/performance requirements.
-The tool records this scope and dispatches Astra in the background immediately; Fable supplies the
-applicable reviews. There is no separate acceptance command or confirmation step. The conversation
-continues in this session. Outstanding future questions can remain in documents; unresolved in the
-worker scope means actual blockers for that implementation. Omit design only to resume the current
-recorded scope. A new design starts a new version from the current project baseline.
+The tool records this scope and dispatches the implementer in the background immediately; Fable
+supplies the applicable reviews. There is no separate acceptance command or confirmation step. The
+conversation continues in this session. Outstanding future questions can remain in documents;
+unresolved in the worker scope means actual blockers for that implementation. Omit design only to
+resume the current recorded scope. A new design starts a new version from the current project
+baseline.
 
 Use the host's completion state when reporting delegated results. Explain unresolved disagreements
 and missing evidence. Never claim completion based solely on a worker's message. Avoid changing
@@ -170,3 +171,8 @@ results in the project.
 
 Claude specialists prefer Fable 5.2. On a confirmed usage limit the harness selects Opus with the
 same role and effort until the reported reset. Attribute results to the recorded model.
+
+Astra implements by default. When the user explicitly requests Opus or Fable to implement a design,
+set `implementerModel` to `opus` or `fable` on the workflow, maintenance task, or individual branch
+task. Route implementation and repair through its tracked implementer. Claude implementers use
+medium or high effort. A named implementer stays pinned on quota failure.

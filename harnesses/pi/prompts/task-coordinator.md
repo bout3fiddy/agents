@@ -64,3 +64,6 @@ semantics, including a changed durability boundary outside conventional database
 
 Claude specialists prefer Fable 5.2. On a confirmed usage limit the harness selects Opus with the
 same role and effort until the reported reset. Attribute results to the recorded model.
+
+When the task carries `implementerModel`, delegate implementation and repairs to the implementer.
+The harness applies that selection to each attempt. Use medium or high thinking for Claude.

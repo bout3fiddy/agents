@@ -18,6 +18,7 @@ import {
   completedResult,
   validateResult,
   writePathSchema,
+  type ImplementerModel,
   type Checkpoint,
   type Project,
   type Receipt,
@@ -52,6 +53,7 @@ import { LiveWorker } from './worker-live.ts'
 import { attachLiveSession } from './worker-live-session.ts'
 
 export interface TaskCoordinatorRequest {
+  implementerModel?: ImplementerModel
   thinking?: Role['thinking']
   task: string
   context: string
@@ -262,6 +264,10 @@ export async function createTaskCoordinatorTools(
       throw new Error('Task is already submitted')
     }
 
+    if (request.implementerModel && raw.role === 'task-worker' && raw.writePaths.length) {
+      throw new Error('Assign implementation writes to the user-selected implementer')
+    }
+
     if (!scopeContained(raw.writePaths, request.checkpoint.writePaths)) {
       throw new Error('Child write scope exceeds the delegated task')
     }
@@ -295,7 +301,9 @@ export async function createTaskCoordinatorTools(
     let recoverableFailure = false
 
     try {
-      const childRole = await loadRole(raw.role)
+      const implementerModel = raw.role === 'implementer' ? request.implementerModel : undefined
+      const childRole = await loadRole(raw.role, raw.thinking, implementerModel)
+      const quotaKey = implementerModel ? 'implementer/' + childRole.model : childRole.model
       await progress.update({
         stage: 'child',
         role: raw.role,
@@ -305,7 +313,7 @@ export async function createTaskCoordinatorTools(
       let child: WorkerEvidence
 
       try {
-        const rejected = rejectedModels.get(childRole.model)
+        const rejected = rejectedModels.get(quotaKey)
 
         if (rejected && rejected.retryAt > Date.now()) {
           throw rejected
@@ -315,6 +323,7 @@ export async function createTaskCoordinatorTools(
           {
             role: raw.role,
             thinking: raw.thinking,
+            implementerModel,
             documentsOnly,
             task: JSON.stringify({
               task: raw.task,
@@ -347,7 +356,7 @@ export async function createTaskCoordinatorTools(
         checkChildWrites(request, raw, childRole, before, await inventory(request.workspace))
 
         if (error instanceof ProviderQuotaError) {
-          rejectedModels.set(childRole.model, error)
+          rejectedModels.set(quotaKey, error)
         }
 
         recoverableFailure = true
@@ -368,7 +377,13 @@ export async function createTaskCoordinatorTools(
       const actualModel =
         childRole.backend === 'claude-cli' ? child.model.replace(/^claude-cli\//, '') : child.model
 
-      if (actualModel !== expectedModel) {
+      const validFallback =
+        childRole.backend === 'claude-cli' &&
+        raw.role !== 'implementer' &&
+        child.quotaFallbackFrom === expectedModel &&
+        /^claude-opus-/.test(actualModel)
+
+      if (actualModel !== expectedModel && !validFallback) {
         throw new Error('Child model does not match its configured role')
       }
 
@@ -741,7 +756,11 @@ export async function createTaskCoordinatorTools(
         const child = validateAssignment(raw)
 
         if (child.thinking !== undefined) {
-          await loadRole(child.role, child.thinking)
+          await loadRole(
+            child.role,
+            child.thinking,
+            child.role === 'implementer' ? request.implementerModel : undefined,
+          )
         }
 
         const results = await delegateRound([child])
@@ -1058,6 +1077,7 @@ export async function runTaskCoordinator(
         context: request.context,
         kind: request.kind,
         taskScope: request.checkpoint,
+        implementerModel: request.implementerModel,
         ...(request.kind === 'branch' &&
           request.designPath && {
             pinnedDesign: designReference(request.designPath, request.baseline),

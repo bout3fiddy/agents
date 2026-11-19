@@ -57,3 +57,27 @@ test('Fable quota shares cooldown and restores preference after reset', async (t
     (error) => error === fault,
   )
 })
+
+test('manual Claude implementers retain scope and never substitute another writer', async () => {
+  const defaultRole = await loadRole('implementer')
+  assert.equal(defaultRole.model, 'openai-codex/gpt-6.2-astra')
+
+  for (const selection of ['fable', 'opus'] as const) {
+    const role = await loadRole('implementer', 'high', selection)
+    const model = selection === 'opus' ? 'claude-opus-5-5' : 'claude-fable-5-2'
+    assert.deepEqual(role, { ...defaultRole, backend: 'claude-cli', model, thinking: 'high' })
+    let attempts = 0
+    const limit = new ProviderQuotaError('quota', Date.now() + 60000)
+    await assert.rejects(
+      routeClaude(role, async (selected) => {
+        attempts++
+        assert.equal(selected.model, model)
+        throw limit
+      }),
+      (error) => error === limit,
+    )
+    assert.equal(attempts, 1)
+    await assert.rejects(loadRole('reviewer', 'medium', selection), /implementer role/)
+    await assert.rejects(loadRole('implementer', 'low', selection), /Unsupported thinking/)
+  }
+})

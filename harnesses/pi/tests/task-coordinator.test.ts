@@ -663,3 +663,45 @@ test('retained worker files must participate in the reviewed Git snapshot', asyn
   await invoke(worker.tools, 'project_write', { path: 'src/value.js', content: 'tracked' })
   assert.equal(await readFile(join(root, 'src/value.js'), 'utf8'), 'tracked')
 })
+
+test('branch coordinators apply the requested writer and accept its scoped receipt', async (t) => {
+  const { request, controller } = await setup(t)
+  request.kind = 'branch'
+  request.implementerModel = 'opus'
+  const calls: string[] = []
+  const worker = await createTaskCoordinatorTools(request, controller.signal, async (child) => {
+    calls.push(child.role)
+    assert.equal(child.implementerModel, 'opus')
+    return { ...(await evidence(child)), model: 'claude-cli/claude-opus-5-5' }
+  })
+  await assert.rejects(invoke(worker.tools, 'delegate_worker', leaf), /user-selected implementer/)
+  await invoke(worker.tools, 'delegate_worker', { ...leaf, role: 'implementer', thinking: 'high' })
+  assert.deepEqual(calls, ['implementer'])
+  await assert.rejects(
+    invoke(worker.tools, 'delegate_worker', { ...leaf, role: 'implementer', thinking: 'low' }),
+    /Unsupported thinking/,
+  )
+})
+
+test('coordinator accepts an Opus review only with matching fallback provenance', async (t) => {
+  const { request, controller } = await setup(t)
+
+  for (const authorized of [true, false]) {
+    const worker = await createTaskCoordinatorTools(request, controller.signal, async (child) => ({
+      ...(await evidence(child)),
+      model: 'claude-cli/claude-opus-5-5',
+      ...(authorized && { quotaFallbackFrom: 'claude-fable-5-2' }),
+    }))
+    const review = invoke(worker.tools, 'delegate_worker', {
+      role: 'reviewer',
+      writePaths: [],
+      task: 'Review the scoped candidate',
+    })
+
+    if (authorized) {
+      await review
+    } else {
+      await assert.rejects(review, /model does not match/)
+    }
+  }
+})

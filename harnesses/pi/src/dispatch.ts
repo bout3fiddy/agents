@@ -135,7 +135,7 @@ export function dispatcher(store: StateStore): Dispatcher {
     const outputPath = join(store.directory, 'attempts', `${id}.result.json`)
     await atomicJson(path, { ...request, outputPath })
     await atomicJson(`${path}.status`, { status: 'dispatched', role: request.role })
-    await loadRole(request.role)
+    await loadRole(request.role, request.thinking, request.implementerModel)
     let lastActivity = ''
     let pending = Promise.resolve()
     const observe = () => {

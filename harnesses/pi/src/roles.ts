@@ -6,12 +6,17 @@ import {
   roleNames,
   thinkingSchema,
   specialistThinkingSchema,
+  type ImplementerModel,
   type Role,
   type RoleName,
 } from './contracts.ts'
 import { validateScope } from './paths.ts'
 
-export async function loadRole(name: RoleName, thinking?: Role['thinking']): Promise<Role> {
+export async function loadRole(
+  name: RoleName,
+  thinking?: Role['thinking'],
+  implementerModel?: ImplementerModel,
+): Promise<Role> {
   if (!roleNames.includes(name)) {
     throw new Error('Unknown role')
   }
@@ -33,6 +38,15 @@ export async function loadRole(name: RoleName, thinking?: Role['thinking']): Pro
     'timeoutMs' in role
   ) {
     throw new Error(`Invalid role definition: ${name}`)
+  }
+
+  if (implementerModel !== undefined) {
+    if (name !== 'implementer' || !['opus', 'fable'].includes(implementerModel)) {
+      throw new Error('Claude implementation selection requires the implementer role')
+    }
+
+    role.backend = 'claude-cli'
+    role.model = implementerModel === 'opus' ? 'claude-opus-5-5' : 'claude-fable-5-2'
   }
 
   validateScope(role.writes)

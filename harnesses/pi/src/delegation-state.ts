@@ -9,6 +9,7 @@ import { acquireLock } from './lock.ts'
 import { matches, validateWriteScope } from './paths.ts'
 import type { Receipt, WorkerEvidence } from './contracts.ts'
 import {
+  implementerModelSchema,
   thinkingSchema,
   workflowSpecialistsSchema,
   designSchema,
@@ -25,6 +26,7 @@ export const delegateSchema = Type.Object(
   {
     task: Type.String({ minLength: 1, maxLength: 8000 }),
     context: Type.String({ maxLength: 24000 }),
+    implementerModel: Type.Optional(implementerModelSchema),
     thinking: Type.Optional(thinkingSchema),
     specialistThinking: Type.Optional(workflowSpecialistsSchema),
     kind: Type.Union([
@@ -238,6 +240,14 @@ export function delegationView(job: Delegation) {
 export function validateDelegation(input: DelegateInput): void {
   if (!Check(delegateSchema, input)) {
     throw new Error('Invalid delegated task; provide task, context, kind and writePaths')
+  }
+
+  if (input.implementerModel && !['implementation', 'maintenance'].includes(input.kind)) {
+    throw new Error('Select a Claude implementer for implementation or maintenance tasks')
+  }
+
+  if (input.implementerModel && input.kind === 'implementation' && input.thinking === 'low') {
+    throw new Error('Claude implementers support medium or high effort')
   }
 
   validateWriteScope(input.writePaths)

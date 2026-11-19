@@ -1,7 +1,14 @@
 import { randomUUID } from 'node:crypto'
 import { join } from 'node:path'
 import { rm } from 'node:fs/promises'
-import type { Project, Receipt, WorkerEvidence, WorkerRole, WorkerThinking } from './contracts.ts'
+import type {
+  ImplementerModel,
+  Project,
+  Receipt,
+  WorkerEvidence,
+  WorkerRole,
+  WorkerThinking,
+} from './contracts.ts'
 import { StateStore, atomicJson, type TaskState } from './state.ts'
 import { collectWorkerResults, dispatcher, type Dispatcher } from './dispatch.ts'
 import { createWorkspace, hasSkippedTests, loadProject, verifyProject } from './project.ts'
@@ -147,6 +154,7 @@ export async function runWorkflow(
   signal?: AbortSignal,
   dispatch: Dispatcher = dispatcher(store),
   thinking: Partial<Record<WorkflowRole, WorkerThinking>> = {},
+  implementerModel?: ImplementerModel,
 ): Promise<TaskState> {
   const release = await store.lock()
   let task: TaskState | undefined
@@ -223,6 +231,7 @@ export async function runWorkflow(
       const evidence = await dispatch(
         {
           role,
+          ...(role === 'implementer' && { implementerModel }),
           thinking: thinking[role],
           task: assignment,
           workspace,
