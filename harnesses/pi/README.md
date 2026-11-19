@@ -44,7 +44,8 @@ formatter output on those files. Any other edit or unclassified required finding
 review. Final checks still run. A new concern can request `freshReviewReason`.
 
 DB review follows explicit impact, configured DB paths, SQL/schema files and persistence code or
-configuration changes. References in ordinary Markdown do not trigger a specialist.
+configuration changes. References in ordinary Markdown do not trigger a specialist. Vyper NatSpec
+annotations are excluded from SQL detection.
 
 ## Install and run
 

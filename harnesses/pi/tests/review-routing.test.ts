@@ -53,6 +53,12 @@ test('DB review follows changed persistence code, removed adapters and configure
     assert.ok(detect(path, contents, ''), 'removed ' + path)
   }
 
+  const annotation = '    @notice Select the next item from the queue.'
+  const contract = 'contract/queue.vy'
+  assert.equal(detect(contract, '', annotation), false)
+  assert.ok(detect(contract, '', annotation, ['contract/**']))
+  assert.ok(detect('src/query.py', '', 'sql = "SELECT item FROM queue"'))
+
   const loader = 'import { Pool } from "pg"\n'
   assert.ok(detect('src/loader.ts', loader + 'return tx(a)', loader + 'return tx(b)'))
   assert.ok(detect('storage/lease.go', 'return 1', 'return 2', ['storage/**']))

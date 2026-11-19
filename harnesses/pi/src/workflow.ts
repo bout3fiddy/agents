@@ -71,7 +71,12 @@ export function databaseImpact(
       }
 
       const source = bytes.toString('utf8')
-      return databaseStatements.test(source) || databaseDriver.test(source)
+
+      // NatSpec annotations describe contract behavior in prose.
+      const code = path.endsWith('.vy')
+        ? source.replace(/^[ \t]*(?:"{3}|'{3})?@(?:notice|dev|param|return)\b[^\n]*/gm, '')
+        : source
+      return databaseStatements.test(code) || databaseDriver.test(code)
     })
   })
 }
