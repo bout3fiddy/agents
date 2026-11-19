@@ -25,7 +25,7 @@ import {
   DelegationRepairRequired,
 } from './delegation-checks.ts'
 import { loadProject } from './project.ts'
-import { requireBranchChecks } from './branch-contracts.ts'
+import { pinnedDesignInstruction, requireBranchChecks } from './branch-contracts.ts'
 import { changes } from './integration.ts'
 import { digest, fileHashes, inventory, snapshotHash, readBoundedFile, safePath } from './paths.ts'
 import { validateDesign } from './contracts.ts'
@@ -101,7 +101,13 @@ export async function runBranchTask(
 
     validateDesign(plan.design)
 
-    if (plan.design.unresolved.length || digest(plan.design.design) !== plan.designHash) {
+    const referenced =
+      plan.design.design === pinnedDesignInstruction(plan.designPath, plan.designHash)
+
+    if (
+      plan.design.unresolved.length ||
+      (!referenced && digest(plan.design.design) !== plan.designHash)
+    ) {
       throw new Error('The pinned branch design is unresolved or changed')
     }
 
@@ -168,7 +174,7 @@ export async function runBranchTask(
       await mkdir(join(store.directory, 'baselines'), { recursive: true, mode: 0o700 })
       await prepareBaseline(branch, base, originals, signal)
       const baseline = await inventory(originals)
-      const document = (await readBoundedFile(await safePath(originals, plan!.designPath), 24000))
+      const document = (await readBoundedFile(await safePath(originals, plan!.designPath)))
         .toString('utf8')
         .trimEnd()
 

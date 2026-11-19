@@ -313,3 +313,32 @@ test('published and later merged outcomes both notify the originating session on
     await runtime.settleCredentialWrites()
   }
 })
+
+test('large committed designs remain pinned and readable during branch work', async (t) => {
+  const setup = await branchRepository(t)
+  const path = setup.input.designPath
+  const design = '# Design\n' + 'Keep the existing exports.\n'.repeat(1350) + 'Final requirement.\n'
+  await writeFile(join(setup.root, path), design)
+  const git = (args: string[]) => gitCommand(setup.root, args)
+  await git(['add', path])
+  await git(['commit', '-m', 'Record the full design'])
+  await git(['push', 'origin', 'HEAD:main'])
+  const { requests } = await setup.launch()
+  const request = requests[0]!
+  assert.ok(request.context.length < 1000)
+  const state = await runBranchTask(
+    setup.store,
+    request,
+    new AbortController().signal,
+    async (assignment) => {
+      assert.equal(assignment.designPath, path)
+      assert.equal(await git(['show', request.branch!.base + ':' + path]), design.trimEnd())
+      assert.match(assignment.checkpoint.design, /original_read/)
+      await writeFeature(assignment)
+      return coordinatorEvidence(assignment)
+    },
+  )
+  assert.equal(state.status, 'complete', state.error)
+  await writeFile(join(setup.root, path), design.replace('Final requirement.', 'Changed ending.'))
+  await assert.rejects(setup.launch(), /matches the document on remote main/)
+})

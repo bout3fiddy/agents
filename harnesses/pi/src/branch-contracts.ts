@@ -52,6 +52,10 @@ export type BranchPlan = {
   mergeToMain?: boolean
 }
 
+export function pinnedDesignInstruction(path: string, hash: string) {
+  return `Read the settled design at ${path} with original_read, paging as needed. SHA-256: ${hash}`
+}
+
 export type BranchTaskInput = {
   thinking?: WorkerThinking
   task: string

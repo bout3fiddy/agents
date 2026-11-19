@@ -330,7 +330,8 @@ orchestrator uses `delegate_branches` to launch up to four autonomous orchestrat
 scopes, each in a Git worktree on its own branch. They implement through Astra, handle Fable review
 feedback, fix test failures, push branches and open GitHub PRs. Publication is the default. Only an
 explicit user request authorizes merging, either through `mergeToMain: true` at dispatch or a later
-`merge_branches` call. Published tasks resume in their existing worktrees.
+`merge_branches` call. Published tasks resume in their existing worktrees. Large designs stay in the
+pinned worktree. The coordinator reads their full text in pages from the original snapshot.
 
 For an authorized merge, the host detects external review agents such as Codex or Claude, waits for
 feedback, and sends findings to the branch orchestrator for triage and verified fixes. Each fix is

@@ -418,7 +418,8 @@ export function registerDelegation(pi: ExtensionAPI, launch: Launcher = launchDe
       'current discussion. Routine setup and related small work may stay on the host. Workers ' +
       'cannot install dependencies, use the network or publish Git; declare host requirements. ' +
       'Return immediately and continue discussion. Supply context and scoped writePaths. ' +
-      'For implementation, include the settled design; omit design only when resuming its scope.',
+      'Only implementation accepts specialistThinking. For documents, put reviewer requests in ' +
+      'the task. Include the settled implementation design unless resuming its scope.',
     parameters: delegateSchema,
     async execute(_id, args, _signal, _update, ctx) {
       return start(ctx, args)

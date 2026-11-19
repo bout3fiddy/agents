@@ -12,7 +12,7 @@ import { Delegations, delegationView, scopesOverlap } from './delegation-state.t
 import { launchDelegation } from './delegation-process.ts'
 import { textResult } from './file-tools.ts'
 import { loadProject } from './project.ts'
-import { requireBranchChecks } from './branch-contracts.ts'
+import { pinnedDesignInstruction, requireBranchChecks } from './branch-contracts.ts'
 
 export async function startBranchBatch(
   ctx: ExtensionContext,
@@ -56,17 +56,17 @@ export async function startBranchBatch(
     throw new Error('Commit and push the settled design document to main before branch fanout')
   }
 
-  const design = await gitCommand(
+  const document = await gitCommand(
     store.projectRoot,
     ['show', `${repository.base}:${input.designPath}`],
     signal,
   )
-  const local = (await readBoundedFile(await safePath(store.projectRoot, input.designPath), 24000))
+  const local = (await readBoundedFile(await safePath(store.projectRoot, input.designPath)))
     .toString('utf8')
     .trimEnd()
 
-  if (!design.trim() || design.length > 16000 || design !== local) {
-    throw new Error('Use a settled design up to 16 KB that matches the document on remote main')
+  if (!document.trim() || document !== local) {
+    throw new Error('Use a settled design that matches the document on remote main')
   }
 
   const project = await loadProject(store.projectRoot, async <T>(path: string) => {
@@ -92,6 +92,9 @@ export async function startBranchBatch(
     requireBranchChecks(project, task)
   }
 
+  const designHash = digest(document)
+  const design =
+    document.length <= 16000 ? document : pinnedDesignInstruction(input.designPath, designHash)
   const batch = randomUUID()
   const tasks = input.tasks.map(({ task, thinking, ...scope }) => ({
     task,
@@ -105,7 +108,7 @@ export async function startBranchBatch(
       remoteUrl: repository.remoteUrl,
       base: repository.base,
       designPath: input.designPath,
-      designHash: digest(design),
+      designHash,
       mergeToMain: input.mergeToMain === true,
       design: validateDesign({
         ...scope,
