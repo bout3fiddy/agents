@@ -77,7 +77,14 @@ export function databaseImpact(
         return false
       }
 
-      const source = bytes.toString('utf8')
+      let source = bytes.toString('utf8')
+
+      if (/\.[cm]?[jt]sx?$/i.test(path)) {
+
+        // A leading line comment can say "select ... from" in prose. Stop at the first
+        // source token so SQL in strings, templates and executable code remains visible.
+        source = source.replace(/^(?:[ \t]*\/\/[^\r\n]*(?:\r?\n|$)|[ \t]*\r?\n)+/, '')
+      }
 
       // NatSpec annotations describe contract behavior in prose.
       const code = path.endsWith('.vy')

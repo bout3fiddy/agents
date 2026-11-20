@@ -151,3 +151,6 @@ asserts parallel progress, foreground discussion, separate published branches wi
 an explicit later merge request, sequential refreshed merges, preserved original checkout,
 completion acknowledgements and reload deduplication. Its 40-minute test deadline belongs to the
 validation script and does not limit production branch orchestration.
+
+For a branch in needs_attention, the merge tool returns the task ID and its recorded blocker.
+Inspect review_receipts and recover the required checks on the intended head before merging.

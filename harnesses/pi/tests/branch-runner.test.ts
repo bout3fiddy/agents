@@ -430,3 +430,30 @@ test('a blocked branch delivers its current host actions and clears them on resu
   assert.deepEqual(await readFile(original), originalReceipt)
   assert.equal((await resolveRemote(setup.root)).base, setup.initial)
 })
+
+test('merge refusal directs the host to recover the actual branch gate', async (t) => {
+  const setup = await branchRepository(t)
+  const { requests } = await setup.launch({ ...setup.input, tasks: [setup.input.tasks[0]!] })
+  const id = requests[0]!.id
+  const { state } = await setup.jobs.get(id)
+  await atomicJson(join(delegationDirectory(setup.store, id), 'status.json'), {
+    ...state,
+    status: 'needs_attention',
+    error: 'Required checks failed: harness-lint',
+  })
+  let launches = 0
+  await assert.rejects(
+    setup.jobs.requestMerge([id], setup.origin, async () => {
+      launches++
+    }),
+    (e) => {
+      assert.ok(e instanceof Error)
+      assert.ok(e.message.includes(id) && e.message.includes('needs_attention'))
+      assert.match(e.message, /review_receipts/)
+      assert.match(e.message, /harness-lint/)
+      return true
+    },
+  )
+  assert.equal(launches, 0)
+  assert.equal((await resolveRemote(setup.root)).base, setup.initial)
+})

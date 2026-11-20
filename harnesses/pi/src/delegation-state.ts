@@ -574,6 +574,15 @@ export class Delegations {
       }
 
       for (const job of jobs) {
+        if (job.request.kind === 'branch' && job.state.status === 'needs_attention') {
+          const detail = job.state.error || job.state.summary || 'Inspect the task handoff.'
+          throw new Error(
+            `Branch ${job.request.id} needs_attention: ${detail.slice(0, 500)}. ` +
+              'Read review_receipts, recover any failed required checks on the intended head, ' +
+              'then resume the task. These gates also apply to host-managed PR merges.',
+          )
+        }
+
         if (
           job.request.kind !== 'branch' ||
           (!activeTask(job.state) && !['published', 'complete'].includes(job.state.status))

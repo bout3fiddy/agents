@@ -266,6 +266,10 @@ coverage.
 
 ## Database and performance scope
 
+The DB review trigger disregards prose in leading JavaScript and TypeScript line comments. It
+continues to inspect executable query text and both revisions of changed files. Explicit database
+scopes and declared impact still request review.
+
 Durability is evaluated against a stated failure model: process crash, host/disk loss, region loss
 or malicious changes are different requirements. Replication does not substitute for backup and
 tested restore. Sharding and replicas need a measured or availability-driven justification, with

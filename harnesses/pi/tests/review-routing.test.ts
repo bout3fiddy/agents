@@ -59,6 +59,13 @@ test('DB review follows changed persistence code, removed adapters and configure
   assert.ok(detect(contract, '', annotation, ['contract/**']))
   assert.ok(detect('src/query.py', '', 'sql = "SELECT item FROM queue"'))
 
+  const header = "// Shared UI utility.\r\n// Select the kind from the field's meaning.\r\n"
+  assert.equal(detect('ui/link.ts', '', header + 'export const base = url'), false)
+  assert.equal(detect('ui/link.ts', header, ''), false)
+  assert.ok(detect('ui/link.ts', '', header + "const query = 'SELECT id FROM job'"))
+  assert.ok(detect('ui/link.ts', '', header, ['ui/**']))
+  assert.ok(detect('ui/link.js', '', 'const sql = `\nSELECT id FROM job\n`'))
+
   const loader = 'import { Pool } from "pg"\n'
   assert.ok(detect('src/loader.ts', loader + 'return tx(a)', loader + 'return tx(b)'))
   assert.ok(detect('storage/lease.go', 'return 1', 'return 2', ['storage/**']))
