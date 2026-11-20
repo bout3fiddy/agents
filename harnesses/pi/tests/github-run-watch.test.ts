@@ -170,3 +170,113 @@ for (const outcome of ['success', 'failure', 'unavailable', ...Object.keys(chang
     }
   })
 }
+
+test('withdrawn CI stays silent through in-flight completion and reload', async () => {
+  const { root, base } = await fixture()
+  const repository = 'fixture/project'
+  const head = 'a'.repeat(40)
+  let phase = 0
+  let issued = false
+  let completed = false
+  let polls = 0
+  const wakes: number[] = []
+  let release!: () => void
+  let start!: () => void
+  const hold = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  const entered = new Promise<void>((resolve) => {
+    start = resolve
+  })
+  const result = { head_sha: head, run_attempt: 1, run_started_at: null, updated_at: 'now' }
+  const { session, runtime } = await captureSession(
+    root,
+    base,
+    [
+      (pi) =>
+        registerGitHubRunWatch(
+          pi,
+          async (args) => {
+            const id = Number(args.at(-1)?.split('/').at(-1))
+            polls++
+
+            if (id === 75) {
+              start()
+              await hold
+            }
+
+            return JSON.stringify({
+              ...result,
+              id,
+              status: completed ? 'completed' : 'in_progress',
+              conclusion: completed ? 'success' : null,
+            })
+          },
+          15,
+        ),
+    ],
+    async (ctx) => {
+      const last = JSON.stringify(ctx.messages.at(-1)?.content)
+
+      if (last.includes('GitHub Actions watch finished.')) {
+        for (const id of [75, 76]) {
+          if (last.includes(String(id))) {
+            wakes.push(id)
+          }
+        }
+
+        return [{ type: 'text', text: 'Observed.' }]
+      }
+
+      if (issued) {
+        return [{ type: 'text', text: 'OK.' }]
+      }
+
+      issued = true
+      const requests = phase === 0 ? [75, 76] : [75]
+      return requests.map((runId) => {
+        const args: Record<string, string | number> = { repository, runId }
+
+        if (phase === 0) {
+          args.followUp = 'Continue ' + runId
+        } else {
+          args.action = 'cancel'
+        }
+
+        return {
+          type: 'toolCall',
+          name: 'watch_github_run',
+          id: 'watch-' + phase + '-' + runId,
+          arguments: args,
+        }
+      })
+    },
+  )
+
+  try {
+    await session.prompt('Monitor both runs.')
+    await entered
+    phase++
+    issued = false
+    await session.prompt('Drop run 75 and keep 76.')
+    completed = true
+    release()
+
+    for (let i = 0; i < 80 && !wakes.length; i++) {
+      await delay(15)
+    }
+
+    await session.waitForIdle()
+    assert.deepEqual(wakes, [76])
+    await session.reload()
+    const previous = polls
+    await delay(100)
+    assert.equal(polls, previous)
+    assert.deepEqual(wakes, [76])
+  } finally {
+    release()
+    await session.dispose()
+    await runtime.settleCredentialWrites()
+    await rm(base, { recursive: true, force: true })
+  }
+})

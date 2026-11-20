@@ -43,7 +43,7 @@ when a script catches an error or prints only part of a result.
   checks for the same attempt. Required findings and non-passing check receipts survive a narrow
   script projection.
 
-- `watch_github_run`. Direct host tool. Registers a run for an asynchronous follow-up.
+- `watch_github_run`. Direct host tool. Registers or cancels a local CI follow-up.
 
 - `codemode`. Top-level script runner. Model helpers are disabled.
 

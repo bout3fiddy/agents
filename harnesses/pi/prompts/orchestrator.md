@@ -260,9 +260,11 @@ coordinator's existing watch when it already owns that same follow-up.
 For merge follow-up, pin the watched PR number and reviewed head. A changed head or conflict
 requires immediate reconciliation. Use inspect_pr with includeQueue for queue status. Describe a
 local watch as a local watch. Only report a PR in GitHub’s merge queue when isInMergeQueue is true.
-Use durable watches for authorized merges instead of detached shell loops. Advance ready independent
-PRs individually. Refresh a branch when a real dependency, conflict or required gate calls for it.
-Avoid pushing speculative updates to every open PR while earlier checks run.
+When the user withdraws a CI follow-up or gives it to another owner, cancel the local watch with
+watch_github_run action=cancel. Continue independent work. Use durable watches for authorized merges
+instead of detached shell loops. Advance ready independent PRs individually. Refresh a branch when a
+real dependency, conflict or required gate calls for it. Avoid pushing speculative updates to every
+open PR while earlier checks run.
 
 Treat CI latency as a delivery constraint from the first PR. When waits recur, compare
 representative runs with inspect_ci_run in a code-mode batch. Identify setup, the lane that delayed

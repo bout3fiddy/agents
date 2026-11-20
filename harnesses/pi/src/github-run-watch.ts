@@ -6,7 +6,7 @@ import { githubApi, type GitHubCommand } from './branch-github.ts'
 import { githubPrState } from './github-pr-state.ts'
 import { textResult } from './file-tools.ts'
 
-const parameters = Type.Object({
+const watchFields = Type.Object({
   repository: Type.String({
     pattern: '^[A-Za-z0-9][A-Za-z0-9-]{0,38}/[A-Za-z0-9_][A-Za-z0-9_.-]{0,99}$',
   }),
@@ -19,8 +19,13 @@ const parameters = Type.Object({
   ),
   followUp: Type.String({ minLength: 1, maxLength: 1000 }),
 })
+const parameters = Type.Object({
+  ...watchFields.properties,
+  action: Type.Optional(Type.Union([Type.Literal('watch'), Type.Literal('cancel')])),
+  followUp: Type.Optional(watchFields.properties.followUp),
+})
 const registration = Type.Object({
-  ...parameters.properties,
+  ...watchFields.properties,
   id: Type.String(),
   session: Type.String(),
 })
@@ -196,6 +201,12 @@ export function registerGitHubRunWatch(pi: ExtensionAPI, run?: GitHubCommand, in
         if (Check(registration, entry.data) && entry.data.session === session) {
           pending.set(entry.data.id, { watch: entry.data, errors: 0 })
         }
+      } else if (entry.type === 'custom' && entry.customType === 'pi-github-run-unwatch') {
+        if (Check(resultIds, entry.data)) {
+          for (const id of entry.data) {
+            pending.delete(id)
+          }
+        }
       } else if (entry.type === 'custom_message' && entry.customType === 'pi-github-run-result') {
         if (Check(resultIds, entry.details)) {
           for (const id of entry.details) {
@@ -217,10 +228,44 @@ export function registerGitHubRunWatch(pi: ExtensionAPI, run?: GitHubCommand, in
     description:
       'Return immediately and wake this session when a run completes. Specify the next ' +
       'authorized action for success or failure. For a merge, include pullRequest with the ' +
-      'reviewed head to wake on replacement, conflict or closure. Re-register to update.',
+      'reviewed head to wake on replacement, conflict or closure. Re-register to update. ' +
+      'Use action=cancel to stop local follow-ups for a run; optionally limit to a pinned PR. ' +
+      'GitHub continues running.',
     parameters,
     async execute(_call, input, _signal, _update, ctx) {
       const repository = input.repository.toLowerCase()
+
+      if (input.action === 'cancel') {
+        const ids = [...pending.values()]
+          .filter(
+            ({ watch }) =>
+              watch.repository === repository &&
+              watch.runId === input.runId &&
+              (!input.pullRequest ||
+                (input.pullRequest.number === watch.pullRequest?.number &&
+                  input.pullRequest.expectedHead === watch.pullRequest.expectedHead)),
+          )
+          .map(({ watch }) => watch.id)
+
+        if (ids.length) {
+          pi.appendEntry('pi-github-run-unwatch', ids)
+
+          for (const id of ids) {
+            pending.delete(id)
+          }
+
+          if (!pending.size) {
+            stop()
+          }
+        }
+
+        return textResult({ repository, runId: input.runId, cancelledWatches: ids.length })
+      }
+
+      if (!input.followUp) {
+        throw new Error('Watching a CI run requires the next authorized followUp')
+      }
+
       const existing = [...pending.values()].find(
         ({ watch }) =>
           watch.repository === repository &&
@@ -228,7 +273,9 @@ export function registerGitHubRunWatch(pi: ExtensionAPI, run?: GitHubCommand, in
           watch.pullRequest?.number === input.pullRequest?.number,
       )
       const watch = {
-        ...input,
+        runId: input.runId,
+        pullRequest: input.pullRequest,
+        followUp: input.followUp,
         repository,
         id: existing?.watch.id ?? randomUUID(),
         session: ctx.sessionManager.getSessionId(),

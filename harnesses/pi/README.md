@@ -621,4 +621,6 @@ a diagnostic. The host retains its existing permissions for any subsequent actio
 For a PR merge, pass its number and expected head in the watch's `pullRequest` field. A changed
 head, conflict or closed PR wakes the session even while the old run is pending. Query `inspect_pr`
 with `includeQueue: true` to distinguish verified GitHub queue membership from a local watch.
-Ordinary inspections keep their single GitHub query.
+Ordinary inspections keep their single GitHub query. If a run stops gating your task, the host can
+call `watch_github_run` with `action: "cancel"`, repository and run ID. Cancellation survives reload
+and leaves the remote workflow running. An optional PR pin limits cancellation to that candidate.
