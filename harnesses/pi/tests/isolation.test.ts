@@ -211,3 +211,21 @@ test('integration journal recovers partial writes and preserves concurrent edits
     await rm(base, { recursive: true, force: true })
   }
 })
+
+test('sandbox npx runs installed tools and reports missing packages offline', async (t) => {
+  const workspace = await mkdtemp(join(tmpdir(), 'pi-offline-npx-'))
+  t.after(() => rm(workspace, { recursive: true, force: true }))
+  await writeFile(join(workspace, 'package.json'), '{"name":"fixture","version":"1.0.0"}')
+  const bin = join(workspace, 'node_modules', '.bin')
+  await mkdir(bin, { recursive: true })
+  await writeFile(join(bin, 'fixture-check'), '#!/bin/sh\necho fixture-check\nexit 17\n', {
+    mode: 0o755,
+  })
+  const installed = await runSandboxed(workspace, ['npx', 'fixture-check'], 10000)
+  assert.equal(installed.exitCode, 17, installed.output)
+  assert.match(installed.output, /fixture-check/)
+  const missing = await runSandboxed(workspace, ['npx', '--yes', 'prettier', '--version'], 10000)
+  assert.equal(missing.timedOut, false)
+  assert.equal(missing.exitCode, 1, missing.output)
+  assert.match(missing.output, /ENOTCACHED/i)
+})

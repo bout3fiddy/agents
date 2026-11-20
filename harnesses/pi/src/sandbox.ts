@@ -125,6 +125,7 @@ export async function runSandboxed(
           TMPDIR: scratch,
           LANG: 'en_US.UTF-8',
           CI: '1',
+          npm_config_offline: 'true',
           NO_COLOR: '1',
           PYTHONDONTWRITEBYTECODE: '1',
           UV_CACHE_DIR: join(scratch, 'uv-cache'),

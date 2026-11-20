@@ -23,9 +23,11 @@ programs.
 Worker-issued shell commands run through macOS `sandbox-exec` in disposable project copies with a
 clean environment. The profile permits platform executables, runtime dependencies, the disposable
 workspace and scratch directory. Home files, host project writes and network access are denied.
-Dependencies and harness source are readable but not writable. Commands cannot retain generated
-code: scoped file tools perform retained edits. File tools reject traversal, secret/dependency paths
-and symbolic links.
+Sandboxed npm and npx run offline. Installed binaries run normally and a cache miss returns
+immediately. The host can provision a missing dependency. When grouping verification commands,
+preserve each check's exit status before formatting its output. Dependencies and harness source are
+readable but not writable. Commands cannot retain generated code: scoped file tools perform retained
+edits. File tools reject traversal, secret/dependency paths and symbolic links.
 
 Read-only access to the harness is restricted to its runtime assets, excluding private reports.
 Homebrew configuration and service-data directories are excluded. A command that leaves inherited

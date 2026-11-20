@@ -155,7 +155,9 @@ export function createWorkerTools(request: WorkerRequest, role: Role) {
       name: 'run_command',
       label: 'Run isolated command',
       description:
-        'Run isolated argv. No network/home access. Retain edits with project_edit/project_write.',
+        'Run isolated argv. npm/npx use installed tools or offline cache. ' +
+        'Preserve each check’s exit status when grouping commands or filtering output. ' +
+        'No network/home access. Retain edits with project_edit/project_write.',
       parameters: Type.Object({
         argv: Type.Array(Type.String(), { minItems: 1, maxItems: 100 }),
         timeoutMs: Type.Optional(Type.Integer({ minimum: 1, maximum: 120000 })),
