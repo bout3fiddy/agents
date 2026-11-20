@@ -28,6 +28,7 @@ import { runtimeVersion } from './runtime-version.ts'
 import { registerBranchTools } from './branch-tools.ts'
 import { capabilities } from './capabilities.ts'
 import { registerRecurring } from './recurring-tools.ts'
+import { registerGitHubRunWatch } from './github-run-watch.ts'
 import { registerWorkers } from './workers-command.ts'
 
 // A running generation keeps matching code, prompts and tool policy until a real reload.
@@ -39,6 +40,7 @@ export default function harness(pi: ExtensionAPI): void {
   const workerWindow = { open: false }
   registerWorkers(pi, workerWindow)
   registerRecurring(pi)
+  registerGitHubRunWatch(pi)
   const { consultations } = registerWorkshop(pi)
   registerWorkshopContext(pi)
   registerDocumentTools(pi)

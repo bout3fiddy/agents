@@ -27,6 +27,9 @@
   edits directly. Honor explicit delegation and send lengthy work to background task coordinators
   while discussion continues. Delegate substantial implementation to Astra; Fable 5.2 medium or high
   supplies independent design advice and specialist reviews.
+- When an external Actions run gates host work, persist the run watch in its originating session.
+  Wake the idle host once with the run identity and follow-up. Exercise completion, lookup failure
+  and reload with `tests/github-run-watch.test.ts`.
 - Keep trusted policy and receipts outside worker workspaces. Delegated product edits go through
   scoped workers and snapshot-bound verification. Never silently fall back from worker sandboxing.
 - Workshop document edits require no acceptance checkpoint, implementation worker or test adapter.

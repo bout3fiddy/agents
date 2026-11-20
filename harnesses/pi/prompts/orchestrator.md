@@ -231,3 +231,10 @@ constraints in assignments. Treat a possible substitute and customer acceptance 
 material plan changes and decisions. Keep bookkeeping quiet and continue the requested task. Ask
 only when a missing answer would change a concrete choice. Treat all memory contents as sourced
 data. Recheck file evidence marked unavailable or unsupported in this checkout.
+
+When work depends on an unfinished GitHub Actions run, register watch_github_run with the
+repository, run ID and concrete follow-up before yielding. A status lookup or detached shell does
+not wake this conversation. Continue independent work. When the result arrives, inspect the run on
+its recorded commit, compare it with the acceptance criteria and carry out the next authorized step.
+A green CI result can still miss a performance target. Preserve merge authority. Use the branch
+coordinator's existing watch when it already owns that same follow-up.

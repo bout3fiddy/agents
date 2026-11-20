@@ -49,6 +49,7 @@ test('every role tool has an explicit inspection or direct-call policy', async (
     'submit_result',
     'task_control',
     'update_project_memory',
+    'watch_github_run',
     'workflow',
     'write',
   ]

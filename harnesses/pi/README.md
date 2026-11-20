@@ -602,3 +602,11 @@ scripts; formatting changes to those scripts preserve their behavior.
 
 Local implementation hands unchanged, out-of-scope harness lint failures to the host when all
 diagnostics can be attributed. The gate stays failed and the candidate remains available.
+
+### GitHub Actions follow-up
+
+When a pending Actions run gates the next step, the orchestrator uses `watch_github_run` to save the
+repository, run ID and intended follow-up in its session. Pi checks GitHub every 30 seconds while
+that conversation is open and wakes it at idle with the conclusion, commit and attempt. Reopening
+the same session restores outstanding watches. Three consecutive lookup failures wake the host with
+a diagnostic. The host retains its existing permissions for any subsequent action.
