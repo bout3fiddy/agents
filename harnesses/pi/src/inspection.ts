@@ -4,7 +4,11 @@ import { Type } from 'typebox'
 import { githubCommand } from './branch-github.ts'
 import { receiptView } from './context.ts'
 import { resultSchema, type Receipt, type WorkerEvidence } from './contracts.ts'
-import { delegationDirectory, type DelegationStatus } from './delegation-state.ts'
+import {
+  delegationDirectory,
+  type DelegationRequest,
+  type DelegationStatus,
+} from './delegation-state.ts'
 import { textResult } from './file-tools.ts'
 import { readJson, StateStore } from './state.ts'
 import { safeTrace } from './workers-data.ts'
@@ -39,10 +43,24 @@ export async function reviewReceipts(store: StateStore, id: string) {
     throw new Error('Invalid progress file')
   }
 
-  const [children, checks] = await Promise.all([
+  const [children, provisional] = await Promise.all([
     path(attempt + '.children.json').then((p) => readJson<{ evidence: WorkerEvidence }[]>(p)),
     path(attempt + '.checks.json').then((p) => readJson<Receipt[]>(p)),
   ])
+  let checks = provisional
+
+  if (state.receipts && state.receiptAttempt === attempt) {
+    checks = state.receipts
+  } else if (state.receipts && !state.receiptAttempt) {
+
+    // Local tasks clear receipts on every resume. Older branch repair attempts could retain them.
+    const request = await readJson<DelegationRequest>(await path('request.json'))
+
+    if (request && request.kind !== 'branch') {
+      checks = state.receipts
+    }
+  }
+
   return {
     id,
     attempt,
@@ -65,7 +83,10 @@ export async function reviewReceipts(store: StateStore, id: string) {
       checks?.map((r) =>
         r.status === 'passed'
           ? { check: r.check, snapshot: r.snapshot, status: r.status }
-          : receiptView(r),
+          : {
+              ...receiptView(r),
+              ...(r.inheritedLintPaths?.length && { inheritedLintPaths: r.inheritedLintPaths }),
+            },
       ) ?? null,
   }
 }
@@ -99,6 +120,7 @@ export function inspectionTools(pi: ExtensionAPI): void {
           Type.Object(
             {
               check: Type.String(),
+              inheritedLintPaths: Type.Optional(Type.Array(Type.String())),
               snapshot: Type.String(),
               status: Type.String(),
             },

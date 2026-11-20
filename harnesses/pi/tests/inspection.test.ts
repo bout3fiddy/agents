@@ -63,6 +63,41 @@ test('attempt summaries preserve required findings and failed checks', async (t)
   await assert.rejects(reviewReceipts(store, id), /Linked/)
 })
 
+test('inspection selects final checks for this attempt, including older local tasks', async (t) => {
+  const item = await fixture()
+  t.after(() => rm(item.base, { recursive: true, force: true }))
+  const store = new StateStore(item.root)
+  const id = randomUUID()
+  const dir = delegationDirectory(store, id)
+  const receipts = [
+    {
+      check: 'lint',
+      status: 'failed',
+      snapshot: 'final',
+      result: { output: 'lint error' },
+      inheritedLintPaths: ['existing.md'],
+    },
+  ]
+  await atomicJson(join(dir, 'request.json'), { kind: 'maintenance' })
+  await atomicJson(join(dir, 'status.json'), { status: 'needs_attention', receipts })
+  const final = (await reviewReceipts(store, id)).checks?.[0]
+  assert.equal(final?.snapshot, 'final')
+  assert.ok('inheritedLintPaths' in final)
+  assert.deepEqual(final.inheritedLintPaths, ['existing.md'])
+
+  const progressFile = 'orchestrator-2-1.json'
+  const checkFile = join(dir, progressFile + '.checks.json')
+  await atomicJson(join(dir, 'request.json'), { kind: 'branch' })
+  await atomicJson(join(dir, 'status.json'), { status: 'running', progressFile, receipts })
+  assert.equal((await reviewReceipts(store, id)).checks, null)
+  await atomicJson(checkFile, [{ check: 'lint', status: 'passed', snapshot: 'provisional' }])
+  const state = { status: 'needs_attention', progressFile, receipts, receiptAttempt: progressFile }
+  await atomicJson(join(dir, 'status.json'), state)
+  assert.equal((await reviewReceipts(store, id)).checks?.[0]?.status, 'failed')
+  await atomicJson(join(dir, 'status.json'), { ...state, progressFile: 'orchestrator-3-1.json' })
+  assert.equal((await reviewReceipts(store, id)).checks, null)
+})
+
 test('the host SDK allows nested reads and blocks nested writes in the same script', async (t) => {
   const item = await fixture()
   t.after(() => rm(item.base, { recursive: true, force: true }))

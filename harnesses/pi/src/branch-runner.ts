@@ -201,7 +201,7 @@ export async function runBranchTask(
         const generation = state.deliveryVersion ? `-run-${state.deliveryVersion}` : ''
         const progressFile = `orchestrator-${validation}-${revision}${generation}.json`
         const outputPath = join(directory, progressFile)
-        await save({ progressFile })
+        await save({ progressFile, receipts: undefined, receiptAttempt: undefined })
         const evidence = await coordinate(
           {
             kind: 'branch',
@@ -277,7 +277,7 @@ export async function runBranchTask(
           }
 
           if (error instanceof DelegationChecksFailed) {
-            await save({ receipts: error.receipts })
+            await save({ receipts: error.receipts, receiptAttempt: progressFile })
             feedback = JSON.stringify({ checks: error.receipts })
           } else {
             feedback = error.message
@@ -302,7 +302,7 @@ export async function runBranchTask(
           throw new Error('Branch candidate changed during verification')
         }
 
-        await save({ receipts })
+        await save({ receipts, receiptAttempt: progressFile })
         await atomicJson(join(directory, `validation-${validation}.json`), {
           base,
           snapshot: verified,

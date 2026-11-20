@@ -11,7 +11,9 @@ combine.
 
 - `project_search`, `project_read`. Host and Pi worker inspections. Literal search exposes hits with
   path, line and text, and hasMore. Listings expose matches and an optional nextAfterPath. Reads
-  include content, folder rules, the full-file hash and any continuation coordinates.
+  include content, folder rules, the full-file hash and any continuation coordinates. For literal
+  searches, return hits and hasMore when you need locations. Each entry in matches repeats the same
+  path, line and text.
 
 - `original_read`, `read_reference`. Worker inspections where the role supplies them. Original reads
   use the same paging as project_read. Reference text comes from the existing reference allowlist.
@@ -24,8 +26,8 @@ combine.
 
 - `inspect_pr`, `review_receipts`. Host inspections. Project the PR head, mergeable, reviewDecision,
   reviews and checks as needed. Read required findings and check snapshots from receipts. Missing
-  receipts are null. Required findings and non-passing check receipts survive a narrow script
-  projection.
+  receipts are null. Final runner checks supersede provisional coordinator checks for the same
+  attempt. Required findings and non-passing check receipts survive a narrow script projection.
 
 - `codemode`. Top-level script runner. Model helpers are disabled.
 

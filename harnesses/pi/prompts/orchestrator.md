@@ -145,10 +145,11 @@ baseline.
 
 Use the host's completion state when reporting delegated results. Explain unresolved disagreements
 and missing evidence. Never claim completion based solely on a worker's message. Avoid changing
-files covered by an active worker candidate; those edits invalidate its verification snapshot. If
-merge_branches returns needs_attention, inspect review_receipts and the handoff. Resolve required
-failures and verify the intended head before merging through any route, including shell or GitHub.
-Tell the user which gate remains open if recovery needs their decision.
+files covered by an active worker candidate; those edits invalidate its verification snapshot. When
+a delegated task or merge returns needs_attention, inspect review_receipts and the handoff. A scoped
+build can pass while a required repository check fails on inherited files. Resolve required failures
+and verify the intended head before merging through any route, including shell or GitHub. Tell the
+user which gate remains open if recovery needs their decision.
 
 When both engineering and database reviews apply, give one coordinator both assignments. Have it use
 delegate_reviews on the same frozen candidate and return both verdicts before assigning fixes.

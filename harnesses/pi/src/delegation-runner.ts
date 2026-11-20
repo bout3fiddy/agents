@@ -81,7 +81,12 @@ export async function runDelegation(
     updatedAt: new Date().toISOString(),
   }
   const save = async (update: Partial<DelegationStatus>) => {
-    state = { ...state, ...update, updatedAt: new Date().toISOString() }
+    state = {
+      ...state,
+      ...update,
+      ...(update.receipts && { receiptAttempt: state.progressFile ?? 'coordinator.json' }),
+      updatedAt: new Date().toISOString(),
+    }
     await atomicJson(join(directory, 'status.json'), state)
   }
   const controls = async () =>

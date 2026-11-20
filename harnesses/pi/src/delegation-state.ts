@@ -89,6 +89,7 @@ export type DelegationStatus = {
   summary?: string
   error?: string
   changedPaths?: string[]
+  receiptAttempt?: string
   receipts?: Receipt[]
   children?: {
     role: string
@@ -693,6 +694,7 @@ export class Delegations {
         hostActions: undefined,
         summary: 'Resuming retained task',
         receipts: undefined,
+        receiptAttempt: undefined,
         children: undefined,
         updatedAt: new Date().toISOString(),
         deliveryVersion: (job.state.deliveryVersion ?? 0) + 1,
