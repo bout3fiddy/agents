@@ -3,7 +3,15 @@ import { dirname } from 'node:path'
 import { Type, type Static } from 'typebox'
 import type { ToolDefinition } from '@earendil-works/pi-coding-agent'
 import { instructions } from './project.ts'
-import { digest, inventory, maxFileBytes, safePath, writable, readBoundedFile } from './paths.ts'
+import {
+  digest,
+  inventory,
+  maxFileBytes,
+  safePath,
+  sensitive,
+  writable,
+  readBoundedFile,
+} from './paths.ts'
 
 export function textResult(value: unknown) {
   return {
@@ -145,12 +153,13 @@ export function fileTools(
       hasMore: Type.Optional(Type.Boolean()),
       limit: Type.Integer(),
       nextAfterPath: Type.Optional(Type.String()),
+      scopeNote: Type.Optional(Type.String()),
       call: Type.String(),
     }),
     label: 'Search project',
     description:
       'List files or find literal text in authored files. Filter by pathPrefix. For listings, ' +
-      'pass nextAfterPath as afterPath to continue.',
+      'pass nextAfterPath as afterPath to continue. Excluded paths have unknown contents.',
     parameters: Type.Object({
       query: Type.Optional(Type.String({ maxLength: 300 })),
       pathPrefix: Type.Optional(Type.String()),
@@ -167,6 +176,13 @@ export function fileTools(
         afterPath?: string
       }
       const files = await inventory(root, pathPrefix)
+      const scopeNote = sensitive(pathPrefix)
+        ? 'This path is excluded from project_search. Its contents are unknown.'
+        : undefined
+
+      if (scopeNote && !files.size) {
+        throw new Error(scopeNote)
+      }
 
       if (!query) {
         const names = [...files.keys()]
@@ -178,7 +194,7 @@ export function fileTools(
 
         const matches = names.slice(start, start + 100)
         const nextAfterPath = start + matches.length < names.length ? matches.at(-1) : undefined
-        return structuredResult({ matches, limit: 100, nextAfterPath, call: id })
+        return structuredResult({ matches, limit: 100, nextAfterPath, scopeNote, call: id })
       }
 
       if (afterPath !== undefined) {
@@ -207,7 +223,7 @@ export function fileTools(
 
       const page = hits.slice(0, 100)
       const matches = page.map((hit) => `${hit.path}:${hit.line}: ${hit.text}`)
-      const value = { matches, limit: 100, call: id }
+      const value = { matches, limit: 100, ...(scopeNote && { scopeNote }), call: id }
       return {
         ...textResult(value),
         structuredContent: { ...value, hits: page, hasMore: hits.length > 100 },

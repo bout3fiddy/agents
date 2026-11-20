@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { readFile, rm, symlink, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { execFileSync } from 'node:child_process'
 import { fileTools } from '../src/file-tools.ts'
@@ -252,6 +252,38 @@ test('large project paths are available through paginated listings', async (t) =
   assert.deepEqual([...first.matches, ...second.matches], names)
   assert.equal(second.nextAfterPath, undefined)
   await assert.rejects(page('missing'), /cursor/)
+})
+
+test('excluded search distinguishes unavailable paths from empty results', async (t) => {
+  const item = await fixture()
+  t.after(() => rm(item.base, { recursive: true, force: true }))
+  const search = fileTools(item.root).find((tool) => tool.name === 'project_search')!
+  const run = async (pathPrefix: string, query?: string) => {
+    const res = await search.execute(
+      'search',
+      { pathPrefix, query },
+      undefined,
+      undefined,
+      {} as ExtensionToolContext,
+    )
+    return JSON.parse((res.content[0] as { text: string }).text)
+  }
+
+  const excluded = /excluded from project_search.*contents are unknown/
+  await assert.rejects(run('.pi/audit'), excluded)
+  await mkdir(join(item.root, '.pi', 'audit'), { recursive: true })
+  await writeFile(join(item.root, '.pi', 'audit', 'private.md'), 'private finding')
+  await assert.rejects(run('.pi/audit/', 'finding'), excluded)
+  assert.deepEqual((await run('src/absent')).matches, [])
+
+  // A lexical prefix can also select an ordinary authored sibling.
+  await writeFile(join(item.root, '.pi', 'audit-guide.md'), 'public guidance')
+  const listed = await run('.pi/audit')
+  assert.deepEqual(listed.matches, ['.pi/audit-guide.md'])
+  assert.match(listed.scopeNote, excluded)
+  const filtered = await run('.pi/audit', 'finding')
+  assert.deepEqual(filtered.matches, [])
+  assert.match(filtered.scopeNote, excluded)
 })
 
 test('scoped search reads only matching safe files in snapshots and Git worktrees', async (t) => {

@@ -16,7 +16,9 @@ separately from the clipped output.
   path, line and text, and hasMore. Listings expose matches and an optional nextAfterPath. Reads
   include content, folder rules, the full-file hash and any continuation coordinates. For literal
   searches, use pathPrefix to restrict the files scanned. Return hits and hasMore when you need
-  locations. Each entry in matches repeats the same path, line and text.
+  locations. Each entry in matches repeats the same path, line and text. An explicitly excluded
+  prefix returns an error, or scopeNote when the same prefix matches visible sibling names. Report
+  the excluded contents as unknown. If they affect a decision, hand that check to the host.
 
 - `original_read`, `read_reference`. Worker inspections where the role supplies them. Original reads
   use the same paging as project_read. Reference text comes from the existing reference allowlist.
