@@ -201,7 +201,7 @@ export async function safePath(root: string, name: string): Promise<string> {
   return cursor
 }
 
-export async function inventory(root: string): Promise<Map<string, Buffer>> {
+export async function inventory(root: string, pathPrefix = ''): Promise<Map<string, Buffer>> {
   const files = new Map<string, Buffer>()
   let bytes = 0
 
@@ -215,8 +215,10 @@ export async function inventory(root: string): Promise<Map<string, Buffer>> {
       }
 
       if (entry.isDirectory()) {
-        await visit(path)
-      } else if (entry.isFile()) {
+        if (name.startsWith(pathPrefix) || pathPrefix.startsWith(name + '/')) {
+          await visit(path)
+        }
+      } else if (entry.isFile() && name.startsWith(pathPrefix)) {
         const info = await lstat(path)
 
         if (info.size > maxFileBytes || bytes + info.size > 100_000_000 || files.size >= 10_000) {
@@ -260,7 +262,7 @@ export async function inventory(root: string): Promise<Map<string, Buffer>> {
 
   if (names) {
     for (const name of names) {
-      if (name === projectBriefPath || sensitive(name)) {
+      if (!name.startsWith(pathPrefix) || name === projectBriefPath || sensitive(name)) {
         continue
       }
 

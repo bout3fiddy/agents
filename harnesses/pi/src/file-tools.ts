@@ -166,10 +166,10 @@ export function fileTools(
         pathPrefix?: string
         afterPath?: string
       }
-      const files = await inventory(root)
+      const files = await inventory(root, pathPrefix)
 
       if (!query) {
-        const names = [...files.keys()].filter((path) => path.startsWith(pathPrefix))
+        const names = [...files.keys()]
         const start = afterPath === undefined ? 0 : names.indexOf(afterPath) + 1
 
         if (afterPath !== undefined && !start) {
@@ -188,7 +188,7 @@ export function fileTools(
       const hits: { path: string; line: number; text: string }[] = []
 
       for (const [path, bytes] of files) {
-        if (path.startsWith(pathPrefix) && !bytes.includes(0)) {
+        if (!bytes.includes(0)) {
           for (const [index, line] of bytes.toString('utf8').split('\n').entries()) {
             if (line.includes(query)) {
               hits.push({ path, line: index + 1, text: line.slice(0, 400) })

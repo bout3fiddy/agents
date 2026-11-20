@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { readFile, rm, symlink, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
+import { execFileSync } from 'node:child_process'
 import { fileTools } from '../src/file-tools.ts'
 import { captureSession } from './session-support.ts'
 import { fixture, hashes } from './support.ts'
@@ -251,4 +252,36 @@ test('large project paths are available through paginated listings', async (t) =
   assert.deepEqual([...first.matches, ...second.matches], names)
   assert.equal(second.nextAfterPath, undefined)
   await assert.rejects(page('missing'), /cursor/)
+})
+
+test('scoped search reads only matching safe files in snapshots and Git worktrees', async (t) => {
+  const item = await fixture()
+  t.after(() => rm(item.base, { recursive: true, force: true }))
+  await writeFile(join(item.root, 'unrelated'), Buffer.alloc(maxFileBytes + 1))
+  await writeFile(join(item.root, 'src', 'fixture-file'), 'needle')
+  await writeFile(join(item.root, 'src', 'fixture-other'), 'needle')
+  await symlink(join(item.root, 'unrelated'), join(item.root, 'src', 'fixture-link'))
+  const search = fileTools(item.root).find((tool) => tool.name === 'project_search')!
+  const run = async (pathPrefix: string, query?: string) => {
+    const result = await search.execute(
+      'search',
+      { pathPrefix, query },
+      undefined,
+      undefined,
+      {} as ExtensionToolContext,
+    )
+    return JSON.parse((result.content[0] as { text: string }).text).matches
+  }
+
+  for (const git of [false, true]) {
+    if (git) {
+      execFileSync('git', ['-C', item.root, 'init', '--quiet'])
+    }
+
+    assert.deepEqual(await run('src/fixt'), ['src/fixture-file', 'src/fixture-other'])
+    assert.deepEqual(await run('src/fixture-f', 'needle'), ['src/fixture-file:1: needle'])
+    assert.deepEqual(await run('../'), [])
+    await assert.rejects(run('unrelated'), /Snapshot limit/)
+    await assert.rejects(run(''), /Snapshot limit/)
+  }
 })

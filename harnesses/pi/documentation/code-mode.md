@@ -12,8 +12,8 @@ combine.
 - `project_search`, `project_read`. Host and Pi worker inspections. Literal search exposes hits with
   path, line and text, and hasMore. Listings expose matches and an optional nextAfterPath. Reads
   include content, folder rules, the full-file hash and any continuation coordinates. For literal
-  searches, return hits and hasMore when you need locations. Each entry in matches repeats the same
-  path, line and text.
+  searches, use pathPrefix to restrict the files scanned. Return hits and hasMore when you need
+  locations. Each entry in matches repeats the same path, line and text.
 
 - `original_read`, `read_reference`. Worker inspections where the role supplies them. Original reads
   use the same paging as project_read. Reference text comes from the existing reference allowlist.
