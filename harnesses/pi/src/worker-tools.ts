@@ -27,6 +27,7 @@ export const references: Record<string, string> = {
   compiler: 'skills/zig/references/compiler-evidence.md',
   machine: 'skills/zig/references/machine-level-hypotheses.md',
   housekeeping: 'skills/housekeeping/SKILL.md',
+  'readability-spacing': 'harnesses/pi/scripts/linting/readability.mjs',
 }
 
 export function createWorkerTools(request: WorkerRequest, role: Role) {
@@ -71,7 +72,9 @@ export function createWorkerTools(request: WorkerRequest, role: Role) {
       executionMode: 'sequential',
       label: 'Format assigned files',
       description:
-        'Format Prettier-supported files. For Python use scoped edits and project checks.',
+        'Format assigned Prettier-supported files. For JS/TS this applies the exact harness ' +
+        'spacing rule (read_reference: readability-spacing). Check line widths separately. ' +
+        'For Python use scoped edits and project checks.',
       parameters: Type.Object({ paths: Type.Array(Type.String(), { minItems: 1, maxItems: 50 }) }),
       async execute(_id, raw) {
         const { paths } = raw as { paths: string[] }
@@ -180,7 +183,7 @@ export function createWorkerTools(request: WorkerRequest, role: Role) {
       name: 'read_reference',
       label: 'Read engineering reference',
       description:
-        'Read canonical benchmarking, allocation, compiler, machine or ' + 'housekeeping guidance.',
+        'Read canonical engineering references, including the executable JS/TS spacing rule.',
       parameters: Type.Object({
         name: Type.Union(Object.keys(references).map((name) => Type.Literal(name))),
       }),

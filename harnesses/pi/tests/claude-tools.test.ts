@@ -83,6 +83,22 @@ test('Claude bridge gives performance scoped writes and denies product writes', 
     const tools = await client.listTools()
     assert.ok(tools.tools.some((tool) => tool.name === 'project_write'))
     assert.ok(!tools.tools.some((tool) => tool.name === 'workflow' || tool.name === 'bash'))
+    const formatTool = tools.tools.find((tool) => tool.name === 'project_format')
+    assert.match(formatTool?.description ?? '', /readability-spacing/)
+    const rule = await client.callTool({
+      name: 'read_reference',
+      arguments: { name: 'readability-spacing' },
+    })
+    const canonical = await readFile(join(harnessRoot, 'scripts/linting/readability.mjs'), 'utf8')
+    assert.deepEqual(rule.content, [{ type: 'text', text: canonical }])
+    const example = join(item.root, 'benchmarks', 'probe.ts')
+    await writeFile(example, 'start()\n// Sample the result.\nfinish()\n')
+    const formatted = await client.callTool({
+      name: 'project_format',
+      arguments: { paths: ['benchmarks/probe.ts'] },
+    })
+    assert.ok(!formatted.isError)
+    assert.equal(await readFile(example, 'utf8'), 'start()\n\n// Sample the result.\nfinish()\n')
     const invalidTimeout = await client.callTool({
       name: 'run_command',
       arguments: { argv: ['npm', 'test'], timeoutMs: 180000 },

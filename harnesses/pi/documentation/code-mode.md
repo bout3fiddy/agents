@@ -21,7 +21,8 @@ separately from the clipped output.
   the excluded contents as unknown. If they affect a decision, hand that check to the host.
 
 - `original_read`, `read_reference`. Worker inspections where the role supplies them. Original reads
-  use the same paging as project_read. Reference text comes from the existing reference allowlist.
+  use the same paging as project_read. For the exact JS/TS formatting rule, read_reference({name:
+  "readability-spacing"}) returns the same source used by project_format and harness lint.
 
 - `task_status`, `harness_status`, `harness_capabilities`. Host inspections. Task status returns one
   object for an ID or an array without an ID. Read status, hostActions and checks from the task.

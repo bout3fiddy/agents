@@ -62,7 +62,10 @@ evidence.
 
 Keep authored lines within 100 columns. Separate logical stages and standalone comment blocks with
 blank lines. Use project_format where available or the repository formatter; long strings may need
-manual splitting. Keep project-specific semantic linting and type checks in the project adapter.
+manual splitting. On supported JS/TS files, project_format already applies the harness spacing rule.
+Use read_reference with readability-spacing if you need its exact behavior. Leave inherited,
+out-of-scope findings with the coordinator. Keep semantic lint and type checks in the project
+adapter.
 
 Measure performance at the caller-visible boundary with matching workload, build, warmup, worker
 count and correctness checks. The performance role owns measurement; implementers optimize product
