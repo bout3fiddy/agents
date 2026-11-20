@@ -96,3 +96,63 @@ test('the host SDK allows nested reads and blocks nested writes in the same scri
     await runtime.settleCredentialWrites()
   }
 })
+
+test('a verdict-only script retains a failed check on the reviewed snapshot', async (t) => {
+  const item = await fixture()
+  t.after(() => rm(item.base, { recursive: true, force: true }))
+  const id = randomUUID()
+  const dir = delegationDirectory(new StateStore(item.root), id)
+  const attempt = 'orchestrator-1-1.json'
+  await atomicJson(join(dir, 'status.json'), { status: 'needs_attention', progressFile: attempt })
+  await atomicJson(join(dir, attempt + '.children.json'), [
+    {
+      evidence: {
+        role: 'reviewer',
+        model: 'fixture',
+        snapshot: 'reviewed-head',
+        result: { verdict: 'pass', findings: [] },
+      },
+    },
+  ])
+  await atomicJson(join(dir, attempt + '.checks.json'), [
+    {
+      check: 'harness-lint',
+      status: 'failed',
+      snapshot: 'reviewed-head',
+      result: { output: 'raw diagnostic text', exitCode: 1 },
+    },
+  ])
+  const code =
+    'const v=await tools.review_receipts({id:' +
+    JSON.stringify(id) +
+    '});' +
+    'text([v.state,v.reviews.slice(-1).map(x=>x.verdict)])'
+  let response = ''
+  let called = false
+  const { session, runtime } = await captureSession(
+    item.root,
+    item.base,
+    [harness],
+    async (ctx) => {
+      if (called) {
+        response = JSON.stringify(ctx.messages.at(-1)?.content)
+        return [{ type: 'text', text: 'done' }]
+      }
+
+      called = true
+      return [{ type: 'toolCall', name: 'codemode', id: 'replay', arguments: { code } }]
+    },
+  )
+
+  try {
+    await session.prompt('Read the final review verdict.')
+    assert.match(response, /pass/)
+    assert.match(response, /harness-lint/)
+    assert.match(response, /failed/)
+    assert.match(response, /reviewed-head/)
+    assert.doesNotMatch(response, /raw diagnostic text/)
+  } finally {
+    session.dispose()
+    await runtime.settleCredentialWrites()
+  }
+})

@@ -1,5 +1,5 @@
 import { createCodemodeExtension } from '@earendil-works/pi-coding-agent'
-import { inspectionTools, nestedInspectionTools } from './inspection.ts'
+import { inspectionTools, nestedInspectionTools, type reviewReceipts } from './inspection.ts'
 import { realpath } from 'node:fs/promises'
 import { Type } from 'typebox'
 import type { ExtensionAPI } from '@earendil-works/pi-coding-agent'
@@ -45,11 +45,52 @@ export default function harness(pi: ExtensionAPI): void {
             callable: loadout.callable.filter(inspectable),
           })
         },
-        execute(id, args, signal, update, ctx) {
+        async execute(id, args, signal, update, ctx) {
+          const checkEvidence = new Set<string>()
+          const executeTool: typeof ctx.executeTool = async (name, input, options) => {
+            const outcome = await ctx.executeTool(name, input, options)
+
+            if (name === 'review_receipts' && !outcome.isError) {
+              const receipt = outcome.result.structuredContent as
+                Awaited<ReturnType<typeof reviewReceipts>> | undefined
+
+              for (const check of receipt?.checks ?? []) {
+                if (check.status !== 'passed') {
+                  checkEvidence.add(
+                    JSON.stringify({
+                      id: receipt!.id,
+                      attempt: receipt!.attempt,
+                      check: check.check,
+                      status: check.status,
+                      snapshot: check.snapshot,
+                    }),
+                  )
+                }
+              }
+            }
+
+            return outcome
+          }
           const inspectionContext = Object.create(ctx, {
             tools: { value: ctx.tools.filter(inspectable) },
+            executeTool: { value: executeTool },
           })
-          return tool.execute(id, args, signal, update, inspectionContext)
+          const result = await tool.execute(id, args, signal, update, inspectionContext)
+
+          if (!checkEvidence.size) {
+            return result
+          }
+
+          return {
+            ...result,
+            content: [
+              ...result.content,
+              {
+                type: 'text' as const,
+                text: 'Recorded non-passing checks:\n' + [...checkEvidence].join('\n'),
+              },
+            ],
+          }
         },
       })
     },
