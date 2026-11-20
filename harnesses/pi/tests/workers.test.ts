@@ -1,3 +1,4 @@
+import { transcriptTurns } from '../src/workers-transcript.ts'
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { join } from 'node:path'
@@ -493,4 +494,19 @@ test('Escape leaves the guidance composer while delivery is pending', async (t) 
   release()
   await delay(10)
   await worker.finish('complete', 'Done')
+})
+
+test('legacy coordinator assignments and revisions display their message without envelopes', () => {
+  const entries = [
+    { task: 'Prepare deployment notes.', taskScope: {}, kind: 'documents' },
+    { taskControlRevision: 2, taskUpdate: 'Cover disaster recovery.', immutableWriteScope: [] },
+  ].map((payload) => ({ at: '', role: 'user', text: JSON.stringify(payload) }))
+  const turns = transcriptTurns(entries)
+  assert.deepEqual(
+    turns.map((turn) => turn.blocks[0]),
+    [
+      { kind: 'prose', text: 'Prepare deployment notes.' },
+      { kind: 'prose', text: 'Cover disaster recovery.' },
+    ],
+  )
 })

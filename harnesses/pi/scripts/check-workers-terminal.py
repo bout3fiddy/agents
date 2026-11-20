@@ -5,6 +5,7 @@ Run: uv run --with pexpect --with pyte --with pillow scripts/check-workers-termi
 
 import json
 import os
+import re
 import tempfile
 import time
 import uuid
@@ -66,9 +67,22 @@ def record(root, role, task, parent=None, review=None, complete=False):
             {"path": "design/queue.md", "newText": "raw-marker " * 1400}
         ),
     }
-    (directory / "conversation.jsonl").write_text(
-        json.dumps(entry) + "\n" + json.dumps(tool) + "\n"
-    )
+    read_call = {
+        "at": now, "role": "assistant",
+        "text": 'mcp__piworker__project_read {"path":"src/worker.ts"}',
+    }
+    result = {
+        "content": '1: const region = "north"\n2: export const retries = 3',
+        "fileSha256": "a" * 64, "totalLines": 2, "instructionsUnchanged": True, "call": "128",
+    }
+    read_result = {"at": now, "role": "user", "text": json.dumps(result)}
+    command = {"at": now, "role": "tool", "text": 'run_command {"argv":["npm","test"]}'}
+    failure = {"at": now, "role": "toolResult", "text": json.dumps(
+        {"argv": ["npm", "test"], "exitCode": 1, "output": "FAIL queue recovery"}
+    )}
+    entry["text"] += "\n\n**Next step**: rerun the `queue` checks."
+    events = [entry, read_call, read_result, command, failure, tool]
+    (directory / "conversation.jsonl").write_text("".join(json.dumps(e) + "\n" for e in events))
     return identifier
 
 
@@ -123,8 +137,20 @@ def main():
         picture = Image.new("RGB", (screen.columns * 9 + 24, screen.lines * 19 + 24), "#16181d")
         draw = ImageDraw.Draw(picture)
 
-        for y, line in enumerate(lines):
-            draw.text((12, 12 + y * 19), line, font=font, fill="#d6d9e0")
+        for y, row in screen.buffer.items():
+            for x, cell in row.items():
+                if not cell.data.strip():
+                    continue
+
+                color = cell.fg
+
+                if re.fullmatch("[0-9a-fA-F]{6}", color):
+                    color = "#" + color
+                elif color in {"default", "brown"} or color.startswith("bright"):
+                    color = "#d6d9e0"
+
+                draw.text((12 + x * 9, 12 + y * 19), cell.data, font=font, fill=color,
+                          stroke_width=int(cell.bold), stroke_fill=color)
 
         picture.save(reports / f"{name}.png")
         return "\n".join(lines)
@@ -158,7 +184,12 @@ def main():
         keys("\x1b[B\x1b[B\x1b[B\x1b[B\r")
         chat = capture("03-conversation")
         assert "Review ·" in chat and "Café" in chat, chat
-        assert "Edit  design/queue.md" in chat and "raw-marker" not in chat, chat
+        assert "design/queue.md" in chat and "raw-marker" not in chat, chat
+        assert "src/worker.ts" in chat and "FAIL queue recovery" in chat, chat
+
+        for fragment in ['"content":', '"argv":', 'fileSha256', "**Next step**", r"\n2:"]:
+            assert fragment not in chat, chat
+
         keys("r")
         assert "raw-marker" in capture("03-raw")
         before_scroll = capture("03-before-wheel")

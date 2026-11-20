@@ -294,9 +294,14 @@ running.
 | d                   | Toggle model, delegator, repository, worktree/candidate, branch and scope |
 | p                   | Toggle the complete delegated task prompt                                 |
 | PgUp/PgDn, Home/End | Scroll history or return to latest activity                               |
+| r                   | Toggle the raw transcript                                                 |
 | l                   | Load older conversation history                                           |
 | Escape              | Return to the picker, then to the orchestrator                            |
 | Ctrl+O              | Return directly to the orchestrator                                       |
+
+The conversation renders worker prose as Markdown and shows tool activity alongside its outcome. Use
+the wheel in fullscreen Pi, or the arrow and page keys, to read earlier turns. Press **End** to
+follow new activity. Press **r** to inspect a tool’s original input and output.
 
 `/workers panel` toggles a compact, noncapturing panel at the upper right. It lists active subagents
 with the same hierarchy and leaves keyboard focus in the host input. Pi's extension API supplies an
@@ -549,7 +554,3 @@ scripts; formatting changes to those scripts preserve their behavior.
 
 Local implementation hands unchanged, out-of-scope harness lint failures to the host when all
 diagnostics can be attributed. The gate stays failed and the candidate remains available.
-
-In a worker conversation, tool calls show the action and file. Press **r** for the raw transcript,
-**d** for worker details, or **p** for its prompt. Scroll with the wheel in fullscreen Pi or with
-the arrow and page keys. **End** follows the latest activity.

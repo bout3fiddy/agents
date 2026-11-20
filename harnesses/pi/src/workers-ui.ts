@@ -1,8 +1,6 @@
 import {
   Input,
   matchesKey,
-  stripTerminalSequences,
-  replaceControlCharacters,
   truncateToWidth,
   wrapTextWithAnsi,
   visibleWidth,
@@ -11,7 +9,8 @@ import {
 } from '@earendil-works/pi-tui'
 import type { Theme } from '@earendil-works/pi-coding-agent'
 import { taskTitle, type WorkersCatalog, type WorkerRow } from './workers-data.ts'
-import { transcriptEntry } from './workers-transcript.ts'
+import { ConversationRenderer, terminalText } from './workers-render.ts'
+import { rawEntry } from './workers-transcript.ts'
 import { workerTree } from './workers-tree.ts'
 import type { ConversationEntry } from './worker-live.ts'
 
@@ -26,15 +25,7 @@ const names: Record<string, string> = {
   performance: 'Performance',
 }
 
-export function terminalText(value: string): string {
-
-  // Untrusted tool output must not inject terminal controls into the viewer.
-  return stripTerminalSequences(value)
-    .replaceAll('\t', '  ')
-    .split('\n')
-    .map(replaceControlCharacters)
-    .join('\n')
-}
+export { terminalText }
 
 function age(at: string): string {
   const seconds = Math.max(0, Math.floor((Date.now() - Date.parse(at)) / 1000))
@@ -71,6 +62,7 @@ export class WorkersView implements Focusable {
   private sending = false
   private disposed = false
   private timer?: ReturnType<typeof setInterval>
+  private readonly conversationRenderer: ConversationRenderer
 
   constructor(
     private readonly source: Source,
@@ -81,6 +73,7 @@ export class WorkersView implements Focusable {
     readonly panel = false,
     autoRefresh = true,
   ) {
+    this.conversationRenderer = new ConversationRenderer(theme)
     this.input.onSubmit = (text) => {
       void this.send(text)
     }
@@ -450,86 +443,43 @@ export class WorkersView implements Focusable {
 
   private renderChat(row: WorkerRow, width: number): string[] {
     const heading = `${names[row.info.role] ?? row.info.role} · ${status(row)}`
+    const attention = ['needs_attention', 'failed', 'blocked'].includes(
+      row.taskStatus ?? row.state.status,
+    )
     const header = [
-      this.theme.fg('accent', terminalText(heading)),
+      this.theme.fg(attention ? 'warning' : 'accent', terminalText(heading)),
       terminalText(`Task: ${(row.title || taskTitle(row.info.task)).split('\n')[0]}`),
       terminalText(`By ${row.delegatedBy}${row.branch ? ` · ${row.branch}` : ''}`),
     ]
-    let text: string
+    let body: string[]
 
-    if (this.mode === 'details') {
-      text = [
-        `Worker: ${row.id}`,
-        `Model: ${row.info.model}${row.info.thinking ? ` · ${row.info.thinking}` : ''}`,
-        `Delegated by: ${row.delegatedBy}`,
-        `Task status: ${row.taskStatus ?? row.state.status}`,
-        `Repository: ${row.info.projectRoot}`,
-        `Worktree / candidate: ${row.info.workspace}`,
-        `Branch: ${row.branch ?? 'No branch recorded; isolated candidate or local task'}`,
-        `Assigned scope: ${row.info.scope.join(', ') || 'Read only'}`,
-        row.info.writeLimits
-          ? `Write access within scope: ${row.info.writeLimits.join(', ') || 'Read only'}`
-          : '',
-        `Started: ${row.info.startedAt}`,
-        `Latest activity: ${row.state.updatedAt}`,
-        `Prompt: press p to view the complete delegated prompt.`,
-        `Trace: ${row.transcript ?? row.info.output}`,
-        row.info.reviewOf ? `Reviewing the candidate after worker ${row.info.reviewOf}` : '',
-        row.inferredRelationship
-          ? 'Legacy relationship reconstructed from task, candidate and worker order.'
-          : '',
-        row.legacy
-          ? 'Legacy run: guidance goes to the task coordinator.'
-          : 'Guidance goes to this worker at a safe boundary; its write scope stays unchanged.',
-      ]
-        .filter(Boolean)
-        .join('\n\n')
-    } else if (this.mode === 'prompt') {
-      try {
-        text = JSON.stringify(JSON.parse(row.info.task), null, 2)
-      } catch {
-        text = row.info.task
-      }
+    if (this.mode === 'chat' && !this.raw) {
+      body =
+        this.conversation.length || row.state.partial
+          ? this.conversationRenderer.render(
+              this.conversation,
+              {
+                name: names[row.info.role] ?? terminalText(row.info.role),
+                active: row.active,
+                partial: row.state.partial,
+                partialAt: row.state.updatedAt,
+                summary:
+                  !row.active && row.state.summary
+                    ? { status: row.state.status, text: row.state.summary }
+                    : undefined,
+              },
+              Math.min(96, width),
+            )
+          : [this.theme.fg('dim', 'Waiting for conversation events…')]
     } else {
-      text =
-        this.conversation.map((entry) => transcriptEntry(entry, this.raw)).join('\n\n') ||
-        'Waiting for conversation events…'
-
-      if (row.state.partial) {
-        text +=
-          '\n\n' +
-          transcriptEntry(
-            { at: row.state.updatedAt, role: 'assistant', text: row.state.partial },
-            this.raw,
-          )
-      }
-
-      if (!row.active && row.state.summary) {
-        text += `\n\n${row.state.status}\n${row.state.summary}`
-      }
+      body = terminalText(this.plainText(row))
+        .split('\n')
+        .flatMap((line) => wrapTextWithAnsi(line, width))
     }
 
-    const measure = this.mode === 'chat' && !this.raw ? Math.min(96, width) : width
-    const body = terminalText(text)
-      .split('\n')
-      .flatMap((line) => {
-        const wrapped = wrapTextWithAnsi(line, measure)
-
-        if (this.mode !== 'chat' || this.raw) {
-          return wrapped
-        }
-
-        if (/^(Worker|Tool result|Tool|user) · /.test(line)) {
-          return wrapped.map((part) => this.theme.fg('accent', this.theme.bold(part)))
-        }
-
-        return line.startsWith('  › ')
-          ? wrapped.map((part) => this.theme.fg('muted', part))
-          : wrapped
-      })
     const help = this.composing
       ? 'Enter Send · Esc Cancel input · Ctrl+O Orchestrator'
-      : 'g Guide · d Details · p Prompt · r Summary/raw · PgUp/PgDn Scroll · End Follow · Esc Back'
+      : 'g Guide · d Details · p Prompt · r Readable/raw · PgUp/PgDn Scroll · End Follow · Esc Back'
     const footer = wrapTextWithAnsi(this.theme.fg('dim', help), width)
     const queued = row.guidance.filter((message) => message.status !== 'delivered').length
     const last = row.guidance.at(-1)
@@ -573,6 +523,59 @@ export class WorkersView implements Focusable {
       ...footer,
       ...composer,
     ]
+  }
+
+  /** Details, prompt and the exact raw trace keep their unformatted text. */
+  private plainText(row: WorkerRow): string {
+    if (this.mode === 'details') {
+      return [
+        `Worker: ${row.id}`,
+        `Model: ${row.info.model}${row.info.thinking ? ` · ${row.info.thinking}` : ''}`,
+        `Delegated by: ${row.delegatedBy}`,
+        `Task status: ${row.taskStatus ?? row.state.status}`,
+        `Repository: ${row.info.projectRoot}`,
+        `Worktree / candidate: ${row.info.workspace}`,
+        `Branch: ${row.branch ?? 'No branch recorded; isolated candidate or local task'}`,
+        `Assigned scope: ${row.info.scope.join(', ') || 'Read only'}`,
+        row.info.writeLimits
+          ? `Write access within scope: ${row.info.writeLimits.join(', ') || 'Read only'}`
+          : '',
+        `Started: ${row.info.startedAt}`,
+        `Latest activity: ${row.state.updatedAt}`,
+        `Prompt: press p to view the complete delegated prompt.`,
+        `Trace: ${row.transcript ?? row.info.output}`,
+        row.info.reviewOf ? `Reviewing the candidate after worker ${row.info.reviewOf}` : '',
+        row.inferredRelationship
+          ? 'Legacy relationship reconstructed from task, candidate and worker order.'
+          : '',
+        row.legacy
+          ? 'Legacy run: guidance goes to the task coordinator.'
+          : 'Guidance goes to this worker at a safe boundary; its write scope stays unchanged.',
+      ]
+        .filter(Boolean)
+        .join('\n\n')
+    }
+
+    if (this.mode === 'prompt') {
+      try {
+        return JSON.stringify(JSON.parse(row.info.task), null, 2)
+      } catch {
+        return row.info.task
+      }
+    }
+
+    let text = this.conversation.map(rawEntry).join('\n\n') || 'Waiting for conversation events…'
+
+    if (row.state.partial) {
+      text +=
+        '\n\n' + rawEntry({ at: row.state.updatedAt, role: 'assistant', text: row.state.partial })
+    }
+
+    if (!row.active && row.state.summary) {
+      text += `\n\n${row.state.status}\n${row.state.summary}`
+    }
+
+    return text
   }
 
   private renderPanel(width: number): string[] {
