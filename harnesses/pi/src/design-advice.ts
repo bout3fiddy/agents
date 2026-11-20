@@ -244,6 +244,10 @@ export class DesignConsultations {
     private readonly persist: typeof atomicJson = atomicJson,
   ) {}
 
+  get busy(): boolean {
+    return this.pending.size + this.ready.size + this.claiming.size > 0
+  }
+
   async start(
     store: StateStore,
     session: string,

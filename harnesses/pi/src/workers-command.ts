@@ -2,7 +2,7 @@ import type { ExtensionAPI, ExtensionContext } from '@earendil-works/pi-coding-a
 import { WorkersCatalog } from './workers-data.ts'
 import { WorkersView } from './workers-ui.ts'
 
-export function registerWorkers(pi: ExtensionAPI): void {
+export function registerWorkers(pi: ExtensionAPI, window = { open: false }): void {
   const catalog = (cwd: string) =>
     new WorkersCatalog(cwd, (row, text) => {
       pi.sendMessage(
@@ -17,7 +17,6 @@ export function registerWorkers(pi: ExtensionAPI): void {
         { deliverAs: 'nextTurn', triggerTurn: false },
       )
     })
-  let opened = false
   let closePanel: (() => void) | undefined
   const panel = (ctx: ExtensionContext) => {
     if (closePanel) {
@@ -76,11 +75,11 @@ export function registerWorkers(pi: ExtensionAPI): void {
         return
       }
 
-      if (opened) {
+      if (window.open) {
         return
       }
 
-      opened = true
+      window.open = true
 
       try {
         await ctx.ui.custom<void>(
@@ -96,7 +95,7 @@ export function registerWorkers(pi: ExtensionAPI): void {
           { overlay: true, overlayOptions: { width: '94%', maxHeight: '94%', margin: 1 } },
         )
       } finally {
-        opened = false
+        window.open = false
       }
     },
   })

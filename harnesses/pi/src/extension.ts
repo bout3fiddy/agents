@@ -21,6 +21,7 @@ import { registerDocumentTools } from './document-tools.ts'
 import { registerTiming } from './timing.ts'
 import { registerDelegation } from './delegation-tools.ts'
 import { Delegations, delegationView } from './delegation-state.ts'
+import { registerAutoReload } from './auto-reload.ts'
 import { runtimeVersion } from './runtime-version.ts'
 import { registerBranchTools } from './branch-tools.ts'
 import { capabilities } from './capabilities.ts'
@@ -53,9 +54,10 @@ export default function harness(pi: ExtensionAPI): void {
     },
   })
   inspectionTools(pi)
-  registerWorkers(pi)
+  const workerWindow = { open: false }
+  registerWorkers(pi, workerWindow)
   registerRecurring(pi)
-  registerWorkshop(pi)
+  const { consultations } = registerWorkshop(pi)
   registerWorkshopContext(pi)
   registerDocumentTools(pi)
   const runtime = runtimeVersion(pi)
@@ -69,6 +71,7 @@ export default function harness(pi: ExtensionAPI): void {
     pi.setActiveTools(role.tools)
     await runtime.record(ctx, event.reason, role.tools)
   })
+  registerAutoReload(pi, runtime.current, () => workerWindow.open || consultations.busy)
   registerTraces(pi)
 
   pi.registerTool({

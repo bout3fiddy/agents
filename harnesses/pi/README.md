@@ -277,6 +277,14 @@ and their results are recorded in the Claude JSONL trace. Research supplements p
 Run `npm run test:live:delegation -- --automatic` to exercise document routing from an ordinary
 request, concurrent discussion, completion acknowledgement and reload receipts.
 
+## Automatic harness updates
+
+An interactive host checks the completed local install receipt every three seconds. It applies a new
+source hash through Pi’s reload command at the next idle point. An unsent draft, queued work, open
+worker conversation picker or pending design consultation defers the reload. Detached worker
+processes continue on their current build. Use `/harness-version` to inspect the loaded receipt.
+Hosts running a version older than 0.6.35 need one manual `/reload` to start watching installs.
+
 ## Browse subagents
 
 `/workers` opens a tree table with task, status, latest activity and update age. It has Active and

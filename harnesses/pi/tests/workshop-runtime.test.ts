@@ -60,6 +60,8 @@ for (const mode of ['wait', 'cancel', 'automatic'] as const) {
         }
 
         if (step === 2) {
+          assert.equal(workshop.consultations.busy, true)
+
           if (lateWait) {
 
             // Regression: Fable finishes during model generation, before a later wait call.
