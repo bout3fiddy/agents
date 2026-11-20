@@ -357,10 +357,12 @@ test('host scripts receive typed task, harness, history and file reads', async (
   })
   await writeFile(join(item.root, 'lookup:fixture.md'), 'Read this marker\n')
   const code = [
-    'const [job,cap,harness,history,search] = await Promise.all([',
+    'const [job,cap,harness,history,search,receipt] = await Promise.all([',
     'tools.task_status({id:' + JSON.stringify(id) + '}),tools.harness_capabilities({}),',
     'tools.harness_status({}),tools.project_memory_history({key:"scope"}),',
-    'tools.project_search({query:"this marker",pathPrefix:"lookup:"})]);',
+    'tools.project_search({query:"this marker",pathPrefix:"lookup:"}),',
+    'tools.review_receipts({id:' + JSON.stringify(id) + '})]);',
+    'text([receipt,job].map(x=>[x.state,x.status].join("/")).join(","));',
     'const hit=search.hits[0];',
     'const file=await tools.project_read({path:hit.path,startLine:hit.line});',
     'text([job.status,Array.isArray(cap.host.tasks),!!harness.runtime.version,',
@@ -387,6 +389,7 @@ test('host scripts receive typed task, harness, history and file reads', async (
   try {
     await session.prompt('Inspect the fixture.')
     assert.match(response, /Script completed/)
+    assert.match(response, /running\/running,running\/running/)
     assert.match(response, /running.*true,true,true.*lookup:fixture.md.*false,true/)
   } finally {
     await session.dispose()

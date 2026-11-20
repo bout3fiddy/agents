@@ -65,6 +65,7 @@ export async function reviewReceipts(store: StateStore, id: string) {
     id,
     attempt,
     state: state.status,
+    status: state.status,
     reviews:
       children
         ?.filter(({ evidence }) =>
@@ -111,6 +112,7 @@ export function inspectionTools(pi: ExtensionAPI): void {
       id: Type.String(),
       attempt: Type.String(),
       state: Type.String(),
+      status: Type.String(),
       reviews: Type.Union([Type.Array(reviewSchema), Type.Null()]),
       checks: Type.Union([
         Type.Array(

@@ -26,7 +26,9 @@ separately from the clipped output.
 
 - `task_status`, `harness_status`, `harness_capabilities`. Host inspections. Task status returns one
   object for an ID or an array without an ID. Read status, hostActions and checks from the task.
-  Harness status includes runtime, workflow and delegations.
+  Both task_status and review_receipts expose the same task lifecycle as status and state. Receipt
+  verdicts and individual check statuses apply to their recorded snapshots. Harness status includes
+  runtime, workflow and delegations.
 
 - `project_memory_history`. Host inspection of sourced revisions for a specific fact.
 

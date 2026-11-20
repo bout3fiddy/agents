@@ -12,6 +12,7 @@ export const taskStatusSchema = Type.Object(
     id: string,
     kind: string,
     status: string,
+    state: string,
     updatedAt: string,
     task: string,
     writePaths: strings,

@@ -232,6 +232,7 @@ export function delegationView(job: Delegation) {
     task: job.request.task.slice(0, 500),
     writePaths: job.request.writePaths,
     ...state,
+    state: state.status,
     checks: receipts?.map((receipt) => ({
       check: receipt.check,
       status: receipt.status,
