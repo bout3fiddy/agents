@@ -1,7 +1,7 @@
 import { Server } from '@modelcontextprotocol/sdk/server/index.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js'
-import { Check } from 'typebox/value'
+import { Check, Errors } from 'typebox/value'
 import type { ExtensionToolContext } from '@earendil-works/pi-coding-agent'
 import type { WorkerRequest } from './contracts.ts'
 import { atomicJson, readJson } from './state.ts'
@@ -42,18 +42,24 @@ server.setRequestHandler(CallToolRequestSchema, async (call, context) => {
 
     const tool = worker.tools.find((item) => item.name === call.params.name)
 
-    if (!tool || !Check(tool.parameters, call.params.arguments ?? {})) {
-      throw new Error('Unknown or invalid scoped worker tool call')
+    if (!tool) {
+      throw new Error('Unknown scoped worker tool. Select an advertised tool for this role.')
+    }
+
+    const args = call.params.arguments ?? {}
+
+    if (!Check(tool.parameters, args)) {
+      const problems = Errors(tool.parameters, args).slice(0, 3)
+      const reason = problems
+        .map((error) => {
+          return `${error.instancePath || '/'} ${error.message}`
+        })
+        .join('; ')
+      throw new Error(`Invalid ${tool.name} arguments: ${reason}. The tool did not run.`)
     }
 
     const invoke = () =>
-      tool.execute(
-        String(++calls),
-        call.params.arguments ?? {},
-        context.signal,
-        undefined,
-        {} as ExtensionToolContext,
-      )
+      tool.execute(String(++calls), args, context.signal, undefined, {} as ExtensionToolContext)
     const boundary = mailbox
       ? await mailbox.toolBoundary(tool.name === 'submit_result', invoke)
       : { blocked: false as const, messages: [], result: await invoke() }

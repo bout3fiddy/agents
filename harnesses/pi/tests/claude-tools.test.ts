@@ -83,6 +83,15 @@ test('Claude bridge gives performance scoped writes and denies product writes', 
     const tools = await client.listTools()
     assert.ok(tools.tools.some((tool) => tool.name === 'project_write'))
     assert.ok(!tools.tools.some((tool) => tool.name === 'workflow' || tool.name === 'bash'))
+    const invalidTimeout = await client.callTool({
+      name: 'run_command',
+      arguments: { argv: ['npm', 'test'], timeoutMs: 180000 },
+    })
+    assert.equal(invalidTimeout.isError, true)
+    assert.match(JSON.stringify(invalidTimeout.content), /timeoutMs must be <= 120000/)
+    const unknown = await client.callTool({ name: 'missing_tool', arguments: {} })
+    assert.equal(unknown.isError, true)
+    assert.match(JSON.stringify(unknown.content), /Unknown scoped worker tool/)
     const denied = await client.callTool({
       name: 'project_write',
       arguments: { path: 'src/value.js', content: 'bad' },
