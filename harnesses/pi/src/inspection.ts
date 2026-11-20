@@ -138,13 +138,15 @@ export function inspectionTools(pi: ExtensionAPI): void {
     name: 'inspect_pr',
     label: 'Inspect pull request',
     description:
-      'Read PR head, state, reviews, checks and their details or target URLs in one query.',
+      'Read PR base branch and commit, head commit, reviews and check URLs in one query.',
     parameters: Type.Object({
       repository: Type.String({ pattern: '^[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+$' }),
       number: Type.Integer({ minimum: 1 }),
     }),
     outputSchema: Type.Object(
       {
+        baseRefName: Type.String(),
+        baseRefOid: Type.String(),
         headRefOid: Type.String(),
         state: Type.String(),
         number: Type.Integer(),
@@ -174,9 +176,10 @@ export function inspectionTools(pi: ExtensionAPI): void {
     ),
     async execute(_call, { repository, number }, signal) {
       const fields =
-        'number,state,isDraft,headRefOid,mergeable,reviewDecision,reviews,statusCheckRollup'
+        'number,state,isDraft,baseRefName,baseRefOid,headRefOid,mergeable,' +
+        'reviewDecision,reviews,statusCheckRollup'
       const projection =
-        '{number,state,isDraft,headRefOid,mergeable,reviewDecision,' +
+        '{number,state,isDraft,baseRefName,baseRefOid,headRefOid,mergeable,reviewDecision,' +
         'reviews:[.reviews[]|{state,author:.author.login,commit:.commit.oid}],' +
         'statusCheckRollup:[.statusCheckRollup[]|' +
         '{name,context,status,state,conclusion,detailsUrl,targetUrl}]}'

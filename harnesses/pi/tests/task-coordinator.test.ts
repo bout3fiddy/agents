@@ -1,10 +1,12 @@
 import assert from 'node:assert/strict'
-import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import test, { type TestContext } from 'node:test'
 import type { ToolDefinition } from '@earendil-works/pi-coding-agent'
 import { ProviderQuotaError, type WorkerResult } from '../src/contracts.ts'
 import type { Dispatcher } from '../src/dispatch.ts'
+import { createWorkspace } from '../src/project.ts'
+import { digest, projectBriefPath } from '../src/paths.ts'
 import { gitCommand } from '../src/git-branches.ts'
 import { loadRole } from '../src/roles.ts'
 import { createWorkerTools } from '../src/worker-tools.ts'
@@ -130,6 +132,63 @@ test('coordinator exposes bounded delegation and no retained write tools', async
   await invoke(worker.tools, 'submit_result', pass)
   assert.equal(worker.result()?.verdict, 'pass')
   await assert.rejects(invoke(worker.tools, 'delegate_worker', leaf), /already submitted/)
+})
+
+test('scoped reads serve the primary brief across worktrees without copying it', async (t) => {
+  const { request } = await setup(t)
+  const root = request.project.root
+  await gitCommand(root, ['init', '-q'])
+  await gitCommand(root, ['add', 'src'])
+  await gitCommand(root, [
+    '-c',
+    'user.name=Test',
+    '-c',
+    'user.email=test@example.org',
+    'commit',
+    '-qm',
+    'Seed',
+  ])
+  const linked = join(root, '..', 'linked')
+  await gitCommand(root, ['worktree', 'add', '--detach', linked, 'HEAD'])
+  const workspace = await createWorkspace(linked)
+  t.after(() => rm(workspace, { recursive: true, force: true }))
+  const brief = join(root, projectBriefPath)
+  const source = 'Demo scope\nUse the sandbox integration.\n'
+  await writeFile(brief, source)
+  const role = await loadRole('implementer')
+  const worker = () =>
+    createWorkerTools(
+      {
+        ...request,
+        workspace,
+        originals: workspace,
+        project: { ...request.project, root: linked },
+        role: 'implementer',
+      },
+      role,
+    ).tools
+  const tools = worker()
+  const read = async (startLine: number) => {
+    const result = await invoke(tools, 'project_read', {
+      path: projectBriefPath,
+      startLine,
+      lines: 1,
+    })
+    return JSON.parse((result.content[0] as { text: string }).text)
+  }
+  const first = await read(1)
+  assert.equal(first.source, 'shared project brief')
+  assert.equal(first.fileSha256, digest(source))
+  await writeFile(brief, 'A newer decision.\n')
+  assert.equal((await read(first.nextStartLine)).content, '2: Use the sandbox integration.')
+  await assert.rejects(readFile(join(workspace, projectBriefPath)), { code: 'ENOENT' })
+  await assert.rejects(invoke(tools, 'original_read', { path: projectBriefPath }))
+  await assert.rejects(
+    invoke(tools, 'project_write', { path: projectBriefPath, content: 'overwrite' }),
+  )
+  await rm(brief)
+  await symlink(join(root, 'src/value.js'), brief)
+  await assert.rejects(invoke(worker(), 'project_read', { path: projectBriefPath }))
 })
 
 test('mixed unsupported formatting leaves earlier files intact', async (t) => {

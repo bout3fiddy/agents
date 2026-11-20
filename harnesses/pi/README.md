@@ -307,10 +307,10 @@ private until the orchestrator checkpoints a shareable decision.
 
 Each revision keeps its source, supporting quote, classification and relevant file paths. Pi checks
 those paths in the active checkout, reads current designs and worker receipts from their owners, and
-reconciles the plan again when project evidence changes before dispatch. Ask “what next?” or “why
-did that change?” in a fresh chat. Pi can retrieve the prior revisions. A worker's test result
-retains the checkout, candidate or commit recorded by its coordinator. Deployment and customer
-acceptance need their own evidence.
+reconciles the plan again when project evidence changes before dispatch, showing the changed
+sections. Ask “what next?” or “why did that change?” in a fresh chat. Pi can retrieve the prior
+revisions. A worker's test result retains the checkout, candidate or commit recorded by its
+coordinator. Deployment and customer acceptance need their own evidence.
 
 Run `npm run test:live:memory` for the demo and correction rehearsal across linked worktrees, then
 recall from a fresh clone containing only the committed brief. The branch-result portion uses a

@@ -2,7 +2,7 @@ import { realpath, stat } from 'node:fs/promises'
 import { Type } from 'typebox'
 import type { ExtensionAPI, ExtensionContext } from '@earendil-works/pi-coding-agent'
 import { textResult } from './file-tools.ts'
-import { digest, safePath } from './paths.ts'
+import { safePath } from './paths.ts'
 import { discoverSources, memoryRepository, sourceExcerpt, worktrees } from './memory-repository.ts'
 import { briefName, portableLine, readBrief, repositoryStore, syncBrief } from './memory-files.ts'
 import type { MemoryStore, MemoryFact } from './memory-store.ts'
@@ -39,14 +39,14 @@ export function registerProjectMemory(
   currentJobs?: () => Delegation[] | undefined,
 ) {
   let state: { db: MemoryStore; root: string; cwd: string; home: string } | undefined
-  let lastPlan = ''
+  let lastPlan: Awaited<ReturnType<typeof frame>> | undefined
   let lastBrief = ''
   let lastFacts = ''
   let lastOwners = ''
   const close = () => {
     state?.db.close()
     state = undefined
-    lastPlan = ''
+    lastPlan = undefined
   }
   pi.on('session_shutdown', close)
   const load = async (cwd: string, request = '') => {
@@ -125,7 +125,7 @@ export function registerProjectMemory(
       }
 
       const data = await frame(s, currentJobs?.())
-      lastPlan = digest(JSON.stringify(data))
+      lastPlan = data
       lastFacts = JSON.stringify(s.db.facts())
       lastOwners = JSON.stringify(data.owners)
       lastBrief = data.projectBrief
@@ -268,7 +268,7 @@ export function registerProjectMemory(
           lastBrief === current.projectBrief &&
           lastOwners === JSON.stringify(current.owners)
         ) {
-          lastPlan = digest(JSON.stringify(current))
+          lastPlan = current
           lastFacts = JSON.stringify(s.db.facts())
         }
       }
@@ -286,14 +286,24 @@ export function registerProjectMemory(
     }
 
     const current = await frame(state)
-    const revision = digest(JSON.stringify(current))
+    const previous = lastPlan
 
-    if (lastPlan && revision !== lastPlan) {
-      lastPlan = revision
+    if (!previous) {
+      return
+    }
+
+    const changes = Object.fromEntries(
+      (Object.keys(current) as (keyof typeof current)[])
+        .filter((key) => JSON.stringify(current[key]) !== JSON.stringify(previous[key]))
+        .map((key) => [key, current[key]]),
+    )
+
+    if (Object.keys(changes).length) {
+      lastPlan = current
       lastBrief = current.projectBrief
       return {
         block: true,
-        reason: 'Project evidence changed. Reconcile before dispatch: ' + JSON.stringify(current),
+        reason: 'Project evidence changed. Reconcile before dispatch: ' + JSON.stringify(changes),
       }
     }
   })

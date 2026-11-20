@@ -14,7 +14,9 @@ when a script catches an error or prints only part of a result.
 
 - `project_search`, `project_read`. Host and Pi worker inspections. Literal search exposes hits with
   path, line and text, and hasMore. Listings expose matches and an optional nextAfterPath. Reads
-  include content, folder rules, the full-file hash and any continuation coordinates. For literal
+  include content, folder rules, the full-file hash and any continuation coordinates. For explicit
+  worker reads of .pi/project-state.md, the source is the shared brief in the primary checkout,
+  captured on first read for consistent paging. It is outside the candidate snapshot. For literal
   searches, use pathPrefix to restrict the files scanned. Return hits and hasMore when you need
   locations. Each entry in matches repeats the same path, line and text. An explicitly excluded
   prefix returns an error, or scopeNote when the same prefix matches visible sibling names. Report
@@ -32,10 +34,11 @@ when a script catches an error or prints only part of a result.
 
 - `project_memory_history`. Host inspection of sourced revisions for a specific fact.
 
-- `inspect_pr`, `review_receipts`. Host inspections. Project the PR head, mergeable, reviewDecision,
-  reviews and checks as needed. Read required findings and check snapshots from receipts. Missing
-  receipts are null. Final runner checks supersede provisional coordinator checks for the same
-  attempt. Required findings and non-passing check receipts survive a narrow script projection.
+- `inspect_pr`, `review_receipts`. Host inspections. Read baseRefName, baseRefOid and headRefOid in
+  the same query as mergeability, reviews and checks. Read required findings and check snapshots
+  from receipts. Missing receipts are null. Final runner checks supersede provisional coordinator
+  checks for the same attempt. Required findings and non-passing check receipts survive a narrow
+  script projection.
 
 - `codemode`. Top-level script runner. Model helpers are disabled.
 

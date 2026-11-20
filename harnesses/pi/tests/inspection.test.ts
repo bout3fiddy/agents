@@ -80,6 +80,8 @@ test('one scripted PR inspection returns check-run and commit-status links', asy
       'set -eu',
       'cd "$(dirname "$0")"',
       'echo "$3" >> calls',
+      'echo "$7" | tr , "\\n" | grep -qx baseRefOid',
+      'echo "$7" | tr , "\\n" | grep -qx baseRefName',
       'exec /usr/bin/jq -c "$9" pr.json',
     ].join('\n'),
     { mode: 0o755 },
@@ -87,6 +89,8 @@ test('one scripted PR inspection returns check-run and commit-status links', asy
   await atomicJson(join(item.base, 'pr.json'), {
     number: 44,
     headRefOid: 'fixture-head',
+    baseRefOid: 'fixture-base',
+    baseRefName: 'release',
     state: 'OPEN',
     isDraft: false,
     mergeable: 'MERGEABLE',
@@ -100,7 +104,8 @@ test('one scripted PR inspection returns check-run and commit-status links', asy
   })
   const code = [
     'const pr = await tools.inspect_pr({repository:"fixture/project",number:44});',
-    'text([pr.headRefOid,...pr.statusCheckRollup.map(c=>c.detailsUrl ?? c.targetUrl ?? null)]);',
+    'text([pr.baseRefName,pr.baseRefOid,pr.headRefOid]);',
+    'text(pr.statusCheckRollup.map(c=>c.detailsUrl ?? c.targetUrl ?? null));',
   ].join('')
   let reply = ''
   let called = false
@@ -121,7 +126,8 @@ test('one scripted PR inspection returns check-run and commit-status links', asy
 
   try {
     await session.prompt('Locate these checks on the current head.')
-    assert.match(reply, /fixture-head.*example.org\/runs\/44.*example.org\/status\/44.*null/)
+    assert.match(reply, /release.*fixture-base.*fixture-head/)
+    assert.match(reply, /example.org\/runs\/44.*example.org\/status\/44.*null/)
     assert.equal(await readFile(join(item.base, 'calls'), 'utf8'), '44\n')
   } finally {
     await session.dispose()

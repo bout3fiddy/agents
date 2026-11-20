@@ -166,7 +166,9 @@ test('Pi checks evidence and reconciles changed priorities before dispatch', asy
       }
 
       if (step === 3) {
-        assert.match(context, /Reconcile before dispatch/)
+        const rejection = JSON.stringify(ctx.messages.at(-1)?.content)
+        assert.match(rejection, /Reconcile before dispatch/)
+        assert.doesNotMatch(rejection, /projectBrief|briefConflicts|owners/)
         assert.match(context, /Resolve the customer dependency first/)
         assert.equal(dispatched, 0)
       }
@@ -179,6 +181,9 @@ test('Pi checks evidence and reconciles changed priorities before dispatch', asy
     await session.prompt('Which work should we schedule next?')
     await session.waitForIdle()
     assert.equal(step, 3)
+    const reply = session.messages.findLast((m) => m.role === 'assistant')
+    assert.equal(reply?.stopReason, 'stop', reply?.errorMessage)
+    assert.equal(dispatched, 0)
     assert.deepEqual(
       concurrent.facts().map((f) => f.key),
       ['priority'],

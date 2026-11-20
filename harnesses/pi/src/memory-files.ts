@@ -79,6 +79,10 @@ export function repositoryStore(repo: { home: string; identity: string }) {
 }
 
 export function readBrief(home: string) {
+  return readBriefBytes(home)?.toString('utf8') ?? ''
+}
+
+export function readBriefBytes(home: string) {
   if (!lstatSync(join(home, '.pi')).isDirectory()) {
     throw new Error('Unsafe .pi directory')
   }
@@ -90,7 +94,7 @@ export function readBrief(home: string) {
     fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK)
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-      return ''
+      return undefined
     }
 
     throw error
@@ -103,7 +107,7 @@ export function readBrief(home: string) {
       throw new Error('Expected a regular project brief under 64 KiB')
     }
 
-    return readFileSync(fd, 'utf8')
+    return readFileSync(fd)
   } finally {
     closeSync(fd)
   }
