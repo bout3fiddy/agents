@@ -704,7 +704,7 @@ export async function createTaskCoordinatorTools(
       label: 'Run branch acceptance checks',
       description:
         'Run the configured required tests, lint, recovery checks and benchmarks. ' +
-        'Repair failures through workers, then rerun after any retained edit.',
+        'Route inheritedLintPaths to the host. Repair in-scope failures and rerun after edits.',
       parameters: Type.Object({}),
       async execute() {
         pending++

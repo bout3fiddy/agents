@@ -64,6 +64,31 @@ async function setup(t: TestContext, options: { database?: boolean; performance?
   return { request, signal: new AbortController().signal }
 }
 
+test('run_checks distinguishes inherited lint from a changed failing file', async (t) => {
+  const { request, signal } = await setup(t)
+  const name = 'existing.js'
+  const longLine = '// ' + 'x'.repeat(110) + '\n'
+  await writeFile(join(request.workspace, name), longLine)
+  await writeFile(join(request.originals, name), longLine)
+  request.baseline = await hashes(request.workspace)
+  const worker = await createTaskCoordinatorTools(request, signal, (child) => receipt(child))
+
+  async function lint() {
+    const result = await invoke(worker.tools, 'run_checks')
+    const text = result.content[0]
+    assert.ok(text?.type === 'text')
+    return JSON.parse(text.text).checks[0]
+  }
+
+  const inherited = await lint()
+  assert.equal(inherited.status, 'failed')
+  assert.deepEqual(inherited.inheritedLintPaths, [name])
+  await writeFile(join(request.workspace, name), longLine + '// changed\n')
+  const changed = await lint()
+  assert.equal(changed.status, 'failed')
+  assert.equal(changed.inheritedLintPaths, undefined)
+})
+
 test('branch coordinator repairs failing checks and refreshes review before passing', async (t) => {
   const { request, signal } = await setup(t)
   request.project.checks[0]!.argv = [

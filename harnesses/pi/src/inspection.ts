@@ -83,10 +83,7 @@ export async function reviewReceipts(store: StateStore, id: string) {
       checks?.map((r) =>
         r.status === 'passed'
           ? { check: r.check, snapshot: r.snapshot, status: r.status }
-          : {
-              ...receiptView(r),
-              ...(r.inheritedLintPaths?.length && { inheritedLintPaths: r.inheritedLintPaths }),
-            },
+          : receiptView(r),
       ) ?? null,
   }
 }

@@ -15,6 +15,7 @@ export function receiptView(receipt: Receipt) {
         'The host can diagnose the declared check or configure the project to use ' +
         'node --import tsx --test with equivalent test selection and rerun the gate.',
     }),
+    ...(receipt.inheritedLintPaths?.length && { inheritedLintPaths: receipt.inheritedLintPaths }),
     check: receipt.check,
     status: receipt.status,
     snapshot: receipt.snapshot,

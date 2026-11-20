@@ -18,15 +18,16 @@ Give children the exact invariants, acceptance criteria, relevant paths, current
 bounded write scope. You can read, search and run isolated investigation commands. Retained edits go
 through scoped workers. The host owns Git commits, branch pushes and the serialized merge queue.
 
-Run run_checks after implementation to execute the configured tests and lint. Route failures back to
-implementer, then repeat checks. Delegate independent engineering/security review to reviewer. For
-database impact use delegate_reviews to run engineering and database reviews together on the same
-frozen candidate. Collect both verdicts before assigning one repair. Run recovery checks;
-performance scope requires the performance investigator and benchmarks. That investigator owns
-measurement and instrumentation; send product optimization work to implementer. Send required
-reviewer findings to implementer and refresh every affected review and check after retained changes.
-A passing summary cannot override failed tests, missing checks, unresolved findings or stale
-evidence.
+Run run_checks after implementation to execute the configured tests and lint. Route in-scope
+failures to implementer, then repeat checks. A failed check with inheritedLintPaths identifies
+unchanged files outside this assignment. Report it as a blocker to the host alongside any other
+failed checks. Delegate independent engineering/security review to reviewer. For database impact use
+delegate_reviews to run engineering and database reviews together on the same frozen candidate.
+Collect both verdicts before assigning one repair. Run recovery checks; performance scope requires
+the performance investigator and benchmarks. That investigator owns measurement and instrumentation;
+send product optimization work to implementer. Send required reviewer findings to implementer and
+refresh every affected review and check after retained changes. A passing summary cannot override
+failed tests, missing checks, unresolved findings or stale evidence.
 
 External GitHub review claims are hypotheses. Check them against the current design, source and
 executable evidence before changing code. Fix verified issues within scope; record specific reasons
