@@ -340,3 +340,54 @@ test('Pi worker scripts expose only scoped inspections', async (t) => {
     await runtime.settleCredentialWrites()
   }
 })
+
+test('scoped workers can recover stored pages and see failed reads after truncation', async (t) => {
+  const item = await fixture()
+  t.after(() => rm(item.base, { recursive: true, force: true }))
+  await writeFile(join(item.root, 'large.txt'), 'start' + 'x'.repeat(12000) + 'stored-end')
+  const role = await loadRole('implementer')
+  const outputs: string[] = []
+  const scripts = [
+    [
+      '// @options: {"max_output_tokens": 256}',
+      'const file = await tools.project_read({path:"large.txt"});',
+      'store("large",file.content);',
+      'try { await tools.project_read({path:"missing-file.txt"}) } catch {}',
+      'text(file.content);',
+    ].join('\n'),
+    'text(load("large").slice(-10))',
+  ]
+  let step = 0
+  const { session, runtime } = await captureSession(
+    item.root,
+    item.base,
+    [],
+    async (ctx) => {
+      if (step) {
+        outputs.push(JSON.stringify(ctx.messages.at(-1)?.content))
+      }
+
+      const code = scripts[step++]
+      return code
+        ? [{ type: 'toolCall', id: 'page-' + step, name: 'codemode', arguments: { code } }]
+        : [{ type: 'text', text: 'done' }]
+    },
+    {
+      tools: role.tools,
+      customTools: fileTools(item.root, ['**'], ['**']),
+      resourceLoader: await explicitResources('Read the assigned fixture.'),
+    },
+  )
+
+  try {
+    await session.prompt('Inspect this file.')
+    assert.match(outputs[0]!, /truncated output/)
+    assert.doesNotMatch(outputs[0]!, /read with offset\/limit/)
+    assert.match(outputs[0]!, /load\(/)
+    assert.match(outputs[0]!, /project_read.*missing-file.txt/)
+    assert.match(outputs[1]!, /stored-end/)
+  } finally {
+    await session.dispose()
+    await runtime.settleCredentialWrites()
+  }
+})

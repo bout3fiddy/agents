@@ -47,7 +47,8 @@ export async function explicitResources(prompt: string): Promise<ResourceLoader>
         prompt +
         '\nUse codemode for two or more independent inspections or a ' +
         'search followed by bounded reads. Use Promise.allSettled for independent calls, ' +
-        'surface errors and preserve evidence. Use direct tools for one simple read, ' +
+        'return errors and relevant excerpts. For a large result, store it before printing, ' +
+        'then use load(key) to inspect further slices. Use direct tools for one simple read, ' +
         'commands, edits, reports and delegation.',
       extensionFactories: [(pi) => registerInspectionMode(pi, workerInspectionTools)],
     })

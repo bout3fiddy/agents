@@ -4,7 +4,10 @@ The orchestrator and Pi-backed coordinators, implementers and task workers can c
 script sees the permitted inspection tools registered for its own role. Independent reads can run
 together. A script can also search once and use the returned paths and line numbers for bounded
 follow-up reads in the same model step. Keep a single lookup direct when there is nothing to
-combine.
+combine. Workers can save a large inspected value with `store(key, value)` and use `load(key)` in
+later scripts in the session. Return the needed excerpts. When the SDK truncates a result, workers
+can reread the relevant project range. The tool reports the count and first six nested failures
+separately from the clipped output.
 
 - `read`, `grep`, `find`, `ls`. Host SDK inspections. Native read returns its SDK shape. The three
   listing/search tools return text.

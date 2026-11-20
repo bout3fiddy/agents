@@ -1,4 +1,8 @@
-import { createCodemodeExtension, type ExtensionAPI } from '@earendil-works/pi-coding-agent'
+import {
+  createCodemodeExtension,
+  type CodemodeToolDetails,
+  type ExtensionAPI,
+} from '@earendil-works/pi-coding-agent'
 import type { reviewReceipts } from './inspection.ts'
 
 export const workerInspectionTools = new Set([
@@ -96,20 +100,67 @@ export function registerInspectionMode(pi: ExtensionAPI, allowed: ReadonlySet<st
           })
           const result = await tool.execute(id, args, signal, update, inspectionContext)
 
-          if (!checkEvidence.size) {
-            return result
+          const details = result.details as CodemodeToolDetails | undefined
+          let content = result.content
+
+          if (details?.fullOutputPath) {
+            if (!allowed.has('read')) {
+              const hint =
+                '\n\n[Full output: ' + details.fullOutputPath + ' (read with offset/limit)]'
+              content = content.map((block) => {
+                if (block.type !== 'text' || !block.text.endsWith(hint)) {
+                  return block
+                }
+
+                return {
+                  ...block,
+                  text:
+                    block.text.slice(0, -hint.length) +
+                    '\n\nUse load(key) for values saved with store(). Otherwise rerun the ' +
+                    'relevant scoped read with a smaller range or narrower output.',
+                }
+              })
+            }
+
+            const failures = details.calls.filter(
+              (call) => call.status === 'error' || call.status === 'cancelled',
+            )
+
+            if (failures.length) {
+              const lines = failures
+                .slice(0, 6)
+                .map((call) =>
+                  [call.name, call.args.slice(0, 240), call.status, call.error?.slice(0, 240)]
+                    .filter(Boolean)
+                    .join(' '),
+                )
+              content = [
+                ...content,
+                {
+                  type: 'text' as const,
+                  text:
+                    'Failed or cancelled nested calls (' +
+                    failures.length +
+                    ' total, showing ' +
+                    lines.length +
+                    '):\n' +
+                    lines.join('\n'),
+                },
+              ]
+            }
           }
 
-          return {
-            ...result,
-            content: [
-              ...result.content,
+          if (checkEvidence.size) {
+            content = [
+              ...content,
               {
                 type: 'text' as const,
                 text: 'Recorded review and check evidence:\n' + [...checkEvidence].join('\n'),
               },
-            ],
+            ]
           }
+
+          return { ...result, content }
         },
       })
     },
