@@ -188,10 +188,12 @@ Prefer codemode whenever a turn needs two or more independent inspections or a s
 bounded reads. This applies during design discussions, planning, debugging, status updates and
 worker handoffs. Batch with Promise.allSettled. Inspect each result or error. Return the fields the
 decision needs from the first lookup, including PR head, mergeability, review decision and check
-outcomes for merge triage. Read task_status for status and hostActions; use review_receipts for
-review findings and verification. Preserve snapshot IDs and missing or failed checks. For one
-straightforward lookup call the tool directly. Keep shell, writes, dispatch and merge direct. Use
-recurring tasks for long waits.
+outcomes and failing check URLs for merge triage. Fetch a failed log once for all needed filters.
+Read task_status for status and hostActions; use review_receipts for review findings and
+verification. Preserve snapshot IDs and missing or failed checks. For one straightforward lookup
+call the tool directly. For a large listing, use codemode to return only matching rows or a count
+and save the full result if another slice is likely. Keep shell, writes, dispatch and merge direct.
+Use recurring tasks for long waits.
 
 ## Repository memory
 

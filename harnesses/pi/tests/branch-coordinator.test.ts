@@ -198,6 +198,20 @@ test('branch completion requires database and performance evidence when scoped',
   await invoke(worker.tools, 'submit_result', pass)
 })
 
+test('changed database paths explain a review conflict before dispatch', async (t) => {
+  const { request, signal } = await setup(t)
+  request.checkpoint.database = false
+  request.project.databasePaths = ['src/**']
+  await writeFile(join(request.workspace, 'src/value.js'), 'export const value = 9\n')
+  const worker = await createTaskCoordinatorTools(request, signal, async () => {
+    assert.fail('A single review cannot start')
+  })
+  await assert.rejects(
+    invoke(worker.tools, 'delegate_worker', assignment('reviewer')),
+    /delegate_reviews.*changed database paths or persistence code.*host.*snapshot [a-f0-9]{64}/,
+  )
+})
+
 test('newly detected database changes invalidate checks lacking recovery coverage', async (t) => {
   const { request, signal } = await setup(t, { database: true })
   request.checkpoint.database = false

@@ -52,7 +52,13 @@ separately from the clipped output.
 - `WebFetch`, `WebSearch`. Claude-native tools where enabled. Claude CLI roles use their existing
   tools and can issue independent reads together.
 
-For PR triage, inspect each head once and select the fields needed for the next decision.
+For one large read that only needs a count or a few matches, filter it in code mode. Use a direct
+call for one small read. Save expensive results before printing when a later slice is likely. Scope
+saved keys to the observed head or snapshot and refresh mutable status when acting on it.
+
+For PR triage, inspect each head once. Check runs expose detailsUrl and commit statuses expose
+targetUrl. Either may be null. Use the failing check's link and collect its log once for all needed
+filters.
 
 ```js
 const reads = await Promise.allSettled(

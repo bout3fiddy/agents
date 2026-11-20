@@ -135,7 +135,8 @@ export function inspectionTools(pi: ExtensionAPI): void {
   pi.registerTool({
     name: 'inspect_pr',
     label: 'Inspect pull request',
-    description: 'Read GitHub pull request head, state, reviews and checks in a single query.',
+    description:
+      'Read PR head, state, reviews, checks and their details or target URLs in one query.',
     parameters: Type.Object({
       repository: Type.String({ pattern: '^[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+$' }),
       number: Type.Integer({ minimum: 1 }),
@@ -155,6 +156,8 @@ export function inspectionTools(pi: ExtensionAPI): void {
             status: nullableString,
             state: nullableString,
             conclusion: nullableString,
+            detailsUrl: nullableString,
+            targetUrl: nullableString,
           }),
         ),
         reviews: Type.Array(
@@ -173,7 +176,8 @@ export function inspectionTools(pi: ExtensionAPI): void {
       const projection =
         '{number,state,isDraft,headRefOid,mergeable,reviewDecision,' +
         'reviews:[.reviews[]|{state,author:.author.login,commit:.commit.oid}],' +
-        'statusCheckRollup:[.statusCheckRollup[]|{name,context,status,state,conclusion}]}'
+        'statusCheckRollup:[.statusCheckRollup[]|' +
+        '{name,context,status,state,conclusion,detailsUrl,targetUrl}]}'
       const value = JSON.parse(
         await githubCommand(
           [

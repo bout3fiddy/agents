@@ -464,12 +464,20 @@ export async function createTaskCoordinatorTools(
           isReview(single.role) &&
           requiresBoth &&
           !missingVerdicts.size &&
-          (await needsDatabase(before)) &&
           !reviewed(single.role === 'reviewer' ? 'database-reviewer' : 'reviewer', snapshot)
         ) {
-          throw new Error(
-            'Use delegate_reviews for engineering and database review on this candidate',
-          )
+          const reason = await databaseReviewReason(before)
+
+          if (reason) {
+            throw new Error(
+              'Use delegate_reviews for engineering and database review due to ' +
+                reason +
+                '. If the assignment excludes DB review, report the conflict to the host with ' +
+                'snapshot ' +
+                snapshot +
+                ' and continue permitted work.',
+            )
+          }
         }
 
         const completingReview = missingVerdicts.size > 0
@@ -571,21 +579,33 @@ export async function createTaskCoordinatorTools(
     }
   }
 
-  async function needsDatabase(candidate?: Map<string, Buffer>): Promise<boolean> {
-    return Boolean(
-      declaredDatabase ||
-      receipts.some((receipt) => receipt.evidence.result.databaseImpact) ||
-      (originals &&
-        databaseImpact(
-          originals,
-          candidate ?? (await inventory(request.workspace)),
-          request.project.databasePaths,
-        )),
-    )
+  async function databaseReviewReason(
+    candidate?: Map<string, Buffer>,
+  ): Promise<string | undefined> {
+    if (declaredDatabase) {
+      return 'declared database impact in the task or coordinator result'
+    }
+
+    if (receipts.some((receipt) => receipt.evidence.result.databaseImpact)) {
+      return 'database impact reported by a worker'
+    }
+
+    if (
+      originals &&
+      databaseImpact(
+        originals,
+        candidate ?? (await inventory(request.workspace)),
+        request.project.databasePaths,
+      )
+    ) {
+      return 'changed database paths or persistence code'
+    }
+
+    return undefined
   }
 
   async function validateBranch(snapshot: string): Promise<void> {
-    const database = await needsDatabase()
+    const database = Boolean(await databaseReviewReason())
     const performance =
       request.checkpoint.performance ||
       receipts.some((receipt) => receipt.evidence.role === 'performance')
@@ -718,7 +738,7 @@ export async function createTaskCoordinatorTools(
             requireValidCandidate()
             checks = []
             checkedDatabase = false
-            checkedDatabase = await needsDatabase()
+            checkedDatabase = Boolean(await databaseReviewReason())
             checks = await verifyProject(
               request.workspace,
               request.project,

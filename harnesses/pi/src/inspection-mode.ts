@@ -21,7 +21,8 @@ export function registerInspectionMode(pi: ExtensionAPI, allowed: ReadonlySet<st
         ...tool,
         promptSnippet: 'Batch or chain read-only inspections in JavaScript',
         promptGuidelines: [
-          'Use codemode for independent reads or search followed by reads. ' +
+          'Use codemode for independent reads, search followed by reads, or filtering a large ' +
+            'inspection result before it enters the conversation. ' +
             'Issue commands, checks and edits as direct tool calls.',
         ],
         prepareLoadout(loadout) {

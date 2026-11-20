@@ -5,7 +5,7 @@ import { loadRole } from '../src/roles.ts'
 import { fixture } from './support.ts'
 import { captureSession } from './session-support.ts'
 import assert from 'node:assert/strict'
-import { access, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises'
+import { access, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { execFileSync } from 'node:child_process'
 import { memoryRepository } from '../src/memory-repository.ts'
@@ -13,9 +13,121 @@ import { repositoryStore } from '../src/memory-files.ts'
 import { tmpdir } from 'node:os'
 import { randomUUID } from 'node:crypto'
 import test from 'node:test'
-import { reviewReceipts } from '../src/inspection.ts'
+import { roleNames } from '../src/contracts.ts'
+import { workerInspectionTools } from '../src/inspection-mode.ts'
+import { reviewReceipts, nestedInspectionTools } from '../src/inspection.ts'
 import { atomicJson, StateStore } from '../src/state.ts'
 import { delegationDirectory } from '../src/delegation-state.ts'
+
+test('every role tool has an explicit inspection or direct-call policy', async () => {
+  const roles = await Promise.all(roleNames.map((name) => loadRole(name)))
+  const direct = [
+    'WebFetch',
+    'WebSearch',
+    'bash',
+    'codemode',
+    'consult_design',
+    'delegate_branches',
+    'delegate_reviews',
+    'delegate_task',
+    'delegate_worker',
+    'design_consultation',
+    'document_check',
+    'edit',
+    'merge_branches',
+    'project_delete',
+    'project_edit',
+    'project_format',
+    'project_write',
+    'recurring_task',
+    'report_milestone',
+    'report_progress',
+    'resume_task',
+    'revise_tasks',
+    'run_checks',
+    'run_command',
+    'submit_result',
+    'task_control',
+    'update_project_memory',
+    'workflow',
+    'write',
+  ]
+  const inspected = new Set([...nestedInspectionTools, ...workerInspectionTools])
+
+  for (const name of direct) {
+    assert.ok(!inspected.has(name), name)
+  }
+
+  assert.deepEqual(new Set(roles.flatMap((role) => role.tools)), new Set([...inspected, ...direct]))
+
+  for (const role of roles) {
+    assert.equal(role.tools.includes('codemode'), role.backend === 'pi', role.name)
+  }
+})
+
+test('one scripted PR inspection returns check-run and commit-status links', async (t) => {
+  const item = await fixture()
+  t.after(() => rm(item.base, { recursive: true, force: true }))
+  const originalPath = process.env.PATH!
+  process.env.PATH = item.base + ':' + originalPath
+  t.after(() => {
+    process.env.PATH = originalPath
+  })
+  await writeFile(
+    join(item.base, 'gh'),
+    [
+      '#!/bin/sh',
+      'set -eu',
+      'cd "$(dirname "$0")"',
+      'echo "$3" >> calls',
+      'exec /usr/bin/jq -c "$9" pr.json',
+    ].join('\n'),
+    { mode: 0o755 },
+  )
+  await atomicJson(join(item.base, 'pr.json'), {
+    number: 44,
+    headRefOid: 'fixture-head',
+    state: 'OPEN',
+    isDraft: false,
+    mergeable: 'MERGEABLE',
+    reviewDecision: null,
+    reviews: [],
+    statusCheckRollup: [
+      { name: 'CI', conclusion: 'FAILURE', detailsUrl: 'https://example.org/runs/44' },
+      { context: 'legacy', state: 'ERROR', targetUrl: 'https://example.org/status/44' },
+      { name: 'queued', status: 'QUEUED' },
+    ],
+  })
+  const code = [
+    'const pr = await tools.inspect_pr({repository:"fixture/project",number:44});',
+    'text([pr.headRefOid,...pr.statusCheckRollup.map(c=>c.detailsUrl ?? c.targetUrl ?? null)]);',
+  ].join('')
+  let reply = ''
+  let called = false
+  const { session, runtime } = await captureSession(
+    item.root,
+    item.base,
+    [harness],
+    async (ctx) => {
+      if (called) {
+        reply = JSON.stringify(ctx.messages.at(-1)?.content)
+        return [{ type: 'text', text: 'done' }]
+      }
+
+      called = true
+      return [{ type: 'toolCall', name: 'codemode', id: 'pr-checks', arguments: { code } }]
+    },
+  )
+
+  try {
+    await session.prompt('Locate these checks on the current head.')
+    assert.match(reply, /fixture-head.*example.org\/runs\/44.*example.org\/status\/44.*null/)
+    assert.equal(await readFile(join(item.base, 'calls'), 'utf8'), '44\n')
+  } finally {
+    await session.dispose()
+    await runtime.settleCredentialWrites()
+  }
+})
 
 test('attempt summaries preserve required findings and failed checks', async (t) => {
   const root = await mkdtemp(join(tmpdir(), 'pi-inspection-'))
