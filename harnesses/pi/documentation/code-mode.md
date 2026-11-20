@@ -6,8 +6,8 @@ together. A script can also search once and use the returned paths and line numb
 follow-up reads in the same model step. Keep a single lookup direct when there is nothing to
 combine. Workers can save a large inspected value with `store(key, value)` and use `load(key)` in
 later scripts in the session. Return the needed excerpts. When the SDK truncates a result, workers
-can reread the relevant project range. The tool reports the count and first six nested failures
-separately from the clipped output.
+can reread the relevant project range. The tool reports the count and first six nested failures even
+when a script catches an error or prints only part of a result.
 
 - `read`, `grep`, `find`, `ls`. Host SDK inspections. Native read returns its SDK shape. The three
   listing/search tools return text.

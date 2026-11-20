@@ -222,6 +222,13 @@ export async function runBranchTask(
               baseCommit: base,
               conflicts,
               previousFeedback: feedback,
+              ...(current.previousHostHandoff &&
+                current.previousHostHandoff.forDeliveryVersion === state.deliveryVersion && {
+                  previousHostHandoff: {
+                    attempt: current.previousHostHandoff.attempt,
+                    actions: current.previousHostHandoff.actions,
+                  },
+                }),
               parentContext: request.context,
             }),
             model: request.model,

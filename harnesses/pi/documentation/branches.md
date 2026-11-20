@@ -109,10 +109,12 @@ rerun the gate with the same test selection.
 ## Controls and evidence
 
 A blocked branch delivers its coordinator’s requested host capabilities and reasons in the terminal
-notification and task status. Resume clears the previous handoff and starts a separate receipt and
-transcript directory for the new execution. During a coordinator run, a confirmed Claude quota
-rejection with a future reset suppresses repeat launches of the same model. New host guidance, a
-resumed coordinator, or the provider reset allows another attempt. Transient errors and usage
+notification and task status. Resume clears active host actions and starts a separate receipt and
+transcript. The resumed coordinator receives the previous attempt ID and host actions as history,
+including when the host revised its assignment before resuming. Current host guidance and the new
+candidate determine what still needs verification. During a coordinator run, a confirmed Claude
+quota rejection with a future reset suppresses repeat launches of the same model. New host guidance,
+a resumed coordinator, or the provider reset allows another attempt. Transient errors and usage
 warnings retain ordinary recovery behavior.
 
 `task_status` reports queued, running, checking, publishing, published, merge-queued, merging and

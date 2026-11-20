@@ -471,6 +471,7 @@ test('scoped workers can recover stored pages and see failed reads after truncat
       'text(file.content);',
     ].join('\n'),
     'text(load("large").slice(-10))',
+    'text(await Promise.allSettled([tools.project_read({path:"unavailable.ts"})]))',
   ]
   let step = 0
   const { session, runtime } = await captureSession(
@@ -501,6 +502,9 @@ test('scoped workers can recover stored pages and see failed reads after truncat
     assert.match(outputs[0]!, /load\(/)
     assert.match(outputs[0]!, /project_read.*missing-file.txt/)
     assert.match(outputs[1]!, /stored-end/)
+    assert.doesNotMatch(outputs[1]!, /Failed or cancelled/)
+    assert.doesNotMatch(outputs[2]!, /truncated output/)
+    assert.match(outputs[2]!, /project_read.*unavailable.ts.*error.*ENOENT/)
   } finally {
     await session.dispose()
     await runtime.settleCredentialWrites()

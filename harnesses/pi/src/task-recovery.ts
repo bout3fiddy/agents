@@ -18,6 +18,7 @@ import {
 import { writePathSchema } from './contracts.ts'
 import { changes } from './integration.ts'
 import {
+  handoffForResume,
   scopesOverlap,
   ownsTaskPaths,
   type Delegations,
@@ -296,6 +297,7 @@ export async function reviseTasks(jobs: Delegations, raw: Revision) {
           state,
           controls: {
             ...control,
+            previousHostHandoff: handoffForResume(job, control),
             cancelled: false,
             paused: true,
             baseRevision: control.revision,

@@ -412,6 +412,9 @@ test('a blocked branch delivers its current host actions and clears them on resu
   assert.match(delivered.error!, /Host verification required/)
   const original = join(delegationDirectory(setup.store, request!.id), state.progressFile!)
   const originalReceipt = await readFile(original)
+  await reviseTasks(setup.jobs, {
+    tasks: [{ id: request!.id, task: request!.task, context: 'Continue scoped verification.' }],
+  })
   const resumed = await setup.jobs.resume(request!.id, setup.origin, async () => {})
   assert.equal(delegationView(resumed).hostActions, undefined)
   const interrupted = new AbortController()
@@ -420,6 +423,11 @@ test('a blocked branch delivers its current host actions and clears them on resu
     request!,
     interrupted.signal,
     async (assignment) => {
+      const context = JSON.parse(assignment.context)
+      assert.deepEqual(context.previousHostHandoff, {
+        attempt: state.progressFile,
+        actions,
+      })
       interrupted.abort()
       return coordinatorEvidence(assignment, { verdict: 'blocked', hostActions: actions })
     },

@@ -116,6 +116,11 @@ export type DelegationStatus = {
 }
 export type Delegation = { request: DelegationRequest; state: DelegationStatus; milestone?: string }
 export type TaskControls = {
+  previousHostHandoff?: {
+    forDeliveryVersion: number
+    attempt: string
+    actions: NonNullable<WorkerResult['hostActions']>
+  }
   revision: number
   baseRevision?: number
   messages: { revision: number; text: string }[]
@@ -124,6 +129,25 @@ export type TaskControls = {
   mergeRequestId?: string
   paused?: boolean
 }
+
+export function handoffForResume(job: Delegation, controls: TaskControls) {
+  if (job.request.kind !== 'branch') {
+    return undefined
+  }
+
+  const forDeliveryVersion = (job.state.deliveryVersion ?? 0) + 1
+
+  if (job.state.progressFile && job.state.hostActions?.length) {
+    return { forDeliveryVersion, attempt: job.state.progressFile, actions: job.state.hostActions }
+  }
+
+  if (controls.previousHostHandoff?.forDeliveryVersion === forDeliveryVersion) {
+    return controls.previousHostHandoff
+  }
+
+  return undefined
+}
+
 export const emptyControls: TaskControls = { revision: 0, messages: [], cancelled: false }
 const activeStates = new Set([
   'queued',
@@ -686,6 +710,7 @@ export class Delegations {
         throw new Error('Task controls are unavailable')
       }
 
+      const previousHostHandoff = handoffForResume(job, controls)
       job.request = { ...job.request, ...origin }
       job.state = {
         ...job.state,
@@ -703,6 +728,7 @@ export class Delegations {
       }
       await atomicJson(join(directory, 'controls.json'), {
         ...controls,
+        previousHostHandoff,
         cancelled: false,
         paused: false,
       })

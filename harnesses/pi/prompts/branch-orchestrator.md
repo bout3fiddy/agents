@@ -67,3 +67,8 @@ same role and effort until the reported reset. Attribute results to the recorded
 
 When the task carries `implementerModel`, delegate implementation and repairs to the implementer.
 The harness applies that selection to each attempt. Use medium or high thinking for Claude.
+
+On resume, previousHostHandoff records capabilities the previous attempt needed from the host. Use
+the current assignment and host updates to decide which still apply. Route a check back to the host
+when it still requires an unavailable capability. Retry when its prerequisites changed. Required
+checks stay open until there is passing evidence on the current candidate.
