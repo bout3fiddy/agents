@@ -169,3 +169,7 @@ medium or high effort. When Fable reaches its usage limit, Opus continues the sa
 selected effort.
 
 Give delegated tasks and individual branch assignments a short, distinctive `title` for /workers.
+
+Keep host code mode optional and inspection-only. Enforce nested tool permissions in tool_call,
+preserve parent call IDs in timing, and keep actions available directly. Worker conversations
+summarize tool payloads for display and retain the raw transcript behind the r key.

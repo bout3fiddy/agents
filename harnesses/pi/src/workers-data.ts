@@ -85,7 +85,7 @@ async function entries(path: string): Promise<string[]> {
   }
 }
 
-async function safeTrace(store: StateStore, path: string): Promise<string> {
+export async function safeTrace(store: StateStore, path: string): Promise<string> {
   const local = relative(store.directory, resolve(path))
 
   if (!local || local.startsWith('..') || local.startsWith(sep)) {

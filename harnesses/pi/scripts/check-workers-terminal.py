@@ -59,7 +59,16 @@ def record(root, role, task, parent=None, review=None, complete=False):
         "text": "Checking queue recovery and backpressure. Café 🧪 — words stay separated.\n"
         "The accepted capacity is 120. Persistence remains an open design decision.",
     }
-    (directory / "conversation.jsonl").write_text(json.dumps(entry) + "\n")
+    tool = {
+        "at": now,
+        "role": "assistant",
+        "text": "mcp__piworker__project_edit " + json.dumps(
+            {"path": "design/queue.md", "newText": "raw-marker " * 1400}
+        ),
+    }
+    (directory / "conversation.jsonl").write_text(
+        json.dumps(entry) + "\n" + json.dumps(tool) + "\n"
+    )
     return identifier
 
 
@@ -149,6 +158,16 @@ def main():
         keys("\x1b[B\x1b[B\x1b[B\x1b[B\r")
         chat = capture("03-conversation")
         assert "Review ·" in chat and "Café" in chat, chat
+        assert "Edit  design/queue.md" in chat and "raw-marker" not in chat, chat
+        keys("r")
+        assert "raw-marker" in capture("03-raw")
+        before_scroll = capture("03-before-wheel")
+        keys("\x1b[<64;70;20M")
+        after_scroll = capture("03-after-wheel")
+        line_range = lambda frame: next(line.strip() for line in frame.splitlines()
+                                        if "Raw transcript  ──" in line)
+        assert line_range(before_scroll) != line_range(after_scroll), after_scroll
+        keys("r")
         keys("d")
         assert "Worker:" in capture("04-details")
         keys("\x1b[F")

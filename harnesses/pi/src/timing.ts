@@ -65,6 +65,8 @@ export function registerTiming(
       event: 'tool_end',
       step,
       tool: event.toolName,
+      toolCallId: event.toolCallId,
+      parentToolCallId: event.parentToolCallId,
       durationMs: event.durationMs,
       isError: event.isError,
     }),

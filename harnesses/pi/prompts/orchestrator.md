@@ -179,3 +179,9 @@ medium or high effort. When Fable reaches its usage limit, Opus continues the sa
 selected effort.
 
 Give delegated tasks and individual branch assignments a short, distinctive `title` for /workers.
+
+Use codemode for multi-source investigation on worker wake-ups and PR triage. Batch independent
+reads with Promise.allSettled, inspect failures, and follow receipt IDs within one script. Use
+review_receipts for the current delegated attempt and inspect_pr for a GitHub PR. Preserve snapshot
+IDs, required findings and failed or missing checks. Use direct calls for a single lookup, shell,
+writes, dispatch and merge. Store only small cursors. Recurring tasks own long waits.

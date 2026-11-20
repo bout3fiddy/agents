@@ -1,3 +1,5 @@
+import { createCodemodeExtension } from '@earendil-works/pi-coding-agent'
+import { inspectionTools, nestedInspectionTools } from './inspection.ts'
 import { realpath } from 'node:fs/promises'
 import { Type } from 'typebox'
 import type { ExtensionAPI } from '@earendil-works/pi-coding-agent'
@@ -29,6 +31,8 @@ import { registerWorkers } from './workers-command.ts'
 const orchestratorPolicy = Promise.all([loadRole('orchestrator'), rolePrompt('orchestrator')])
 
 export default function harness(pi: ExtensionAPI): void {
+  createCodemodeExtension({ models: false, mode: 'on' })(pi)
+  inspectionTools(pi)
   registerWorkers(pi)
   registerRecurring(pi)
   registerWorkshop(pi)
@@ -82,6 +86,10 @@ export default function harness(pi: ExtensionAPI): void {
   })
 
   pi.on('tool_call', async (event) => {
+    if (event.parentToolCallId && !nestedInspectionTools.has(event.toolName)) {
+      return { block: true, reason: 'Use a direct host call for this tool.' }
+    }
+
     if (!(await orchestratorPolicy)[0].tools.includes(event.toolName)) {
       return { block: true, reason: 'This tool is not enabled in the orchestrator role.' }
     }

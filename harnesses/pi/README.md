@@ -549,3 +549,7 @@ scripts; formatting changes to those scripts preserve their behavior.
 
 Local implementation hands unchanged, out-of-scope harness lint failures to the host when all
 diagnostics can be attributed. The gate stays failed and the candidate remains available.
+
+In a worker conversation, tool calls show the action and file. Press **r** for the raw transcript,
+**d** for worker details, or **p** for its prompt. Scroll with the wheel in fullscreen Pi or with
+the arrow and page keys. **End** follows the latest activity.

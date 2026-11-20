@@ -219,7 +219,13 @@ function validatePull(value: unknown, expected: Omit<GitHubPullRequest, 'number'
   return { item, head }
 }
 
-export { api as githubApi, array as githubArray, object as githubObject, validatePull }
+export {
+  command as githubCommand,
+  api as githubApi,
+  array as githubArray,
+  object as githubObject,
+  validatePull,
+}
 
 function pullReference(value: unknown, expected: Omit<GitHubPullRequest, 'number' | 'url'>) {
   const { item } = validatePull(value, expected)

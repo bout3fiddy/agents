@@ -88,7 +88,8 @@ export function registerWorkers(pi: ExtensionAPI): void {
             new WorkersView(
               catalog(ctx.cwd),
               theme,
-              () => Math.max(6, tui.terminal.rows - 4),
+              () =>
+                Math.max(6, Math.min(tui.terminal.rows - 4, Math.floor(tui.terminal.rows * 0.94))),
               () => tui.requestRender(),
               () => done(),
             ),

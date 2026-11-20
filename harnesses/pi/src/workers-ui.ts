@@ -7,9 +7,11 @@ import {
   wrapTextWithAnsi,
   visibleWidth,
   type Focusable,
+  type TuiMouseEvent,
 } from '@earendil-works/pi-tui'
 import type { Theme } from '@earendil-works/pi-coding-agent'
 import { taskTitle, type WorkersCatalog, type WorkerRow } from './workers-data.ts'
+import { transcriptEntry } from './workers-transcript.ts'
 import { workerTree } from './workers-tree.ts'
 import type { ConversationEntry } from './worker-live.ts'
 
@@ -59,11 +61,12 @@ export class WorkersView implements Focusable {
   composing = false
   notice = ''
   private conversation: ConversationEntry[] = []
+  private raw = false
+  private scrollLimit = 0
   private truncated = false
   private bytes = 131072
   private offset = 0
   private collapsed = new Set<string>()
-  private lastBodyLines = 0
   private refreshPromise?: Promise<void>
   private sending = false
   private disposed = false
@@ -142,7 +145,7 @@ export class WorkersView implements Focusable {
       if (row) {
         const conversation = await this.source.conversation(row, this.bytes)
 
-        if (this.disposed) {
+        if (this.disposed || this.conversationId !== row.id) {
           return
         }
 
@@ -247,6 +250,7 @@ export class WorkersView implements Focusable {
         this.selectedId = nodes[Math.max(0, Math.min(nodes.length - 1, next))]?.row.id
       } else if (matchesKey(data, 'enter') && this.selectedId) {
         this.conversationId = this.selectedId
+        this.raw = false
         this.conversation = []
         this.offset = 0
         void this.refresh()
@@ -256,7 +260,27 @@ export class WorkersView implements Focusable {
     this.redraw()
   }
 
+  handleMouse(event: TuiMouseEvent) {
+    if (this.panel || this.composing || event.type !== 'wheel' || !event.wheelDelta) {
+      return
+    }
+
+    if (this.conversationId) {
+      this.offset = Math.min(this.scrollLimit, Math.max(0, this.offset - event.wheelDelta))
+    } else {
+      this.handleInput(event.wheelDelta < 0 ? '\x1b[A' : '\x1b[B')
+    }
+
+    return { handled: true }
+  }
+
   private chatInput(data: string): void {
+    if (data === 'r' && this.mode === 'chat') {
+      this.raw = !this.raw
+      this.offset = 0
+      return
+    }
+
     if (data === 'd' || data === 'p') {
       const target = data === 'd' ? 'details' : 'prompt'
       this.mode = this.mode === target ? 'chat' : target
@@ -272,7 +296,7 @@ export class WorkersView implements Focusable {
       }
     } else if (matchesKey(data, 'pageUp') || matchesKey(data, 'up')) {
       this.offset = Math.min(
-        this.lastBodyLines - 1,
+        this.scrollLimit,
         this.offset + (matchesKey(data, 'up') ? 1 : Math.max(1, this.height() - 10)),
       )
     } else if (matchesKey(data, 'pageDown') || matchesKey(data, 'down')) {
@@ -283,7 +307,7 @@ export class WorkersView implements Focusable {
     } else if (matchesKey(data, 'end')) {
       this.offset = 0
     } else if (matchesKey(data, 'home')) {
-      this.offset = this.lastBodyLines - 1
+      this.offset = this.scrollLimit
     } else if (data === 'l') {
       this.bytes = Math.min(2_000_000, this.bytes + 131072)
       void this.refresh()
@@ -428,7 +452,7 @@ export class WorkersView implements Focusable {
     const heading = `${names[row.info.role] ?? row.info.role} · ${status(row)}`
     const header = [
       this.theme.fg('accent', terminalText(heading)),
-      terminalText(`Task: ${taskTitle(row.info.task).split('\n')[0]}`),
+      terminalText(`Task: ${(row.title || taskTitle(row.info.task)).split('\n')[0]}`),
       terminalText(`By ${row.delegatedBy}${row.branch ? ` · ${row.branch}` : ''}`),
     ]
     let text: string
@@ -468,12 +492,16 @@ export class WorkersView implements Focusable {
       }
     } else {
       text =
-        this.conversation
-          .map((entry) => `${entry.role} · ${entry.at.slice(11, 19)}\n${entry.text}`)
-          .join('\n\n') || 'Waiting for conversation events…'
+        this.conversation.map((entry) => transcriptEntry(entry, this.raw)).join('\n\n') ||
+        'Waiting for conversation events…'
 
       if (row.state.partial) {
-        text += `\n\nassistant · streaming\n${row.state.partial}`
+        text +=
+          '\n\n' +
+          transcriptEntry(
+            { at: row.state.updatedAt, role: 'assistant', text: row.state.partial },
+            this.raw,
+          )
       }
 
       if (!row.active && row.state.summary) {
@@ -481,13 +509,27 @@ export class WorkersView implements Focusable {
       }
     }
 
+    const measure = this.mode === 'chat' && !this.raw ? Math.min(96, width) : width
     const body = terminalText(text)
       .split('\n')
-      .flatMap((line) => wrapTextWithAnsi(line, width))
-    this.lastBodyLines = body.length
+      .flatMap((line) => {
+        const wrapped = wrapTextWithAnsi(line, measure)
+
+        if (this.mode !== 'chat' || this.raw) {
+          return wrapped
+        }
+
+        if (/^(Worker|Tool result|Tool|user) · /.test(line)) {
+          return wrapped.map((part) => this.theme.fg('accent', this.theme.bold(part)))
+        }
+
+        return line.startsWith('  › ')
+          ? wrapped.map((part) => this.theme.fg('muted', part))
+          : wrapped
+      })
     const help = this.composing
       ? 'Enter Send · Esc Cancel input · Ctrl+O Orchestrator'
-      : 'g Guide · d Details · p Prompt · PgUp/PgDn Scroll · End Follow · Esc Back · Ctrl+O Return'
+      : 'g Guide · d Details · p Prompt · r Summary/raw · PgUp/PgDn Scroll · End Follow · Esc Back'
     const footer = wrapTextWithAnsi(this.theme.fg('dim', help), width)
     const queued = row.guidance.filter((message) => message.status !== 'delivered').length
     const last = row.guidance.at(-1)
@@ -511,19 +553,25 @@ export class WorkersView implements Focusable {
     ]
       .filter(Boolean)
       .map(terminalText)
-    const available = Math.max(
-      1,
-      this.height() - header.length - footer.length - extras.length - (this.composing ? 2 : 1) - 2,
-    )
-    const end = Math.max(available, body.length - Math.max(0, this.offset))
-    const visible = body.slice(Math.max(0, end - available), end)
+    const composer = this.composing ? this.input.render(width) : []
+    const fixed = 4 + header.length + footer.length + extras.length + composer.length
+    const available = Math.max(1, this.height() - fixed)
+    this.scrollLimit = Math.max(0, body.length - available)
+    this.offset = Math.min(this.scrollLimit, Math.max(0, this.offset))
+    const end = body.length - this.offset
+    const start = Math.max(0, end - available)
+    const visible = body.slice(start, end)
+    const section =
+      this.mode === 'chat' ? (this.raw ? 'Raw transcript' : 'Conversation') : this.mode
+    const position = `${start + 1}–${end} of ${body.length}`
     return [
       ...header,
-      '',
+      this.theme.fg('muted', truncateToWidth(`${section}  ──  ${position}`, width)),
       ...visible,
+      ...Array<string>(available - visible.length).fill(''),
       ...extras,
       ...footer,
-      ...(this.composing ? this.input.render(width) : []),
+      ...composer,
     ]
   }
 

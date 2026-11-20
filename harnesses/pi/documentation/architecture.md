@@ -306,3 +306,8 @@ inspect evidence, resolve authorized host-only operations or report the actual e
 repeated identical incapable workers are not a recovery strategy. Recovery first reconciles current
 project state and user updates; work already completed directly must not be retried or overwritten
 from an old failed candidate.
+
+The host registers Pi code mode alongside direct tools. Its nested tool hook permits inspection
+only. Model helpers are disabled. Worker roles keep their own toolsets. Use review_receipts for a
+delegation’s current attempt and inspect_pr for a one-shot GitHub read. Missing evidence is null.
+Timing rows link nested calls to their parent so overlapping durations can be measured once.

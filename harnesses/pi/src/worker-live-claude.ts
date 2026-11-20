@@ -43,9 +43,12 @@ export class ClaudeLiveTrace {
     }
 
     if (event.message) {
-      void this.live
-        .append(event.message.role ?? event.type ?? 'message', messageText(event.message))
-        .catch(() => {})
+      const role =
+        event.message.content?.length &&
+        event.message.content.every((part) => part.type === 'tool_result')
+          ? 'toolResult'
+          : (event.message.role ?? event.type ?? 'message')
+      void this.live.append(role, messageText(event.message)).catch(() => {})
       const tool = event.message.content?.find((part) => part.type === 'tool_use')
       void this.live
         .update({
