@@ -138,6 +138,7 @@ export async function runSandboxed(
       let timedOut = false
       let aborted = false
       let settled = false
+      let cleanupError = ''
       let drainTimer: ReturnType<typeof setTimeout> | undefined
 
       const capture = (chunk: Buffer) => {
@@ -151,8 +152,24 @@ export async function runSandboxed(
           try {
             process.kill(-child.pid, 'SIGKILL')
           } catch (error) {
-            if ((error as NodeJS.ErrnoException).code !== 'ESRCH') {
-              reject(error)
+            const code = (error as NodeJS.ErrnoException).code
+
+            if (code === 'ESRCH') {
+              return
+            }
+
+            cleanupError = 'Could not signal command process group: ' + (code ?? 'unknown error')
+
+            if (child.exitCode === null && child.signalCode === null) {
+              try {
+                process.kill(child.pid, 'SIGKILL')
+              } catch (leaderError) {
+                const cause = (leaderError as NodeJS.ErrnoException).code
+
+                if (cause !== 'ESRCH') {
+                  cleanupError += '; command process signal failed: ' + (cause ?? 'unknown error')
+                }
+              }
             }
           }
         }
@@ -188,9 +205,15 @@ export async function runSandboxed(
           child.unref()
         }
 
+        if (cleanupError) {
+          const limit = outputLimit - cleanupError.length - 1
+          truncated ||= output.length > limit
+          output = output.slice(0, limit) + '\n' + cleanupError
+        }
+
         resolve({
           argv,
-          exitCode: undrained ? null : exitCode,
+          exitCode: undrained || cleanupError ? null : exitCode,
           output,
           timedOut,
           aborted,

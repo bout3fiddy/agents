@@ -29,6 +29,10 @@ preserve each check's exit status before formatting its output. Dependencies and
 readable but not writable. Commands cannot retain generated code: scoped file tools perform retained
 edits. File tools reject traversal, secret/dependency paths and symbolic links.
 
+When process-group cleanup is denied, the runner also tries to stop the command process itself. The
+result retains captured output, elapsed time, timeout or cancellation, and the cleanup error. An
+unconfirmed cleanup always yields a null exit code and fails verification.
+
 Read-only access to the harness is restricted to its runtime assets, excluding private reports.
 Homebrew configuration and service-data directories are excluded. A command that leaves inherited
 streams open after its parent exits fails after a bounded drain. Deliberately detached daemons are

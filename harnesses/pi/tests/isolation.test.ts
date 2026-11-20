@@ -113,6 +113,29 @@ test('commands terminate on timeout and cancellation and bound output', async ()
   }
 })
 
+test('denied group cleanup preserves timeout evidence and fails closed', async (t) => {
+  const workspace = await mkdtemp(join(tmpdir(), 'pi-denied-kill-'))
+  t.after(() => rm(workspace, { recursive: true, force: true }))
+  const kill = process.kill.bind(process)
+  t.mock.method(process, 'kill', (pid: number, signal: NodeJS.Signals) => {
+    if (pid < 0 && signal === 'SIGKILL') {
+      throw Object.assign(new Error('kill EPERM'), { code: 'EPERM' })
+    }
+
+    return kill(pid, signal)
+  })
+
+  for (const hang of [true, false]) {
+    const program = 'console.log("checkpoint");' + (hang ? 'setTimeout(()=>{}, 1500)' : '')
+    const result = await runSandboxed(workspace, ['node', '-e', program], hang ? 600 : 4000)
+    assert.equal(result.timedOut, hang)
+    assert.equal(result.exitCode, null)
+    assert.match(result.output, /checkpoint/)
+    assert.match(result.output, /process group.*EPERM/)
+    assert.ok(result.durationMs < 1450)
+  }
+})
+
 test('cancellation during asynchronous command setup remains observable', async () => {
   const workspace = await mkdtemp(join(tmpdir(), 'pi-setup-abort-'))
 
