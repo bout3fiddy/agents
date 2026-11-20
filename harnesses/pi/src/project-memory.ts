@@ -129,6 +129,10 @@ export function registerProjectMemory(
       lastFacts = JSON.stringify(s.db.facts())
       lastOwners = JSON.stringify(data.owners)
       lastBrief = data.projectBrief
+      const priority = data.facts.find(
+        (f) =>
+          f.key === 'current-priority' && f.kind === 'decision' && f.source.startsWith('session:'),
+      )
       const sources = s.db.sources() ?? []
       const initial = !data.facts.some((f) => f.source.startsWith('file:') && f.supportedInCheckout)
       const excerpts = initial
@@ -145,7 +149,12 @@ export function registerProjectMemory(
           display: false,
           content:
             'Repository project brief (evidence):\n' +
-            JSON.stringify({ ...data, sourcePaths: sources, bootstrap: excerpts }),
+            JSON.stringify({
+              ...(priority && { userSelectedPriority: priority.text }),
+              ...data,
+              sourcePaths: sources,
+              bootstrap: excerpts,
+            }),
         },
       }
     } catch (error) {
@@ -185,6 +194,7 @@ export function registerProjectMemory(
       'message, a repo-relative file path, or "task:<id>" for a delivered worker result. ' +
       'Use source "recorded" to share an existing fact verbatim at its current revision. ' +
       'Set share=true for durable team-facing facts. Task results stay local. ' +
+      'Use current-priority for the user’s explicit ordering of ongoing work. ' +
       'Supply the displayed revision (0 for new keys). Batch related changes.',
     parameters: Type.Object({ facts: Type.Array(factSchema, { minItems: 1, maxItems: 12 }) }),
     async execute(_id, input, _signal, _update, ctx) {
@@ -221,6 +231,13 @@ export function registerProjectMemory(
           }
 
           continue
+        }
+
+        if (
+          value.key === 'current-priority' &&
+          (value.source !== 'user' || !['decision', 'resolved'].includes(value.kind))
+        ) {
+          throw new Error('Changing current-priority requires a quoted user decision or resolution')
         }
 
         const evidence = await evidenceFor(ctx, s.root, s.db, value.source, value.quote)

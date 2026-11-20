@@ -101,6 +101,8 @@
   attention notice when activity is absent, inspect the cause, and recover within original
   authority. Silence alone never cancels work. Test progress delivery and reload deduplication with
   the real SDK.
+- Preserve the user's explicit priority through side questions and worker handoffs. Required audit
+  findings go to the host with the report path. Keep an empty-response follow-up bounded to one.
 - Keep internal progress messages hidden from the user. Worker-authored summaries describe
   meaningful findings, phases or blockers; telemetry remains automatic. Guidance requests are
   exceptional and identify a concrete missing decision or capability. `/workers` exposes live status

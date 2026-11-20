@@ -109,6 +109,7 @@ export type DelegationStatus = {
   activityAgeMs?: number
   health?: 'active' | 'quiet' | 'stopped' | 'needs_attention'
   auditReport?: string
+  auditRequired?: Pick<WorkerResult['findings'][number], 'location' | 'problem'>[]
   auditAttention?: boolean
   auditDecision?: WorkerResult['continuation']
   progressFile?: string

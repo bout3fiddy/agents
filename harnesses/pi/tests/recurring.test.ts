@@ -138,8 +138,22 @@ test('audits report once per activity change and only findings wake the Pi sessi
         registerDelegation(pi, async () => {})
       },
     ],
-    async () => {
+    async (ctx) => {
       calls++
+
+      if (calls === 3) {
+        const wake = JSON.stringify(ctx.messages.at(-1)?.content)
+        assert.match(wake, /Identify who can issue the release credential/)
+        return [{ type: 'text', text: '' }]
+      }
+
+      if (calls === 4) {
+        assert.match(JSON.stringify(ctx.messages.at(-1)?.content), /empty response/)
+
+        // Even a second empty reply must settle without an unbounded model loop.
+        return [{ type: 'text', text: '' }]
+      }
+
       return [{ type: 'text', text: 'The milestone is verified.' }]
     },
   )
@@ -182,11 +196,12 @@ test('audits report once per activity change and only findings wake the Pi sessi
     coordinatorEvidence(
       req,
       {
+        verdict: 'changes',
         findings: [
           {
-            severity: 'suggestion',
+            severity: 'required',
             location: 'second milestone',
-            problem: 'Delivery blocked',
+            problem: 'Identify who can issue the release credential',
             evidence: 'Host discussion',
           },
         ],
@@ -194,20 +209,31 @@ test('audits report once per activity change and only findings wake the Pi sessi
       [],
     ),
   )
-  assert.equal(attention.auditAttention, true)
+  assert.equal(attention.auditAttention, true, attention.error)
 
   for (let attempt = 0; attempt < 40; attempt++) {
-    if (calls >= 3) {
+    if (calls >= 4) {
       break
     }
 
     await delay(100)
   }
 
-  assert.equal(calls, 3)
+  assert.equal(calls, 4)
+  await session.waitForIdle()
+  const reply = session.messages.findLast((m) => m.role === 'assistant')
+  assert.equal(reply?.stopReason, 'stop', reply?.errorMessage)
+  assert.equal(
+    session.sessionManager
+      .getBranch()
+      .filter(
+        (entry) => entry.type === 'custom_message' && entry.customType === 'pi-priority-follow-up',
+      ).length,
+    1,
+  )
   await session.reload()
   await delay(1100)
-  assert.equal(calls, 3)
+  assert.equal(calls, 4)
 })
 
 test('audit report publication rejects a linked output directory', async (t) => {

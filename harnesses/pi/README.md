@@ -603,6 +603,11 @@ scripts; formatting changes to those scripts preserve their behavior.
 Local implementation hands unchanged, out-of-scope harness lint failures to the host when all
 diagnostics can be attributed. The gate stays failed and the candidate remains available.
 
+When the user sets an ongoing priority, Pi records it in repository memory and shows it on later
+host turns. A side question or worker notification leaves the order intact. Required audit findings
+reach the host with their report path. An empty first response to an actionable audit gets one
+follow-up opportunity at idle, subject to queued user input.
+
 ### GitHub Actions follow-up
 
 When a pending Actions run gates the next step, the orchestrator uses `watch_github_run` to save the

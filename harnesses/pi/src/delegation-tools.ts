@@ -69,6 +69,10 @@ function taskMilestone(job: Delegation) {
 }
 
 function resultMessage(jobs: Delegation[]): CustomMessageEntryDraft {
+  const actionableAudit = jobs.some(
+    ({ request, state }) =>
+      request.recurring?.audit && (state.auditRequired?.length || state.hostActions?.length),
+  )
   return {
     type: 'custom_message',
     customType: 'pi-task-result',
@@ -76,7 +80,11 @@ function resultMessage(jobs: Delegation[]): CustomMessageEntryDraft {
     content:
       'Background task outcome. Assess material changes to project dependencies or priorities. ' +
       'Use the task receipt as evidence for any resulting project-memory change. ' +
-      'Handle routine completions privately. ' +
+      (actionableAudit
+        ? 'An audit identified work for the host. Check the required findings against the ' +
+          'latest user priority. Advance the authorized next step or identify its concrete ' +
+          'dependency and owner. A completed audit does not complete the objective. '
+        : 'Handle routine completions privately. ') +
       'When an outcome changes what the user can use, decide or expect, combine related ' +
       'results into one short update. Answer pending questions first. ' +
       'For failures, inspect the retained candidate and evidence. ' +
@@ -86,7 +94,7 @@ function resultMessage(jobs: Delegation[]): CustomMessageEntryDraft {
       'when consistent with user instructions. Never restart user-cancelled work without a new ' +
       'request. Report genuine external blockers.\n' +
       JSON.stringify(jobs.map(delegationView)),
-    details: { taskIds: jobs.map(notificationId) },
+    details: { taskIds: jobs.map(notificationId), ...(actionableAudit && { actionableAudit }) },
   }
 }
 
@@ -306,7 +314,66 @@ export function registerDelegation(pi: ExtensionAPI, launch: Launcher = launchDe
       : undefined
   }
   pi.on('turn_end', boundary)
-  pi.on('agent_before_settle', boundary)
+  pi.on('agent_before_settle', async (event, ctx) => {
+    const delivery = await boundary(event, ctx)
+
+    if (
+      delivery ||
+      event.outcome !== 'completed' ||
+      event.continue ||
+      event.context.pendingMessages.length
+    ) {
+      return delivery
+    }
+
+    const messages = event.context.contextMessages
+    const last = messages.at(-1)
+
+    if (
+      last?.role !== 'assistant' ||
+      last.stopReason !== 'stop' ||
+      last.content.some((part) => part.type === 'text' && part.text.trim())
+    ) {
+      return
+    }
+
+    for (let i = messages.length - 2; i >= 0; i--) {
+      const previous = messages[i]!
+
+      if (previous.role !== 'custom') {
+        return
+      }
+
+      if (
+        ['pi-project-memory', 'pi-active-tasks', 'pi-task-progress'].includes(previous.customType)
+      ) {
+        continue
+      }
+
+      if (
+        previous.customType === 'pi-task-result' &&
+        (previous.details as { actionableAudit?: boolean } | undefined)?.actionableAudit
+      ) {
+        return {
+          entries: [
+            ...event.entries,
+            {
+              type: 'custom_message',
+              customType: 'pi-priority-follow-up',
+              display: false,
+              content:
+                'The last audit reported a required finding and received an empty response. ' +
+                'Reconcile it with the user’s priority. Take an available authorized action, or ' +
+                'surface the specific decision that prevents progress. If already handled, stop.',
+            },
+          ],
+          continue: true,
+        }
+      }
+
+      return
+    }
+  })
   pi.on('agent_settled', async (_event, ctx) => idle(ctx))
   pi.on('session_start', (_event, ctx) => {
     closed = false

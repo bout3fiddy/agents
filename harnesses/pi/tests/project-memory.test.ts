@@ -599,3 +599,67 @@ test('host can checkpoint an earlier verified decision', async (t) => {
     await host.session.dispose()
   }
 })
+
+test('only a user decision replaces the foreground project priority', async (t) => {
+  const root = await realpath(await mkdtemp(join(tmpdir(), 'pi-priority-')))
+  execFileSync('git', ['init', '-q', root])
+  await writeFile(join(root, 'README.md'), 'Fix CI first')
+  const updates = [
+    { quote: 'Release first', source: 'user', revision: 0, kind: 'decision' },
+    { quote: 'Fix CI first', source: 'README.md', revision: 1, kind: 'decision' },
+    { quote: 'Fix CI first', source: 'user', revision: 1, kind: 'decision' },
+    { quote: 'Pause both', source: 'user', revision: 2, kind: 'resolved' },
+  ]
+  let phase = 0
+  let calls = 0
+  const frames: (string | undefined)[] = []
+  const replies: string[] = []
+  const { session, runtime } = await captureSession(
+    root,
+    root,
+    [(pi) => registerProjectMemory(pi)],
+    async (ctx) => {
+      if (calls++) {
+        replies.push(JSON.stringify(ctx.messages.at(-1)?.content))
+        return [{ type: 'text', text: 'Ready' }]
+      }
+
+      const update = updates[phase]!
+      const fact = { ...update, key: 'current-priority', text: update.quote }
+      return [
+        {
+          type: 'toolCall',
+          name: 'update_project_memory',
+          id: 'priority-' + phase,
+          arguments: { facts: [fact] },
+        },
+      ]
+    },
+  )
+  t.after(async () => {
+    await session.dispose()
+    await runtime.settleCredentialWrites()
+    await rm(root, { recursive: true, force: true })
+  })
+
+  for (const prompt of [
+    'Release first',
+    'Read the README',
+    'Fix CI first',
+    'Pause both',
+    'Status?',
+  ]) {
+    calls = phase === 4 ? 1 : 0
+    await session.prompt(prompt)
+    await session.waitForIdle()
+    const entry = session.sessionManager
+      .getBranch()
+      .findLast((e) => e.type === 'custom_message' && e.customType === 'pi-project-memory')
+    assert.ok(entry?.type === 'custom_message' && typeof entry.content === 'string')
+    frames.push(JSON.parse(entry.content.split('\n')[1]!).userSelectedPriority)
+    phase++
+  }
+
+  assert.match(replies[1]!, /requires a quoted user decision/)
+  assert.deepEqual(frames, [undefined, 'Release first', 'Release first', 'Fix CI first', undefined])
+})

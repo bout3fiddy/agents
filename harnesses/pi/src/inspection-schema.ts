@@ -16,6 +16,7 @@ export const taskStatusSchema = Type.Object(
     updatedAt: string,
     task: string,
     writePaths: strings,
+    auditRequired: Type.Optional(Type.Array(Type.Object({ location: string, problem: string }))),
     branch: optional,
     commit: optional,
     candidate: optional,

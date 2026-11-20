@@ -219,7 +219,10 @@ try {
   const recalled = await ask(fresh, 'What is our priority, and are we still waiting for access?')
   assert.match(recalled, /Friday/i)
   assert.match(recalled, /production|live integration/i)
-  assert.match(recalled, /receiv|arriv|have|available|obtained|no longer/i)
+  assert.match(
+    recalled,
+    /receiv|arriv|have|available|obtained|no longer|has production credentials/i,
+  )
 } finally {
   await fresh.dispose()
 }

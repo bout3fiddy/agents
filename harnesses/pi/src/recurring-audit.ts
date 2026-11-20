@@ -284,8 +284,12 @@ export async function writeAuditReport(
     })
   }
 
+  const required = result.findings.filter((finding) => finding.severity === 'required')
   return {
     auditReport: relative,
+    ...(required.length && {
+      auditRequired: required.slice(0, 3).map(({ location, problem }) => ({ location, problem })),
+    }),
     auditDecision: result.continuation,
     auditAttention: Boolean(
       result.continuation?.action === 'stop' ||
