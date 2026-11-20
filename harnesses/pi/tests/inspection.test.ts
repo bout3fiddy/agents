@@ -64,6 +64,8 @@ test('the host SDK allows nested reads and blocks nested writes in the same scri
   const code = [
     'const r = await tools.task_status({});',
     'text(r);',
+    'text("nested shell: " + ("bash" in tools));',
+    'text("lists shell: " + ALL_TOOLS.some(tool => tool.name === "bash"));',
     'try { await tools.write({path:"unexpected",content:"incorrect"}) }',
     'catch (error) { text(String(error)) }',
   ].join(' ')
@@ -86,7 +88,8 @@ test('the host SDK allows nested reads and blocks nested writes in the same scri
   try {
     await session.prompt('Inspect active tasks')
     assert.match(response, /Script completed/)
-    assert.match(response, /Use a direct host call/)
+    assert.match(response, /nested shell: false/)
+    assert.match(response, /lists shell: false/)
     await assert.rejects(access(join(item.root, 'unexpected')), { code: 'ENOENT' })
   } finally {
     session.dispose()

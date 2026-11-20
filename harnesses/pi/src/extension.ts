@@ -31,7 +31,27 @@ import { registerWorkers } from './workers-command.ts'
 const orchestratorPolicy = Promise.all([loadRole('orchestrator'), rolePrompt('orchestrator')])
 
 export default function harness(pi: ExtensionAPI): void {
-  createCodemodeExtension({ models: false, mode: 'on' })(pi)
+  const inspectable = (tool: { name: string }) => nestedInspectionTools.has(tool.name)
+  createCodemodeExtension({ models: false, mode: 'on' })({
+    ...pi,
+    registerTool(tool) {
+      pi.registerTool({
+        ...tool,
+        prepareLoadout(loadout) {
+          return tool.prepareLoadout?.({
+            ...loadout,
+            callable: loadout.callable.filter(inspectable),
+          })
+        },
+        execute(id, args, signal, update, ctx) {
+          const inspectionContext = Object.create(ctx, {
+            tools: { value: ctx.tools.filter(inspectable) },
+          })
+          return tool.execute(id, args, signal, update, inspectionContext)
+        },
+      })
+    },
+  })
   inspectionTools(pi)
   registerWorkers(pi)
   registerRecurring(pi)

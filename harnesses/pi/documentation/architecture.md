@@ -308,9 +308,10 @@ project state and user updates; work already completed directly must not be retr
 from an old failed candidate.
 
 The host registers Pi code mode alongside direct tools. Its nested tool hook permits inspection
-only. Model helpers are disabled. Worker roles keep their own toolsets. Use review_receipts for a
-delegation’s current attempt and inspect_pr for a one-shot GitHub read. Missing evidence is null.
-Timing rows link nested calls to their parent so overlapping durations can be measured once.
+only. The script catalog and tool descriptions use the same allowlist. Model helpers are disabled.
+Worker roles keep their own toolsets. Use review_receipts for a delegation’s current attempt and
+inspect_pr for a one-shot GitHub read. Missing evidence is null. Timing rows link nested calls to
+their parent so overlapping durations can be measured once.
 
 Claude worker tools validate arguments before execution. A rejected call identifies the failing
 field and schema constraint so the worker can correct it without escalating to the host.
