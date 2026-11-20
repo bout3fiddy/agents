@@ -48,6 +48,9 @@
 - For scoped verification, report inherited width findings on byte-identical out-of-scope Markdown
   excluded by the unchanged baseline formatting policy. Keep full checks on added, edited or
   assigned files and provide the complete snapshot to project checks.
+- Keep inherited out-of-scope lint failures blocking. On local implementation, send attributable
+  failures directly to the host with the candidate and existing worker handoffs. Mixed failures
+  still go to the writer for repair.
 - Record actual model/effort and request/model/tool timing under project-local `harness/timing/`.
   Respect the selected orchestrator model; implementation remains independently pinned to
   `openai-codex/gpt-6.2-astra` with medium as the default.

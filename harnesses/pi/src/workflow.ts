@@ -349,6 +349,21 @@ export async function runWorkflow(
           throw new Error('Configure the missing required checks in .pi/harness.json')
         }
 
+        const paths = failures.length === 1 ? failures[0]?.inheritedLintPaths : undefined
+
+        if (paths?.length) {
+          const reason =
+            'Required harness-lint failed on unchanged files outside this task: ' +
+            paths.slice(0, 8).join(', ') +
+            '. Route to the owning scope and rerun verification.'
+          const lastWriter = task.evidence.findLast((item) => item.role === 'implementer')
+          task.hostActions = [
+            ...(lastWriter?.result.hostActions ?? []),
+            { capability: 'project-policy', reason },
+          ]
+          throw new Error(reason)
+        }
+
         feedback = JSON.stringify({ requiredChecks: failures.map(receiptView) })
         continue
       }

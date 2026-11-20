@@ -546,3 +546,6 @@ installation. Claude global cleanup is a separate, explicit operation under `../
 supplies its Claude workers' prompts at launch. Canonical `SKILL.md` content and
 `instructions/global.md` are unchanged. Repository-wide lint also covers the executable skill
 scripts; formatting changes to those scripts preserve their behavior.
+
+Local implementation hands unchanged, out-of-scope harness lint failures to the host when all
+diagnostics can be attributed. The gate stays failed and the candidate remains available.

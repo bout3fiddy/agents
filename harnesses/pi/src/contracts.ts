@@ -182,6 +182,7 @@ export type Project = {
 }
 
 export type Receipt = {
+  inheritedLintPaths?: string[]
   snapshot: string
   check: string
   status: 'passed' | 'failed' | 'skipped' | 'unavailable'

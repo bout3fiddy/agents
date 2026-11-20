@@ -1,4 +1,4 @@
-import { mkdtemp, symlink, rm, chmod, stat } from 'node:fs/promises'
+import { mkdtemp, symlink, rm, chmod, realpath, stat } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -165,12 +165,61 @@ export function hasSkippedTests(output: string): boolean {
   )
 }
 
+type LintBaseline = { files: Map<string, Buffer>; writePaths: string[] }
+
+/** Attribute a complete harness-lint failure only when every diagnostic names unchanged,
+ * out-of-scope input. Unknown or mixed diagnostics follow the ordinary repair path. */
+function inheritedLintPaths(
+  output: string,
+  probe: string,
+  files: Map<string, Buffer>,
+  baseline: LintBaseline,
+): string[] | undefined {
+  const paths = new Set<string>()
+
+  for (const line of output.trim().split('\n')) {
+    const diagnostic = /^([^:\r\n]+)(?::\d+)?: (.+)$/.exec(line)
+
+    if (!diagnostic) {
+      return undefined
+    }
+
+    const [, raw, message] = diagnostic
+    const name = raw!.startsWith(probe + '/') ? raw!.slice(probe.length + 1) : raw!
+    const bytes = files.get(name)
+
+    if (
+      !bytes ||
+      !baseline.files.get(name)?.equals(bytes) ||
+      baseline.writePaths.some((scope) => matches(name, scope))
+    ) {
+      return undefined
+    }
+
+    if (
+      ![
+        'line exceeds 100 columns',
+        'invalid JSON',
+        'add a blank line between logical stages',
+        'add a blank line before a standalone comment block',
+        'separate logical stages and standalone comment blocks',
+      ].includes(message!)
+    ) {
+      return undefined
+    }
+
+    paths.add(name)
+  }
+
+  return [...paths]
+}
+
 export async function verifyProject(
   workspace: string,
   project: Project,
   database: boolean,
   signal?: AbortSignal,
-  baseline?: { files: Map<string, Buffer>; writePaths: string[] },
+  baseline?: LintBaseline,
 ): Promise<Receipt[]> {
   const files = await inventory(workspace)
   const hash = snapshotHash(files)
@@ -201,7 +250,7 @@ export async function verifyProject(
   for (const check of checks) {
 
     // Every command receives a disposable copy, so test code cannot alter the reviewed candidate.
-    const probe = await createWorkspace(workspace, files)
+    const probe = await realpath(await createWorkspace(workspace, files))
     let result
 
     try {
@@ -224,7 +273,22 @@ export async function verifyProject(
         : check !== checks[0] && hasSkippedTests(result.output)
           ? 'skipped'
           : 'passed'
-    receipts.push({ snapshot: hash, check: check.id, status, result })
+    const inherited =
+      check === checks[0] &&
+      baseline &&
+      result.exitCode === 1 &&
+      !result.timedOut &&
+      !result.aborted &&
+      !result.truncated
+        ? inheritedLintPaths(result.output, probe, files, baseline)
+        : undefined
+    receipts.push({
+      snapshot: hash,
+      check: check.id,
+      status,
+      result,
+      ...(inherited?.length && { inheritedLintPaths: inherited }),
+    })
 
     if (status !== 'passed' && check.required) {
       return receipts

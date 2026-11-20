@@ -546,3 +546,42 @@ test('a blocked implementation persists the current host handoff', async (t) => 
   assert.equal(task.status, 'needs_attention')
   assert.deepEqual((await store.task())?.hostActions, hostActions)
 })
+
+test('inherited lint retains the candidate and preserves host actions', async (t) => {
+  const item = await fixture()
+  t.after(() => rm(item.base, { recursive: true, force: true }))
+  await writeFile(join(item.root, 'guide.md'), 'x'.repeat(101) + '\n')
+  const calls: string[] = []
+  const task = await runWorkflow(item.store, 'fixture/model', undefined, async (request) => {
+    calls.push(request.role)
+    assert.equal(calls.length, 1, 'Cannot repair unchanged files outside this scope')
+    await writeFile(join(request.workspace, 'src/value.js'), 'export const value = 4\n')
+    return evidence(request, { hostActions: [{ capability: 'network', reason: 'Provider check' }] })
+  })
+  assert.equal(task.status, 'needs_attention')
+  assert.deepEqual(task.receipts[0]?.inheritedLintPaths, ['guide.md'])
+  assert.equal(task.receipts[0]?.status, 'failed')
+  assert.deepEqual(
+    task.hostActions?.map((action) => action.capability),
+    ['network', 'project-policy'],
+  )
+  assert.match(await readFile(join(item.root, 'src/value.js'), 'utf8'), /value = 0/)
+  assert.match(await readFile(join(task.candidate!, 'src/value.js'), 'utf8'), /value = 4/)
+})
+
+test('mixed lint findings keep repair with the writer', async (t) => {
+  const item = await fixture()
+  t.after(() => rm(item.base, { recursive: true, force: true }))
+  await writeFile(join(item.root, 'guide.md'), 'x'.repeat(101) + '\n')
+  let calls = 0
+  const result = await runWorkflow(item.store, 'fixture/model', undefined, async (request) => {
+    calls++
+    assert.ok(calls <= 2)
+    const value = calls === 1 ? '// ' + 'x'.repeat(101) : 'export const value = 3'
+    await writeFile(join(request.workspace, 'src/value.js'), value + '\n')
+    return evidence(request)
+  })
+  assert.equal(calls, 2)
+  assert.deepEqual(result.receipts[0]?.inheritedLintPaths, ['guide.md'])
+  assert.equal(result.status, 'needs_attention')
+})
