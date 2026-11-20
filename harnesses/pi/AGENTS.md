@@ -29,7 +29,9 @@
   supplies independent design advice and specialist reviews.
 - When an external Actions run gates host work, persist the run watch in its originating session.
   Wake the idle host once with the run identity and follow-up. Exercise completion, lookup failure
-  and reload with `tests/github-run-watch.test.ts`.
+  and reload with `tests/github-run-watch.test.ts`. Pin merge follow-ups to their PR head. Test CI
+  timing and same-head discovery with `tests/ci-timing.test.ts`. Keep one-time merge authority in
+  the task. Exercise priority retirement through `tests/project-memory.test.ts`.
 - Keep trusted policy and receipts outside worker workspaces. Delegated product edits go through
   scoped workers and snapshot-bound verification. Never silently fall back from worker sandboxing.
 - Workshop document edits require no acceptance checkpoint, implementation worker or test adapter.

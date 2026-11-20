@@ -114,13 +114,37 @@ export function readBriefBytes(home: string) {
 }
 
 function entry(lines: string[], key: string) {
-  const matches = lines.filter((line) => line.startsWith(`- **${key}** `))
+  const matches = lines.flatMap((line, index) => {
+    if (!line.startsWith(`- **${key}** `)) {
+      return []
+    }
+
+    let end = index + 1
+
+    while (end < lines.length && /^ {2}\S/.test(lines[end]!)) {
+      end++
+    }
+
+    return [lines.slice(index, end).join('\n')]
+  })
 
   if (matches.length > 1) {
     throw new Error('Duplicate project brief key: ' + key)
   }
 
   return matches[0] ?? ''
+}
+
+export function withoutBriefEntry(brief: string, key: string) {
+  const lines = brief.split('\n')
+  const block = entry(lines, key)
+
+  if (block) {
+    const parts = block.split('\n')
+    lines.splice(lines.indexOf(parts[0]!), parts.length)
+  }
+
+  return lines.join('\n')
 }
 
 export function portableLine(
@@ -131,17 +155,21 @@ export function portableLine(
 ): PendingLine | undefined {
   const previous = entry(brief.split('\n'), fact.key)
 
-  if (fromWorker || (!previous && (!share || fact.kind === 'tentative'))) {
+  const remove =
+    share === false ||
+    ['tentative', 'retired'].includes(fact.kind) ||
+    fact.key === 'current-priority'
+
+  if ((fromWorker && fact.kind !== 'retired') || (!previous && (!share || remove))) {
     return undefined
   }
 
   // Demotion removes the old committed statement. Raw evidence always stays private.
   const paths = fact.paths.filter((path) => !/[\r\n`]/.test(path)).map((path) => '`' + path + '`')
   const references = paths.length ? ' — ' + paths.join(', ') : ''
-  const line =
-    share === false || fact.kind === 'tentative'
-      ? ''
-      : `- **${fact.key}** (${fact.kind}) ${fact.text.replace(/\s+/g, ' ').trim()}` + references
+  const line = remove
+    ? ''
+    : `- **${fact.key}** (${fact.kind}) ${fact.text.replace(/\s+/g, ' ').trim()}` + references
   return { key: fact.key, previous, line }
 }
 
@@ -166,7 +194,8 @@ export function syncBrief(db: MemoryStore, home: string) {
         changed = true
 
         if (existing) {
-          lines.splice(lines.indexOf(existing), 1, ...(row.line ? [row.line] : []))
+          const parts = existing.split('\n')
+          lines.splice(lines.indexOf(parts[0]!), parts.length, ...(row.line ? [row.line] : []))
         } else {
           if (!before && !applied.length) {
             lines.unshift('# Project state')

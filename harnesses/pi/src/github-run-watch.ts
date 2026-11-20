@@ -3,6 +3,7 @@ import { Type, type Static } from 'typebox'
 import { Check } from 'typebox/value'
 import type { ExtensionAPI, ExtensionContext } from '@earendil-works/pi-coding-agent'
 import { githubApi, type GitHubCommand } from './branch-github.ts'
+import { githubPrState } from './github-pr-state.ts'
 import { textResult } from './file-tools.ts'
 
 const parameters = Type.Object({
@@ -10,6 +11,12 @@ const parameters = Type.Object({
     pattern: '^[A-Za-z0-9][A-Za-z0-9-]{0,38}/[A-Za-z0-9_][A-Za-z0-9_.-]{0,99}$',
   }),
   runId: Type.Integer({ minimum: 1, maximum: Number.MAX_SAFE_INTEGER }),
+  pullRequest: Type.Optional(
+    Type.Object({
+      number: Type.Integer({ minimum: 1, maximum: Number.MAX_SAFE_INTEGER }),
+      expectedHead: Type.String({ pattern: '^[0-9a-f]{40}$' }),
+    }),
+  ),
   followUp: Type.String({ minLength: 1, maxLength: 1000 }),
 })
 const registration = Type.Object({
@@ -50,9 +57,24 @@ export function registerGitHubRunWatch(pi: ExtensionAPI, run?: GitHubCommand, in
       return
     }
 
-    const { repository, runId } = item.watch
+    const { repository, runId, pullRequest } = item.watch
 
     try {
+      if (pullRequest) {
+        const pr = await githubPrState(repository, pullRequest.number, signal, run)
+
+        if (
+          pr.state !== 'OPEN' ||
+          pr.headRefOid !== pullRequest.expectedHead ||
+          pr.mergeable === 'CONFLICTING'
+        ) {
+          item.result =
+            'Pull request changed; recheck the current candidate before acting. ' +
+            JSON.stringify(pr)
+          return
+        }
+      }
+
       const data = await githubApi(`repos/${repository}/actions/runs/${runId}`, signal, { run })
 
       if (
@@ -61,6 +83,11 @@ export function registerGitHubRunWatch(pi: ExtensionAPI, run?: GitHubCommand, in
         (data.status === 'completed' && !data.conclusion)
       ) {
         throw new Error('Invalid GitHub Actions run response')
+      }
+
+      if (pullRequest && data.head_sha !== pullRequest.expectedHead) {
+        item.result = 'The watched run belongs to a different commit: ' + data.head_sha
+        return
       }
 
       if (data.status === 'completed') {
@@ -108,12 +135,13 @@ export function registerGitHubRunWatch(pi: ExtensionAPI, run?: GitHubCommand, in
           return
         }
 
-        const ready = items.filter((item) => item.result)
+        const ready = items.filter((item) => item.result && pending.get(item.watch.id) === item)
 
         if (ready.length) {
           const results = ready.map(({ watch, result }) => ({
             repository: watch.repository,
             runId: watch.runId,
+            ...(watch.pullRequest && { pullRequest: watch.pullRequest }),
             followUp: watch.followUp,
             result,
           }))
@@ -188,12 +216,16 @@ export function registerGitHubRunWatch(pi: ExtensionAPI, run?: GitHubCommand, in
     label: 'Watch GitHub Actions run',
     description:
       'Return immediately and wake this session when a run completes. Specify the next ' +
-      'authorized action for success or failure. Re-register to update the follow-up.',
+      'authorized action for success or failure. For a merge, include pullRequest with the ' +
+      'reviewed head to wake on replacement, conflict or closure. Re-register to update.',
     parameters,
     async execute(_call, input, _signal, _update, ctx) {
       const repository = input.repository.toLowerCase()
       const existing = [...pending.values()].find(
-        ({ watch }) => watch.repository === repository && watch.runId === input.runId,
+        ({ watch }) =>
+          watch.repository === repository &&
+          watch.runId === input.runId &&
+          watch.pullRequest?.number === input.pullRequest?.number,
       )
       const watch = {
         ...input,
@@ -204,7 +236,11 @@ export function registerGitHubRunWatch(pi: ExtensionAPI, run?: GitHubCommand, in
       pi.appendEntry('pi-github-run-watch', watch)
 
       if (existing) {
-        existing.watch = watch
+        if (existing.watch.pullRequest?.expectedHead !== watch.pullRequest?.expectedHead) {
+          pending.set(watch.id, { watch, errors: 0 })
+        } else {
+          existing.watch = watch
+        }
       } else {
         pending.set(watch.id, { watch, errors: 0 })
       }

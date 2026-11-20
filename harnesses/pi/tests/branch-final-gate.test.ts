@@ -21,6 +21,7 @@ for (const change of ['controls', 'human', 'ci', 'cancel', 'authority', 'none'] 
     const waiting = new Promise<void>((resolve) => {
       entered = resolve
     })
+    const observedHeads = new Set<string>()
     let afterReview = false
     let finalChecks = 0
     let repairFeedback = ''
@@ -34,6 +35,9 @@ for (const change of ['controls', 'human', 'ci', 'cancel', 'authority', 'none'] 
         url: 'https://github.com/fixture/final-gate/pull/1',
       }),
       checks: async (_pull, head, _signal, options) => {
+        assert.equal(options?.registrationGraceMs, observedHeads.has(head) ? 0 : undefined)
+        observedHeads.add(head)
+
         if (afterReview) {
           finalChecks++
           assert.equal(options?.registrationGraceMs, 0)

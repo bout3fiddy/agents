@@ -4,7 +4,14 @@ import type { ExtensionAPI, ExtensionContext } from '@earendil-works/pi-coding-a
 import { textResult } from './file-tools.ts'
 import { safePath } from './paths.ts'
 import { discoverSources, memoryRepository, sourceExcerpt, worktrees } from './memory-repository.ts'
-import { briefName, portableLine, readBrief, repositoryStore, syncBrief } from './memory-files.ts'
+import {
+  briefName,
+  portableLine,
+  readBrief,
+  repositoryStore,
+  syncBrief,
+  withoutBriefEntry,
+} from './memory-files.ts'
 import type { MemoryStore, MemoryFact } from './memory-store.ts'
 import { ownerBrief } from './memory-owners.ts'
 import type { Delegation } from './delegation-state.ts'
@@ -13,7 +20,17 @@ const factSchema = Type.Object({
   key: Type.String({ pattern: '^[a-z][a-z0-9-]{0,63}$' }),
   revision: Type.Integer({ minimum: 0 }),
   kind: Type.Union(
-    ['decision', 'observation', 'inference', 'tentative', 'resolved'].map((v) => Type.Literal(v)),
+    ['decision', 'observation', 'inference', 'tentative', 'resolved', 'retired'].map((v) =>
+      Type.Literal(v),
+    ),
+  ),
+  scope: Type.Optional(Type.Union([Type.Literal('task'), Type.Literal('project')])),
+  until: Type.Optional(
+    Type.String({
+      minLength: 1,
+      maxLength: 240,
+      description: 'Exact source phrase bounding a cross-task priority or project constraint.',
+    }),
   ),
   text: Type.String({ minLength: 1, maxLength: 480 }),
   source: Type.String({ minLength: 1, maxLength: 240 }),
@@ -84,28 +101,46 @@ export function registerProjectMemory(
 
   const frame = async (s: NonNullable<typeof state>, localJobs?: Delegation[]) => {
     const { db, root } = s
+    const latest = db.facts()
+    const inactive = new Set(
+      latest.filter(
+        (f) =>
+          f.kind === 'retired' ||
+          (f.key === 'current-priority' && (!f.until || f.kind !== 'decision')),
+      ),
+    )
     const facts = await Promise.all(
-      db.facts().map(async (fact) => {
-        const paths = await Promise.all(
-          fact.paths.map(async (path) => ({
-            path,
-            available: await safePath(root, path)
-              .then((p) => stat(p))
-              .then((v) => v.isFile())
-              .catch(() => false),
-          })),
-        )
-        const supported =
-          !fact.source.startsWith('file:') ||
-          (await sourceExcerpt(root, fact.source.slice(5), 32768)
-            .then((t) => t.includes(fact.quote))
-            .catch(() => false))
-        return { ...fact, paths, supportedInCheckout: supported }
-      }),
+      latest
+        .filter((f) => !inactive.has(f))
+        .map(async (fact) => {
+          const paths = await Promise.all(
+            fact.paths.map(async (path) => ({
+              path,
+              available: await safePath(root, path)
+                .then((p) => stat(p))
+                .then((v) => v.isFile())
+                .catch(() => false),
+            })),
+          )
+          const supported =
+            !fact.source.startsWith('file:') ||
+            (await sourceExcerpt(root, fact.source.slice(5), 32768)
+              .then((t) => t.includes(fact.quote))
+              .catch(() => false))
+          return { ...fact, paths, supportedInCheckout: supported }
+        }),
     )
     const owners = await ownerBrief(root, s.cwd, db, localJobs)
     const conflicts = syncBrief(db, s.home)
-    return { facts, owners, projectBrief: readBrief(s.home), briefConflicts: conflicts }
+
+    const projectBrief = readBrief(s.home)
+    return {
+      facts,
+      owners,
+      projectBrief,
+      briefConflicts: conflicts,
+      inactiveKeys: [...inactive].map(({ key, revision }) => ({ key, revision })),
+    }
   }
 
   pi.on('before_agent_start', async (event, ctx) => {
@@ -152,6 +187,7 @@ export function registerProjectMemory(
             JSON.stringify({
               ...(priority && { userSelectedPriority: priority.text }),
               ...data,
+              projectBrief: withoutBriefEntry(data.projectBrief, 'current-priority'),
               sourcePaths: sources,
               bootstrap: excerpts,
             }),
@@ -171,6 +207,7 @@ export function registerProjectMemory(
     outputSchema: Type.Array(
       Type.Object({
         key: Type.String(),
+        until: Type.Optional(Type.Union([Type.String(), Type.Null()])),
         revision: Type.Integer(),
         kind: Type.String(),
         text: Type.String(),
@@ -194,7 +231,9 @@ export function registerProjectMemory(
       'message, a repo-relative file path, or "task:<id>" for a delivered worker result. ' +
       'Use source "recorded" to share an existing fact verbatim at its current revision. ' +
       'Set share=true for durable team-facing facts. Task results stay local. ' +
-      'Use current-priority for the user’s explicit ordering of ongoing work. ' +
+      'Task instructions, PR batches and one-off permissions belong in the conversation only. ' +
+      'A project-wide current-priority requires scope=project and a quoted milestone boundary ' +
+      'in until. Retire a stale key with kind=retired and evidence. Never act on old permission. ' +
       'Supply the displayed revision (0 for new keys). Batch related changes.',
     parameters: Type.Object({ facts: Type.Array(factSchema, { minItems: 1, maxItems: 12 }) }),
     async execute(_id, input, _signal, _update, ctx) {
@@ -209,6 +248,10 @@ export function registerProjectMemory(
       const portable = []
 
       for (const value of input.facts) {
+        if (value.scope === 'task') {
+          continue
+        }
+
         if (value.source === 'recorded') {
           const old = s.db.facts().find((f) => f.key === value.key)
 
@@ -217,7 +260,8 @@ export function registerProjectMemory(
             old.revision !== value.revision ||
             old.text !== value.text ||
             old.kind !== value.kind ||
-            old.quote !== value.quote
+            old.quote !== value.quote ||
+            old.kind === 'retired'
           ) {
             throw new Error('Use the exact current fact when checkpointing recorded evidence')
           }
@@ -235,18 +279,40 @@ export function registerProjectMemory(
 
         if (
           value.key === 'current-priority' &&
+          value.kind !== 'retired' &&
           (value.source !== 'user' || !['decision', 'resolved'].includes(value.kind))
         ) {
           throw new Error('Changing current-priority requires a quoted user decision or resolution')
         }
 
+        if (
+          value.key === 'current-priority' &&
+          value.kind === 'decision' &&
+          (value.scope !== 'project' || !value.until)
+        ) {
+          throw new Error(
+            'One-off orders stay in this task. Project priority requires explicit ' +
+              'project scope and a source-quoted milestone boundary in until.',
+          )
+        }
+
+        if (value.kind === 'retired' && value.revision === 0) {
+          throw new Error('Retire an existing project fact by its current revision')
+        }
+
         const evidence = await evidenceFor(ctx, s.root, s.db, value.source, value.quote)
+
+        if (value.until) {
+          await evidenceFor(ctx, s.root, s.db, value.source, value.until)
+        }
 
         if (
           value.source.startsWith('task:') &&
-          !['observation', 'inference'].includes(value.kind)
+          !['observation', 'inference', 'retired'].includes(value.kind)
         ) {
-          throw new Error('Worker evidence supports observations and inferences only')
+          throw new Error(
+            'Worker evidence supports observations, inferences or evidence of retirement',
+          )
         }
 
         const paths = [
@@ -269,6 +335,10 @@ export function registerProjectMemory(
         if (line) {
           portable.push(line)
         }
+      }
+
+      if (!facts.length) {
+        return textResult({ recorded: [] })
       }
 
       const upToDate = lastFacts === JSON.stringify(s.db.facts()) && lastBrief === readBrief(s.home)
@@ -312,7 +382,12 @@ export function registerProjectMemory(
     const changes = Object.fromEntries(
       (Object.keys(current) as (keyof typeof current)[])
         .filter((key) => JSON.stringify(current[key]) !== JSON.stringify(previous[key]))
-        .map((key) => [key, current[key]]),
+        .map((key) => [
+          key,
+          key === 'projectBrief'
+            ? withoutBriefEntry(current.projectBrief, 'current-priority')
+            : current[key],
+        ]),
     )
 
     if (Object.keys(changes).length) {

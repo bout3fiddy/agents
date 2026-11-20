@@ -532,8 +532,10 @@ export async function awaitBranchChecks(
       continue
     }
 
-    const reported = await checks(pr, expectedHead, combined, options)
-    const reviewed = await reviews(pr, combined, options)
+    const [reported, reviewed] = await Promise.all([
+      checks(pr, expectedHead, combined, options),
+      reviews(pr, combined, options),
+    ])
 
     if (!(await inspect())) {
       await delay(Math.min(pollMs, headSyncMs), undefined, { signal: combined })

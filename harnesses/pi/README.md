@@ -603,10 +603,12 @@ scripts; formatting changes to those scripts preserve their behavior.
 Local implementation hands unchanged, out-of-scope harness lint failures to the host when all
 diagnostics can be attributed. The gate stays failed and the candidate remains available.
 
-When the user sets an ongoing priority, Pi records it in repository memory and shows it on later
-host turns. A side question or worker notification leaves the order intact. Required audit findings
-reach the host with their report path. An empty first response to an actionable audit gets one
-follow-up opportunity at idle, subject to queued user input.
+One-time commands and approvals stay with their task. A cross-task priority requires a quoted
+milestone boundary. Pi checks its relevance before planning and can retire it on evidence from the
+user, checkout or worker. History retains its revisions. Older priorities without a boundary drop
+out of active recall on upgrade. Required audit findings reach the host with their report path. An
+empty first response to an actionable audit gets one follow-up opportunity at idle, subject to
+queued user input.
 
 ### GitHub Actions follow-up
 
@@ -615,3 +617,8 @@ repository, run ID and intended follow-up in its session. Pi checks GitHub every
 that conversation is open and wakes it at idle with the conclusion, commit and attempt. Reopening
 the same session restores outstanding watches. Three consecutive lookup failures wake the host with
 a diagnostic. The host retains its existing permissions for any subsequent action.
+
+For a PR merge, pass its number and expected head in the watch's `pullRequest` field. A changed
+head, conflict or closed PR wakes the session even while the old run is pending. Query `inspect_pr`
+with `includeQueue: true` to distinguish verified GitHub queue membership from a local watch.
+Ordinary inspections keep their single GitHub query.

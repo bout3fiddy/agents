@@ -34,6 +34,9 @@ when a script catches an error or prints only part of a result.
 
 - `project_memory_history`. Host inspection of sourced revisions for a specific fact.
 
+- `inspect_ci_run`. Batch run IDs for the baseline and candidate. Compare wallMs, lastFinishingJob,
+  longestJobs and sameHeadRuns. Check jobsObserved against jobsTotal before generalizing.
+
 - `inspect_pr`, `review_receipts`. Host inspections. Read baseRefName, baseRefOid and headRefOid in
   the same query as mergeability, reviews and checks. Read required findings and check snapshots
   from receipts. Missing receipts are null. Final runner checks supersede provisional coordinator

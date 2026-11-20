@@ -9,6 +9,7 @@ export interface MemoryFact {
   text: string
   source: string
   quote: string
+  until?: string
   paths: string[]
 }
 export interface PendingLine {
@@ -31,6 +32,9 @@ export class MemoryStore {
       CREATE TABLE IF NOT EXISTS facts (
         key TEXT NOT NULL, revision INTEGER NOT NULL, kind TEXT NOT NULL, text TEXT NOT NULL,
         source TEXT NOT NULL, quote TEXT NOT NULL, paths TEXT NOT NULL,
+        PRIMARY KEY(key,revision));
+      CREATE TABLE IF NOT EXISTS lifetimes (
+        key TEXT NOT NULL, revision INTEGER NOT NULL, until TEXT NOT NULL,
         PRIMARY KEY(key,revision));
       CREATE TABLE IF NOT EXISTS hosts (path TEXT PRIMARY KEY);
       CREATE TABLE IF NOT EXISTS pending (
@@ -116,8 +120,10 @@ export class MemoryStore {
   history(key: string) {
     return this.db
       .prepare(
-        `SELECT *, 'current-store' AS origin FROM facts WHERE key=?
-        UNION ALL SELECT *, 'legacy-conflict' AS origin FROM legacy_conflicts WHERE key=?
+        `SELECT f.*, l.until, 'current-store' AS origin FROM facts f
+        LEFT JOIN lifetimes l USING(key,revision) WHERE f.key=?
+        UNION ALL SELECT *, NULL AS until, 'legacy-conflict' AS origin
+        FROM legacy_conflicts WHERE key=?
         ORDER BY revision DESC LIMIT 12`,
       )
       .all(key, key) as unknown as (StoredFact & { origin: string })[]
@@ -127,11 +133,12 @@ export class MemoryStore {
     return (
       this.db
         .prepare(
-          `SELECT f.* FROM facts f WHERE revision =
+          `SELECT f.*, l.until FROM facts f LEFT JOIN lifetimes l USING(key,revision)
+      WHERE f.revision =
       (SELECT MAX(revision) FROM facts WHERE key=f.key) ORDER BY key`,
         )
         .all() as unknown as StoredFact[]
-    ).map((row) => ({ ...row, paths: JSON.parse(row.paths) }))
+    ).map((row) => ({ ...row, until: row.until ?? undefined, paths: JSON.parse(row.paths) }))
   }
 
   publishPending(write: (rows: PendingLine[]) => string[]) {
@@ -163,7 +170,8 @@ export class MemoryStore {
 
     try {
       const current = this.db.prepare(
-        'SELECT * FROM facts WHERE key=? ORDER BY revision DESC LIMIT 1',
+        `SELECT f.*, l.until FROM facts f LEFT JOIN lifetimes l USING(key,revision)
+         WHERE f.key=? ORDER BY f.revision DESC LIMIT 1`,
       )
       const insert = this.db.prepare('INSERT INTO facts VALUES(?,?,?,?,?,?,?)')
 
@@ -176,7 +184,8 @@ export class MemoryStore {
           old.kind === fact.kind &&
           old.paths === paths &&
           old.source === fact.source &&
-          old.quote === fact.quote
+          old.quote === fact.quote &&
+          (old.until ?? undefined) === fact.until
         ) {
           recorded.push({ key: fact.key, revision: Number(old.revision) })
           continue
@@ -197,6 +206,13 @@ export class MemoryStore {
           fact.quote,
           paths,
         )
+
+        if (fact.until) {
+          this.db
+            .prepare('INSERT INTO lifetimes VALUES(?,?,?)')
+            .run(fact.key, fact.revision + 1, fact.until)
+        }
+
         recorded.push({ key: fact.key, revision: fact.revision + 1 })
       }
 

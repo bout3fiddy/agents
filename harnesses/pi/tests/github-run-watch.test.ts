@@ -8,7 +8,14 @@ import { textResult } from '../src/file-tools.ts'
 import { captureSession } from './session-support.ts'
 import { fixture } from './support.ts'
 
-for (const outcome of ['success', 'failure', 'unavailable']) {
+const changed = {
+  moved: 'b'.repeat(40),
+  conflict: 'CONFLICTING',
+  closed: 'CLOSED',
+  mismatch: 'different commit',
+}
+
+for (const outcome of ['success', 'failure', 'unavailable', ...Object.keys(changed)]) {
   test(`an idle session continues after GitHub run ${outcome} across reload`, async () => {
     const { root, base } = await fixture()
     let completed = false
@@ -32,6 +39,17 @@ for (const outcome of ['success', 'failure', 'unavailable']) {
           registerGitHubRunWatch(
             pi,
             async (args) => {
+              if (args[1] === 'graphql') {
+                return JSON.stringify({
+                  number: 42,
+                  state: completed && outcome === 'closed' ? 'CLOSED' : 'OPEN',
+                  headRefOid: (completed && outcome === 'moved' ? 'b' : 'a').repeat(40),
+                  isInMergeQueue: false,
+                  mergeable: completed && outcome === 'conflict' ? 'CONFLICTING' : 'MERGEABLE',
+                  mergeStateStatus: 'CLEAN',
+                })
+              }
+
               assert.equal(args.at(-1), 'repos/fixture/project/actions/runs/75')
               queried++
 
@@ -42,9 +60,9 @@ for (const outcome of ['success', 'failure', 'unavailable']) {
 
               return JSON.stringify({
                 id: 75,
-                status: completed ? 'completed' : 'in_progress',
-                conclusion: completed ? outcome : null,
-                head_sha: 'a'.repeat(40),
+                status: completed && !(outcome in changed) ? 'completed' : 'in_progress',
+                conclusion: completed && !(outcome in changed) ? outcome : null,
+                head_sha: (completed && outcome === 'mismatch' ? 'b' : 'a').repeat(40),
                 run_attempt: 2,
                 run_started_at: '2026-11-20T18:54:28Z',
                 updated_at: '2026-11-20T19:08:03Z',
@@ -76,6 +94,9 @@ for (const outcome of ['success', 'failure', 'unavailable']) {
               arguments: {
                 repository: 'Fixture/Project',
                 runId: 75,
+                ...(outcome in changed && {
+                  pullRequest: { number: 42, expectedHead: 'a'.repeat(40) },
+                }),
                 followUp: steps === 1 ? 'First plan' : 'Compare with the seven-minute target.',
               },
             },
@@ -91,7 +112,7 @@ for (const outcome of ['success', 'failure', 'unavailable']) {
 
         if (last.includes('GitHub Actions watch finished.')) {
           assert.match(last, /seven-minute target/)
-          assert.ok(last.includes(outcome))
+          assert.ok(last.includes(changed[outcome as keyof typeof changed] ?? outcome))
 
           if (outcome !== 'unavailable') {
             assert.ok(last.includes('a'.repeat(40)))

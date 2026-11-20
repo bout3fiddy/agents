@@ -1,6 +1,8 @@
 import { join } from 'node:path'
 import type { ExtensionAPI } from '@earendil-works/pi-coding-agent'
 import { Type } from 'typebox'
+import { inspectCiRun } from './ci-timing.ts'
+import { githubPrState } from './github-pr-state.ts'
 import { githubCommand } from './branch-github.ts'
 import { receiptView } from './context.ts'
 import { resultSchema, type Receipt, type WorkerEvidence } from './contracts.ts'
@@ -26,6 +28,7 @@ export const nestedInspectionTools = new Set([
   'project_memory_history',
   'review_receipts',
   'inspect_pr',
+  'inspect_ci_run',
 ])
 
 export async function reviewReceipts(store: StateStore, id: string) {
@@ -103,6 +106,32 @@ const reviewSchema = Type.Object({
 
 export function inspectionTools(pi: ExtensionAPI): void {
   pi.registerTool({
+    name: 'inspect_ci_run',
+    label: 'Inspect CI timings',
+    description:
+      'Measure Actions attempt wall time, job start delays, slow steps, last finisher ' +
+      'and other runs of the same workflow on this head. Batch comparable runs in codemode.',
+    parameters: Type.Object({
+      repository: Type.String({ pattern: '^[a-zA-Z0-9-]+/[a-zA-Z0-9_.-]+$' }),
+      runId: Type.Integer({ minimum: 1, maximum: Number.MAX_SAFE_INTEGER }),
+    }),
+    outputSchema: Type.Object(
+      {
+        runId: Type.Integer(),
+        head: Type.String(),
+        attempt: Type.Integer(),
+        wallMs: Type.Union([Type.Integer(), Type.Null()]),
+        longestJobs: Type.Array(Type.Object({}, { additionalProperties: true })),
+        sameHeadRuns: Type.Array(Type.Object({}, { additionalProperties: true })),
+      },
+      { additionalProperties: true },
+    ),
+    async execute(_id, { repository, runId }, signal) {
+      const value = await inspectCiRun(repository, runId, signal)
+      return { ...textResult(value), structuredContent: value }
+    },
+  })
+  pi.registerTool({
     name: 'review_receipts',
     label: 'Inspect review receipts',
     description:
@@ -138,10 +167,11 @@ export function inspectionTools(pi: ExtensionAPI): void {
     name: 'inspect_pr',
     label: 'Inspect pull request',
     description:
-      'Read PR base branch and commit, head commit, reviews and check URLs in one query.',
+      'Read PR commits, reviews and checks. Set includeQueue to verify GitHub queue membership.',
     parameters: Type.Object({
       repository: Type.String({ pattern: '^[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+$' }),
       number: Type.Integer({ minimum: 1 }),
+      includeQueue: Type.Optional(Type.Boolean()),
     }),
     outputSchema: Type.Object(
       {
@@ -152,6 +182,8 @@ export function inspectionTools(pi: ExtensionAPI): void {
         number: Type.Integer(),
         isDraft: Type.Boolean(),
         mergeable: Type.String(),
+        isInMergeQueue: Type.Optional(Type.Boolean()),
+        mergeStateStatus: Type.Optional(Type.String()),
         reviewDecision: nullableString,
         statusCheckRollup: Type.Array(
           Type.Object({
@@ -174,7 +206,7 @@ export function inspectionTools(pi: ExtensionAPI): void {
       },
       { additionalProperties: true },
     ),
-    async execute(_call, { repository, number }, signal) {
+    async execute(_call, { repository, number, includeQueue }, signal) {
       const fields =
         'number,state,isDraft,baseRefName,baseRefOid,headRefOid,mergeable,' +
         'reviewDecision,reviews,statusCheckRollup'
@@ -183,8 +215,8 @@ export function inspectionTools(pi: ExtensionAPI): void {
         'reviews:[.reviews[]|{state,author:.author.login,commit:.commit.oid}],' +
         'statusCheckRollup:[.statusCheckRollup[]|' +
         '{name,context,status,state,conclusion,detailsUrl,targetUrl}]}'
-      const value = JSON.parse(
-        await githubCommand(
+      const [raw, queue] = await Promise.all([
+        githubCommand(
           [
             'pr',
             'view',
@@ -198,7 +230,19 @@ export function inspectionTools(pi: ExtensionAPI): void {
           ],
           signal,
         ),
-      )
+        includeQueue ? githubPrState(repository, number, signal) : undefined,
+      ])
+      const value = JSON.parse(raw)
+
+      if (queue) {
+        if (queue.headRefOid !== value.headRefOid || queue.state !== value.state) {
+          throw new Error('PR changed during inspection; refresh its checks and queue state')
+        }
+
+        value.isInMergeQueue = queue.isInMergeQueue
+        value.mergeStateStatus = queue.mergeStateStatus
+      }
+
       return { ...textResult(value), structuredContent: value }
     },
   })

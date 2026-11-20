@@ -354,7 +354,9 @@ export async function runBranchTask(
       )
       await save({ pullRequest: pull?.url })
 
-      async function checkRemote(head: string, refresh = false) {
+      let discoveredHead: string | undefined
+
+      async function checkRemote(head: string) {
         const prior = previousHead
         previousHead = head
 
@@ -362,8 +364,9 @@ export async function runBranchTask(
           const receipt = await (adapters.checks ?? awaitBranchChecks)(pull, head, signal, {
             previousHead: prior,
             excludeAgentReviews: true,
-            ...(refresh ? { registrationGraceMs: 0 } : {}),
+            ...(discoveredHead === head ? { registrationGraceMs: 0 } : {}),
           })
+          discoveredHead = head
           await atomicJson(join(directory, `github-${head}.json`), receipt)
         }
 
@@ -428,7 +431,7 @@ export async function runBranchTask(
 
               // Reviews can wait minutes; CI, human objections and task controls must be fresh.
               if (revised === undefined) {
-                await checkRemote(head, true)
+                await checkRemote(head)
               }
 
               const finalControl = await controls()

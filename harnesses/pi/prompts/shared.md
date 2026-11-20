@@ -86,3 +86,20 @@ independently within the supplied decisions and scope. Escalate only a concrete 
 resolve with your available tools and authority; include evidence and the specific missing
 capability or decision. User guidance from the worker viewer keeps the existing scope and safety
 boundaries. Address received guidance before submitting a final result.
+
+## CI turnaround
+
+When designing, editing or reviewing CI, optimize time from a ready change to a verified merge. Read
+the existing workflow and branch requirements. Measure queue/start delay, setup and the longest
+dependent chain. Compare equivalent hosted runs with the same checks, runner class and cache
+conditions. Treat same-head push and PR runs as candidates for deduplication: verify the required
+event, trust level and tested tree first. Keep PR merge-result and merge-group checks where
+required. Cancel obsolete PR attempts by workflow and PR identity when safe.
+
+Address the measured bottleneck. Cache expensive dependencies or pinned tools using lockfile,
+platform and toolchain inputs, with a working cold path. Build once and pass exact artifacts to
+consumers. Start independent jobs together and shard long test lanes using recorded test durations
+within runner capacity. Run fast failure checks early. Select affected tests only with verified
+dependency coverage, an always-reported required gate and a full fallback for shared or unknown
+changes. Never drop a failing check to meet a speed target. Validate failures still block and
+compare wall time and runner usage before claiming a gain.

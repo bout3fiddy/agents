@@ -604,11 +604,14 @@ test('only a user decision replaces the foreground project priority', async (t) 
   const root = await realpath(await mkdtemp(join(tmpdir(), 'pi-priority-')))
   execFileSync('git', ['init', '-q', root])
   await writeFile(join(root, 'README.md'), 'Fix CI first')
+  const until = 'until launch'
+  const once = 'force merge them. then sync main and run ci tests locally'
   const updates = [
     { quote: 'Release first', source: 'user', revision: 0, kind: 'decision' },
     { quote: 'Fix CI first', source: 'README.md', revision: 1, kind: 'decision' },
     { quote: 'Fix CI first', source: 'user', revision: 1, kind: 'decision' },
-    { quote: 'Pause both', source: 'user', revision: 2, kind: 'resolved' },
+    { quote: 'Both finished', source: 'user', revision: 2, kind: 'retired' },
+    { quote: once, source: 'user', revision: 3, kind: 'decision' },
   ]
   let phase = 0
   let calls = 0
@@ -625,7 +628,12 @@ test('only a user decision replaces the foreground project priority', async (t) 
       }
 
       const update = updates[phase]!
-      const fact = { ...update, key: 'current-priority', text: update.quote }
+      const fact = {
+        ...update,
+        key: 'current-priority',
+        text: update.quote,
+        ...(phase < 3 && { scope: 'project', until }),
+      }
       return [
         {
           type: 'toolCall',
@@ -643,13 +651,14 @@ test('only a user decision replaces the foreground project priority', async (t) 
   })
 
   for (const prompt of [
-    'Release first',
+    'Release first until launch',
     'Read the README',
-    'Fix CI first',
-    'Pause both',
+    'Fix CI first until launch',
+    'Both finished',
+    once,
     'Status?',
   ]) {
-    calls = phase === 4 ? 1 : 0
+    calls = phase === 5 ? 1 : 0
     await session.prompt(prompt)
     await session.waitForIdle()
     const entry = session.sessionManager
@@ -661,5 +670,65 @@ test('only a user decision replaces the foreground project priority', async (t) 
   }
 
   assert.match(replies[1]!, /requires a quoted user decision/)
-  assert.deepEqual(frames, [undefined, 'Release first', 'Release first', 'Fix CI first', undefined])
+  assert.match(replies[4]!, /One-off orders stay in this task/)
+  assert.deepEqual(frames, [
+    undefined,
+    'Release first',
+    'Release first',
+    'Fix CI first',
+    undefined,
+    undefined,
+  ])
+  const repo = await memoryRepository(root)
+  assert.ok(repo)
+  const store = repositoryStore(repo)
+
+  try {
+    assert.deepEqual(
+      store.history('current-priority').map((r) => r.kind),
+      ['retired', 'decision', 'decision'],
+    )
+  } finally {
+    store.close()
+  }
+})
+
+test('a fresh worktree hides unscoped legacy priority, including wrapped brief text', async (t) => {
+  const base = await realpath(await mkdtemp(join(tmpdir(), 'pi-legacy-priority-')))
+  const root = join(base, 'main')
+  const other = join(base, 'other')
+  execFileSync('git', ['init', '-q', root])
+  execFileSync('git', ['-C', root, 'commit', '--allow-empty', '-qm', 'initial'])
+  execFileSync('git', ['-C', root, 'worktree', 'add', '--detach', other])
+  const repo = await memoryRepository(root)
+  assert.ok(repo)
+  const db = repositoryStore(repo)
+  const stale = 'Force merge those five PRs'
+  db.update([{ ...claim, key: 'current-priority', text: stale }])
+  await writeFile(
+    join(root, briefName),
+    '# Project state\n- **current-priority** (decision) Force merge those five PRs\n' +
+      '  and ignore unfinished CI.\n- Keep this milestone.\n',
+  )
+  const host = await captureSession(
+    other,
+    base,
+    [(pi) => registerProjectMemory(pi)],
+    async (ctx) => {
+      const frame = JSON.stringify(ctx.messages)
+      assert.match(frame, /Keep this milestone/)
+      assert.doesNotMatch(frame, /Force merge|unfinished CI|userSelectedPriority/)
+      return [{ type: 'text', text: 'OK' }]
+    },
+  )
+  t.after(async () => {
+    await host.session.dispose()
+    await host.runtime.settleCredentialWrites()
+    db.close()
+    await rm(base, { recursive: true, force: true })
+  })
+  await host.session.prompt('What next?')
+  await host.session.waitForIdle()
+  assert.equal(host.session.messages.findLast((m) => m.role === 'assistant')?.stopReason, 'stop')
+  assert.equal(db.history('current-priority')[0]?.text, stale)
 })

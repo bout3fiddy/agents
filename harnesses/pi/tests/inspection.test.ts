@@ -81,6 +81,7 @@ test('one scripted PR inspection returns check-run and commit-status links', asy
       'set -eu',
       'cd "$(dirname "$0")"',
       'echo "$3" >> calls',
+      'if [ "$2" = graphql ]; then cat queue.json; exit 0; fi',
       'echo "$7" | tr , "\\n" | grep -qx baseRefOid',
       'echo "$7" | tr , "\\n" | grep -qx baseRefName',
       'exec /usr/bin/jq -c "$9" pr.json',
@@ -89,7 +90,7 @@ test('one scripted PR inspection returns check-run and commit-status links', asy
   )
   await atomicJson(join(item.base, 'pr.json'), {
     number: 44,
-    headRefOid: 'fixture-head',
+    headRefOid: 'a'.repeat(40),
     baseRefOid: 'fixture-base',
     baseRefName: 'release',
     state: 'OPEN',
@@ -103,7 +104,16 @@ test('one scripted PR inspection returns check-run and commit-status links', asy
       { name: 'queued', status: 'QUEUED' },
     ],
   })
-  const code = [
+  const queue = {
+    number: 44,
+    state: 'OPEN',
+    headRefOid: 'a'.repeat(40),
+    isInMergeQueue: false,
+    mergeable: 'MERGEABLE',
+    mergeStateStatus: 'CLEAN',
+  }
+  await atomicJson(join(item.base, 'queue.json'), queue)
+  let code = [
     'const pr = await tools.inspect_pr({repository:"fixture/project",number:44});',
     'text([pr.baseRefName,pr.baseRefOid,pr.headRefOid]);',
     'text(pr.statusCheckRollup.map(c=>c.detailsUrl ?? c.targetUrl ?? null));',
@@ -127,9 +137,19 @@ test('one scripted PR inspection returns check-run and commit-status links', asy
 
   try {
     await session.prompt('Locate these checks on the current head.')
-    assert.match(reply, /release.*fixture-base.*fixture-head/)
+    assert.match(reply, /release.*fixture-base.*a{40}/)
     assert.match(reply, /example.org\/runs\/44.*example.org\/status\/44.*null/)
     assert.equal(await readFile(join(item.base, 'calls'), 'utf8'), '44\n')
+    code =
+      'const p=await tools.inspect_pr({repository:"fixture/project",number:44,' +
+      'includeQueue:true});text([p.isInMergeQueue,p.mergeStateStatus])'
+    called = false
+    await session.prompt('Is GitHub actually queuing it?')
+    assert.match(reply, /false.*CLEAN/)
+    await atomicJson(join(item.base, 'queue.json'), { ...queue, headRefOid: 'b'.repeat(40) })
+    called = false
+    await session.prompt('Recheck the refreshed candidate.')
+    assert.match(reply, /PR changed during inspection/)
   } finally {
     await session.dispose()
     await runtime.settleCredentialWrites()
