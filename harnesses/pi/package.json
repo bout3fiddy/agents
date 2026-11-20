@@ -1,6 +1,6 @@
 {
   "name": "@swadhin/pi-harness",
-  "version": "0.6.35",
+  "version": "0.6.36",
   "private": true,
   "type": "module",
   "engines": {
@@ -24,7 +24,8 @@
     "test:live:branches": "tsx scripts/live-branches.ts",
     "test:live:host": "tsx scripts/live-host-routing.ts",
     "test:live:recovery": "tsx scripts/live-task-recovery.ts",
-    "test:live:workers": "tsx scripts/live-workers.ts"
+    "test:live:workers": "tsx scripts/live-workers.ts",
+    "test:live:memory": "tsx scripts/live-project-memory.ts"
   },
   "dependencies": {
     "@earendil-works/pi-coding-agent": "1.5.2",

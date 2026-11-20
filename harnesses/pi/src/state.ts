@@ -75,11 +75,15 @@ export class StateStore {
   constructor(
     readonly projectRoot: string,
     stateRoot?: string,
+    initializeTraces = true,
   ) {
     this.projectRoot = realpathSync(projectRoot)
     this.directory = stateRoot
       ? join(stateRoot, digest(this.projectRoot).slice(0, 24))
-      : join(projectTraces(this.projectRoot), 'harness')
+      : join(
+          initializeTraces ? projectTraces(this.projectRoot) : join(this.projectRoot, '.pi/traces'),
+          'harness',
+        )
   }
 
   async draft(design: Design): Promise<string> {

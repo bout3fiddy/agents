@@ -73,7 +73,9 @@ function resultMessage(jobs: Delegation[]): CustomMessageEntryDraft {
     customType: 'pi-task-result',
     display: false,
     content:
-      'Background task outcome. Handle routine completions privately. ' +
+      'Background task outcome. Assess material changes to project dependencies or priorities. ' +
+      'Use the task receipt as evidence for any resulting project-memory change. ' +
+      'Handle routine completions privately. ' +
       'When an outcome changes what the user can use, decide or expect, combine related ' +
       'results into one short update. Answer pending questions first. ' +
       'For failures, inspect the retained candidate and evidence. ' +
@@ -89,6 +91,7 @@ function resultMessage(jobs: Delegation[]): CustomMessageEntryDraft {
 
 export function registerDelegation(pi: ExtensionAPI, launch: Launcher = launchDelegation) {
   pi.registerMessageRenderer('pi-task-progress', () => ({ render: () => [], invalidate() {} }))
+  let turnJobs: Delegation[] | undefined
   let current: ExtensionContext | undefined
   let closed = false
   let collecting = false
@@ -310,9 +313,9 @@ export function registerDelegation(pi: ExtensionAPI, launch: Launcher = launchDe
   })
   pi.on('before_agent_start', async (_event, ctx) => {
     current = ctx
-    const active = (await new Delegations(await storeFor(ctx.cwd)).list()).filter((job) =>
-      ownsTaskPaths(job.state),
-    )
+    const jobs = await new Delegations(await storeFor(ctx.cwd)).list()
+    turnJobs = jobs
+    const active = jobs.filter((job) => ownsTaskPaths(job.state))
 
     if (active.length) {
       return {
@@ -501,5 +504,5 @@ export function registerDelegation(pi: ExtensionAPI, launch: Launcher = launchDe
       )
     },
   })
-  return { start }
+  return { start, turnJobs: () => turnJobs }
 }

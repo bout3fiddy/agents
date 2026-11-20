@@ -6,6 +6,8 @@
   "skills": [],
   "tools": [
     "codemode",
+    "update_project_memory",
+    "project_memory_history",
     "review_receipts",
     "inspect_pr",
     "read",

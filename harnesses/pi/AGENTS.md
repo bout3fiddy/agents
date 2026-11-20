@@ -177,3 +177,8 @@ summarize tool payloads for display and retain the raw transcript behind the r k
 Automatic updates use the completed local install receipt and Pi’s TUI command dispatch. Exercise
 install, deferred reload and build verification in a disposable terminal with
 `uv run --with pexpect scripts/check-auto-reload.py` after changing this path.
+
+Repository memory belongs to the Pi agent directory. Resolve Git's common directory locally,
+validate evidence in the active checkout, preserve prior revisions and reconcile competing writes.
+Designs and task receipts own implementation state. Run the project-memory tests and
+`npm run test:live:memory` for changes to capture, recall or planning.

@@ -76,6 +76,14 @@ function supersededProgress(messages: ContextMessage[]): Set<ContextMessage> {
       continue
     }
 
+    if (message.customType === 'pi-project-memory') {
+      if (newer.has(message.customType)) {
+        obsolete.add(message)
+      }
+
+      newer.add(message.customType)
+    }
+
     const details = message.details as { taskId?: unknown; taskIds?: unknown } | undefined
 
     if (message.customType === 'pi-task-result' && Array.isArray(details?.taskIds)) {

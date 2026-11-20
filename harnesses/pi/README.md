@@ -277,6 +277,25 @@ and their results are recorded in the Claude JSONL trace. Research supplements p
 Run `npm run test:live:delegation -- --automatic` to exercise document routing from an ordinary
 request, concurrent discussion, completion acknowledgement and reload receipts.
 
+## Project memory
+
+Start Pi in any worktree of a local Git repository and talk normally. On the first substantive
+request it inspects a bounded set of README, design, documentation, entry point and test excerpts.
+Other worktrees reuse that source index. The orchestrator records consequential evidence during its
+ordinary turn. Routine conversation adds no fact. The private database lives under
+`~/.pi/agent/project-memory/<repository-id>/memory.sqlite` with the active Pi agent directory
+honored. Git's common directory identifies linked worktrees. Separate clones have separate memory.
+
+Each revision keeps its source, supporting quote, classification and relevant file paths. Pi checks
+those paths in the active checkout, reads current designs and worker receipts from their owners, and
+reconciles the plan again when project evidence changes before dispatch. Ask “what next?” or “why
+did that change?” in a fresh chat. Pi can retrieve the prior revisions. A worker's test result
+retains the checkout, candidate or commit recorded by its coordinator. Deployment and customer
+acceptance need their own evidence.
+
+Run `npm run test:live:memory` for the three-chat demo and correction rehearsal in a disposable
+repository with two worktrees. The branch-result portion uses a coordinator receipt fixture.
+
 ## Automatic harness updates
 
 An interactive host checks the completed local install receipt every three seconds. It applies a new
