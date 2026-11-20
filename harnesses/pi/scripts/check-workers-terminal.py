@@ -24,12 +24,14 @@ def record(root, role, task, parent=None, review=None, complete=False):
     directory = root / ".pi/traces/harness/workers" / identifier
     directory.mkdir(parents=True)
     now = datetime.now(timezone.utc).isoformat()
+    model = "claude-cli/claude-opus-5-5" if role == "reviewer" else "openai-codex/gpt-6.2-astra"
     info = {
         "id": identifier,
         "parentId": parent,
         "reviewOf": review,
         "role": role,
-        "model": "terminal-fixture/model",
+        "model": model,
+        "thinking": "high" if role == "reviewer" else "xhigh",
         "task": json.dumps({"task": task, "constraints": ["Preserve persistence semantics."]}),
         "scope": ["design/queue.md"],
         "writeLimits": [] if role == "reviewer" else ["design/**"],
@@ -183,7 +185,7 @@ def main():
         # The newer independent coordinator is first, followed by its performance worker.
         keys("\x1b[B\x1b[B\x1b[B\x1b[B\r")
         chat = capture("03-conversation")
-        assert "Review ·" in chat and "Café" in chat, chat
+        assert "Review · Opus 5.5 · high · Working" in chat and "Café" in chat, chat
         assert "design/queue.md" in chat and "raw-marker" not in chat, chat
         assert "src/worker.ts" in chat and "FAIL queue recovery" in chat, chat
 

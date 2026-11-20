@@ -241,6 +241,17 @@ test('chat view keeps raw toggle, scrolling, follow and wheel input', async () =
   const position = () =>
     view.render(80).find((line) => /(Conversation|Raw transcript) {2}──/.test(line))
   const readable = view.render(80).join('\n')
+  assert.match(readable, /test.model · effort unrecorded/)
+
+  for (const [model, thinking, expected] of [
+    ['openai-codex/gpt-6.2-astra', 'xhigh', 'Astra 6.2 · xhigh'],
+    ['claude-cli/claude-fable-5-2', 'medium', 'Fable 5.2 · medium'],
+    ['claude-cli/opus', 'high', 'Opus · high'],
+  ] as const) {
+    Object.assign(row.info, { model, thinking })
+    assert.ok(view.render(80).join('\n').includes(expected))
+  }
+
   assert.match(readable, /printed 29/)
   assert.doesNotMatch(readable, /"argv"/)
   const following = position()

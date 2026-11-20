@@ -37,7 +37,22 @@ function status(row: WorkerRow): string {
     return row.taskStatus && row.legacy ? row.taskStatus : row.state.status
   }
 
-  return `${row.state.tool ?? row.state.stage} · ${age(row.state.updatedAt)} ago`
+  const stage = row.state.stage === 'model' ? 'Working' : row.state.stage
+  return `${row.state.tool ?? stage} · ${age(row.state.updatedAt)} ago`
+}
+
+function modelLabel(id: string): string {
+  const model = id.split('/').at(-1) ?? id
+  const claude = /^(?:claude-)?(opus|fable)(?:-(\d+)-(\d+))?$/i.exec(model)
+  const gpt = /^gpt-([\d.]+)-(astra|sol|terra)$/i.exec(model)
+  const family = claude?.[1] ?? gpt?.[2]
+
+  if (!family) {
+    return id || 'Model unrecorded'
+  }
+
+  const version = gpt?.[1] ?? (claude?.[2] ? `${claude[2]}.${claude[3]}` : '')
+  return family[0]!.toUpperCase() + family.slice(1).toLowerCase() + (version ? ' ' + version : '')
 }
 
 /** Both the picker and the non-capturing panel observe existing processes only. */
@@ -442,12 +457,16 @@ export class WorkersView implements Focusable {
   }
 
   private renderChat(row: WorkerRow, width: number): string[] {
-    const heading = `${names[row.info.role] ?? row.info.role} · ${status(row)}`
+    const model = row.legacy ? 'Model unrecorded' : modelLabel(row.info.model)
+    const effort = row.info.thinking ?? 'effort unrecorded'
+    const heading = [names[row.info.role] ?? row.info.role, model, effort, status(row)].join(' · ')
     const attention = ['needs_attention', 'failed', 'blocked'].includes(
       row.taskStatus ?? row.state.status,
     )
     const header = [
-      this.theme.fg(attention ? 'warning' : 'accent', terminalText(heading)),
+      ...wrapTextWithAnsi(terminalText(heading), width).map((line) =>
+        this.theme.fg(attention ? 'warning' : 'accent', line),
+      ),
       terminalText(`Task: ${(row.title || taskTitle(row.info.task)).split('\n')[0]}`),
       terminalText(`By ${row.delegatedBy}${row.branch ? ` · ${row.branch}` : ''}`),
     ]
@@ -530,7 +549,9 @@ export class WorkersView implements Focusable {
     if (this.mode === 'details') {
       return [
         `Worker: ${row.id}`,
-        `Model: ${row.info.model}${row.info.thinking ? ` · ${row.info.thinking}` : ''}`,
+        row.legacy
+          ? 'Worker model and effort unrecorded'
+          : `Model: ${row.info.model} · ${row.info.thinking ?? 'effort unrecorded'}`,
         `Delegated by: ${row.delegatedBy}`,
         `Task status: ${row.taskStatus ?? row.state.status}`,
         `Repository: ${row.info.projectRoot}`,

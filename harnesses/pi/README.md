@@ -299,9 +299,10 @@ running.
 | Escape              | Return to the picker, then to the orchestrator                            |
 | Ctrl+O              | Return directly to the orchestrator                                       |
 
-The conversation renders worker prose as Markdown and shows tool activity alongside its outcome. Use
-the wheel in fullscreen Pi, or the arrow and page keys, to read earlier turns. Press **End** to
-follow new activity. Press **r** to inspect a tool’s original input and output.
+The conversation header shows the worker model and thinking level. The conversation renders prose as
+Markdown and shows tool activity alongside its outcome. Use the wheel in fullscreen Pi, or the arrow
+and page keys, to read earlier turns. Press **End** to follow new activity. Press **r** to inspect a
+tool’s original input and output.
 
 `/workers panel` toggles a compact, noncapturing panel at the upper right. It lists active subagents
 with the same hierarchy and leaves keyboard focus in the host input. Pi's extension API supplies an
