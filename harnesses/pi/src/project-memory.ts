@@ -4,7 +4,8 @@ import type { ExtensionAPI, ExtensionContext } from '@earendil-works/pi-coding-a
 import { textResult } from './file-tools.ts'
 import { digest, safePath } from './paths.ts'
 import { discoverSources, memoryRepository, sourceExcerpt, worktrees } from './memory-repository.ts'
-import { MemoryStore, type MemoryFact } from './memory-store.ts'
+import { briefName, portableLine, readBrief, repositoryStore, syncBrief } from './memory-files.ts'
+import type { MemoryStore, MemoryFact } from './memory-store.ts'
 import { ownerBrief } from './memory-owners.ts'
 import type { Delegation } from './delegation-state.ts'
 
@@ -17,6 +18,11 @@ const factSchema = Type.Object({
   text: Type.String({ minLength: 1, maxLength: 480 }),
   source: Type.String({ minLength: 1, maxLength: 240 }),
   quote: Type.String({ minLength: 1, maxLength: 380 }),
+  share: Type.Optional(
+    Type.Boolean({
+      description: 'Include this durable, repo-shareable claim in .pi/project-state.md.',
+    }),
+  ),
   paths: Type.Optional(Type.Array(Type.String({ maxLength: 240 }), { maxItems: 6 })),
 })
 
@@ -32,8 +38,9 @@ export function registerProjectMemory(
   pi: ExtensionAPI,
   currentJobs?: () => Delegation[] | undefined,
 ) {
-  let state: { db: MemoryStore; root: string; cwd: string } | undefined
+  let state: { db: MemoryStore; root: string; cwd: string; home: string } | undefined
   let lastPlan = ''
+  let lastBrief = ''
   let lastFacts = ''
   let lastOwners = ''
   const close = () => {
@@ -54,8 +61,8 @@ export function registerProjectMemory(
       return undefined
     }
 
-    const db = new MemoryStore(repo.identity)
-    state = { db, root: repo.root, cwd }
+    const db = repositoryStore(repo)
+    state = { db, root: repo.root, home: repo.home, cwd }
     db.host(cwd)
 
     if (!db.sources()) {
@@ -97,7 +104,8 @@ export function registerProjectMemory(
       }),
     )
     const owners = await ownerBrief(root, s.cwd, db, localJobs)
-    return { facts, owners }
+    const conflicts = syncBrief(db, s.home)
+    return { facts, owners, projectBrief: readBrief(s.home), briefConflicts: conflicts }
   }
 
   pi.on('before_agent_start', async (event, ctx) => {
@@ -120,6 +128,7 @@ export function registerProjectMemory(
       lastPlan = digest(JSON.stringify(data))
       lastFacts = JSON.stringify(s.db.facts())
       lastOwners = JSON.stringify(data.owners)
+      lastBrief = data.projectBrief
       const sources = s.db.sources() ?? []
       const initial = !data.facts.some((f) => f.source.startsWith('file:') && f.supportedInCheckout)
       const excerpts = initial
@@ -160,6 +169,8 @@ export function registerProjectMemory(
     description:
       'Quietly record consequential evidence. Use source "user" for the current user ' +
       'message, a repo-relative file path, or "task:<id>" for a delivered worker result. ' +
+      'Use source "recorded" to share an existing fact verbatim at its current revision. ' +
+      'Set share=true for durable team-facing facts. Task results stay local. ' +
       'Supply the displayed revision (0 for new keys). Batch related changes.',
     parameters: Type.Object({ facts: Type.Array(factSchema, { minItems: 1, maxItems: 12 }) }),
     async execute(_id, input, _signal, _update, ctx) {
@@ -171,7 +182,33 @@ export function registerProjectMemory(
 
       const facts: MemoryFact[] = []
 
+      const portable = []
+
       for (const value of input.facts) {
+        if (value.source === 'recorded') {
+          const old = s.db.facts().find((f) => f.key === value.key)
+
+          if (
+            !old ||
+            old.revision !== value.revision ||
+            old.text !== value.text ||
+            old.kind !== value.kind ||
+            old.quote !== value.quote
+          ) {
+            throw new Error('Use the exact current fact when checkpointing recorded evidence')
+          }
+
+          facts.push(old)
+          const worker = !old.source.startsWith('file:') && !old.source.startsWith('session:')
+          const line = portableLine(lastBrief, old, value.share, worker)
+
+          if (line) {
+            portable.push(line)
+          }
+
+          continue
+        }
+
         const evidence = await evidenceFor(ctx, s.root, s.db, value.source, value.quote)
 
         if (
@@ -194,18 +231,27 @@ export function registerProjectMemory(
           }
         }
 
-        facts.push({ ...value, source: evidence, paths })
+        const fact = { ...value, source: evidence, paths }
+        facts.push(fact)
+        const line = portableLine(lastBrief, fact, value.share, value.source.startsWith('task:'))
+
+        if (line) {
+          portable.push(line)
+        }
       }
 
-      const upToDate = lastFacts === JSON.stringify(s.db.facts())
-      const recorded = s.db.update(facts)
+      const upToDate = lastFacts === JSON.stringify(s.db.facts()) && lastBrief === readBrief(s.home)
+      const recorded = s.db.update(facts, portable)
+      const conflicts = syncBrief(s.db, s.home)
+      lastBrief = readBrief(s.home)
       const updatedFacts = JSON.stringify(s.db.facts())
 
-      if (upToDate) {
+      if (upToDate && !conflicts.length) {
         const current = await frame(s)
 
         if (
           updatedFacts === JSON.stringify(s.db.facts()) &&
+          lastBrief === current.projectBrief &&
           lastOwners === JSON.stringify(current.owners)
         ) {
           lastPlan = digest(JSON.stringify(current))
@@ -213,7 +259,11 @@ export function registerProjectMemory(
         }
       }
 
-      return textResult({ recorded })
+      return textResult({
+        recorded,
+        ...(portable.length && { brief: briefName, checkout: s.home }),
+        ...(conflicts.length && { reconcileKeys: conflicts, currentBrief: lastBrief }),
+      })
     },
   })
   pi.on('tool_call', async (event) => {
@@ -226,6 +276,7 @@ export function registerProjectMemory(
 
     if (lastPlan && revision !== lastPlan) {
       lastPlan = revision
+      lastBrief = current.projectBrief
       return {
         block: true,
         reason: 'Project evidence changed. Reconcile before dispatch: ' + JSON.stringify(current),

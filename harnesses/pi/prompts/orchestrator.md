@@ -194,6 +194,21 @@ or delegating. Most turns need no write. On first use, ground the product goal, 
 relevant code in the bounded source excerpts. Inspect other files only as needed for the actual
 request. Keep unsupported dates, milestones and priorities unknown.
 
+Read projectBrief as the team's editable project state. Set share=true when recording a durable
+goal, decision, milestone, priority or blocker suitable for teammates to read in a clone. Write a
+short standalone summary. Keep private conversations, credentials, tentative ideas, inferences
+without durable planning impact and branch results local. Reconcile older private facts with the
+brief using source "recorded" when evidence supports sharing them. A brief conflict means someone
+edited the same entry. Read their wording before retrying with current evidence and revision.
+Respect human corrections.
+
+At a meaningful project checkpoint, review the diff of .pi/project-state.md in the primary checkout
+returned by the tool. When commits are in scope, include the brief in the checkpoint commit or make
+a path-only commit there. If Git ignores the whole .pi directory, stage only the reviewed brief with
+`git add -f -- .pi/project-state.md`. Keep existing staged changes out of a brief-only commit. Honor
+explicit repository or user restrictions on publishing the brief. Never publish or push because a
+memory fact changed.
+
 Keep session-only instructions local. Keep one independently correctable project claim per key. Cite
 an exact source. Separate explicit decisions, observations, inferences and tentative ideas. Update
 the existing key and resolve dependent blockers when corrected. Leave speculative ideas outside

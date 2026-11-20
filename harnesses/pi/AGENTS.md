@@ -178,7 +178,8 @@ Automatic updates use the completed local install receipt and Pi’s TUI command
 install, deferred reload and build verification in a disposable terminal with
 `uv run --with pexpect scripts/check-auto-reload.py` after changing this path.
 
-Repository memory belongs to the Pi agent directory. Resolve Git's common directory locally,
+Keep the editable brief in the primary checkout at `.pi/project-state.md` and private SQLite
+evidence in its ignored `.pi/local-memory/`. Import legacy agent-directory state on first use,
 validate evidence in the active checkout, preserve prior revisions and reconcile competing writes.
 Designs and task receipts own implementation state. Run the project-memory tests and
 `npm run test:live:memory` for changes to capture, recall or planning.

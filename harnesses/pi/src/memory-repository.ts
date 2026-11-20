@@ -22,7 +22,23 @@ export async function memoryRepository(cwd: string) {
 
     const directory = await realpath(common)
     const info = await stat(directory, { bigint: true })
-    return { root: await realpath(root), identity: directory + '\0' + info.dev + ':' + info.ino }
+    const trees = await git('git', ['-C', root, 'worktree', 'list', '--porcelain', '-z'], {
+      timeout: 3000,
+    })
+    const primary = trees.stdout
+      .split('\0\0')
+      .find((record) => !record.split('\0').includes('bare'))
+    const home = primary?.split('\0')[0]?.slice('worktree '.length)
+
+    if (!home) {
+      return undefined
+    }
+
+    return {
+      root: await realpath(root),
+      home: await realpath(home),
+      identity: directory + '\0' + info.dev + ':' + info.ino,
+    }
   } catch {
     return undefined
   }

@@ -1,8 +1,6 @@
 import { DatabaseSync } from 'node:sqlite'
-import { mkdirSync } from 'node:fs'
-import { homedir } from 'node:os'
-import { join } from 'node:path'
-import { digest } from './paths.ts'
+import { existsSync } from 'node:fs'
+import { pathToFileURL } from 'node:url'
 
 export interface MemoryFact {
   key: string
@@ -13,28 +11,80 @@ export interface MemoryFact {
   quote: string
   paths: string[]
 }
+export interface PendingLine {
+  key: string
+  previous: string
+  line: string
+}
 type StoredFact = Omit<MemoryFact, 'paths'> & { paths: string }
 
 // One database per local clone. All worktrees use the same SQLite writer lock.
 export class MemoryStore {
   private readonly db: DatabaseSync
-  constructor(
-    identity: string,
-    dir = process.env.PI_HARNESS_AGENT_DIR ??
-      process.env.PI_CODING_AGENT_DIR ??
-      join(homedir(), '.pi', 'agent'),
-  ) {
-    const folder = join(dir, 'project-memory', digest(identity))
-    mkdirSync(folder, { recursive: true, mode: 0o700 })
-    this.db = new DatabaseSync(join(folder, 'memory.sqlite'))
-    this.db.exec(`PRAGMA busy_timeout=5000;
+  constructor(file: string, legacy?: string) {
+    this.db = new DatabaseSync(file)
+
+    try {
+      this.db.exec(`PRAGMA busy_timeout=5000;
       PRAGMA journal_mode=WAL;
       CREATE TABLE IF NOT EXISTS seed (id INTEGER PRIMARY KEY CHECK(id=1), paths TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS facts (
         key TEXT NOT NULL, revision INTEGER NOT NULL, kind TEXT NOT NULL, text TEXT NOT NULL,
         source TEXT NOT NULL, quote TEXT NOT NULL, paths TEXT NOT NULL,
         PRIMARY KEY(key,revision));
-      CREATE TABLE IF NOT EXISTS hosts (path TEXT PRIMARY KEY);`)
+      CREATE TABLE IF NOT EXISTS hosts (path TEXT PRIMARY KEY);
+      CREATE TABLE IF NOT EXISTS pending (
+        key TEXT PRIMARY KEY, previous TEXT NOT NULL, line TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS legacy_conflicts AS SELECT * FROM facts WHERE 0;
+      CREATE UNIQUE INDEX IF NOT EXISTS conflict_revision ON legacy_conflicts(key,revision);
+      CREATE TABLE IF NOT EXISTS migration (id INTEGER PRIMARY KEY, cursor INTEGER NOT NULL);`)
+
+      if (legacy && existsSync(legacy)) {
+        this.importLegacy(legacy)
+      }
+    } catch (error) {
+      this.db.close()
+      throw error
+    }
+  }
+
+  private importLegacy(file: string) {
+    this.db.prepare('ATTACH DATABASE ? AS legacy').run(pathToFileURL(file).href + '?mode=ro')
+
+    try {
+      const cursor = 'COALESCE((SELECT cursor FROM migration WHERE id=1),0)'
+      const tip = 'COALESCE((SELECT MAX(rowid) FROM legacy.facts),0)'
+
+      if (
+        this.db.prepare(`SELECT ${cursor} = ${tip} AS caughtUp`).get()?.caughtUp &&
+        this.db.prepare('SELECT id FROM migration').get()
+      ) {
+        return
+      }
+
+      // A live older host can finish a turn after the initial import. Divergent revisions are
+      // retained as history without replacing the decision made in the upgraded harness.
+
+      this.db.exec(`BEGIN IMMEDIATE;
+        INSERT OR IGNORE INTO legacy_conflicts
+          SELECT l.* FROM legacy.facts l WHERE l.rowid > ${cursor} AND EXISTS (
+            SELECT 1 FROM legacy.facts p JOIN main.facts f USING(key,revision)
+            WHERE p.key=l.key AND p.revision<=l.revision AND
+              (p.kind,p.text,p.source,p.quote,p.paths) IS NOT
+              (f.kind,f.text,f.source,f.quote,f.paths));
+        INSERT OR IGNORE INTO main.facts SELECT l.* FROM legacy.facts l WHERE l.rowid > ${cursor}
+          AND NOT EXISTS (SELECT 1 FROM legacy_conflicts c WHERE c.key=l.key);
+        INSERT OR IGNORE INTO hosts SELECT * FROM legacy.hosts;
+        INSERT OR IGNORE INTO seed SELECT * FROM legacy.seed;
+        INSERT OR REPLACE INTO migration VALUES(1,${tip});
+        COMMIT;`)
+    } finally {
+      if (this.db.isTransaction) {
+        this.db.exec('ROLLBACK')
+      }
+
+      this.db.exec('DETACH DATABASE legacy')
+    }
   }
 
   close() {
@@ -65,8 +115,12 @@ export class MemoryStore {
 
   history(key: string) {
     return this.db
-      .prepare('SELECT * FROM facts WHERE key=? ORDER BY revision DESC LIMIT 12')
-      .all(key)
+      .prepare(
+        `SELECT *, 'current-store' AS origin FROM facts WHERE key=?
+        UNION ALL SELECT *, 'legacy-conflict' AS origin FROM legacy_conflicts WHERE key=?
+        ORDER BY revision DESC LIMIT 12`,
+      )
+      .all(key, key)
   }
 
   facts(): MemoryFact[] {
@@ -80,7 +134,30 @@ export class MemoryStore {
     ).map((row) => ({ ...row, paths: JSON.parse(row.paths) }))
   }
 
-  update(facts: MemoryFact[]) {
+  publishPending(write: (rows: PendingLine[]) => string[]) {
+    if (!this.db.prepare('SELECT 1 FROM pending LIMIT 1').get()) {
+      return
+    }
+
+    this.db.exec('BEGIN IMMEDIATE')
+
+    try {
+      const rows = this.db.prepare('SELECT * FROM pending ORDER BY key').all()
+      const keys = write(rows as unknown as PendingLine[])
+      const drop = this.db.prepare('DELETE FROM pending WHERE key=?')
+
+      for (const key of keys) {
+        drop.run(key)
+      }
+
+      this.db.exec('COMMIT')
+    } catch (error) {
+      this.db.exec('ROLLBACK')
+      throw error
+    }
+  }
+
+  update(facts: MemoryFact[], portable: PendingLine[] = []) {
     const recorded: { key: string; revision: number }[] = []
     this.db.exec('BEGIN IMMEDIATE')
 
@@ -121,6 +198,12 @@ export class MemoryStore {
           paths,
         )
         recorded.push({ key: fact.key, revision: fact.revision + 1 })
+      }
+
+      const enqueue = this.db.prepare('INSERT OR REPLACE INTO pending VALUES(?,?,?)')
+
+      for (const row of portable) {
+        enqueue.run(row.key, row.previous, row.line)
       }
 
       this.db.exec('COMMIT')

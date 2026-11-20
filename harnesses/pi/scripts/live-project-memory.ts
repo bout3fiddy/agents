@@ -12,7 +12,7 @@ import {
   SettingsManager,
 } from '@earendil-works/pi-coding-agent'
 import harness from '../src/extension.ts'
-import { MemoryStore } from '../src/memory-store.ts'
+import { briefName, readBrief, repositoryStore } from '../src/memory-files.ts'
 import { memoryRepository } from '../src/memory-repository.ts'
 import { StateStore, atomicJson, readJson } from '../src/state.ts'
 import { loadRole } from '../src/roles.ts'
@@ -94,7 +94,7 @@ const repo = await memoryRepository(root)
 assert.ok(repo)
 const a = await chat(root)
 await ask(a, 'Planning only for now. What does this project do and where is its integration?')
-const db = new MemoryStore(repo.identity)
+const db = repositoryStore(repo)
 assert.match(JSON.stringify(db.facts()), /Relay Desk/i)
 assert.ok(db.facts().some((f) => f.paths.includes('src/integration.ts')))
 await ask(
@@ -194,3 +194,32 @@ assert.ok(db.facts().some((f) => f.revision > 1 && /arrived early|has them now/i
 console.log(JSON.stringify({ facts: db.facts(), sources: db.sources() }))
 await c.dispose()
 db.close()
+
+const brief = readBrief(root)
+assert.match(brief, /Friday/i)
+assert.doesNotMatch(brief, /session:|PDF export|\.pi\/traces/i)
+git('add', '-f', '--', briefName)
+git(
+  '-c',
+  'user.name=Pi',
+  '-c',
+  'user.email=pi@example.invalid',
+  'commit',
+  '--only',
+  '-qm',
+  'Checkpoint project state',
+  '--',
+  briefName,
+)
+const clone = join(base, 'fresh-clone')
+git('clone', '-q', root, clone)
+const fresh = await chat(clone)
+
+try {
+  const recalled = await ask(fresh, 'What is our priority, and are we still waiting for access?')
+  assert.match(recalled, /Friday/i)
+  assert.match(recalled, /production|live integration/i)
+  assert.match(recalled, /receiv|arriv|have|available|obtained|no longer/i)
+} finally {
+  await fresh.dispose()
+}

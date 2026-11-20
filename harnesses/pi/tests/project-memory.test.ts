@@ -1,10 +1,17 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { execFileSync } from 'node:child_process'
-import { mkdtemp, mkdir, writeFile, realpath, rm, symlink } from 'node:fs/promises'
+import { mkdtemp, mkdir, writeFile, readFile, realpath, rm, symlink } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Type } from 'typebox'
+import {
+  briefName,
+  portableLine,
+  readBrief,
+  repositoryStore,
+  syncBrief,
+} from '../src/memory-files.ts'
 import { MemoryStore, type MemoryFact } from '../src/memory-store.ts'
 import { memoryRepository, discoverSources } from '../src/memory-repository.ts'
 import { registerProjectMemory } from '../src/project-memory.ts'
@@ -12,6 +19,7 @@ import { captureSession } from './session-support.ts'
 import { registerDelegation } from '../src/delegation-tools.ts'
 import { atomicJson, StateStore } from '../src/state.ts'
 import { delegationDirectory } from '../src/delegation-state.ts'
+import { digest, inventory, sensitive } from '../src/paths.ts'
 import { textResult } from '../src/file-tools.ts'
 
 const claim: MemoryFact = {
@@ -26,8 +34,8 @@ const claim: MemoryFact = {
 
 test('concurrent corrections preserve history and roll back stale batches', async (t) => {
   const dir = await mkdtemp(join(tmpdir(), 'pi-memory-db-'))
-  const first = new MemoryStore('project', dir)
-  const second = new MemoryStore('project', dir)
+  const first = new MemoryStore(join(dir, 'memory.sqlite'))
+  const second = new MemoryStore(join(dir, 'memory.sqlite'))
   t.after(async () => {
     first.close()
     second.close()
@@ -73,8 +81,8 @@ test('bootstrap is shared across worktrees and scoped to the local clone', async
   assert.ok(a && b)
   assert.equal(a.identity, b.identity)
   assert.notEqual(a.root, b.root)
-  const first = new MemoryStore(a.identity, base)
-  const second = new MemoryStore(b.identity, base)
+  const first = repositoryStore(a)
+  const second = repositoryStore(b)
   t.after(() => {
     first.close()
     second.close()
@@ -85,7 +93,7 @@ test('bootstrap is shared across worktrees and scoped to the local clone', async
   git('clone', '-q', root, join(base, 'clone'))
   const clone = await memoryRepository(join(base, 'clone'))
   assert.ok(clone && clone.identity !== a.identity)
-  const separate = new MemoryStore(clone.identity, base)
+  const separate = repositoryStore(clone)
   t.after(() => separate.close())
   assert.equal(separate.sources(), undefined)
 })
@@ -109,7 +117,7 @@ test('Pi checks evidence and reconciles changed priorities before dispatch', asy
   })
   const repo = await memoryRepository(root)
   assert.ok(repo)
-  const concurrent = new MemoryStore(repo.identity)
+  const concurrent = repositoryStore(repo)
   t.after(() => concurrent.close())
   let step = 0
   let dispatched = 0
@@ -230,6 +238,7 @@ test('fresh chat resolves saved paths without repeating discovery', async (t) =>
                   revision: 0,
                   kind: 'observation',
                   text: 'Parcel Relay syncs orders',
+                  share: true,
                   quote: 'Parcel Relay synchronizes orders.',
                   source: 'README.md',
                   paths: ['main.ts'],
@@ -280,6 +289,42 @@ test('fresh chat resolves saved paths without repeating discovery', async (t) =>
     assert.equal(reply?.stopReason, 'stop', reply?.errorMessage)
   } finally {
     await b.session.dispose()
+  }
+
+  const markdown = await readFile(join(root, briefName), 'utf8')
+  assert.match(markdown, /Parcel Relay syncs orders/)
+  assert.doesNotMatch(markdown, /Parcel Relay synchronizes orders|session:|file:/)
+  assert.equal(
+    git('status', '--porcelain', '--untracked-files=all').toString().trim(),
+    '?? ' + briefName,
+  )
+  await writeFile(join(root, '.gitignore'), '.pi/\n')
+  git('add', '.gitignore')
+  git('-c', 'user.name=Pi', '-c', 'user.email=pi@example.invalid', 'commit', '-qm', 'Ignore Pi')
+  git('add', '-f', '--', briefName)
+  assert.equal(git('diff', '--cached', '--name-only').toString().trim(), briefName)
+  git('-c', 'user.name=Pi', '-c', 'user.email=pi@example.invalid', 'commit', '-qm', 'Project brief')
+  const clone = join(base, 'fresh-clone')
+  git('clone', '-q', root, clone)
+  const fresh = await captureSession(
+    clone,
+    base,
+    [(pi) => registerProjectMemory(pi)],
+    async (ctx) => {
+      const messages = JSON.stringify(ctx.messages)
+      assert.match(messages, /projectBrief.*Parcel Relay syncs orders/)
+      assert.doesNotMatch(messages, /file:README/)
+      return [{ type: 'text', text: 'Recovered the project goal from the brief.' }]
+    },
+  )
+
+  try {
+    await fresh.session.prompt('What next?')
+    await fresh.session.waitForIdle()
+    const response = fresh.session.messages.findLast((m) => m.role === 'assistant')
+    assert.equal(response?.stopReason, 'stop', response?.errorMessage)
+  } finally {
+    await fresh.session.dispose()
   }
 })
 
@@ -351,6 +396,7 @@ test('delivered worker evidence keeps its branch and commit', async (t) => {
               facts: [
                 {
                   key: 'sandbox-option',
+                  share: true,
                   revision: 0,
                   kind: 'inference',
                   text: 'The sandbox fallback is unavailable pending provider recovery.',
@@ -372,7 +418,7 @@ test('delivered worker evidence keeps its branch and commit', async (t) => {
     await session.waitForIdle()
     const repo = await memoryRepository(root)
     assert.ok(repo)
-    const db = new MemoryStore(repo.identity, base)
+    const db = repositoryStore(repo)
 
     try {
       const [fact] = db.facts()
@@ -380,10 +426,171 @@ test('delivered worker evidence keeps its branch and commit', async (t) => {
       assert.equal(fact.kind, 'inference')
       assert.match(fact.source, /status.json @ demo @ f{40}/)
       assert.ok(fact.source.includes(id))
+      assert.equal(readBrief(repo.home), '')
     } finally {
       db.close()
     }
   } finally {
     await session.dispose()
+  }
+})
+
+test('replays pending edits and preserves human revisions', async (t) => {
+  const base = await realpath(await mkdtemp(join(tmpdir(), 'pi-memory-brief-')))
+  t.after(() => rm(base, { recursive: true, force: true }))
+  execFileSync('git', ['init', '-q', base])
+  const repo = await memoryRepository(base)
+  assert.ok(repo)
+  const db = repositoryStore(repo)
+  t.after(() => db.close())
+  const first = portableLine('', claim, true, false)
+  assert.ok(first)
+  assert.equal(portableLine('', { ...claim, kind: 'tentative' }, true, false), undefined)
+  db.update([claim], [first])
+  const other = repositoryStore(repo)
+  t.after(() => other.close())
+  const brief = join(base, briefName)
+  await writeFile(brief, '# Demo plan\n\nKeep this handwritten paragraph.\n')
+  assert.deepEqual(syncBrief(other, base), [])
+  const published = readBrief(base)
+  assert.match(published, /handwritten paragraph/)
+  assert.match(published, /Access arrives Monday/)
+  const correction = { ...claim, revision: 1, text: 'Credentials arrived early', kind: 'resolved' }
+  const next = portableLine(published, correction, undefined, false)
+  assert.ok(next)
+  db.update([correction], [next])
+  const edited = published.replace('Access arrives Monday', 'Access date unconfirmed')
+  await writeFile(brief, edited)
+  assert.deepEqual(syncBrief(other, base), [claim.key])
+  assert.equal(readBrief(base), edited)
+  const retry = portableLine(edited, correction, true, false)
+  assert.ok(retry)
+  db.update([correction], [retry])
+  syncBrief(db, base)
+  assert.match(readBrief(base), /Credentials arrived early/)
+  assert.doesNotMatch(readBrief(base), /Access date unconfirmed|session:first/)
+  assert.ok(!(await inventory(base)).has(briefName))
+  assert.ok(sensitive('.pi/local-memory/memory.sqlite-wal'))
+  assert.ok(![...(await inventory(base)).keys()].some((path) => path.includes('local-memory')))
+  await rm(brief)
+  await symlink(join(base, 'README.md'), brief)
+  assert.throws(() => readBrief(base))
+})
+
+test('upgrade imports legacy history and reconciles late writes from older hosts', async (t) => {
+  const base = await realpath(await mkdtemp(join(tmpdir(), 'pi-memory-migrate-')))
+  const root = join(base, 'root')
+  execFileSync('git', ['init', '-q', root])
+  const repo = await memoryRepository(root)
+  assert.ok(repo)
+  const legacy = join(base, 'project-memory', digest(repo.identity))
+  await mkdir(legacy, { recursive: true })
+  const old = new MemoryStore(join(legacy, 'memory.sqlite'))
+  old.seed(['README.md'])
+  old.host(root)
+  old.update([claim])
+  old.update([{ ...claim, revision: 1, kind: 'resolved' }])
+  const prior = process.env.PI_HARNESS_AGENT_DIR
+  process.env.PI_HARNESS_AGENT_DIR = base
+  t.after(async () => {
+    old.close()
+
+    if (prior) {
+      process.env.PI_HARNESS_AGENT_DIR = prior
+    } else {
+      delete process.env.PI_HARNESS_AGENT_DIR
+    }
+
+    await rm(base, { recursive: true, force: true })
+  })
+  const db = repositoryStore(repo)
+
+  try {
+    assert.deepEqual(
+      db.history(claim.key).map((row) => row.revision),
+      [2, 1],
+    )
+    assert.deepEqual(db.sources(), ['README.md'])
+    assert.deepEqual(db.hosts(), [root])
+    assert.equal(readBrief(root), '')
+    db.update([{ ...claim, revision: 2, text: 'Current decision' }])
+  } finally {
+    db.close()
+  }
+
+  old.update([{ ...claim, key: 'previous-version-only' }])
+  old.update([{ ...claim, revision: 2, text: 'Competing legacy decision' }])
+  old.update([{ ...claim, revision: 3, text: 'Follow-up to legacy decision' }])
+  const reopened = repositoryStore(repo)
+
+  try {
+    assert.deepEqual(
+      reopened.facts().map((f) => f.key),
+      [claim.key, 'previous-version-only'],
+    )
+    assert.equal(reopened.facts()[0]?.text, 'Current decision')
+    const conflicts = reopened.history(claim.key).filter((row) => row.origin === 'legacy-conflict')
+    assert.equal(conflicts.length, 2)
+  } finally {
+    reopened.close()
+  }
+})
+
+test('host can checkpoint an earlier verified decision', async (t) => {
+  const root = await realpath(await mkdtemp(join(tmpdir(), 'pi-memory-checkpoint-')))
+  execFileSync('git', ['init', '-q', root])
+  t.after(() => rm(root, { recursive: true, force: true }))
+  const repo = await memoryRepository(root)
+  assert.ok(repo)
+  const db = repositoryStore(repo)
+  const fact = { ...claim, kind: 'decision' }
+  db.update([fact])
+  t.after(() => db.close())
+  let step = 0
+  const host = await captureSession(
+    root,
+    root,
+    [(pi) => registerProjectMemory(pi)],
+    async (ctx) => {
+      step++
+
+      if (step === 2) {
+        assert.match(JSON.stringify(ctx.messages), /Use the exact current fact/)
+        assert.equal(readBrief(root), '')
+      }
+
+      if (step <= 2) {
+        return [
+          {
+            type: 'toolCall',
+            id: 'checkpoint-' + step,
+            name: 'update_project_memory',
+            arguments: {
+              facts: [
+                {
+                  ...fact,
+                  source: 'recorded',
+                  revision: 1,
+                  share: true,
+                  text: step === 1 ? 'An unsupported revision' : fact.text,
+                },
+              ],
+            },
+          },
+        ]
+      }
+
+      return [{ type: 'text', text: 'Updated the brief.' }]
+    },
+  )
+
+  try {
+    await host.session.prompt('Checkpoint the agreed project decision.')
+    await host.session.waitForIdle()
+    assert.equal(step, 3)
+    assert.match(readBrief(root), /Access arrives Monday/)
+    assert.equal(db.history(claim.key).length, 1)
+  } finally {
+    await host.session.dispose()
   }
 })

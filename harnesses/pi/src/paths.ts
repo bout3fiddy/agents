@@ -43,7 +43,8 @@ export function sensitive(path: string): boolean {
   return (
     parts.some(
       (part, index) =>
-        part === '.pi' && ['traces', 'audit', 'audits'].includes(parts[index + 1] ?? ''),
+        part === '.pi' &&
+        ['traces', 'audit', 'audits', 'local-memory'].includes(parts[index + 1] ?? ''),
     ) ||
     parts.some(
       (part) =>
@@ -58,6 +59,8 @@ export function sensitive(path: string): boolean {
 export function digest(value: string | Buffer): string {
   return createHash('sha256').update(value).digest('hex')
 }
+
+export const projectBriefPath = '.pi/project-state.md'
 
 export const maxFileBytes = 2_000_000
 
@@ -207,7 +210,7 @@ export async function inventory(root: string): Promise<Map<string, Buffer>> {
       const path = join(directory, entry.name)
       const name = relative(root, path).split(sep).join('/')
 
-      if (sensitive(name) || entry.isSymbolicLink()) {
+      if (name === projectBriefPath || sensitive(name) || entry.isSymbolicLink()) {
         continue
       }
 
@@ -257,7 +260,7 @@ export async function inventory(root: string): Promise<Map<string, Buffer>> {
 
   if (names) {
     for (const name of names) {
-      if (sensitive(name)) {
+      if (name === projectBriefPath || sensitive(name)) {
         continue
       }
 
