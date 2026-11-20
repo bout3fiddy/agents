@@ -120,7 +120,7 @@ export class MemoryStore {
         UNION ALL SELECT *, 'legacy-conflict' AS origin FROM legacy_conflicts WHERE key=?
         ORDER BY revision DESC LIMIT 12`,
       )
-      .all(key, key)
+      .all(key, key) as unknown as (StoredFact & { origin: string })[]
   }
 
   facts(): MemoryFact[] {

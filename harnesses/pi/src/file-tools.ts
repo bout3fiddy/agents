@@ -14,6 +14,12 @@ export function textResult(value: unknown) {
   }
 }
 
+// Keep direct output identical and transport the same JSON value across the script boundary.
+export function structuredResult(value: object) {
+  const result = textResult(value)
+  return { ...result, structuredContent: JSON.parse(result.content[0]!.text) }
+}
+
 const replacement = Type.Object({
   oldText: Type.String({ minLength: 1, maxLength: 200000 }),
   newText: Type.String({ maxLength: 200000 }),
@@ -101,11 +107,21 @@ export function fileTools(
       'Read numbered lines and folder rules. Continue at nextStartLine and nextStartColumn. ' +
       'fileSha256 covers the complete file. Set reuseInstructions to reuse identical folder rules.',
     parameters: readParameters,
+    outputSchema: Type.Object({
+      content: Type.String(),
+      totalLines: Type.Integer(),
+      fileSha256: Type.String(),
+      nextStartLine: Type.Optional(Type.Integer()),
+      nextStartColumn: Type.Optional(Type.Integer()),
+      instructions: Type.Optional(Type.String()),
+      instructionsUnchanged: Type.Optional(Type.Boolean()),
+      call: Type.String(),
+    }),
     async execute(id, raw) {
       const args = raw as Static<typeof readParameters>
       const source = await readBoundedFile(await resolveFile(root, args.path))
       const rules = await instructions(root, [args.path])
-      return textResult({
+      return structuredResult({
         ...readWindow(source.toString('utf8'), args),
         fileSha256: digest(source),
         ...folderRules(rules, args.reuseInstructions === true),
@@ -115,6 +131,22 @@ export function fileTools(
   }
   const search: ToolDefinition = {
     name: 'project_search',
+    outputSchema: Type.Object({
+      matches: Type.Array(Type.String()),
+      hits: Type.Optional(
+        Type.Array(
+          Type.Object({
+            path: Type.String(),
+            line: Type.Integer(),
+            text: Type.String(),
+          }),
+        ),
+      ),
+      hasMore: Type.Optional(Type.Boolean()),
+      limit: Type.Integer(),
+      nextAfterPath: Type.Optional(Type.String()),
+      call: Type.String(),
+    }),
     label: 'Search project',
     description:
       'List files or find literal text in authored files. Filter by pathPrefix. For listings, ' +
@@ -146,34 +178,40 @@ export function fileTools(
 
         const matches = names.slice(start, start + 100)
         const nextAfterPath = start + matches.length < names.length ? matches.at(-1) : undefined
-        return textResult({ matches, limit: 100, nextAfterPath, call: id })
+        return structuredResult({ matches, limit: 100, nextAfterPath, call: id })
       }
 
       if (afterPath !== undefined) {
         throw new Error('afterPath applies only to file listings')
       }
 
-      const matches: string[] = []
+      const hits: { path: string; line: number; text: string }[] = []
 
       for (const [path, bytes] of files) {
         if (path.startsWith(pathPrefix) && !bytes.includes(0)) {
           for (const [index, line] of bytes.toString('utf8').split('\n').entries()) {
             if (line.includes(query)) {
-              matches.push(`${path}:${index + 1}: ${line.slice(0, 400)}`)
+              hits.push({ path, line: index + 1, text: line.slice(0, 400) })
             }
 
-            if (matches.length >= 100) {
+            if (hits.length > 100) {
               break
             }
           }
         }
 
-        if (matches.length >= 100) {
+        if (hits.length > 100) {
           break
         }
       }
 
-      return textResult({ matches, limit: 100, call: id })
+      const page = hits.slice(0, 100)
+      const matches = page.map((hit) => `${hit.path}:${hit.line}: ${hit.text}`)
+      const value = { matches, limit: 100, call: id }
+      return {
+        ...textResult(value),
+        structuredContent: { ...value, hits: page, hasMore: hits.length > 100 },
+      }
     },
   }
   const tools = [read, search]

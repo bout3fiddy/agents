@@ -170,9 +170,10 @@ selected effort.
 
 Give delegated tasks and individual branch assignments a short, distinctive `title` for /workers.
 
-Keep host code mode optional and inspection-only. Enforce nested tool permissions in tool_call,
-preserve parent call IDs in timing, and keep actions available directly. Worker conversations
-summarize tool payloads for display and retain the raw transcript behind the r key.
+Keep Pi code mode optional and inspection-only. Audit tool changes against
+documentation/code-mode.md. Enforce nested tool permissions in tool_call, preserve parent call IDs
+in timing, and keep actions available directly. Worker conversations summarize tool payloads for
+display and retain the raw transcript behind the r key.
 
 Automatic updates use the completed local install receipt and Pi’s TUI command dispatch. Exercise
 install, deferred reload and build verification in a disposable terminal with

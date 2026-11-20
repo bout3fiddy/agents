@@ -6,6 +6,7 @@ import {
   SessionManager,
   SettingsManager,
   type ExtensionFactory,
+  type CreateAgentSessionOptions,
 } from '@earendil-works/pi-coding-agent'
 import { AssistantMessageEventStream } from '@earendil-works/pi-ai/utils/event-stream'
 import type { AssistantMessage, Context } from '@earendil-works/pi-ai'
@@ -15,7 +16,10 @@ export async function captureSession(
   base: string,
   extensions: ExtensionFactory[],
   respond: (context: Context) => Promise<AssistantMessage['content']>,
-  options: { extensionPaths?: string[] } = {},
+  options: { extensionPaths?: string[] } & Pick<
+    CreateAgentSessionOptions,
+    'tools' | 'resourceLoader' | 'customTools'
+  > = {},
 ) {
   const runtime = await ModelRuntime.create({
     authPath: join(base, 'auth.json'),
@@ -94,7 +98,9 @@ export async function captureSession(
     modelRuntime: runtime,
     model: runtime.getModel('capture', 'capture')!,
     settingsManager,
-    resourceLoader: loader,
+    resourceLoader: options.resourceLoader ?? loader,
+    ...(options.tools && { tools: options.tools }),
+    ...(options.customTools && { customTools: options.customTools }),
     sessionManager: SessionManager.create(root, join(base, 'sessions')),
   })
   await session.bindExtensions({

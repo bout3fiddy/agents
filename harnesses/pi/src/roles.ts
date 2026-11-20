@@ -46,6 +46,7 @@ export async function loadRole(
     }
 
     role.backend = 'claude-cli'
+    role.tools = role.tools.filter((tool) => tool !== 'codemode')
     role.model = implementerModel === 'opus' ? 'claude-opus-5-5' : 'claude-fable-5-2'
   }
 

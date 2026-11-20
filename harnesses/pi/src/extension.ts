@@ -1,5 +1,6 @@
-import { createCodemodeExtension } from '@earendil-works/pi-coding-agent'
-import { inspectionTools, nestedInspectionTools, type reviewReceipts } from './inspection.ts'
+import { capabilitySchema, harnessStatusSchema } from './inspection-schema.ts'
+import { registerInspectionMode } from './inspection-mode.ts'
+import { inspectionTools, nestedInspectionTools } from './inspection.ts'
 import { realpath } from 'node:fs/promises'
 import { Type } from 'typebox'
 import type { ExtensionAPI } from '@earendil-works/pi-coding-agent'
@@ -9,7 +10,7 @@ import {
   thinkingSchema,
   workflowSpecialistsSchema,
 } from './contracts.ts'
-import { fileTools, textResult } from './file-tools.ts'
+import { fileTools, structuredResult } from './file-tools.ts'
 import { StateStore } from './state.ts'
 import { loadRole, rolePrompt } from './roles.ts'
 import { checkpointText, taskView } from './context.ts'
@@ -33,68 +34,7 @@ import { registerWorkers } from './workers-command.ts'
 const orchestratorPolicy = Promise.all([loadRole('orchestrator'), rolePrompt('orchestrator')])
 
 export default function harness(pi: ExtensionAPI): void {
-  const inspectable = (tool: { name: string }) => nestedInspectionTools.has(tool.name)
-  createCodemodeExtension({ models: false, mode: 'on' })({
-    ...pi,
-    registerTool(tool) {
-      pi.registerTool({
-        ...tool,
-        prepareLoadout(loadout) {
-          return tool.prepareLoadout?.({
-            ...loadout,
-            callable: loadout.callable.filter(inspectable),
-          })
-        },
-        async execute(id, args, signal, update, ctx) {
-          const checkEvidence = new Set<string>()
-          const executeTool: typeof ctx.executeTool = async (name, input, options) => {
-            const outcome = await ctx.executeTool(name, input, options)
-
-            if (name === 'review_receipts' && !outcome.isError) {
-              const receipt = outcome.result.structuredContent as
-                Awaited<ReturnType<typeof reviewReceipts>> | undefined
-
-              for (const check of receipt?.checks ?? []) {
-                if (check.status !== 'passed') {
-                  checkEvidence.add(
-                    JSON.stringify({
-                      id: receipt!.id,
-                      attempt: receipt!.attempt,
-                      check: check.check,
-                      status: check.status,
-                      snapshot: check.snapshot,
-                    }),
-                  )
-                }
-              }
-            }
-
-            return outcome
-          }
-          const inspectionContext = Object.create(ctx, {
-            tools: { value: ctx.tools.filter(inspectable) },
-            executeTool: { value: executeTool },
-          })
-          const result = await tool.execute(id, args, signal, update, inspectionContext)
-
-          if (!checkEvidence.size) {
-            return result
-          }
-
-          return {
-            ...result,
-            content: [
-              ...result.content,
-              {
-                type: 'text' as const,
-                text: 'Recorded non-passing checks:\n' + [...checkEvidence].join('\n'),
-              },
-            ],
-          }
-        },
-      })
-    },
-  })
+  registerInspectionMode(pi, nestedInspectionTools)
   inspectionTools(pi)
   const workerWindow = { open: false }
   registerWorkers(pi, workerWindow)
@@ -119,11 +59,12 @@ export default function harness(pi: ExtensionAPI): void {
 
   pi.registerTool({
     name: 'harness_capabilities',
+    outputSchema: capabilitySchema,
     label: 'Inspect host and worker capabilities',
     description: 'Choose host execution or delegation using actual capabilities and task context.',
     parameters: Type.Object({}),
     async execute() {
-      return textResult(capabilities)
+      return structuredResult(capabilities)
     },
   })
 
@@ -152,10 +93,6 @@ export default function harness(pi: ExtensionAPI): void {
   })
 
   pi.on('tool_call', async (event) => {
-    if (event.parentToolCallId && !nestedInspectionTools.has(event.toolName)) {
-      return { block: true, reason: 'Use a direct host call for this tool.' }
-    }
-
     if (!(await orchestratorPolicy)[0].tools.includes(event.toolName)) {
       return { block: true, reason: 'This tool is not enabled in the orchestrator role.' }
     }
@@ -204,6 +141,7 @@ export default function harness(pi: ExtensionAPI): void {
 
   pi.registerTool({
     name: 'harness_status',
+    outputSchema: harnessStatusSchema,
     label: 'Harness status',
     description: 'Read recorded implementation scope, workflow state and evidence.',
     parameters: Type.Object({}),
@@ -211,7 +149,7 @@ export default function harness(pi: ExtensionAPI): void {
       const store = await storeFor(ctx.cwd)
       const checkpoint = await store.checkpoint()
       const task = await store.task()
-      return textResult({
+      return structuredResult({
         runtime: runtime.current(),
         capabilities,
         delegations: (await new Delegations(store).list()).map(delegationView),

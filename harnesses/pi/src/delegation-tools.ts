@@ -1,3 +1,4 @@
+import { taskStatusSchema } from './inspection-schema.ts'
 import { realpath } from 'node:fs/promises'
 import { basename, dirname, join, relative, resolve } from 'node:path'
 import { Type } from 'typebox'
@@ -8,7 +9,7 @@ import type {
   ExtensionContext,
 } from '@earendil-works/pi-coding-agent'
 import { StateStore } from './state.ts'
-import { textResult } from './file-tools.ts'
+import { structuredResult, textResult } from './file-tools.ts'
 import { digest } from './paths.ts'
 import { launchDelegation } from './delegation-process.ts'
 import {
@@ -434,9 +435,10 @@ export function registerDelegation(pi: ExtensionAPI, launch: Launcher = launchDe
     description:
       'Inspect saved task status/evidence when needed. Completion arrives automatically.',
     parameters: Type.Object({ id: Type.Optional(idSchema) }),
+    outputSchema: Type.Union([taskStatusSchema, Type.Array(taskStatusSchema)]),
     async execute(_id, args, _signal, _update, ctx) {
       const jobs = new Delegations(await storeFor(ctx.cwd))
-      return textResult(
+      return structuredResult(
         args.id ? delegationView(await jobs.get(args.id)) : (await jobs.list()).map(delegationView),
       )
     },

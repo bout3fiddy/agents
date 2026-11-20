@@ -951,7 +951,7 @@ export async function runTaskCoordinator(
     thinkingLevel: role.thinking,
     tools: role.tools,
     customTools: worker.tools,
-    resourceLoader: explicitResources(await rolePrompt(coordinatorRole(request))),
+    resourceLoader: await explicitResources(await rolePrompt(coordinatorRole(request))),
     settingsManager: SettingsManager.inMemory({
       compaction: { enabled: true },
       retry: { enabled: true, maxRetries: 2 },

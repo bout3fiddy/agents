@@ -159,8 +159,22 @@ export function registerProjectMemory(
     description:
       'Inspect prior revisions, evidence and rationale for a displayed project fact key.',
     parameters: Type.Object({ key: factSchema.properties.key }),
+    outputSchema: Type.Array(
+      Type.Object({
+        key: Type.String(),
+        revision: Type.Integer(),
+        kind: Type.String(),
+        text: Type.String(),
+        source: Type.String(),
+        quote: Type.String(),
+        paths: Type.Array(Type.String()),
+        origin: Type.String(),
+      }),
+    ),
     async execute(_id, { key }, _signal, _update, ctx) {
-      return textResult((await load(ctx.cwd))?.db.history(key) ?? [])
+      const rows = (await load(ctx.cwd))?.db.history(key) ?? []
+      const revisions = rows.map((row) => ({ ...row, paths: JSON.parse(row.paths) as string[] }))
+      return { ...textResult(rows), structuredContent: revisions }
     },
   })
   pi.registerTool({

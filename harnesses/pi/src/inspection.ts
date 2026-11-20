@@ -19,6 +19,7 @@ export const nestedInspectionTools = new Set([
   'task_status',
   'harness_status',
   'harness_capabilities',
+  'project_memory_history',
   'review_receipts',
   'inspect_pr',
 ])
@@ -68,6 +69,8 @@ export async function reviewReceipts(store: StateStore, id: string) {
       ) ?? null,
   }
 }
+
+const nullableString = Type.Union([Type.String(), Type.Null()])
 
 const reviewSchema = Type.Object({
   role: Type.String(),
@@ -122,8 +125,26 @@ export function inspectionTools(pi: ExtensionAPI): void {
       {
         headRefOid: Type.String(),
         state: Type.String(),
-        statusCheckRollup: Type.Array(Type.Unknown()),
-        reviews: Type.Array(Type.Unknown()),
+        number: Type.Integer(),
+        isDraft: Type.Boolean(),
+        mergeable: Type.String(),
+        reviewDecision: nullableString,
+        statusCheckRollup: Type.Array(
+          Type.Object({
+            name: nullableString,
+            context: nullableString,
+            status: nullableString,
+            state: nullableString,
+            conclusion: nullableString,
+          }),
+        ),
+        reviews: Type.Array(
+          Type.Object({
+            state: nullableString,
+            author: nullableString,
+            commit: nullableString,
+          }),
+        ),
       },
       { additionalProperties: true },
     ),

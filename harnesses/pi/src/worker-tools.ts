@@ -155,6 +155,7 @@ export function createWorkerTools(request: WorkerRequest, role: Role) {
       name: 'run_command',
       label: 'Run isolated command',
       description:
+        'Call run_command directly for shell commands and tests, including independent checks. ' +
         'Run isolated argv. npm/npx use installed tools or offline cache. ' +
         'Preserve each check’s exit status when grouping commands or filtering output. ' +
         'No network/home access. Retain edits with project_edit/project_write.',

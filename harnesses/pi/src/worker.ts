@@ -1,8 +1,10 @@
 import { join } from 'node:path'
-import { homedir } from 'node:os'
+import { homedir, tmpdir } from 'node:os'
+import { mkdtemp, rm } from 'node:fs/promises'
+import { registerInspectionMode, workerInspectionTools } from './inspection-mode.ts'
 import {
   createAgentSession,
-  createExtensionRuntime,
+  DefaultResourceLoader,
   ModelRuntime,
   SessionManager,
   SettingsManager,
@@ -25,19 +27,40 @@ import { progressReporter } from './progress.ts'
 import { LiveWorker } from './worker-live.ts'
 import { attachLiveSession } from './worker-live-session.ts'
 
-export function explicitResources(prompt: string): ResourceLoader {
-  return {
-    getExtensions: () => ({ extensions: [], errors: [], runtime: createExtensionRuntime() }),
-    getSkills: () => ({ skills: [], diagnostics: [] }),
-    getPrompts: () => ({ prompts: [], diagnostics: [] }),
-    getThemes: () => ({ themes: [], diagnostics: [] }),
-    getAgentsFiles: () => ({ agentsFiles: [] }),
-    getSystemPrompt: () => prompt,
-    getSystemPromptSource: () => undefined,
-    getAppendSystemPrompt: () => [],
-    getAppendSystemPromptSources: () => [],
-    extendResources: () => {},
-    reload: async () => {},
+export async function explicitResources(prompt: string): Promise<ResourceLoader> {
+
+  // Resolve only the trusted inline extension. Project and home packages must never be loaded
+  // into a worker. Its actual tools still resolve files against its assigned snapshot.
+  const directory = await mkdtemp(join(tmpdir(), 'pi-worker-resources-'))
+
+  try {
+    const loader = new DefaultResourceLoader({
+      cwd: directory,
+      agentDir: directory,
+      settingsManager: SettingsManager.inMemory(),
+      noExtensions: true,
+      noSkills: true,
+      noContextFiles: true,
+      noPromptTemplates: true,
+      noThemes: true,
+      systemPrompt:
+        prompt +
+        '\nUse codemode for two or more independent inspections or a ' +
+        'search followed by bounded reads. Use Promise.allSettled for independent calls, ' +
+        'surface errors and preserve evidence. Use direct tools for one simple read, ' +
+        'commands, edits, reports and delegation.',
+      extensionFactories: [(pi) => registerInspectionMode(pi, workerInspectionTools)],
+    })
+    await loader.reload()
+    const extensions = loader.getExtensions()
+
+    if (extensions.errors.length || extensions.extensions.length !== 1) {
+      throw new Error('Unable to load the isolated worker inspection extension')
+    }
+
+    return loader
+  } finally {
+    await rm(directory, { recursive: true, force: true })
   }
 }
 
@@ -98,7 +121,7 @@ export async function runWorker(request: WorkerRequest): Promise<WorkerEvidence>
     thinkingLevel: role.thinking,
     tools: role.tools,
     customTools: worker.tools,
-    resourceLoader: explicitResources(prompt),
+    resourceLoader: await explicitResources(prompt),
     settingsManager: SettingsManager.inMemory({
       compaction: { enabled: true },
       retry: { enabled: true, maxRetries: 2 },

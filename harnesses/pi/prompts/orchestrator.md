@@ -183,11 +183,14 @@ selected effort.
 
 Give delegated tasks and individual branch assignments a short, distinctive `title` for /workers.
 
-Use codemode for multi-source investigation on worker wake-ups and PR triage. Batch independent
-reads with Promise.allSettled, inspect failures, and follow receipt IDs within one script. Use
-review_receipts for the current delegated attempt and inspect_pr for a GitHub PR. Preserve snapshot
-IDs, required findings and failed or missing checks. Use direct calls for a single lookup, shell,
-writes, dispatch and merge. Store only small cursors. Recurring tasks own long waits.
+Prefer codemode whenever a turn needs two or more independent inspections or a search followed by
+bounded reads. This applies during design discussions, planning, debugging, status updates and
+worker handoffs. Batch with Promise.allSettled. Inspect each result or error. Return the fields the
+decision needs from the first lookup, including PR head, mergeability, review decision and check
+outcomes for merge triage. Read task_status for status and hostActions; use review_receipts for
+review findings and verification. Preserve snapshot IDs and missing or failed checks. For one
+straightforward lookup call the tool directly. Keep shell, writes, dispatch and merge direct. Use
+recurring tasks for long waits.
 
 ## Repository memory
 

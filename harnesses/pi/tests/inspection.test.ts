@@ -1,9 +1,15 @@
 import harness from '../src/extension.ts'
+import { explicitResources } from '../src/worker.ts'
+import { fileTools } from '../src/file-tools.ts'
+import { loadRole } from '../src/roles.ts'
 import { fixture } from './support.ts'
 import { captureSession } from './session-support.ts'
 import assert from 'node:assert/strict'
-import { access, mkdtemp, rm, symlink } from 'node:fs/promises'
+import { access, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
+import { execFileSync } from 'node:child_process'
+import { memoryRepository } from '../src/memory-repository.ts'
+import { repositoryStore } from '../src/memory-files.ts'
 import { tmpdir } from 'node:os'
 import { randomUUID } from 'node:crypto'
 import test from 'node:test'
@@ -110,7 +116,17 @@ test('a verdict-only script retains a failed check on the reviewed snapshot', as
         role: 'reviewer',
         model: 'fixture',
         snapshot: 'reviewed-head',
-        result: { verdict: 'pass', findings: [] },
+        result: {
+          verdict: 'changes',
+          findings: [
+            {
+              severity: 'required',
+              location: 'api/claim',
+              problem: 'Retain the required check',
+              evidence: 'fixture',
+            },
+          ],
+        },
       },
     },
   ])
@@ -146,13 +162,146 @@ test('a verdict-only script retains a failed check on the reviewed snapshot', as
 
   try {
     await session.prompt('Read the final review verdict.')
-    assert.match(response, /pass/)
+    assert.match(response, /changes/)
+    assert.match(response, /Retain the required check/)
     assert.match(response, /harness-lint/)
     assert.match(response, /failed/)
     assert.match(response, /reviewed-head/)
     assert.doesNotMatch(response, /raw diagnostic text/)
   } finally {
     session.dispose()
+    await runtime.settleCredentialWrites()
+  }
+})
+
+test('host scripts receive typed task, harness, history and file reads', async (t) => {
+  const item = await fixture()
+  t.after(() => rm(item.base, { recursive: true, force: true }))
+  execFileSync('git', ['-C', item.root, 'init', '--quiet'])
+  const repo = await memoryRepository(item.root)
+  assert.ok(repo)
+  const memory = repositoryStore(repo)
+
+  try {
+    memory.update([
+      {
+        key: 'scope',
+        revision: 0,
+        kind: 'decision',
+        text: 'Use fixture',
+        source: 'fixture.md',
+        quote: 'Use fixture',
+        paths: ['lookup:fixture.md'],
+      },
+    ])
+  } finally {
+    memory.close()
+  }
+
+  const id = randomUUID()
+  const dir = delegationDirectory(new StateStore(item.root), id)
+  await atomicJson(join(dir, 'status.json'), { id, status: 'running', updatedAt: 'now' })
+  await atomicJson(join(dir, 'request.json'), {
+    id,
+    kind: 'research',
+    root: new StateStore(item.root).projectRoot,
+    task: 'Test status',
+    writePaths: [],
+  })
+  await writeFile(join(item.root, 'lookup:fixture.md'), 'Read this marker\n')
+  const code = [
+    'const [job,cap,harness,history,search] = await Promise.all([',
+    'tools.task_status({id:' + JSON.stringify(id) + '}),tools.harness_capabilities({}),',
+    'tools.harness_status({}),tools.project_memory_history({key:"scope"}),',
+    'tools.project_search({query:"this marker",pathPrefix:"lookup:"})]);',
+    'const hit=search.hits[0];',
+    'const file=await tools.project_read({path:hit.path,startLine:hit.line});',
+    'text([job.status,Array.isArray(cap.host.tasks),!!harness.runtime.version,',
+    'history[0].paths[0]===hit.path,hit.path,search.hasMore,',
+    'file.content.includes("Read this marker")]);',
+  ].join('')
+  let response = ''
+  let called = false
+  const { session, runtime } = await captureSession(
+    item.root,
+    item.base,
+    [harness],
+    async (ctx) => {
+      if (!called) {
+        called = true
+        return [{ type: 'toolCall', id: 'typed', name: 'codemode', arguments: { code } }]
+      }
+
+      response = JSON.stringify(ctx.messages.at(-1)?.content)
+      return [{ type: 'text', text: 'done' }]
+    },
+  )
+
+  try {
+    await session.prompt('Inspect the fixture.')
+    assert.match(response, /Script completed/)
+    assert.match(response, /running.*true,true,true.*lookup:fixture.md.*false,true/)
+  } finally {
+    await session.dispose()
+    await runtime.settleCredentialWrites()
+  }
+})
+
+test('Pi worker scripts expose only scoped inspections', async (t) => {
+  const item = await fixture()
+  t.after(() => rm(item.base, { recursive: true, force: true }))
+  await writeFile(join(item.root, 'target.md'), 'unchanged')
+  const role = await loadRole('implementer')
+  const code = [
+    'const names=ALL_TOOLS.map(t=>t.name).sort();',
+    'const expected=["project_read","project_search"];',
+    'if(names.some(n=>!expected.includes(n)))throw Error(names.join(","));',
+    'const [v,s,missing]=await Promise.allSettled([tools.project_read({path:"target.md"}),',
+    'tools.project_search({query:"unchanged",pathPrefix:"target.md"}),',
+    'tools.project_read({path:"missing.md"})]);',
+    'text([v.value.content,s.value.hits[0].line,names,missing.status]);',
+    'try{await tools.project_write({path:"target.md",content:"unexpected"})}',
+    'catch(e){text("write unavailable")}',
+  ].join('')
+  let called = false
+  let response = ''
+  let declaration = ''
+  const { session, runtime } = await captureSession(
+    item.root,
+    item.base,
+    [],
+    async (ctx) => {
+      if (!called) {
+        called = true
+        const declared = ctx.messages.flatMap((msg) =>
+          msg.role === 'system' ? (msg.toolsAdded ?? []) : [],
+        )
+        const tool = declared.findLast((entry) => entry.name === 'codemode')
+        declaration = tool?.description ?? 'absent'
+        return [{ type: 'toolCall', id: 'worker', name: 'codemode', arguments: { code } }]
+      }
+
+      response = JSON.stringify(ctx.messages.at(-1)?.content)
+      return [{ type: 'text', text: 'done' }]
+    },
+    {
+      tools: role.tools,
+      customTools: fileTools(item.root, ['**'], ['**']),
+      resourceLoader: await explicitResources('Use only assigned tools.'),
+    },
+  )
+
+  try {
+    await session.prompt('Inspect the worker catalog.')
+    assert.match(declaration.slice(0, 230), /Available tools: .*project_read/)
+    assert.match(declaration, /Call shell commands, tests, edits/)
+    assert.match(response, /Script completed/)
+    assert.match(response, /unchanged/)
+    assert.match(response, /rejected/)
+    assert.match(response, /write unavailable/)
+    assert.ok(!(await loadRole('implementer', 'medium', 'opus')).tools.includes('codemode'))
+  } finally {
+    await session.dispose()
     await runtime.settleCredentialWrites()
   }
 })

@@ -277,6 +277,12 @@ and their results are recorded in the Claude JSONL trace. Research supplements p
 Run `npm run test:live:delegation -- --automatic` to exercise document routing from an ordinary
 request, concurrent discussion, completion acknowledgement and reload receipts.
 
+## Code mode
+
+Pi batches independent inspections during ordinary project work. See the
+[tool inventory and examples](documentation/code-mode.md) for host and worker result shapes, role
+boundaries and usage measurement.
+
 ## Project memory
 
 Start Pi in any worktree of a local Git repository and talk normally. On the first substantive

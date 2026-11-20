@@ -315,10 +315,12 @@ from an old failed candidate.
 
 The host registers Pi code mode alongside direct tools. Its nested tool hook permits inspection
 only. The script catalog and tool descriptions use the same allowlist. Model helpers are disabled.
-Worker roles keep their own toolsets. Use review_receipts for a delegation’s current attempt and
-inspect_pr for a one-shot GitHub read. Missing evidence is null. Timing rows link nested calls to
-their parent so overlapping durations can be measured once. The parent tool result retains the
-identity, status and snapshot of non-passing checks even when a script selects only verdicts.
+Pi workers load a separate read-only script catalog using their scoped file tools. The
+[code-mode tool inventory](code-mode.md) describes each role boundary. Use review_receipts for a
+delegation’s current attempt and inspect_pr for a one-shot GitHub read. Missing evidence is null.
+Timing rows link nested calls to their parent so overlapping durations can be measured once. The
+parent tool result retains the identity, status and snapshot of non-passing checks even when a
+script selects only verdicts.
 
 Claude worker tools validate arguments before execution. A rejected call identifies the failing
 field and schema constraint so the worker can correct it without escalating to the host.
