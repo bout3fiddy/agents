@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { access, mkdir, mkdtemp, readFile, realpath, rm, utimes, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { basename, dirname, join } from 'node:path'
 import test, { type TestContext } from 'node:test'
 
 // Every temporary path in this file lives below a private TMPDIR.
@@ -64,13 +64,29 @@ const ids = {
 }
 
 test('the sweep removes storage of exited processes and keeps its own', async () => {
-  const own = await temporaryDirectory('workspace')
-  const abandoned = join(temporaryRoot(), 'processes', `${await exitedPid()}-AbCdEf`)
-  await mkdir(join(abandoned, 'workspace-XyZ123'), { recursive: true })
+  const own = await temporaryDirectory('w')
+  const pid = await exitedPid()
+  const abandoned = join(tmpdir(), `pi-${pid}c-AbCdEf`)
+  const previous = join(temporaryRoot(), 'processes', `${pid}-AbCdEf`)
+  await mkdir(abandoned)
+  await mkdir(join(previous, 'workspace-XyZ123'), { recursive: true })
   const report = await sweepTemporary({ retentionMs })
   assert.ok(report.removed.includes(abandoned))
+  assert.ok(report.removed.includes(previous))
   await missing(abandoned)
+  await missing(previous)
   await access(own)
+})
+
+test('command directories leave room for a Unix socket path', async () => {
+
+  // macOS rejects socket paths over 104 bytes with EINVAL, and suites bind them below TMPDIR.
+  // Pi adds one short name directly below TMPDIR, no longer than the pre-0.9 pi-command-XXXXXX.
+  const scratch = await realpath(await temporaryDirectory('c'))
+  assert.equal(dirname(scratch), await realpath(tmpdir()))
+  assert.ok(basename(scratch).length <= 'pi-command-XXXXXX'.length, scratch)
+  const owned = await taskDirectory({ projectRoot: '/', stateDirectory: '/', taskId: 'x' })
+  assert.ok(basename(owned).length <= 'pi-command-XXXXXX'.length, owned)
 })
 
 test('task copies survive only while their task can resume', async (t) => {
@@ -78,7 +94,7 @@ test('task copies survive only while their task can resume', async (t) => {
   const owner = (taskId: string) => ({ projectRoot: root, stateDirectory: store.directory, taskId })
   const pid = await exitedPid()
   const owned = async (taskId: string) => {
-    const path = await taskDirectory('workspace', owner(taskId))
+    const path = await taskDirectory(owner(taskId))
     const record = JSON.parse(await readFile(`${path}.owner.json`, 'utf8'))
     await writeFile(`${path}.owner.json`, JSON.stringify({ ...record, pid }))
     return path
@@ -93,7 +109,7 @@ test('task copies survive only while their task can resume', async (t) => {
   await task(store, ids.stale, { status: 'needs_attention', updatedAt: old, candidate: stale })
   const finished = await owned(ids.complete)
   await task(store, ids.complete, { status: 'complete', updatedAt: new Date().toISOString() })
-  const orphan = await taskDirectory('workspace', {
+  const orphan = await taskDirectory({
     projectRoot: join(root, 'deleted'),
     stateDirectory: store.directory,
     taskId: ids.live,

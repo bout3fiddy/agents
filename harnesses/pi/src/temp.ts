@@ -1,4 +1,4 @@
-import { lstat, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { lstat, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -18,8 +18,13 @@ const activeStatuses = new Set([
   'merging',
 ])
 const retainedStatuses = new Set(['needs_attention', 'paused', 'published', 'interrupted'])
-let processDirectory: Promise<string> | undefined
 
+// macOS limits a Unix socket path to 104 bytes, and test suites bind sockets below TMPDIR. Keep
+// harness directories one level below the system temporary directory with short names.
+const processName = /^pi-(\d+)[a-z]-[A-Za-z0-9_]{6}$/
+const taskName = /^pi-task-[A-Za-z0-9_]{6}$/
+
+/** The 0.9.0 layout, kept for directories created before the short names. */
 export function temporaryRoot(): string {
   return join(tmpdir(), 'pi-harness')
 }
@@ -37,36 +42,15 @@ export function processAlive(pid: number): boolean {
   }
 }
 
-async function ownedProcessDirectory(): Promise<string> {
-  processDirectory ??= (async () => {
-    const parent = join(temporaryRoot(), 'processes')
-    await mkdir(parent, { recursive: true, mode: 0o700 })
-    return mkdtemp(join(parent, `${process.pid}-`))
-  })()
-  return processDirectory
-}
-
-/** Disposable directories belong to the creating process and are swept after it exits. */
-export async function temporaryDirectory(prefix: string): Promise<string> {
-  for (let attempt = 0; ; attempt++) {
-    try {
-      return await mkdtemp(join(await ownedProcessDirectory(), `${prefix}-`))
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'ENOENT' || attempt > 0) {
-        throw error
-      }
-
-      // The operating system can clear temporary storage while a long-lived process runs.
-      processDirectory = undefined
-    }
-  }
+/** Disposable directories carry the creating process ID and are swept after it exits. The kind is
+ * one letter: workspace copy, command scratch or lint baseline. */
+export async function temporaryDirectory(kind: 'w' | 'c' | 'l'): Promise<string> {
+  return mkdtemp(join(tmpdir(), `pi-${process.pid}${kind}-`))
 }
 
 /** Retained candidates record their owning task so a later sweep can judge them alone. */
-export async function taskDirectory(prefix: string, owner: TaskOwner): Promise<string> {
-  const parent = join(temporaryRoot(), 'tasks')
-  await mkdir(parent, { recursive: true, mode: 0o700 })
-  const directory = await mkdtemp(join(parent, `${prefix}-`))
+export async function taskDirectory(owner: TaskOwner): Promise<string> {
+  const directory = await mkdtemp(join(tmpdir(), 'pi-task-'))
   const record: OwnerRecord = { ...owner, pid: process.pid, createdAt: Date.now() }
   await writeFile(`${directory}.owner.json`, JSON.stringify(record), { mode: 0o600 })
   return directory
@@ -202,54 +186,63 @@ async function entries(path: string): Promise<string[]> {
   }
 }
 
+async function sweepTaskDirectory(
+  path: string,
+  now: number,
+  options: SweepOptions,
+  report: SweepReport,
+) {
+  const owner = await readJsonFile<OwnerRecord>(`${path}.owner.json`)
+  const created = owner?.createdAt ?? (await modifiedAt(path)) ?? now
+  const inUse = owner ? processAlive(owner.pid) : now - created < hour
+
+  if (inUse || (owner && (await taskRetains(owner, path, now, options.retentionMs)))) {
+    report.kept++
+    return
+  }
+
+  await remove(path, report, options.dryRun)
+  await remove(`${path}.owner.json`, report, options.dryRun)
+}
+
 /** Remove abandoned harness temporary storage without touching live or resumable work. */
 export async function sweepTemporary(options: SweepOptions): Promise<SweepReport> {
   const now = options.now ?? Date.now()
   const report: SweepReport = { removed: [], kept: 0 }
-  const processes = join(temporaryRoot(), 'processes')
+  const names = await entries(tmpdir())
 
-  for (const name of await entries(processes)) {
-    const pid = Number(name.split('-')[0])
+  for (const name of names) {
+    const path = join(tmpdir(), name)
+    const pid = processName.exec(name)?.[1]
 
-    if (pid === process.pid || processAlive(pid)) {
-      report.kept++
+    if (pid) {
+      if (Number(pid) === process.pid || processAlive(Number(pid))) {
+        report.kept++
+      } else {
+        await remove(path, report, options.dryRun)
+      }
+
       continue
     }
 
-    await remove(join(processes, name), report, options.dryRun)
-  }
-
-  const tasks = join(temporaryRoot(), 'tasks')
-  const names = await entries(tasks)
-
-  for (const name of names.filter((entry) => !entry.endsWith('.owner.json'))) {
-    const path = join(tasks, name)
-    const owner = await readJsonFile<OwnerRecord>(`${path}.owner.json`)
-    const created = owner?.createdAt ?? (await modifiedAt(path)) ?? now
-    const inUse = owner ? processAlive(owner.pid) : now - created < hour
-
-    if (inUse || (owner && (await taskRetains(owner, path, now, options.retentionMs)))) {
-      report.kept++
+    if (taskName.test(name)) {
+      await sweepTaskDirectory(path, now, options, report)
       continue
     }
 
-    await remove(path, report, options.dryRun)
-    await remove(`${path}.owner.json`, report, options.dryRun)
-  }
+    if (name.endsWith('.owner.json') && taskName.test(name.slice(0, -'.owner.json'.length))) {
+      if (!names.includes(name.slice(0, -'.owner.json'.length))) {
+        await remove(path, report, options.dryRun)
+      }
 
-  for (const name of names.filter((entry) => entry.endsWith('.owner.json'))) {
-    if (!names.includes(name.slice(0, -'.owner.json'.length))) {
-      await remove(join(tasks, name), report, options.dryRun)
+      continue
     }
-  }
 
-  // Releases before this sweep wrote copies directly below the temporary directory.
-  for (const name of await entries(tmpdir())) {
+    // Releases before 0.9 wrote copies with these names.
     if (!/^pi-(?:workspace|command)-[A-Za-z0-9_]{6}$/.test(name)) {
       continue
     }
 
-    const path = join(tmpdir(), name)
     const modified = await modifiedAt(path)
 
     if (
@@ -262,6 +255,30 @@ export async function sweepTemporary(options: SweepOptions): Promise<SweepReport
     }
 
     await remove(path, report, options.dryRun)
+  }
+
+  // Releases 0.9.0 and 0.9.1 nested directories below pi-harness/.
+  const processes = join(temporaryRoot(), 'processes')
+
+  for (const name of await entries(processes)) {
+    if (processAlive(Number(name.split('-')[0]))) {
+      report.kept++
+    } else {
+      await remove(join(processes, name), report, options.dryRun)
+    }
+  }
+
+  const tasks = join(temporaryRoot(), 'tasks')
+  const nested = await entries(tasks)
+
+  for (const name of nested.filter((entry) => !entry.endsWith('.owner.json'))) {
+    await sweepTaskDirectory(join(tasks, name), now, options, report)
+  }
+
+  for (const name of nested.filter((entry) => entry.endsWith('.owner.json'))) {
+    if (!nested.includes(name.slice(0, -'.owner.json'.length))) {
+      await remove(join(tasks, name), report, options.dryRun)
+    }
   }
 
   return report

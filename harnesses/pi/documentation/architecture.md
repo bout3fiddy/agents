@@ -38,11 +38,12 @@ snapshot outside sandbox-exec, with the user's permissions and a minimal environ
 after every sandbox check and harness lint pass, so they never execute for a candidate that already
 failed. This is an explicit project decision, never a fallback for a failed sandbox run.
 
-Disposable directories live under `$TMPDIR/pi-harness/processes/<pid>-*` and are removed after the
-creating process exits. Retained candidates live under `$TMPDIR/pi-harness/tasks/` with an owner
-record naming the project, state directory and task. A host cleanup pass removes copies, worktrees
-and baselines that no live or resumable task needs, saves an expired candidate's changes as a patch
-and marks the task so a resume reports the expiry.
+Disposable directories are named `$TMPDIR/pi-<pid><kind>-*` and are removed after the creating
+process exits. Retained candidates are `$TMPDIR/pi-task-*` with an owner record naming the project,
+state directory and task. Names stay one level below `TMPDIR` because macOS rejects Unix socket
+paths over 104 bytes, and project tests bind sockets in their temporary directory. A host cleanup
+pass removes copies, worktrees and baselines that no live or resumable task needs, saves an expired
+candidate's changes as a patch and marks the task so a resume reports the expiry.
 
 When process-group cleanup is denied, the runner also tries to stop the command process itself. The
 result retains captured output, elapsed time, timeout or cancellation, and the cleanup error. An
