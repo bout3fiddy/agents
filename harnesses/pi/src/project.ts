@@ -127,9 +127,7 @@ export async function createWorkspace(
   nodeModules?: string | null,
   owner?: TaskOwner,
 ): Promise<string> {
-  const workspace = owner
-    ? await taskDirectory('workspace', owner)
-    : await temporaryDirectory('workspace')
+  const workspace = owner ? await taskDirectory(owner) : await temporaryDirectory('w')
   const files = snapshot ?? (await inventory(root))
   await copySnapshot(files, workspace)
 
@@ -243,7 +241,7 @@ async function lintBaselineFindings(baseline: LintBaseline, signal?: AbortSignal
 
   if (!pending) {
     pending = (async () => {
-      const directory = await realpath(await temporaryDirectory('lint-baseline'))
+      const directory = await realpath(await temporaryDirectory('l'))
 
       try {
         await copySnapshot(baseline.files, directory)

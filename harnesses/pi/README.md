@@ -508,8 +508,10 @@ it is idle, it removes:
 - baseline worktrees older than six hours whose task is not running, and clean host worktrees under
   `.pi/traces/harness/host-worktrees/` older than the retention period;
 - local `pi/*` branches already merged into `main`;
-- temporary directories under `$TMPDIR/pi-harness/` whose creating process exited, and legacy
-  `$TMPDIR/pi-workspace-*` copies older than the retention period that no retained task references.
+- `$TMPDIR/pi-<pid><kind>-*` directories whose creating process exited, `$TMPDIR/pi-task-*` copies
+  of tasks that no longer need them, and legacy `$TMPDIR/pi-workspace-*` copies older than the
+  retention period that no retained task references. Names stay short because macOS limits Unix
+  socket paths, which test suites bind below `TMPDIR`, to 104 bytes.
 
 Set `PI_HARNESS_RETENTION_HOURS` to change the 48-hour retention. `/harness-cleanup` runs the pass
 immediately; `/harness-cleanup --dry-run` reports without removing. From a project root,

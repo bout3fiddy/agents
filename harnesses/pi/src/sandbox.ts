@@ -157,7 +157,7 @@ async function runCommand(
   }
 
   signal?.throwIfAborted()
-  const scratch = await temporaryDirectory('command')
+  const scratch = await temporaryDirectory('c')
   const profile = join(scratch, 'policy.sb')
   const started = Date.now()
 
