@@ -112,10 +112,16 @@ try {
           'Read status.md and receipt.json. Quote the receipt ID. Stop when receipt.json has ' +
           'that ID, result passed, exitCode 0, and the named artifact exists. ' +
           'Record why. Just confirm setup.'
-        : 'Use Codex low, the default JSON report and no custom reportDirectory. Confirm setup.'),
+        : 'Use Codex low and JSON reports. Update me every interval, even if unchanged.'),
   )
   assert.ok(invoked.includes('recurring_task'))
   assert.equal((await schedules.list())[0]?.name, 'build-audit')
+
+  if (!fable) {
+    const work = (await schedules.list())[0]?.definition.work
+    assert.ok(work?.kind === 'audit' && work.notifyEveryInterval)
+  }
+
   await session.reload()
   let job
 

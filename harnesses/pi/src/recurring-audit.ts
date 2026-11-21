@@ -18,6 +18,7 @@ export const reportDirectorySchema = Type.String({
 })
 
 export type AuditCursor = {
+  currentBaseline?: true
   head?: string
   sessions: Record<string, string>
   jobs: Record<string, string>
@@ -27,7 +28,7 @@ export const emptyCursor = (): AuditCursor => ({ sessions: {}, jobs: {} })
 type Branch = ReturnType<ExtensionContext['sessionManager']['getBranch']>
 
 function discussions(entries: Branch, taskIds: Set<string>) {
-  const turns: { id: string; user?: string; trigger?: string; answer: string }[] = []
+  const turns: { id: string; at: string; user?: string; trigger?: string; answer: string }[] = []
   let origin: { user?: string; trigger?: string } | undefined
 
   for (const entry of entries) {
@@ -60,6 +61,7 @@ function discussions(entries: Branch, taskIds: Set<string>) {
     if (origin && message.role === 'assistant' && message.stopReason === 'stop') {
       turns.push({
         id: entry.id,
+        at: entry.timestamp,
         ...origin,
         answer: message.content
           .flatMap((part) => (part.type === 'text' ? [part.text] : []))
@@ -169,9 +171,17 @@ export function auditDelta(
     jobs.filter((job) => !job.request.recurring?.audit).map((job) => job.request.id),
   )
   const last = previous.sessions[session]
-  const start = last ? entries.findLastIndex((entry) => entry.id === last) + 1 : 0
+  const index = last ? entries.findLastIndex((entry) => entry.id === last) : -1
+  const baseline = !previous.currentBaseline || Boolean(last && index < 0)
+  cursor.currentBaseline = true
+  const turns = discussions(entries.slice(index + 1), taskIds)
+  const latest = turns.at(-1)
 
-  for (const turn of discussions(entries.slice(start), taskIds)) {
+  // A first report summarizes the current project. Reserve space for current worker receipts.
+  const jobBudget = Math.floor(remaining / 2)
+  remaining -= jobBudget
+
+  for (const turn of baseline ? turns.slice(-3).reverse() : turns) {
     if (!add({ session, ...turn })) {
       break
     }
@@ -179,11 +189,16 @@ export function auditDelta(
     cursor.sessions[session] = turn.id
   }
 
-  for (const { request, state, milestone } of jobs) {
-    if (request.recurring?.audit) {
-      continue
-    }
+  if (baseline && latest) {
+    cursor.sessions[session] = latest.id
+  }
 
+  remaining += jobBudget
+  const recent = jobs
+    .filter((job) => !job.request.recurring?.audit)
+    .toSorted((a, b) => b.state.updatedAt.localeCompare(a.state.updatedAt))
+
+  for (const { request, state, milestone } of recent) {
     const observed = {
       id: request.id,
       kind: request.kind,
@@ -207,7 +222,7 @@ export function auditDelta(
     }
     const fingerprint = digest(JSON.stringify(observed))
 
-    if (previous.jobs[request.id] !== fingerprint && add(observed)) {
+    if (previous.jobs[request.id] !== fingerprint && (add(observed) || baseline)) {
       cursor.jobs[request.id] = fingerprint
     }
   }

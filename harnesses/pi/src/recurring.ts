@@ -39,6 +39,7 @@ const audit = Type.Object(
     thinking: Type.Optional(thinkingSchema),
     model: Type.Optional(Type.Union([Type.Literal('codex'), Type.Literal('fable')])),
     reportDirectory: Type.Optional(reportDirectorySchema),
+    notifyEveryInterval: Type.Optional(Type.Boolean()),
     stopWhen: Type.Optional(
       Type.String({
         minLength: 1,
@@ -282,6 +283,7 @@ export class RecurringTasks {
     branch: () => ReturnType<ExtensionContext['sessionManager']['getBranch']>,
     now = Date.now(),
   ) {
+    const notices: string[] = []
     const due = (row: Schedule) =>
       row.session === origin.session &&
       !row.stoppedReason &&
@@ -291,12 +293,20 @@ export class RecurringTasks {
           (!row.definition.until || Date.parse(row.definition.until) > now)))
 
     if (!(await this.read()).some(due)) {
-      return
+      return notices
     }
 
     await this.locked(async (rows) => {
       for (const row of rows.filter(due)) {
         const interval = row.definition.everyMinutes * 60000
+
+        const work = row.definition.work
+        const announce = (summary: string) => {
+          if (work.kind === 'audit' && work.notifyEveryInterval) {
+            const time = new Date(now).toISOString().slice(11, 16)
+            notices.push(time + ' UTC · ' + row.name + ' · ' + summary)
+          }
+        }
 
         if (row.active) {
           let state
@@ -312,6 +322,12 @@ export class RecurringTasks {
           }
 
           if (activeTask(state)) {
+            if (work.kind === 'audit' && work.notifyEveryInterval && row.nextAt <= now) {
+              announce('Audit in progress.')
+              row.nextAt = now + interval
+              await atomicJson(this.file, rows)
+            }
+
             continue
           }
 
@@ -320,6 +336,7 @@ export class RecurringTasks {
 
           if (state.status === 'complete') {
             if (row.pendingCursor) {
+              announce(state.summary || 'Audit completed.')
               row.cursor = row.pendingCursor
 
               if (
@@ -346,7 +363,6 @@ export class RecurringTasks {
         }
 
         row.nextAt = now + interval
-        const work = row.definition.work
         let input: DelegateInput
         let cursor: AuditCursor | undefined
 
@@ -362,6 +378,7 @@ export class RecurringTasks {
           )
 
           if (!delta.context && !row.baselinePending) {
+            announce('No new activity in the monitored session or tasks.')
             row.outcome = 'no new activity'
             await atomicJson(this.file, rows)
             continue
@@ -425,5 +442,7 @@ export class RecurringTasks {
         }
       }
     })
+
+    return notices
   }
 }

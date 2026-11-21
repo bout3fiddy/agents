@@ -1,3 +1,4 @@
+import { replaceControlCharacters, stripTerminalSequences } from '@earendil-works/pi-tui'
 import { Type } from 'typebox'
 import type { ExtensionAPI } from '@earendil-works/pi-coding-agent'
 import { RecurringTasks, scheduleName, scheduleSchema } from './recurring.ts'
@@ -26,13 +27,21 @@ export function registerRecurring(pi: ExtensionAPI, pollMs = 5000) {
       }
 
       if (model) {
-        await schedules.tick(
+        const session = ctx.sessionManager.getSessionId()
+        const notices = await schedules.tick(
           {
-            session: ctx.sessionManager.getSessionId(),
+            session,
             model: `${model.provider}/${model.id}`,
           },
           () => ctx.sessionManager.getBranch(),
         )
+
+        if (ctx.hasUI && ctx.sessionManager.getSessionId() === session) {
+          for (const notice of notices) {
+            const clean = replaceControlCharacters(stripTerminalSequences(notice))
+            ctx.ui.notify(clean.replace(/\s+/g, ' ').slice(0, 800), 'info')
+          }
+        }
       }
     }
     const poll = () => {
@@ -76,6 +85,7 @@ export function registerRecurring(pi: ExtensionAPI, pollMs = 5000) {
       'List, set (create or replace), or remove a named project schedule. ' +
       'Runs while Pi is open. For progress audits set work.kind=audit, model, thinking, ' +
       'reportDirectory and optional stopWhen. startImmediately runs the baseline. ' +
+      'Use work.notifyEveryInterval for explicit periodic user updates, including quiet ticks. ' +
       'Other work uses normal scoped background delegation. Remove cancels outstanding work.',
     parameters: Type.Object(
       {

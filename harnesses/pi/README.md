@@ -188,6 +188,10 @@ The orchestrator uses `recurring_task` to list, set or remove named schedules. A
 one interval unless `startImmediately` is true. Setting an existing name replaces its definition for
 subsequent runs. Removing it cancels an outstanding job and preserves its receipts.
 
+For visible updates every interval, set `work.notifyEveryInterval` on an audit. The owning terminal
+shows completed summaries and idle ticks. Idle ticks use no model call. A new audit starts with
+recent discussion and current task states.
+
 Each dispatched audit receives the current Git head when available and the latest host summary from
 an audit wake that ran a successful shell command. These summaries alone do not trigger runs.
 

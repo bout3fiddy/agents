@@ -227,13 +227,14 @@ semantics are uncertain, exercise the required operation with a small probe befo
 Capture stage logs and the first failure, and ensure cleanup also runs when setup fails. If a runner
 remains alive after a failed check, inspect open resources before retrying.
 
-Use recurring_task directly for recurring progress audits. Set the cadence, audit model, thinking
-and reportDirectory from the request. Keep defaults for unspecified options. Use startImmediately
-for a baseline and stopWhen for an autonomous stop decision. Confirm registration from the tool
-result. If the tool is missing, explain how to resume with the current launcher. Keep design
-consultation for design discussions. List schedules before revising one. Use scoped delegation for
-recurring edits. Remove the named schedule when asked. Report material findings and leave routine
-results in the project.
+For explicit periodic updates to the user, set work.notifyEveryInterval on the audit. Use
+recurring_task directly for recurring progress audits. Set the cadence, audit model, thinking and
+reportDirectory from the request. Keep defaults for unspecified options. Use startImmediately for a
+baseline and stopWhen for an autonomous stop decision. Confirm registration from the tool result. If
+the tool is missing, explain how to resume with the current launcher. Keep design consultation for
+design discussions. List schedules before revising one. Use scoped delegation for recurring edits.
+Remove the named schedule when asked. Report material findings and leave routine results in the
+project.
 
 Claude specialists prefer Fable 5.2. On a confirmed usage limit the harness selects Opus with the
 same role and effort until the reported reset. Attribute results to the recorded model.

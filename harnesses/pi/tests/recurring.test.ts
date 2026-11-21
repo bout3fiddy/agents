@@ -1,3 +1,4 @@
+import type { ExtensionUIContext } from '@earendil-works/pi-coding-agent'
 import assert from 'node:assert/strict'
 import test, { type TestContext } from 'node:test'
 import { mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises'
@@ -590,4 +591,102 @@ test('scheduled audit carries host verification without waking itself', () => {
   assert.match(next.context, /Seven checks passed on revision abc/)
   assert.match(next.context, /"head":"abc"/)
   assert.equal(auditDelta(next.cursor, 's', entries, jobs, 'abc').context, '')
+})
+
+test('an immediate audit of a long session starts with current evidence', async (t) => {
+  const { schedules } = await setup(t)
+  const job = await schedules.jobs.start(documents.work, owner, async () => {})
+  const entries = Array.from({ length: 140 }, (_, i) => [
+    { type: 'message', id: 'q' + i, message: { role: 'user', content: 'Question ' + i } },
+    {
+      type: 'message',
+      id: 'a' + i,
+      message: {
+        role: 'assistant',
+        stopReason: 'stop',
+        content: [{ type: 'text', text: 'answer '.repeat(160) }],
+      },
+    },
+  ]).flat()
+  const jobs = Array.from({ length: 100 }, (_, i) => ({
+    ...job,
+    request: { ...job.request, id: 'job-' + i, task: 'old task '.repeat(35) },
+    state: { ...job.state, updatedAt: new Date(i).toISOString() },
+  }))
+  const branch = JSON.parse(JSON.stringify(entries))
+  const first = auditDelta(emptyCursor(), owner.session, branch, jobs)
+  assert.match(first.context, /Question 139/)
+  assert.match(first.context, /"id":"job-99"/)
+  assert.doesNotMatch(first.context, /Question 0"/)
+  assert.ok(first.context.length <= 18000)
+  assert.equal(auditDelta(first.cursor, owner.session, branch, jobs).context, '')
+  jobs[0]!.state.updatedAt = new Date(3000).toISOString()
+  assert.match(auditDelta(first.cursor, owner.session, branch, jobs).context, /"id":"job-0"/)
+})
+
+test('requested interval updates deliver results and idle ticks once to the owner', async (t) => {
+  const { schedules, started, now, store, open } = await setup(t)
+  await schedules.set(
+    'progress',
+    {
+      ...audit,
+      work: { ...audit.work, notifyEveryInterval: true },
+    },
+    owner.session,
+    true,
+    now,
+  )
+  await schedules.tick(owner, () => [], now)
+  const state = await runDelegation(store, started[0]!.id, new AbortController().signal, (req) =>
+    coordinatorEvidence(req, { summary: 'Selector ready for host checks.' }, []),
+  )
+  assert.equal(state.auditAttention, false)
+  assert.deepEqual(await schedules.tick({ ...owner, session: 'other' }, () => [], now + 1), [])
+  assert.match(String(await schedules.tick(owner, () => [], now + 2)), /Selector ready for host/)
+  assert.deepEqual(await open().tick(owner, () => [], now + 3), [])
+  assert.match(String(await open().tick(owner, () => [], now + interval)), /No new activity/)
+  assert.equal(started.length, 1)
+})
+
+test('the Pi scheduler prints a requested quiet update without a model turn', async (t) => {
+  const { root, base, store } = await setup(t)
+  const schedules = new RecurringTasks(store)
+  const notices: string[] = []
+  let modelCalls = 0
+  const { session, runtime } = await captureSession(
+    root,
+    base,
+    [(pi) => registerRecurring(pi, 20)],
+    async () => {
+      modelCalls++
+      return []
+    },
+  )
+
+  try {
+    const ui = {
+      notify: (message: string) => notices.push(message),
+    } as unknown as ExtensionUIContext
+    await session.bindExtensions({ mode: 'tui', uiContext: ui })
+    await schedules.set(
+      'report',
+      { ...audit, work: { ...audit.work, notifyEveryInterval: true } },
+      session.sessionManager.getSessionId(),
+      false,
+      Date.now() - interval,
+    )
+
+    for (let i = 0; i < 100 && !notices.length; i++) {
+      await delay(20)
+    }
+
+    assert.match(notices.join(' '), /report · No new activity/)
+    await delay(75)
+    assert.equal(notices.length, 1)
+    assert.equal(modelCalls, 0)
+  } finally {
+    session.dispose()
+    await schedules.remove('report')
+    await runtime.settleCredentialWrites()
+  }
 })
