@@ -197,6 +197,7 @@ export type Project = {
 }
 
 export type Receipt = {
+  scopedLintOutput?: string
   inheritedLintPaths?: string[]
   snapshot: string
   check: string

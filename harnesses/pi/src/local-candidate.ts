@@ -471,7 +471,7 @@ async function executeLocalCandidate(
             failed.map((r) => ({
               check: r.check,
               status: r.status,
-              output: r.result.output.slice(-4000),
+              output: r.scopedLintOutput ?? r.result.output.slice(-4000),
             })),
           )
         } else {

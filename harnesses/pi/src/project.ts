@@ -177,34 +177,41 @@ type LintBaseline = { files: Map<string, Buffer>; writePaths: string[] }
 
 /** Attribute a complete harness-lint failure only when every diagnostic names unchanged,
  * out-of-scope input. Unknown or mixed diagnostics follow the ordinary repair path. */
-function inheritedLintPaths(
+function classifyLintFindings(
   output: string,
   probe: string,
   files: Map<string, Buffer>,
   baseline: LintBaseline,
-): string[] | undefined {
+): Pick<Receipt, 'inheritedLintPaths' | 'scopedLintOutput'> {
   const paths = new Set<string>()
+  let inheritedOnly = true
+  let scopedOutput = ''
 
   for (const line of output.trim().split('\n')) {
     const diagnostic = /^([^:\r\n]+)(?::\d+)?: (.+)$/.exec(line)
 
     if (!diagnostic) {
-      return undefined
+      inheritedOnly = false
+      continue
     }
 
     const [, raw, message] = diagnostic
     const name = raw!.startsWith(probe + '/') ? raw!.slice(probe.length + 1) : raw!
     const bytes = files.get(name)
 
-    if (
-      !bytes ||
-      !baseline.files.get(name)?.equals(bytes) ||
-      baseline.writePaths.some((scope) => matches(name, scope))
-    ) {
-      return undefined
+    if (bytes && baseline.writePaths.some((scope) => matches(name, scope))) {
+      inheritedOnly = false
+
+      if (scopedOutput.length < 4000) {
+        scopedOutput += name + line.slice(raw!.length) + '\n'
+      }
+
+      continue
     }
 
     if (
+      !bytes ||
+      !baseline.files.get(name)?.equals(bytes) ||
       ![
         'line exceeds 100 columns',
         'invalid JSON',
@@ -213,13 +220,16 @@ function inheritedLintPaths(
         'separate logical stages and standalone comment blocks',
       ].includes(message!)
     ) {
-      return undefined
+      inheritedOnly = false
     }
 
     paths.add(name)
   }
 
-  return [...paths]
+  return {
+    ...(inheritedOnly && paths.size > 0 && { inheritedLintPaths: [...paths] }),
+    ...(scopedOutput && { scopedLintOutput: scopedOutput.slice(0, 4000).trimEnd() }),
+  }
 }
 
 export async function verifyProject(
@@ -281,21 +291,21 @@ export async function verifyProject(
         : check !== checks[0] && hasSkippedTests(result.output)
           ? 'skipped'
           : 'passed'
-    const inherited =
+    const lintFindings =
       check === checks[0] &&
       baseline &&
       result.exitCode === 1 &&
       !result.timedOut &&
       !result.aborted &&
       !result.truncated
-        ? inheritedLintPaths(result.output, probe, files, baseline)
+        ? classifyLintFindings(result.output, probe, files, baseline)
         : undefined
     receipts.push({
       snapshot: hash,
       check: check.id,
       status,
       result,
-      ...(inherited?.length && { inheritedLintPaths: inherited }),
+      ...lintFindings,
     })
 
     if (status !== 'passed' && check.required) {

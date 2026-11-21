@@ -233,6 +233,9 @@ device/inode identities to avoid replacing Pi's own live session file. Codex wor
 complete Pi session traces; Claude workers capture streamed JSONL events, bounded at 16 MB per
 attempt. Oversized output fails explicitly.
 
+Local candidate repair prompts prioritize lint findings in the assigned files. The check receipt
+keeps the full output. Inherited failures continue to block integration.
+
 Each local accepted-design workflow has one project lock and no repair-round ceiling. Repeating an
 identical failure with an unchanged candidate produces an actionable blocker. Commands, output size,
 snapshot file count and size remain bounded. Database recovery verification is activated by the

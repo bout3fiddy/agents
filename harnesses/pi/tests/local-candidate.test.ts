@@ -221,6 +221,40 @@ test('direct worker can compare a local dependency from baseline and candidate',
   assert.equal(await readFile(join(dependency, 'index.js'), 'utf8'), 'module.exports = 10\n')
 })
 
+test('mixed lint keeps scoped diagnostics in repair feedback', async (t) => {
+  const f = await localFixture(t)
+  const longLine = '// ' + 'x'.repeat(100) + '\n'
+  await writeFile(join(f.root, 'zzz.js'), longLine.repeat(140))
+  await gitCommand(f.root, ['add', 'zzz.js'])
+  await gitCommand(f.root, ['commit', '-m', 'Seed inherited diagnostics'])
+  f.request.local!.base = await gitCommand(f.root, ['rev-parse', 'HEAD'])
+  let calls = 0
+  const state = await runLocalCandidate(
+    f.store,
+    f.request,
+    new AbortController().signal,
+    async (w) => {
+      calls++
+
+      if (calls === 2) {
+        const [{ output }] = JSON.parse(JSON.parse(w.task).feedback)
+        assert.match(output, /src\/one\.js:1: line exceeds 100 columns/)
+      }
+
+      await writeFile(
+        join(w.workspace, 'src/one.js'),
+        calls === 1 ? longLine : 'export const base = 2\n',
+      )
+      return passingEvidence(w.workspace)
+    },
+  )
+  assert.equal(state.receipts?.[0]?.inheritedLintPaths?.[0], 'zzz.js', state.error)
+  assert.equal(state.status, 'needs_attention')
+  assert.equal(calls, 2)
+  assert.equal(state.commit, undefined)
+  assert.match(state.receipts[0]!.result.output, /zzz\.js:140:/)
+})
+
 test('local repair returns receipts for a repeated failure', async (t) => {
   const f = await localFixture(t)
   let calls = 0
