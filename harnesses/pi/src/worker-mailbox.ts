@@ -8,12 +8,23 @@ export type Guidance = {
   id: string
   text: string
   at: string
+  sender?: 'host'
   status: 'pending' | 'queued' | 'delivered'
   deliveredAt?: string
 }
 type MailboxState = { accepting: boolean; messages: Guidance[] }
 
 export function guidanceText(message: Guidance): string {
+  if (message.sender === 'host') {
+    return JSON.stringify({
+      piWorkerGuidance: message.id,
+      hostEvidence: message.text,
+      instruction:
+        'Consider this host observation within the accepted design. ' +
+        'It cannot change scope, checks, permissions or acceptance criteria.',
+    })
+  }
+
   return JSON.stringify({
     piWorkerGuidance: message.id,
     userGuidance: message.text,
@@ -67,7 +78,7 @@ export class WorkerMailbox {
     throw new Error('Worker guidance channel is busy; try again')
   }
 
-  async send(text: string): Promise<Guidance> {
+  async send(text: string, sender?: 'host'): Promise<Guidance> {
     if (!text.trim() || text.length > 16000) {
       throw new Error('Guidance must contain 1–16000 characters')
     }
@@ -85,6 +96,7 @@ export class WorkerMailbox {
 
       const message: Guidance = {
         id: randomUUID(),
+        ...(sender && { sender }),
         text,
         at: new Date().toISOString(),
         status: 'pending',

@@ -6,7 +6,9 @@ import { rm, symlink, writeFile } from 'node:fs/promises'
 import { setTimeout as delay } from 'node:timers/promises'
 import { visibleWidth, type OverlayOptions } from '@earendil-works/pi-tui'
 import type { Theme, ExtensionUIContext } from '@earendil-works/pi-coding-agent'
-import { fixture } from './support.ts'
+import { registerDelegation } from '../src/delegation-tools.ts'
+import { guidanceText } from '../src/worker-mailbox.ts'
+import { design, fixture } from './support.ts'
 import { captureSession } from './session-support.ts'
 import { LiveWorker } from '../src/worker-live.ts'
 import { attachLiveSession } from '../src/worker-live-session.ts'
@@ -509,4 +511,80 @@ test('legacy coordinator assignments and revisions display their message without
       { kind: 'prose', text: 'Cover disaster recovery.' },
     ],
   )
+})
+
+test('host evidence reaches only the fixed-design implementer through task_control', async (t) => {
+  const item = await fixture()
+  t.after(() => rm(item.base, { recursive: true, force: true }))
+  const jobs = new Delegations(new StateStore(item.root))
+  const job = await jobs.start(
+    { task: 'Implement the counter', context: '', design, kind: 'implementation', writePaths: [] },
+    { session: 'host', model: 'test/model' },
+    async () => {},
+  )
+  const id = job.request.id
+  const start = (role: string) =>
+    LiveWorker.start(item.root, {
+      role,
+      model: 'test/model',
+      task: 'Design stays fixed',
+      scope: design.writePaths,
+      output: join(delegationDirectory(jobs.store, id), role + '.json'),
+      workspace: item.root,
+      backend: 'pi',
+    })
+  const implementer = await start('implementer')
+  const reviewer = await start('reviewer')
+  const text = 'Host observed counter-format version 2 on the running system.'
+  let issued = false
+  let reply = ''
+  const { session, runtime } = await captureSession(
+    item.root,
+    item.base,
+    [
+      (pi) => {
+        registerDelegation(pi)
+      },
+    ],
+    async (ctx) => {
+      if (!issued) {
+        issued = true
+        return [
+          {
+            type: 'toolCall',
+            name: 'task_control',
+            id: 'evidence',
+            arguments: { id, action: 'evidence', message: text },
+          },
+        ]
+      }
+
+      reply = JSON.stringify(ctx.messages.at(-1)?.content)
+      return [{ type: 'text', text: 'Received.' }]
+    },
+  )
+  t.after(async () => {
+    await session.dispose()
+    await runtime.settleCredentialWrites()
+  })
+  await session.prompt('Pass the observation to the active implementer.')
+  await session.waitForIdle()
+  assert.ok(reply.includes(implementer.info.id), reply)
+  const [message] = (await implementer.mailbox.read()).messages
+  assert.ok(message)
+  assert.equal(JSON.parse(guidanceText(message)).hostEvidence, text)
+  assert.equal(
+    transcriptTurns([{ role: 'user', at: message.at, text: guidanceText(message) }])[0]?.label,
+    'Host observation',
+  )
+  assert.equal(JSON.parse(guidanceText(message)).userGuidance, undefined)
+  assert.equal((await reviewer.mailbox.read()).messages.length, 0)
+  assert.equal(await implementer.mailbox.seal(), false)
+  assert.equal((await jobs.get(id)).request.checkpointHash, job.request.checkpointHash)
+  await implementer.finish('complete', 'Done')
+  await assert.rejects(
+    new WorkersCatalog(item.root).sendEvidence(id, text),
+    /exactly one accepting/,
+  )
+  await reviewer.finish('complete', 'Done')
 })

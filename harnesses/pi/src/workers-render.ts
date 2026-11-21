@@ -206,7 +206,7 @@ export class ConversationRenderer {
       turn.speaker === 'worker'
         ? [view.name, 'accent']
         : turn.speaker === 'guidance'
-          ? ['You', 'borderAccent']
+          ? [turn.label ?? 'You', 'borderAccent']
           : turn.speaker === 'assignment'
             ? ['Assignment', 'muted']
             : turn.speaker === 'summary'

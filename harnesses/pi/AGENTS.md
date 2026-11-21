@@ -193,3 +193,6 @@ evidence in its ignored `.pi/local-memory/`. Import legacy agent-directory state
 validate evidence in the active checkout, preserve prior revisions and reconcile competing writes.
 Designs and task receipts own implementation state. Run the project-memory tests and
 `npm run test:live:memory` for changes to capture, recall or planning.
+
+- Use task_control action=evidence for an observed fact needed by a live fixed-design implementer.
+  Bind delivery to the accepting worker and original task. Never change its design or review scope.

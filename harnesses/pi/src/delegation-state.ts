@@ -774,7 +774,8 @@ export class Delegations {
 
         if (job.request.kind === 'implementation') {
           throw new Error(
-            'This implementation task has a fixed design. Inspect task_status, then use ' +
+            'This implementation task has a fixed design. Send observations with task_control ' +
+              'action=evidence. For a scope change use ' +
               'workflow with the revised design after the current reservation is released.',
           )
         }

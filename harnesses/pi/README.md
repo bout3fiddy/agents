@@ -232,12 +232,15 @@ completion is blocked by an earlier child result, the error names the exact role
 that must pass. Verification-only follow-ups retain that scope. Passing reviews remain reusable
 while the candidate is unchanged.
 
-`task_control` sends a scoped update, pause or cancellation. `task_status` inspects durable state
-and evidence. Completion reaches the originating session once at a safe model/tool boundary. While
-idle, it wakes the orchestrator for a brief acknowledgement; while busy, it joins the current
-discussion. Simultaneous completions are batched, queued user input takes priority, and reload does
-not repeat the notification. Routine progress does not start model calls. Recovery within the
-original authorization is permitted; unrelated work and publication need their own authorization.
+`task_control` with `action: "evidence"` passes host observations to the active implementer on the
+specified task through its existing mailbox. The receipt identifies the worker and queued message.
+The accepted design and independent reviews keep their original scope. Other actions send a scoped
+update, pause or cancellation. `task_status` inspects durable state and evidence. Completion reaches
+the originating session once at a safe model/tool boundary. While idle, it wakes the orchestrator
+for a brief acknowledgement; while busy, it joins the current discussion. Simultaneous completions
+are batched, queued user input takes priority, and reload does not repeat the notification. Routine
+progress does not start model calls. Recovery within the original authorization is permitted;
+unrelated work and publication need their own authorization.
 
 Two ordinary jobs may run concurrently on disjoint paths. Local implementation reserves writes
 exclusively through both `workflow` and `delegate_task` with kind `implementation`. Read-only

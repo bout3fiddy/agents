@@ -134,7 +134,8 @@ try {
   await session.prompt(
     'Delegate a small document task in the background, then keep discussing with me. ' +
       'Record capacity 100 and reject new jobs when full in design/queue.md; keep persistence ' +
-      'open. Use one task-worker, then the explicitly requested independent Fable reviewer. ' +
+      'open. Use one task-worker, then an independent Claude reviewer. Use the configured ' +
+      'Fable preference and accept the configured Opus quota fallback for this review. ' +
       'Tell the editing worker to report_progress with a brief summary, then run_command ' +
       'node -e "setTimeout(() => {}, 20000)" once before editing. ' +
       'It may receive guidance while waiting. The reviewer should independently check ' +

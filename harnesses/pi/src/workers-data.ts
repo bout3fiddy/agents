@@ -125,12 +125,14 @@ export class WorkersCatalog {
     this.jobs = new Delegations(this.store)
   }
 
-  async list(): Promise<WorkerRow[]> {
+  async list(taskId?: string): Promise<WorkerRow[]> {
     this.warnings = []
-    const jobs = await this.jobs.list().catch((error: unknown) => {
-      this.warnings.push(`Task registry: ${String(error)}`)
-      return [] as Delegation[]
-    })
+    const jobs = taskId
+      ? [await this.jobs.get(taskId)]
+      : await this.jobs.list().catch((error: unknown) => {
+          this.warnings.push(`Task registry: ${String(error)}`)
+          return [] as Delegation[]
+        })
     const rows: WorkerRow[] = []
     const directory = join(this.store.directory, 'workers')
 
@@ -144,6 +146,11 @@ export class WorkersCatalog {
         const info =
           this.info.get(id) ??
           (await readJson<LiveWorkerInfo>(await safeTrace(this.store, join(path, 'info.json'))))
+
+        if (taskId && info?.taskId !== taskId) {
+          continue
+        }
+
         let state = await readJson<LiveWorkerState>(
           await safeTrace(this.store, join(path, 'state.json')),
         )
@@ -270,6 +277,34 @@ export class WorkersCatalog {
       },
       transcript: latest ? join(sessions, latest) : undefined,
     }
+  }
+
+  async sendEvidence(taskId: string, text: string) {
+    const rows = (await this.list(taskId)).filter(
+      (row) =>
+        row.info.taskId === taskId &&
+        row.info.role === 'implementer' &&
+        row.active &&
+        row.accepting &&
+        !row.legacy &&
+        !row.inferredRelationship,
+    )
+
+    if (rows.length !== 1) {
+      throw new Error('Evidence needs exactly one accepting implementer on the specified task')
+    }
+
+    const worker = rows[0]!
+    const message = await this.jobs.locked(async () => {
+      const job = await this.jobs.get(taskId)
+
+      if (job.request.kind !== 'implementation' || !activeTask(job.state)) {
+        throw new Error('Host evidence requires an active fixed-design implementation task')
+      }
+
+      return new WorkerMailbox(worker.directory!).send(text, 'host')
+    })
+    return { taskId, workerId: worker.id, messageId: message.id, status: message.status }
   }
 
   async send(id: string, text: string): Promise<string> {

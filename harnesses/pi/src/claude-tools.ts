@@ -75,7 +75,7 @@ server.setRequestHandler(CallToolRequestSchema, async (call, context) => {
           ...guidance,
           {
             type: 'text',
-            text: 'New user guidance arrived. Address it before retrying this tool or submitting.',
+            text: 'New guidance arrived. Consider it within the assigned scope before retrying.',
           },
         ],
       }

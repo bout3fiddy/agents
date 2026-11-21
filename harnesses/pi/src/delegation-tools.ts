@@ -1,3 +1,4 @@
+import { WorkersCatalog } from './workers-data.ts'
 import { taskStatusSchema } from './inspection-schema.ts'
 import { realpath } from 'node:fs/promises'
 import { basename, dirname, join, relative, resolve } from 'node:path'
@@ -514,15 +515,30 @@ export function registerDelegation(pi: ExtensionAPI, launch: Launcher = launchDe
     name: 'task_control',
     label: 'Steer, pause or cancel task',
     description:
-      'Send a scoped update, pause for inspection, or cancel. Pause stops the process tree and ' +
+      'Use evidence to send a host observation to the active implementer of a fixed design. ' +
+      'Use message for task updates. Pause stops the process tree and ' +
       'preserves candidate and ownership. Wait for the paused outcome before revise_tasks or ' +
       'resume_task. Cancellation releases ownership after the worker stops.',
     parameters: Type.Object({
       id: idSchema,
-      action: Type.Union([Type.Literal('message'), Type.Literal('pause'), Type.Literal('cancel')]),
+      action: Type.Union([
+        Type.Literal('message'),
+        Type.Literal('evidence'),
+        Type.Literal('pause'),
+        Type.Literal('cancel'),
+      ]),
       message: Type.Optional(Type.String({ maxLength: 12000 })),
     }),
     async execute(_id, args, _signal, _update, ctx) {
+      if (args.action === 'evidence') {
+        return textResult(
+          await new WorkersCatalog(await realpath(ctx.cwd)).sendEvidence(
+            args.id,
+            args.message ?? '',
+          ),
+        )
+      }
+
       return textResult(
         await new Delegations(await storeFor(ctx.cwd)).control(args.id, args.action, args.message),
       )

@@ -332,7 +332,7 @@ export function outcomeOf(text: string, verb = ''): Outcome {
     return { tone: 'ok', summary: 'done', detail: [], hidden: 0 }
   }
 
-  if (/^New user guidance arrived/.test(body)) {
+  if (/^New (?:user )?guidance arrived/.test(body)) {
     return { tone: 'blocked', summary: 'paused for new guidance', detail: [], hidden: 0 }
   }
 
@@ -354,10 +354,15 @@ export function outcomeOf(text: string, verb = ''): Outcome {
   return { tone: 'ok', summary: firstLine(body), detail: lines.slice(1, 4), hidden: 0 }
 }
 
-type Guidance = { text: string }
+type Guidance = { text: string; label?: string }
 
 function guidanceOf(text: string): Guidance | undefined {
   const value = parseObject(text)
+
+  if (typeof value?.hostEvidence === 'string') {
+    return { text: value.hostEvidence, label: 'Host observation' }
+  }
+
   return typeof value?.userGuidance === 'string' ? { text: value.userGuidance } : undefined
 }
 
@@ -457,11 +462,14 @@ export function transcriptTurns(entries: ConversationEntry[]): Turn[] {
 
     const object = parseObject(text.trim())
 
-    if (entry.role === 'user' && typeof object?.userGuidance === 'string') {
+    const userMessage = entry.role === 'user' && guidanceOf(text)
+
+    if (userMessage) {
       turns.push({
         speaker: 'guidance',
+        label: userMessage.label,
         at: entry.at,
-        blocks: [{ kind: 'prose', text: object.userGuidance }],
+        blocks: [{ kind: 'prose', text: userMessage.text }],
       })
       continue
     }
@@ -512,6 +520,7 @@ export function transcriptTurns(entries: ConversationEntry[]): Turn[] {
         if (item) {
           turns.push({
             speaker: 'guidance',
+            label: item.label,
             at: entry.at,
             blocks: [{ kind: 'prose', text: item.text }],
           })

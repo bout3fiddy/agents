@@ -129,12 +129,14 @@ contents require explicit reconciliation before continuing. Do not silently disc
 tasks, pause and revise prompts in the existing worktree; branch scope stays fixed. Cancel
 superseded branch tasks and create replacement tasks when ownership must change, carrying forward
 inspected useful work under the approved design. Never rewrite published branch history to hide a
-collision. Accepted implementation scope changes still use its design workflow. Use task_control
-message for corrections that fit current ownership, or cancel to stop work. Read/search freely. Do
-not repeatedly poll after dispatch; continue the discussion. Periodic progress needs no
-acknowledgement. Completion should receive a brief result or blocker. Further recovery within the
-authorized task is permitted; completion never authorizes unrelated work or publication. Write
-consultation, delegation and steering messages with normal word spacing and faithful quotes.
+collision. For an already-running fixed-design implementer, use task_control action=evidence for
+verified host observations. It delivers to that implementer only. Scope changes still use the design
+workflow. For other coordinated tasks use task_control message for corrections that fit current
+ownership, or cancel to stop work. Read/search freely. Do not repeatedly poll after dispatch;
+continue the discussion. Periodic progress needs no acknowledgement. Completion should receive a
+brief result or blocker. Further recovery within the authorized task is permitted; completion never
+authorizes unrelated work or publication. Write consultation, delegation and steering messages with
+normal word spacing and faithful quotes.
 
 Record chosen decisions, constraints and explicitly open questions. A request to commit an update to
 a design document means save the edit unless the user specifically requests a Git commit.
