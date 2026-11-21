@@ -480,6 +480,11 @@ passes. Earlier repair rounds therefore see only behavioral failures. Harness li
 findings with the base commit's findings by file, message and line text. Existing findings are
 listed in `inheritedLintPaths` and never block; only findings the task adds do.
 
+Local tasks verify against the check policy committed at the checkout's current HEAD while it
+descends from the task's base, so a policy fix reaches retained and resumed tasks instead of leaving
+them to fail on the policy they were dispatched with. Branch tasks already revalidate against
+current `main`.
+
 Dispatch of implementation, maintenance, local and branch work fails when host `node_modules` does
 not match the direct dependencies pinned by the task's `package-lock.json`. Run `npm ci` on the host
 and dispatch again.
