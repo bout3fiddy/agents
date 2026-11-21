@@ -71,6 +71,8 @@
   Keep temporary directories under the per-process or per-task harness roots so a sweep can judge
   them. Never delete a path outside Pi-owned directories. Test with tests/cleanup.test.ts.
 - Reject dispatch when host node_modules differs from the task's lockfile; workers are offline.
+- Stop local repair when the candidate is unchanged, or when edits leave the failing checks naming
+  the same repository locations at the same guidance revision. New guidance continues the loop.
 - Record actual model/effort and request/model/tool timing under project-local `harness/timing/`.
   Respect the selected orchestrator model; implementation remains independently pinned to
   `openai-codex/gpt-6.2-astra` with medium as the default.

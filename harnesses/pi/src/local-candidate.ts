@@ -31,6 +31,40 @@ import { trackDispatch } from './progress.ts'
 import { currentPolicyCommit, loadPinnedProject } from './pinned-project.ts'
 import { atomicJson, readJson, StateStore } from './state.ts'
 
+/** Repository locations a failure names, as path:line[:column] matched against the candidate's
+ * files. Edits in a failing file shift these; edits elsewhere leave an unrelated failure identical.
+ * Returns undefined when a failed check names no repository location. */
+export function failureLocations(receipts: Receipt[], files: Map<string, Buffer>) {
+  const parts: string[] = []
+
+  for (const receipt of receipts.filter((item) => item.status !== 'passed')) {
+    const locations = new Set<string>()
+
+    for (const token of receipt.result.output.match(/[\w@./-]+\.[A-Za-z0-9]{1,8}:\d+(?::\d+)?/g) ??
+      []) {
+      const [path, ...position] = token.split(':')
+      const segments = path!.split('/').filter(Boolean)
+
+      for (let start = 0; start < segments.length; start++) {
+        const name = segments.slice(start).join('/')
+
+        if (files.has(name)) {
+          locations.add([name, ...position].join(':'))
+          break
+        }
+      }
+    }
+
+    if (!locations.size) {
+      return undefined
+    }
+
+    parts.push(`${receipt.check}:${[...locations].sort().join(',')}`)
+  }
+
+  return parts.length ? parts.join('|') : undefined
+}
+
 async function localProject(request: DelegationRequest, signal: AbortSignal) {
   const policy = await currentPolicyCommit(request.root, request.local!.base, signal)
   const project = await loadPinnedProject(request.root, policy, signal)
@@ -499,7 +533,27 @@ async function executeLocalCandidate(
           })
         }
 
+        // Edits that leave a failure at the same repository locations did not reach it, such as
+        // a comment change while an inherited defect fails the gate. Hand off instead of looping.
+        const located =
+          error instanceof DelegationChecksFailed
+            ? failureLocations(error.receipts, after)
+            : undefined
+        const repeated = located && `${current.revision}/located/${located}`
+
+        if (repeated && failures.has(repeated)) {
+          throw new Error(
+            `Repair made no progress; the same failure repeated after edits: ${error.message}`,
+            { cause: error },
+          )
+        }
+
         failures.add(failure)
+
+        if (repeated) {
+          failures.add(repeated)
+        }
+
         lastFailure = {
           revision: current.revision,
           snapshot,

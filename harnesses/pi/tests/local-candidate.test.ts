@@ -359,6 +359,48 @@ test('a task pinned to an unmerged commit uses the checkout policy', async (t) =
   assert.equal(state.receipts?.find((receipt) => receipt.check === 'behavior')?.status, 'passed')
 })
 
+test('edits that leave a failure at the same locations stop the repair loop', async (t) => {
+  const f = await localFixture(t)
+  const policy = join(f.root, '.pi/harness.json')
+  const adapter = JSON.parse(await readFile(policy, 'utf8'))
+  adapter.checks.push({
+    id: 'seam',
+    argv: ['node', '-e', "console.error('legacy.txt:1:3: seam violation'); process.exit(1)"],
+    kind: 'static',
+    required: true,
+    timeoutMs: 10000,
+  })
+  await writeFile(policy, JSON.stringify(adapter, null, 2) + '\n')
+  await writeFile(join(f.root, 'legacy.txt'), 'inherited seam\n')
+  await gitCommand(f.root, ['add', '.pi/harness.json', 'legacy.txt'])
+  await gitCommand(f.root, ['commit', '-m', 'Add an inherited seam failure'])
+  f.request.local!.base = await gitCommand(f.root, ['rev-parse', 'HEAD'])
+  let calls = 0
+  const state = await runLocalCandidate(
+    f.store,
+    f.request,
+    new AbortController().signal,
+    async (w) => {
+      calls++
+      assert.ok(calls <= 2, 'A repeated failure must not keep the implementer looping')
+      const source = [
+        'export const base = 1',
+        '',
+        'export function doubled(value) {',
+        '  return value * 2',
+        '}',
+        `// round ${calls}`,
+        '',
+      ].join('\n')
+      await writeFile(join(w.workspace, 'src/one.js'), source)
+      return passingEvidence(w.workspace)
+    },
+  )
+  assert.equal(state.status, 'needs_attention')
+  assert.equal(calls, 2)
+  assert.match(state.error!, /same failure repeated after edits/)
+})
+
 test('local repair returns receipts for a repeated failure', async (t) => {
   const f = await localFixture(t)
   let calls = 0
