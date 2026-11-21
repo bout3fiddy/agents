@@ -21,7 +21,8 @@ export const capabilities = {
     ],
     localImplementation:
       'workflow and delegate_task implementation share one checkpoint and require exclusive ' +
-      'local writes. Use delegate_branches for independent builds with a committed design ' +
+      'local writes. Use delegate_local for local candidates on the current commit or ' +
+      'delegate_branches for remote builds with a committed design ' +
       'and executable checks. Read-only research can run alongside a local implementation.',
     authority: 'Only actions authorized by the user; a worker request never grants new permission.',
   },

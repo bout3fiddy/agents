@@ -22,6 +22,7 @@ import { memoryRepository } from './memory-repository.ts'
 import { capabilities } from './capabilities.ts'
 import { atomicJson } from './state.ts'
 
+import { verificationLoopSchema, verifyLoop } from './verification-loop.ts'
 import { formatSource } from './source-format.ts'
 
 export const references: Record<string, string> = {
@@ -169,6 +170,21 @@ export function createWorkerTools(request: WorkerRequest, role: Role) {
 
         const result = await checkDocuments(request.workspace, paths, shouldFormat)
         return { ...textResult(result), isError: result.status === 'failed' }
+      },
+    },
+    {
+      name: 'verify_loop',
+      executionMode: 'sequential',
+      label: 'Run verification loop',
+      description:
+        'Run isolated seeded cases in one call. Use {seed} in argv. Differential compares ' +
+        'stable text from original and candidate. Benchmark runs matching inputs in alternating ' +
+        'order; emit one numeric value and specify metric with unit. Return first failing replay ' +
+        'or paired medians. Raw samples are retained. Project acceptance checks remain required.',
+      parameters: verificationLoopSchema,
+      async execute(_id, input, signal) {
+        const result = await verifyLoop(request, input, signal)
+        return { ...textResult(result), isError: result.status !== 'passed' }
       },
     },
     {

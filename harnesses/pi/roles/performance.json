@@ -11,6 +11,7 @@
     "project_edit",
     "project_delete",
     "run_command",
+    "verify_loop",
     "submit_result",
     "read_reference",
     "project_format",

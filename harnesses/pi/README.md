@@ -235,13 +235,14 @@ publication need their own authorization.
 
 Two ordinary jobs may run concurrently on disjoint paths. Local implementation reserves writes
 exclusively through both `workflow` and `delegate_task` with kind `implementation`. Read-only
-research can continue alongside it. For independent concurrent builds, use `delegate_branches` with
-a committed design and the required checks. Coordinators have no child-call or model-turn limit;
-their writable children run serially. Explicit file tools and Markdown formatting reject writes to
-active task paths. Shell ownership is a prompt rule; host integration also rejects a changed target
-file. Document tasks preserve unrelated foreground edits. Code maintenance and implementation
-require the complete project baseline to remain unchanged. New scope requires a new task.
-Acceptance/context reset waits for active tasks to finish or cancel.
+research can continue alongside it. For direct local builds use `delegate_local` on the current
+commit. For independent published builds, use `delegate_branches` with a committed design and the
+required checks. Coordinators have no child-call or model-turn limit; their writable children run
+serially. Explicit file tools and Markdown formatting reject writes to active task paths. Shell
+ownership is a prompt rule; host integration also rejects a changed target file. Document tasks
+preserve unrelated foreground edits. Code maintenance and implementation require the complete
+project baseline to remain unchanged. New scope requires a new task. Acceptance/context reset waits
+for active tasks to finish or cancel.
 
 Jobs survive `/reload` and Pi exit; their process, controls, status and evidence live under
 `.pi/traces/harness/delegations/<id>/`. Stop a job through `task_control`; an ordinary conversation
@@ -644,3 +645,6 @@ update can finish while the task keeps running. The session continues at the nex
 while the host owns a runnable step. An explicit wait, pause or verified completion stops the
 continuation. A continuation that only restates a plan surfaces a stalled notice. State lives in the
 originating Pi conversation. Other chats and repository memory cannot resume it.
+
+Local fan-out, competing candidates and evidence-based integration are described in
+[Independent branch orchestration](documentation/branches.md#local-candidates).

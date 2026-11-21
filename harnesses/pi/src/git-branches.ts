@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process'
 import { createHash, randomUUID } from 'node:crypto'
-import { mkdir, realpath, stat } from 'node:fs/promises'
+import { lstat, mkdir, realpath, stat } from 'node:fs/promises'
 import { isAbsolute, join, resolve } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import { acquireLock } from './lock.ts'
@@ -22,6 +22,7 @@ export type GitRepository = GitTarget & {
   base: string
 }
 export type GitBranch = GitRepository & { workspace: string; branch: string }
+export type CandidateCheckout = Pick<GitBranch, 'root' | 'workspace' | 'branch' | 'base'>
 export type BranchPublication = {
   message: string
   writePaths: string[]
@@ -308,7 +309,10 @@ export async function prepareBranch(
   return { ...repository, base, branch, workspace: await realpath(workspace) }
 }
 
-export async function currentCommit(branch: GitBranch, signal?: AbortSignal): Promise<string> {
+export async function currentCommit(
+  branch: Pick<GitBranch, 'workspace'>,
+  signal?: AbortSignal,
+): Promise<string> {
   return gitCommand(branch.workspace, ['rev-parse', 'HEAD'], signal)
 }
 
@@ -347,8 +351,24 @@ async function commitCandidate(
   baseline: string,
   signal?: AbortSignal,
 ): Promise<string> {
-  validateScope(publication.writePaths)
   await branchIdentity(branch, signal)
+  return commitVerifiedTree(branch, publication, baseline, signal)
+}
+
+/** Stage only scoped changes and validate the committed tree against the checked snapshot. */
+export async function commitVerifiedTree(
+  branch: CandidateCheckout,
+  publication: BranchPublication,
+  baseline: string,
+  signal?: AbortSignal,
+  beforeCommit?: (tree: string) => Promise<void>,
+): Promise<string> {
+  validateScope(publication.writePaths)
+  const current = await gitCommand(branch.workspace, ['symbolic-ref', '--short', 'HEAD'], signal)
+
+  if (current !== branch.branch) {
+    throw new Error('Task worktree changed branches before commit')
+  }
 
   const reviewed = await inventory(branch.workspace)
 
@@ -356,11 +376,34 @@ async function commitCandidate(
     throw new Error('Task candidate changed after verification')
   }
 
+  const paths = ['.']
+  const modules = join(branch.workspace, 'node_modules')
+  const dependencyLink = await lstat(modules).catch((error: NodeJS.ErrnoException) => {
+    if (error.code !== 'ENOENT') {
+      throw error
+    }
+
+    return undefined
+  })
+
+  // A directory-only ignore rule matches installed modules but not our worktree symlink.
+
+  if (dependencyLink?.isSymbolicLink()) {
+    if (
+      (await realpath(modules)) !== (await realpath(join(branch.root, 'node_modules'))) ||
+      (await gitCommand(branch.workspace, ['ls-files', '--', 'node_modules'], signal))
+    ) {
+      throw new Error('Unexpected dependency link in candidate worktree')
+    }
+
+    paths.push(':(top,exclude)node_modules')
+  }
+
   const names = [
     await gitCommand(branch.workspace, ['diff', '--name-only', '-z', baseline, '--'], signal),
     await gitCommand(
       branch.workspace,
-      ['ls-files', '--others', '--exclude-standard', '-z'],
+      ['ls-files', '--others', '--exclude-standard', '-z', '--', ...paths],
       signal,
     ),
   ].flatMap((value) => value.split('\0').filter(Boolean))
@@ -374,7 +417,7 @@ async function commitCandidate(
   }
 
   // The final diff against current main was scoped above, including deletions and index changes.
-  await gitCommand(branch.workspace, ['add', '-A', '--', '.'], signal)
+  await gitCommand(branch.workspace, ['add', '-A', '--', ...paths], signal)
 
   if (
     await gitCommand(branch.workspace, ['diff', '--name-only', '--diff-filter=U', '-z'], signal)
@@ -401,6 +444,10 @@ async function commitCandidate(
       throw error
     })
 
+  if (beforeCommit) {
+    await beforeCommit(await gitCommand(branch.workspace, ['write-tree'], signal))
+  }
+
   if (staged || merging) {
     await gitCommand(
       branch.workspace,
@@ -418,7 +465,7 @@ async function commitCandidate(
 }
 
 async function verifyCommittedTree(
-  branch: GitBranch,
+  branch: CandidateCheckout,
   reviewed: Map<string, Buffer>,
   signal?: AbortSignal,
 ): Promise<void> {
@@ -477,12 +524,12 @@ export async function publishBranch(
   return commit
 }
 
-async function queueLock(branch: GitBranch, signal?: AbortSignal) {
+export async function acquireMergeLock(commonDir: string, signal?: AbortSignal) {
   for (;;) {
     signal?.throwIfAborted()
 
     try {
-      return await acquireLock(join(branch.commonDir, 'pi-harness-merge.lock'))
+      return await acquireLock(join(commonDir, 'pi-harness-merge.lock'))
     } catch (error) {
       if (!String(error).includes('already running')) {
         throw error
@@ -498,7 +545,7 @@ export async function mergeBranch(
   options: MergeOptions,
   signal?: AbortSignal,
 ): Promise<{ commit: string; baseTip: string; attempts: number }> {
-  const release = await queueLock(branch, signal)
+  const release = await acquireMergeLock(branch.commonDir, signal)
 
   try {
     for (let attempts = 1; Number.isSafeInteger(attempts); attempts++) {

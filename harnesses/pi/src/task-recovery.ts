@@ -1,3 +1,4 @@
+import { competingSiblings } from './local-contracts.ts'
 import { mkdir, rm, writeFile } from 'node:fs/promises'
 import { dirname, extname, join } from 'node:path'
 import { randomUUID } from 'node:crypto'
@@ -192,8 +193,18 @@ export async function reviseTasks(jobs: Delegations, raw: Revision) {
       )
 
       if (
-        updates.slice(0, index).some((other) => scopesOverlap(task.writePaths, other.writePaths)) ||
-        sameMode.some((other) => scopesOverlap(task.writePaths, other.request.writePaths))
+        updates
+          .slice(0, index)
+          .some(
+            (other, i) =>
+              !competingSiblings(selected[index]!.request.local, selected[i]!.request.local) &&
+              scopesOverlap(task.writePaths, other.writePaths),
+          ) ||
+        sameMode.some(
+          (other) =>
+            !competingSiblings(selected[index]!.request.local, other.request.local) &&
+            scopesOverlap(task.writePaths, other.request.writePaths),
+        )
       ) {
         throw new Error('Revised tasks still have colliding write scopes')
       }

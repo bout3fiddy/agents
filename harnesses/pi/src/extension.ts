@@ -26,6 +26,7 @@ import { registerProjectMemory } from './project-memory.ts'
 import { registerMainSync } from './main-sync.ts'
 import { registerAutoReload } from './auto-reload.ts'
 import { runtimeVersion } from './runtime-version.ts'
+import { registerLocalTools } from './local-tools.ts'
 import { registerBranchTools } from './branch-tools.ts'
 import { capabilities } from './capabilities.ts'
 import { registerRecurring } from './recurring-tools.ts'
@@ -53,6 +54,7 @@ export default function harness(pi: ExtensionAPI): void {
   registerHostWork(pi)
   registerProjectMemory(pi, delegation.turnJobs)
   registerBranchTools(pi)
+  registerLocalTools(pi)
   const storeFor = async (cwd: string) => new StateStore(await realpath(cwd))
 
   pi.on('session_start', async (event, ctx) => {

@@ -47,6 +47,8 @@ const dispatch = new Set([
   'workflow',
   'delegate_task',
   'delegate_branches',
+  'delegate_local',
+  'integrate_candidate',
   'resume_task',
   'merge_branches',
 ])

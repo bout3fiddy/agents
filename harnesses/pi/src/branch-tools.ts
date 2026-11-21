@@ -11,7 +11,7 @@ import { StateStore } from './state.ts'
 import { Delegations, delegationView, scopesOverlap } from './delegation-state.ts'
 import { launchDelegation } from './delegation-process.ts'
 import { textResult } from './file-tools.ts'
-import { loadProject } from './project.ts'
+import { loadPinnedProject } from './pinned-project.ts'
 import { pinnedDesignInstruction, requireBranchChecks } from './branch-contracts.ts'
 
 export async function startBranchBatch(
@@ -69,24 +69,7 @@ export async function startBranchBatch(
     throw new Error('Use a settled design that matches the document on remote main')
   }
 
-  const project = await loadProject(store.projectRoot, async <T>(path: string) => {
-    const entry = await gitCommand(
-      store.projectRoot,
-      ['ls-tree', repository.base, '--', path],
-      signal,
-    )
-
-    if (!entry) {
-      return undefined
-    }
-
-    if (!/^100(?:644|755) blob [a-f0-9]+\t/.test(entry)) {
-      throw new Error(`Check configuration must be a committed regular file: ${path}`)
-    }
-
-    const raw = await gitCommand(store.projectRoot, ['show', `${repository.base}:${path}`], signal)
-    return JSON.parse(raw) as T
-  })
+  const project = await loadPinnedProject(store.projectRoot, repository.base, signal)
 
   for (const task of input.tasks) {
     requireBranchChecks(project, task)

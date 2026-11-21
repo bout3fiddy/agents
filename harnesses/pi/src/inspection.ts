@@ -30,6 +30,7 @@ export const nestedInspectionTools = new Set([
   'review_receipts',
   'inspect_pr',
   'inspect_ci_run',
+  'compare_candidates',
 ])
 
 export async function reviewReceipts(store: StateStore, id: string) {

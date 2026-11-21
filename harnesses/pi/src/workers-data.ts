@@ -1,3 +1,4 @@
+import { loadRole } from './roles.ts'
 import { lstat, open, readdir } from 'node:fs/promises'
 import { join, relative, resolve, sep } from 'node:path'
 import { StateStore, readJson } from './state.ts'
@@ -207,7 +208,10 @@ export class WorkersCatalog {
         ['task-coordinator', 'branch-orchestrator'].includes(row.info.role),
       )
 
-      if (covered || (job.request.kind === 'implementation' && children.length)) {
+      if (
+        covered ||
+        ((job.request.kind === 'implementation' || job.request.local) && children.length)
+      ) {
         continue
       }
 
@@ -240,6 +244,9 @@ export class WorkersCatalog {
       .sort()
       .at(-1)
     const activity = job.state.progress?.child ?? job.state.progress
+    const direct =
+      job.request.local &&
+      (await loadRole('implementer', job.request.thinking, job.request.implementerModel))
     return {
       id: `task:${job.request.id}`,
       legacy: true,
@@ -253,8 +260,13 @@ export class WorkersCatalog {
       info: {
         id: job.request.id,
         taskId: job.request.id,
-        role: job.request.kind === 'branch' ? 'branch-orchestrator' : 'task-coordinator',
-        model: job.request.model,
+        role: job.request.local
+          ? 'implementer'
+          : job.request.kind === 'branch'
+            ? 'branch-orchestrator'
+            : 'task-coordinator',
+        model: direct?.model ?? job.request.model,
+        thinking: direct?.thinking,
         task: job.request.task,
         scope: job.request.writePaths,
         output,
@@ -262,7 +274,7 @@ export class WorkersCatalog {
         projectRoot: job.request.root,
         pid: job.state.pid ?? 0,
         startedAt: job.request.createdAt,
-        backend: 'pi',
+        backend: direct?.backend === 'claude-cli' ? 'claude' : 'pi',
       },
       state: {
         status: activeTask(job.state)

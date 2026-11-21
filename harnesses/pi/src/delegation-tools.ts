@@ -88,6 +88,9 @@ function resultMessage(jobs: Delegation[]): CustomMessageEntryDraft {
         : 'Handle routine completions privately. ') +
       'When an outcome changes what the user can use, decide or expect, combine related ' +
       'results into one short update. Answer pending questions first. ' +
+      (jobs.some((job) => job.request.local)
+        ? 'Compare verified local candidates and integrate the selected work when in scope. '
+        : '') +
       'For failures, inspect the retained candidate and evidence. ' +
       'Recover within the original authorized scope: handle host-only operations on the host, ' +
       'preserve useful work and rerun relevant checks. Do not repeat a worker lacking the needed ' +

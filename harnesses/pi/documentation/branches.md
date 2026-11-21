@@ -151,3 +151,61 @@ validation script and does not limit production branch orchestration.
 
 For a branch in needs_attention, the merge tool returns the task ID and its recorded blocker.
 Inspect review_receipts and recover the required checks on the intended head before merging.
+
+## Local candidates
+
+Use `delegate_local` for a build on the current checkout. It pins local HEAD once, starts one direct
+implementer per assignment in an isolated worktree and returns immediately. The host can continue
+discussion and receive normal task outcomes. No remote, published design, project adapter or
+coordinator is required. Uncommitted changes stay in their originating checkout. A detached HEAD
+supports comparisons; local integration requires an originating branch.
+
+For independent work, supply an objective, disjoint write scopes and an acceptance command per task
+(or one common command). Example host tool input:
+
+```json
+{
+  "mode": "independent",
+  "objective": "Finish two public arithmetic operations",
+  "tasks": [
+    {
+      "task": "Implement clamp",
+      "writePaths": ["src/clamp.ts"],
+      "acceptance": { "argv": ["node", "--test", "test/clamp.mjs"] }
+    },
+    {
+      "task": "Implement stable deduplication",
+      "writePaths": ["src/unique.ts"],
+      "acceptance": { "argv": ["node", "--test", "test/unique.mjs"] }
+    }
+  ]
+}
+```
+
+Independent work is the default when mode is omitted. Reserve `competition` for a hard unresolved
+tradeoff. Supply `comparison.difficulty` and `comparison.criterion` at the top level, explaining why
+another implementation is worth its cost and what evidence will decide. Give two to four candidate
+approaches the same objective, a single top-level acceptance command and `acceptance.workloadPaths`
+naming its committed drivers, config and fixtures. Use exact files or directory/**. Keep those paths
+outside each worker's write scope. Candidates can edit the same product file in separate worktrees.
+Include the relevant behavior in each assignment. The host owns comparison and selection; each
+worker implements its assigned approach. Use a gate whose exit status tests the actual behavior. For
+a performance comparison, make the pinned workload report the chosen metric and units. Wall time for
+running a check includes overhead.
+
+`compare_candidates` takes a batch ID and reports candidate outcomes and acceptance evidence. The
+host selects a verified candidate based on the stated objective. `integrate_candidate` takes its
+task ID, serializes integration against the originating local branch, and rechecks a changed base. A
+competition can select one winner once the other candidates have stopped. Independent tasks can land
+individually. Candidate commits and receipts remain inspectable after integration. Local integration
+does not authorize publication. Continue to use `delegate_branches` for remote branch coordination
+and GitHub checks.
+
+Implementers and the on-demand performance specialist have `verify_loop` for seeded checks,
+differential replay against the original, and paired benchmark measurements. Pass the seed to the
+project's executable driver with `{seed}` in argv. Failure results retain replay arguments and the
+snapshot identity. Final acceptance runs independently on the verified candidate.
+
+Run `npm run test:live:local` for three real implementers on a local feature branch. Add
+`-- --coordinated` to run the same assignments through the existing remote branch workflow in a
+disposable bare Git repository. Both fixtures drive the host tool with a scripted Pi conversation.

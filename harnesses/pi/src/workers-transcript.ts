@@ -32,6 +32,7 @@ const verbs: Record<string, string> = {
   original_read: 'Original',
   document_check: 'Check',
   run_command: 'Run',
+  verify_loop: 'Verify',
   read_reference: 'Reference',
   report_progress: 'Progress',
   submit_result: 'Submit',
@@ -126,6 +127,10 @@ function targetOf(name: string, args: Record<string, unknown> | undefined): stri
   const text = (value: unknown) => (typeof value === 'string' ? firstLine(value) : '')
   const list = (value: unknown) =>
     Array.isArray(value) ? value.filter((item) => typeof item === 'string').join(', ') : ''
+
+  if (name === 'verify_loop') {
+    return text(args.mode) + ' ' + commandText(args.argv)
+  }
 
   if (name === 'run_command' || args.argv !== undefined) {
     return commandText(args.argv)
@@ -294,6 +299,19 @@ function objectOutcome(result: Record<string, unknown>): Outcome {
     const count = result.matches.length
     const more = typeof result.nextAfterPath === 'string' ? '+' : ''
     return done(count ? `${count}${more} match${count === 1 ? '' : 'es'}` : 'no matches')
+  }
+
+  if (
+    typeof result.status === 'string' &&
+    typeof result.completed === 'number' &&
+    typeof result.requested === 'number' &&
+    typeof result.snapshot === 'string'
+  ) {
+    const tone: Tone =
+      result.status === 'passed' ? 'ok' : result.status === 'failed' ? 'fail' : 'blocked'
+    const seed = typeof result.seed === 'number' ? ' at seed ' + result.seed : ''
+    const reason = typeof result.reason === 'string' ? ' · ' + firstLine(result.reason) : ''
+    return done(`${result.completed}/${result.requested} · ${result.status}${seed}${reason}`, tone)
   }
 
   if (typeof result.status === 'string') {

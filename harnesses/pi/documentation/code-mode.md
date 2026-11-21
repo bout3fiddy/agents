@@ -37,6 +37,8 @@ when a script catches an error or prints only part of a result.
 - `inspect_ci_run`. Batch run IDs for the baseline and candidate. Compare wallMs, lastFinishingJob,
   longestJobs and sameHeadRuns. Check jobsObserved against jobsTotal before generalizing.
 
+- `compare_candidates`. Inspect a local batch and its candidate evidence.
+
 - `inspect_pr`, `review_receipts`. Host inspections. Read baseRefName, baseRefOid and headRefOid in
   the same query as mergeability, reviews and checks. Read required findings and check snapshots
   from receipts. Missing receipts are null. Final runner checks supersede provisional coordinator
@@ -54,17 +56,29 @@ when a script catches an error or prints only part of a result.
 - `document_check`, `design_consultation`, `recurring_task`. Direct. These tools can also format,
   consume/cancel consultation results or change schedules.
 
+- `delegate_local`, `integrate_candidate`. Direct local dispatch and integration.
+
 - `workflow`, `consult_design`, `delegate_task`, `delegate_branches`, `delegate_worker`. Direct.
   These calls launch work.
 
 - `update_project_memory`, `task_control`, `revise_tasks`, `resume_task`, `merge_branches`. Direct
   changes to project state, running work or Git.
 
-- `run_checks`, `submit_result`, `report_progress`, `report_milestone`. Direct coordinator or worker
-  actions that execute checks or record evidence.
+- `run_checks`, `verify_loop`, `submit_result`, `report_progress`, `report_milestone`. Direct
+  coordinator or worker actions that execute checks or record evidence.
 
 - `WebFetch`, `WebSearch`. Claude-native tools where enabled. Claude CLI roles use their existing
   tools and can issue independent reads together.
+
+Implementers and performance workers call `verify_loop` directly for repeated commands. For example,
+mode `seeded`, argv `["node", "tests/recovery.js", "{seed}"]`, firstSeed 100 and count 40 run cases
+100–139 until the first failure. Use the returned replay arguments on the recorded snapshot.
+Differential mode compares matching text from original and candidate; benchmark mode pairs their
+samples in alternating order and reports medians in the supplied metric and unit. Benchmark commands
+must print a single finite number. Both sides use the candidate’s installed dependencies and their
+own source snapshots. Raw samples live in the private receipt alongside the worker result. Each
+sample runs in a fresh sandbox copy. A call accepts up to 128 cases and five minutes; continue a
+longer campaign in ranges. Project acceptance checks still run on the final snapshot.
 
 For one large read that only needs a count or a few matches, filter it in code mode. Use a direct
 call for one small read. Save expensive results before printing when a later slice is likely. Scope

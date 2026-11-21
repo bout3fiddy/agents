@@ -82,6 +82,24 @@ test('tool actions pair with meaningful outcomes instead of JSON', () => {
   }
 })
 
+test('loop failures show the first replay seed in the worker conversation', () => {
+  const lines = render([
+    entry('19:28', 'assistant', call('verify_loop', { mode: 'seeded', argv: ['node', 'test.js'] })),
+    entry(
+      '19:29',
+      'toolResult',
+      JSON.stringify({
+        status: 'failed',
+        completed: 7,
+        requested: 10,
+        snapshot: 'pinned',
+        seed: 12,
+      }),
+    ),
+  ])
+  assert.match(lines.join(' '), /Verify +seeded node test.js +✗ 7\/10 · failed at seed 12/)
+})
+
 test('legacy user-role tool failures are labelled as failed calls', () => {
   const text = render([
     entry('21:52', 'assistant', call('run_command', { argv: 'npm run verify' })),

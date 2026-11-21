@@ -18,6 +18,7 @@ import {
   validateDesign,
   writePathSchema,
 } from './contracts.ts'
+import { competingSiblings, type LocalPlan, type LocalTaskInput } from './local-contracts.ts'
 import type { BranchPlan, BranchTaskInput } from './branch-contracts.ts'
 import { readProgress, type TaskProgress } from './progress.ts'
 import { hostCapability } from './capabilities.ts'
@@ -48,6 +49,7 @@ export const delegateSchema = Type.Object(
 export type DelegateInput = Static<typeof delegateSchema>
 export type DelegationRequest = Omit<DelegateInput, 'kind'> & {
   kind: DelegateInput['kind'] | 'branch'
+  local?: LocalPlan
   branch?: BranchPlan
   id: string
   root: string
@@ -224,7 +226,11 @@ function checkWriteReservations(request: DelegationRequest, previous: Delegation
       (job.request.kind === 'branch') === (request.kind === 'branch') &&
       job.request.writePaths.length > 0,
   )
-  const overlap = owners.find((job) => scopesOverlap(request.writePaths, job.request.writePaths))
+  const overlap = owners.find(
+    (job) =>
+      !competingSiblings(request.local, job.request.local) &&
+      scopesOverlap(request.writePaths, job.request.writePaths),
+  )
 
   if (overlap) {
     throw new DelegationBusy(
@@ -252,6 +258,12 @@ export function delegationView(job: Delegation) {
   const { receipts, ...state } = job.state
   return {
     kind: job.request.kind,
+    ...(job.request.local && {
+      executor: 'implementer',
+      batch: job.request.local.batch,
+      mode: job.request.local.mode,
+      targetRef: job.request.local.targetRef,
+    }),
     ...(job.request.recurring && { schedule: job.request.recurring.name }),
     thinking: job.request.thinking,
     task: job.request.task.slice(0, 500),
@@ -489,7 +501,7 @@ export class Delegations {
   }
 
   async startBranches(
-    inputs: BranchTaskInput[],
+    inputs: (BranchTaskInput | LocalTaskInput)[],
     origin: DelegationOrigin,
     launch: (request: DelegationRequest) => Promise<void>,
   ): Promise<Delegation[]> {
@@ -498,8 +510,17 @@ export class Delegations {
     }
 
     for (const input of inputs) {
-      validateDesign(input.branch.design)
       validateWriteScope(input.writePaths)
+
+      if ('local' in input) {
+        if (!/^[a-f0-9]{40}(?:[a-f0-9]{24})?$/.test(input.local.base)) {
+          throw new Error('Local candidates require a pinned commit')
+        }
+
+        continue
+      }
+
+      validateDesign(input.branch.design)
 
       if (
         input.branch.design.unresolved.length ||
@@ -522,16 +543,22 @@ export class Delegations {
         throw new Error('At most four independent branch orchestrators can run at once')
       }
 
-      const scopes = previous
+      const owners = previous
         .filter((job) => ownsTaskPaths(job.state) && job.request.kind === 'branch')
-        .map((job) => job.request.writePaths)
+        .map((job) => job.request)
 
-      for (const input of inputs) {
-        if (scopes.some((scope) => scopesOverlap(scope, input.writePaths))) {
+      for (const [index, input] of inputs.entries()) {
+        const conflicts = [...owners, ...inputs.slice(0, index)].some(
+          (other) =>
+            !competingSiblings(
+              'local' in input ? input.local : undefined,
+              'local' in other ? other.local : undefined,
+            ) && scopesOverlap(other.writePaths, input.writePaths),
+        )
+
+        if (conflicts) {
           throw new Error('Independent branch tasks require disjoint write scopes')
         }
-
-        scopes.push(input.writePaths)
       }
 
       const jobs: Delegation[] = []
@@ -549,17 +576,25 @@ export class Delegations {
           id: request.id,
           status: 'queued',
           updatedAt: request.createdAt,
-          mergeRequested: input.branch.mergeToMain === true,
+          mergeRequested: input.branch?.mergeToMain === true,
         }
         const directory = delegationDirectory(this.store, request.id)
         await atomicJson(join(directory, 'request.json'), request)
         await atomicJson(join(directory, 'controls.json'), {
           ...emptyControls,
-          mergeRequested: input.branch.mergeToMain === true,
-          mergeRequestId: input.branch.mergeToMain ? randomUUID() : undefined,
+          mergeRequested: input.branch?.mergeToMain === true,
+          mergeRequestId: input.branch?.mergeToMain ? randomUUID() : undefined,
         })
         await atomicJson(join(directory, 'status.json'), state)
         jobs.push({ request, state })
+      }
+
+      const local = jobs[0]?.request.local
+
+      if (local) {
+        await atomicJson(join(this.store.directory, 'local-batches', local.batch + '.json'), {
+          ids: jobs.map((job) => job.request.id),
+        })
       }
 
       await atomicJson(join(this.store.directory, 'delegations', 'index.json'), [
@@ -605,6 +640,10 @@ export class Delegations {
       }
 
       for (const job of jobs) {
+        if (job.request.local) {
+          throw new Error('Local candidates use integrate_candidate in their originating checkout')
+        }
+
         if (job.request.kind === 'branch' && job.state.status === 'needs_attention') {
           const detail = job.state.error || job.state.summary || 'Inspect the task handoff.'
           throw new Error(

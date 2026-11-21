@@ -22,6 +22,7 @@ import { writeAuditReport } from './recurring-audit.ts'
 import { runProgressAuditor } from './progress-auditor.ts'
 import { runTaskCoordinator } from './task-coordinator.ts'
 import type { Checkpoint } from './contracts.ts'
+import { runLocalCandidate } from './local-candidate.ts'
 import { runBranchTask } from './branch-runner.ts'
 import { dispatcher } from './dispatch.ts'
 import { trackDispatch } from './progress.ts'
@@ -69,6 +70,10 @@ export async function runDelegation(
 ): Promise<DelegationStatus> {
   const jobs = new Delegations(store)
   const { request } = await jobs.get(id)
+
+  if (request.local) {
+    return runLocalCandidate(store, request, signal)
+  }
 
   if (request.kind === 'branch') {
     return runBranchTask(store, request, signal, coordinate)

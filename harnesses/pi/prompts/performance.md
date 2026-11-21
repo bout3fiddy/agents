@@ -17,3 +17,6 @@ Prefer project_edit for focused changes to existing files; match a unique curren
 project_write for new files or an intentional complete rewrite. Avoid regenerating unchanged large
 documents. If execution needs an unavailable host capability, return blocked with hostActions
 identifying the capability and reason. Preserve useful work and do not retry the same limitation.
+
+Use verify_loop for seeded tests, output comparisons against the original, or paired benchmark
+samples. Keep workload and units identical. Replay the first failing seed before changing code.

@@ -402,3 +402,18 @@ are evidence for the measured snapshot and do not guarantee future changes.
 
 Failed candidates are retained for inspection and resumption. A changed baseline requires explicit
 design reacceptance before starting from the current project.
+
+## Local implementers and competing candidates
+
+In a three-task arithmetic fixture, both paths used real implementers behind a scripted Pi
+conversation. The first visible edit took 36.3 seconds with direct local dispatch and 57.5 seconds
+with branch coordinators. The last host verification receipt arrived after 96.8 and 121.0 seconds
+respectively. This is one paired run on a shared machine. Remote publication time is excluded from
+those verification measurements. Reproduce with `npm run test:live:local` and its `-- --coordinated`
+option.
+
+A separate live orchestrator ran two alternatives against a pinned gate in a repo without a remote,
+compared the candidates and integrated the requested implementation. The verification-loop fixture
+had a live implementer isolate and replay a deliberately failing seed. Regression tests cover worker
+repairs, crash recovery, write scopes, pinned workload integrity, single-winner selection and
+revalidation against earlier sibling changes.

@@ -38,14 +38,14 @@ export type BranchAdapters = {
   reviews: typeof mergeReviewLoop
 }
 
-async function dependencies(root: string, workspace: string, signal: AbortSignal) {
+export async function linkBranchDependencies(root: string, workspace: string, signal: AbortSignal) {
   let modules: string
 
   try {
     modules = await realpath(join(root, 'node_modules'))
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-      return
+      return false
     }
 
     throw error
@@ -54,6 +54,7 @@ async function dependencies(root: string, workspace: string, signal: AbortSignal
   // Dependency links must be ignored by the committed repository policy before host setup.
   await gitCommand(workspace, ['check-ignore', '-q', 'node_modules/'], signal)
   await symlink(modules, join(workspace, 'node_modules'))
+  return true
 }
 
 export async function runBranchTask(
@@ -145,7 +146,7 @@ export async function runBranchTask(
     await atomicJson(join(directory, 'branch.json'), branch)
 
     if (!retained) {
-      await dependencies(request.root, branch.workspace, signal)
+      await linkBranchDependencies(request.root, branch.workspace, signal)
     }
 
     let validated = await readJson<{

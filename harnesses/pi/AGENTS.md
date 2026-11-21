@@ -131,6 +131,9 @@
   inventories under project-local `harness/runtime/`; attach the load ID to request timing. Never
   report a newer disk revision as the version already loaded in a process. Keep role/prompt policy
   fixed for that loaded generation. `/harness-version` must show this receipt without a model call.
+- Local fan-out pins the current checkout commit and runs implementers directly. Preserve the shared
+  workload, isolated candidates, single competition winner and local-only integration. Exercise the
+  local host tools and changed-base revalidation with the local-candidate tests.
 - `delegate_branches` pins a settled committed design and remote-main baseline for up to four
   independent tasks. The branch orchestrator owns its implementation/review/repair cycle and needs
   no routine human approvals. It has no child-call, turn or total-duration ceiling. All agents

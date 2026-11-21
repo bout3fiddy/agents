@@ -27,6 +27,9 @@ if (githubIndex >= 0 && !github) {
 
 const fixture = await branchFixture(github)
 const { root } = fixture
+
+// Exercise checkout preservation while the host can independently synchronize idle main.
+await gitCommand(root, ['switch', '-c', 'fixture-working'])
 const store = new StateStore(root)
 const jobs = new Delegations(store)
 const reports = join(harnessRoot, 'reports', `branches-${Date.now()}`)

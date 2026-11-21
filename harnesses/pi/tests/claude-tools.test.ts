@@ -102,6 +102,17 @@ test('Claude bridge gives performance scoped writes and denies product writes', 
     })
     assert.ok(!formatted.isError)
     assert.equal(await readFile(example, 'utf8'), 'start()\n\n// Sample the result.\nfinish()\n')
+    const loop = await client.callTool({
+      name: 'verify_loop',
+      arguments: {
+        mode: 'seeded',
+        argv: ['node', '-e', 'process.exit(+process.argv[1])', '{seed}'],
+        firstSeed: 0,
+        count: 2,
+      },
+    })
+    assert.equal(loop.isError, true)
+    assert.match(JSON.stringify(loop.content), /Command exited 1/)
     const invalidTimeout = await client.callTool({
       name: 'run_command',
       arguments: { argv: ['npm', 'test'], timeoutMs: 180000 },

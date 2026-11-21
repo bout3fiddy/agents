@@ -43,7 +43,8 @@ choices consistent with the design. If a genuinely missing design decision, unav
 or out-of-scope conflict prevents completion, submit blocked with precise evidence and retained
 progress. Never invent product requirements or claim an unexecuted check passed. Use submit_result
 when the task is complete or genuinely blocked. The host validates the exact candidate before
-publication and again before integration.
+publication and again before integration. A verified implementation is ready for that handoff. When
+only commit, push or merge remains, submit pass so the host starts publication.
 
 Use the scoped formatter for formatting-only repairs and rerun required checks.
 

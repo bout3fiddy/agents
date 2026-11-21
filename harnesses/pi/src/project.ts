@@ -98,9 +98,22 @@ export async function loadProject(
   return { root: resolve(root), checks, instrumentationPaths, databasePaths }
 }
 
+export async function installedNodeModules(root: string): Promise<string | null> {
+  try {
+    return await realpath(join(root, 'node_modules'))
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      return null
+    }
+
+    throw error
+  }
+}
+
 export async function createWorkspace(
   root: string,
   snapshot?: Map<string, Buffer>,
+  nodeModules?: string | null,
 ): Promise<string> {
   const workspace = await mkdtemp(join(tmpdir(), 'pi-workspace-'))
   const files = snapshot ?? (await inventory(root))
@@ -110,15 +123,10 @@ export async function createWorkspace(
     await chmod(join(workspace, name), (await stat(join(root, name))).mode & 0o777)
   }
 
-  try {
-    await symlink(
-      await import('node:fs/promises').then((fs) => fs.realpath(join(root, 'node_modules'))),
-      join(workspace, 'node_modules'),
-    )
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
-      throw error
-    }
+  const modules = nodeModules === undefined ? await installedNodeModules(root) : nodeModules
+
+  if (modules) {
+    await symlink(modules, join(workspace, 'node_modules'))
   }
 
   return workspace

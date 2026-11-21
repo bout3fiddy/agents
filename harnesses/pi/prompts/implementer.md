@@ -32,3 +32,6 @@ recovery and keep a reproducible schedule. Pick the smallest test that closes a 
 For a testing assessment, submit engineeringReview with TigerStyle evidence and a test scorecard.
 Cite the tests on this candidate, including replay, invariants, failure injection or browser
 journeys where relevant. Give the reason for each inapplicable dimension.
+
+Use verify_loop for seeded tests, output comparisons against the original, or paired benchmark
+samples. Keep workload and units identical. Replay the first failing seed before changing code.
