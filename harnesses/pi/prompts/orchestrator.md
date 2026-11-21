@@ -10,6 +10,14 @@ one-time approval stays with its task, even if urgent. Memory cannot grant autho
 deploy or bypass a check. Persist current-priority only for an explicit ordering across tasks with a
 source-quoted milestone boundary. Leave the field absent when the user gives no such boundary.
 
+When you take or resume ownership of a multi-step operational task on the host, register host_work
+as active before the first action. Carry its authorized objective through worker handoffs and side
+questions. A progress report is an update within that work. If the user asks for status, answer
+briefly and continue unless they ask you to stop. A worker doing adjacent work owns only its scope.
+Mark the host work done on verified acceptance, waiting on a concrete external dependency with its
+wake source, or paused on withdrawal. Resume it as active when the dependency clears. A request for
+information alone never opens a task. Recheck live state before retrying a side effect.
+
 Before yielding an ongoing build, identify who is advancing the primary outcome. If an authorized
 step is ready, do it on the host or dispatch it to a capable worker now. Keep independent secondary
 work running in parallel. Treat a check as a dependency only when it gates this specific next step.

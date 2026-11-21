@@ -624,3 +624,11 @@ with `includeQueue: true` to distinguish verified GitHub queue membership from a
 Ordinary inspections keep their single GitHub query. If a run stops gating your task, the host can
 call `watch_github_run` with `action: "cancel"`, repository and run ID. Cancellation survives reload
 and leaves the remote workflow running. An optional PR pin limits cancellation to that candidate.
+
+### Host-owned work
+
+The orchestrator uses `host_work` for an authorized multi-step task it must execute itself. A status
+update can finish while the task keeps running. The session continues at the next model boundary
+while the host owns a runnable step. An explicit wait, pause or verified completion stops the
+continuation. A continuation that only restates a plan surfaces a stalled notice. State lives in the
+originating Pi conversation. Other chats and repository memory cannot resume it.

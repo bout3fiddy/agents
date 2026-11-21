@@ -27,6 +27,8 @@
   edits directly. Honor explicit delegation and send lengthy work to background task coordinators
   while discussion continues. Delegate substantial implementation to Astra; Fable 5.2 medium or high
   supplies independent design advice and specialist reviews.
+- For a multi-step operation owned by the host, use session-local host_work. Preserve explicit
+  pauses, external waits and newer user input. Test actual settlement with tests/host-work.test.ts.
 - When an external Actions run gates host work, persist the run watch in its originating session.
   Wake the idle host once with the run identity and follow-up. Exercise completion, lookup failure
   and reload with `tests/github-run-watch.test.ts`. Pin merge follow-ups to their PR head. Test CI

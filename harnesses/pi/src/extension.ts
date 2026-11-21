@@ -28,6 +28,7 @@ import { runtimeVersion } from './runtime-version.ts'
 import { registerBranchTools } from './branch-tools.ts'
 import { capabilities } from './capabilities.ts'
 import { registerRecurring } from './recurring-tools.ts'
+import { registerHostWork } from './host-work.ts'
 import { registerGitHubRunWatch } from './github-run-watch.ts'
 import { registerWorkers } from './workers-command.ts'
 
@@ -47,6 +48,7 @@ export default function harness(pi: ExtensionAPI): void {
   const runtime = runtimeVersion(pi)
   registerTiming(pi, runtime.current)
   const delegation = registerDelegation(pi)
+  registerHostWork(pi)
   registerProjectMemory(pi, delegation.turnJobs)
   registerBranchTools(pi)
   const storeFor = async (cwd: string) => new StateStore(await realpath(cwd))
