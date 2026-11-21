@@ -1,5 +1,8 @@
 # Independent branch orchestration
 
+A write-scope conflict identifies the task holding the reservation or the earlier task in the batch,
+along with the intersecting paths. Narrow the assignment or wait for the owner to release it.
+
 The human-facing orchestrator can start autonomous branch orchestrators through `delegate_branches`
 and immediately continue the conversation. Each branch orchestrator receives a settled design,
 invariants, acceptance criteria and its own write scope. It delegates implementation to the

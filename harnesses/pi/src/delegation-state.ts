@@ -200,17 +200,39 @@ function fold(path: string): string {
     .toLowerCase()
 }
 
-export function scopesOverlap(left: string[], right: string[]): boolean {
-  return left.some((a) =>
-    right.some((b) => {
-      const first = fold(a)
-      const second = fold(b)
-      return (
-        matches(first.replace(/\/\*\*$/, ''), second) ||
-        matches(second.replace(/\/\*\*$/, ''), first)
-      )
-    }),
+function overlappingPaths(a: string, b: string) {
+  const first = fold(a)
+  const second = fold(b)
+  return (
+    matches(first.replace(/\/\*\*$/, ''), second) || matches(second.replace(/\/\*\*$/, ''), first)
   )
+}
+
+export function scopesOverlap(left: string[], right: string[]): boolean {
+  return left.some((a) => right.some((b) => overlappingPaths(a, b)))
+}
+
+export function requireDisjointScopes(requested: string[], reserved: string[], owner: string) {
+  const conflicts: string[] = []
+
+  for (const path of requested) {
+    const scope = reserved.find((other) => overlappingPaths(path, other))
+
+    if (scope !== undefined) {
+      conflicts.push(path === scope ? path : path + ' overlaps ' + scope)
+    }
+  }
+
+  if (conflicts.length) {
+    const more = conflicts.length > 8 ? ' (+' + (conflicts.length - 8) + ' more)' : ''
+    throw new Error(
+      'Independent branch tasks require disjoint write scopes. Reserved by ' +
+        owner +
+        ': ' +
+        conflicts.slice(0, 8).join(', ') +
+        more,
+    )
+  }
 }
 
 export class DelegationBusy extends Error {}
@@ -548,16 +570,19 @@ export class Delegations {
         .map((job) => job.request)
 
       for (const [index, input] of inputs.entries()) {
-        const conflicts = [...owners, ...inputs.slice(0, index)].some(
-          (other) =>
-            !competingSiblings(
+        for (const [position, other] of [...owners, ...inputs.slice(0, index)].entries()) {
+          if (
+            competingSiblings(
               'local' in input ? input.local : undefined,
               'local' in other ? other.local : undefined,
-            ) && scopesOverlap(other.writePaths, input.writePaths),
-        )
+            )
+          ) {
+            continue
+          }
 
-        if (conflicts) {
-          throw new Error('Independent branch tasks require disjoint write scopes')
+          const owner =
+            'id' in other ? 'task ' + other.id : 'batch task ' + (position - owners.length + 1)
+          requireDisjointScopes(input.writePaths, other.writePaths, owner)
         }
       }
 

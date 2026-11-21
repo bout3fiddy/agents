@@ -41,8 +41,14 @@ test('competing scopes survive revision and resume', async (t) => {
     (await compareLocalCandidates(fixture.store, batch.batch)).candidates.map((c) => c.eligible),
     [false, false],
   )
-  await assert.rejects(startLocalBatch(fixture.ctx, competition, undefined, launch), /disjoint/)
   const first = tasks[0]!
+  await assert.rejects(startLocalBatch(fixture.ctx, competition, undefined, launch), (error) => {
+    assert.ok(error instanceof Error)
+    assert.ok(tasks.some((owner) => error.message.includes(owner.id)))
+    assert.match(error.message, /src\/one\.js/)
+    return true
+  })
+  assert.equal(tasks.length, 2)
   await fixture.jobs.control(first.id, 'pause')
   const directory = delegationDirectory(fixture.store, first.id)
   const state = (await fixture.jobs.get(first.id)).state

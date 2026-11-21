@@ -8,7 +8,7 @@ import { gitCommand, resolveRemote } from './git-branches.ts'
 import { digest, readBoundedFile, relativePath, safePath, validateWriteScope } from './paths.ts'
 import { validateDesign } from './contracts.ts'
 import { StateStore } from './state.ts'
-import { Delegations, delegationView, scopesOverlap } from './delegation-state.ts'
+import { Delegations, delegationView, requireDisjointScopes } from './delegation-state.ts'
 import { launchDelegation } from './delegation-process.ts'
 import { textResult } from './file-tools.ts'
 import { loadPinnedProject } from './pinned-project.ts'
@@ -33,10 +33,8 @@ export async function startBranchBatch(
   for (const [index, task] of input.tasks.entries()) {
     validateWriteScope(task.writePaths)
 
-    if (
-      input.tasks.slice(0, index).some((prior) => scopesOverlap(prior.writePaths, task.writePaths))
-    ) {
-      throw new Error('Independent branch tasks require disjoint write scopes')
+    for (const [priorIndex, prior] of input.tasks.slice(0, index).entries()) {
+      requireDisjointScopes(task.writePaths, prior.writePaths, 'batch task ' + (priorIndex + 1))
     }
   }
 

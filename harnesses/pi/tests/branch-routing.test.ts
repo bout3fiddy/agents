@@ -41,7 +41,7 @@ test('independent branch fanout rejects intersecting scopes before launching', a
         launches++
       },
     ),
-    /disjoint write scopes/,
+    /disjoint write scopes.*batch task 1.*src\/\*\*.*src\/one\.js/s,
   )
   assert.equal(launches, 0)
 })
