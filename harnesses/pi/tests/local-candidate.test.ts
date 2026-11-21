@@ -1,3 +1,4 @@
+import { assignment } from '../src/worker-tools.ts'
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import { access, mkdir, readFile, writeFile } from 'node:fs/promises'
@@ -93,6 +94,12 @@ test('local implementer repairs a failing pinned gate', async (t) => {
     assert.equal(w.role, 'implementer')
     assert.equal(w.checkpoint.objective, f.request.task)
     assert.equal(w.project.checks.at(-1)?.id, 'local-acceptance')
+    const dispatched = await assignment({ ...w, outputPath: join(f.directory, 'test-output') })
+    assert.deepEqual(dispatched.checkout, {
+      pinnedBase: f.request.local!.base,
+      head: f.request.local!.base,
+      clean: calls === 0,
+    })
     calls++
 
     if (calls === 2) {

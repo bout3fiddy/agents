@@ -286,6 +286,7 @@ export async function assignment(request: WorkerRequest) {
 
   return {
     assignment: request.task,
+    ...(request.checkout && { checkout: request.checkout }),
     acceptedDesign: request.checkpoint,
     changedFiles: request.changedFiles ?? (await changedSinceBaseline(request)),
     ...(smallIndex ? { originalPaths: paths } : {}),

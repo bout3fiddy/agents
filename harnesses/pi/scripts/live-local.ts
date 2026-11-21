@@ -87,10 +87,16 @@ const common = {
   objective: 'Implement three independent arithmetic operations.',
   mode: 'independent',
 }
+const fixtureBase = await git(['rev-parse', 'HEAD'])
 const local = {
   ...common,
   tasks: tasks.map((task, index) => ({
     ...task,
+    task:
+      task.task +
+      ' Before editing, verify that the checkout is clean and based on ' +
+      fixtureBase +
+      '.',
     acceptance: { argv: ['node', 'gate.mjs', names[index]!], workloadPaths: ['gate.mjs'] },
   })),
 }

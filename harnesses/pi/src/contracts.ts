@@ -205,6 +205,7 @@ export type Receipt = {
 }
 
 export type WorkerRequest = {
+  checkout?: { pinnedBase: string; head: string; clean: boolean }
   implementerModel?: ImplementerModel
   decideContinuation?: boolean
   thinking?: Role['thinking']

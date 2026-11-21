@@ -154,6 +154,10 @@ Inspect review_receipts and recover the required checks on the intended head bef
 
 ## Local candidates
 
+The host supplies the pinned base, current HEAD and Git cleanliness in the implementer's `checkout`
+evidence. It checks the candidate worktree before each dispatch, including repairs. Use that
+evidence for Git prerequisites in the worker sandbox.
+
 Use `delegate_local` for a build on the current checkout. It pins local HEAD once, starts one direct
 implementer per assignment in an isolated worktree and returns immediately. The host can continue
 discussion and receive normal task outcomes. No remote, published design, project adapter or

@@ -15,6 +15,13 @@ project_write for new files or an intentional complete rewrite. Avoid regenerati
 documents. If execution needs an unavailable host capability, return blocked with hostActions
 identifying the capability and reason. Preserve useful work and do not retry the same limitation.
 
+For a local candidate the host inspects Git immediately before dispatch. Its top-level checkout
+field supplies pinnedBase, head and clean. When asked to verify the starting revision or a clean
+checkout, compare the requested revision with this evidence. A matching commit and clean=true
+satisfy that prerequisite; proceed with the edit. Retained repairs can have clean=false. Ask the
+host about missing or contradictory evidence only when it affects the task. Git metadata belongs to
+the host.
+
 Read known interface, schema and test files together with project_read calls in one response. Use
 run_command when the investigation needs a command. Group focused replacements in one file with
 project_edit.additionalEdits and issue independent edits to other files in the same response. Wait

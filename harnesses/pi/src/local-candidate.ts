@@ -384,6 +384,28 @@ async function executeLocalCandidate(
         dispatch ?? dispatcher(new StateStore(request.root, directory)),
         output,
       )
+
+      // The worker cannot open Git metadata. Capture checkout evidence before each handoff,
+      // including repairs that keep uncommitted edits from the previous attempt.
+      const status = await gitCommand(
+        branch.workspace,
+        ['status', '--porcelain=v2', '--branch', '--no-ahead-behind', '--untracked-files=normal'],
+        signal,
+      )
+      const lines = status.split('\n')
+
+      if (
+        !lines.includes('# branch.oid ' + initialHead) ||
+        !lines.includes('# branch.head ' + branch.branch)
+      ) {
+        throw new Error('Candidate branch or HEAD changed before implementation')
+      }
+
+      const checkout = {
+        pinnedBase: branch.base,
+        head: initialHead,
+        clean: lines.every((line) => line.startsWith('# ')),
+      }
       const evidence = await child(
         {
           role: 'implementer',
@@ -397,6 +419,7 @@ async function executeLocalCandidate(
           }),
           model: request.model,
           workspace: branch.workspace,
+          checkout,
           project,
           checkpoint,
           baseline,
