@@ -100,11 +100,11 @@ class Terminal:
         raise AssertionError(description + "\n" + "\n".join(self.screen.display))
 
 
-def assert_compact(view):
-    assert view.count("PR #61") == 1, view
-    assert "2 calls" in view and "1 failed" in view, view
-    assert BLOCKER in view and "conflict" in view.lower(), view
-    assert all(marker not in view for marker in (RAW_FIRST, RAW_SECOND, RAW_OUTPUT)), view
+def compact(view):
+    hidden = ("host_work", "TRACK_OPERATION_", '"content":', RAW_FIRST, RAW_SECOND, RAW_OUTPUT)
+    return (view.count("PR #61") == 1 and "project read · guide.md" in view and "Failed ·" in view
+            and "2 calls" in view and "1 failed" in view and BLOCKER in view
+            and "conflict" in view.lower() and all(marker not in view for marker in hidden))
 
 
 def exercise(launcher, project, reports, resume):
@@ -119,13 +119,18 @@ def exercise(launcher, project, reports, resume):
                                 "waiting for grouped in-flight call")
             (reports / "live-running.txt").write_text(running)
 
-        view = cli.until(lambda text: FINISHED in text, "waiting for rendered conversation")
+        view = cli.until(lambda text: FINISHED in text and compact(text),
+                         "waiting for folded conversation")
         (reports / (name + "-folded.txt")).write_text(view)
-        assert_compact(view)
         initial_render = (reports / (name + ".ansi")).read_text()
-        assert all(marker not in initial_render for marker in (RAW_FIRST, RAW_SECOND, RAW_OUTPUT))
+        assert all(marker not in initial_render for marker in (RAW_FIRST, RAW_SECOND, RAW_OUTPUT,
+                                                             "TRACK_OPERATION_"))
 
         if not resume:
+            cli.click("project read · guide.md")
+            cli.until(lambda text: "fileSha256" in text, "opening a single tool result")
+            cli.click('project_read {"path":"guide.md"}')
+            cli.until(lambda text: "fileSha256" not in text, "closing the tool result")
             cli.click("PR #61")
             view = cli.until(lambda text: "Inspect Git state" in text, "opening call list")
             assert "Merge changes" in view, view
@@ -135,18 +140,18 @@ def exercise(launcher, project, reports, resume):
             assert RAW_FIRST in view and RAW_SECOND not in view, view
             (reports / "live-one-call.txt").write_text(view)
             cli.click("PR #61")
-            view = cli.until(lambda text: "Click for calls" in text, "closing call list")
-            assert_compact(view)
+            cli.until(compact, "closing call list")
 
         cli.process.send("\x0f")
-        view = cli.until(lambda text: RAW_FIRST in text and RAW_SECOND in text,
+        view = cli.until(lambda text: all(marker in text for marker in
+                                         (RAW_FIRST, RAW_SECOND, RAW_OUTPUT, "TRACK_OPERATION_END",
+                                          "Merge conflict in guide.md")),
                          "expanding both shell commands")
         (reports / (name + "-expanded.txt")).write_text(view)
         assert RAW_OUTPUT in view and "Merge conflict in guide.md" in view, view
+        assert "TRACK_OPERATION_END" in view, view
         cli.process.send("\x0f")
-        view = cli.until(lambda text: RAW_FIRST not in text and RAW_SECOND not in text,
-                         "collapsing raw commands")
-        assert_compact(view)
+        cli.until(compact, "collapsing raw commands")
     finally:
         cli.close()
 

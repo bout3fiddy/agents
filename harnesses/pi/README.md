@@ -54,7 +54,9 @@ Consecutive host shell calls for the same pull request, check or host operation 
 row. It shows the call count, running work, failures and confirmed outcomes. Click its title for the
 individual calls, then click a call for its original command and combined output. Pi’s expand-tools
 shortcut (Ctrl+O by default) opens raw details throughout the transcript. The same view is available
-when resuming a session. Commands, tool results and session traces retain their original contents.
+when resuming a session. Routine host bookkeeping stays hidden. Other tools use a single activity
+row with failures visible. Click a row or use Ctrl+O for detail. Blockers still show the condition
+for resuming work.
 
 Exercise the terminal view with `uv run --with pexpect --with pyte scripts/check-shell-terminal.py`.
 

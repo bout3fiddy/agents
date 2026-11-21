@@ -3,9 +3,21 @@ import type { ExtensionAPI } from '@earendil-works/pi-coding-agent'
 import type { AssistantMessage } from '@earendil-works/pi-ai'
 import { createAssistantMessageEventStream } from '@earendil-works/pi-ai'
 
-const commands = [
-  'git show -s --format=%B refs/pull/61/head # RAW_FIRST_COMMAND',
-  'sleep 0.6 && git merge --no-commit refs/pull/61/head # RAW_SECOND_COMMAND',
+const calls: { name: string; arguments: Record<string, string> }[] = [
+  { name: 'host_work', arguments: { state: 'active', detail: 'TRACK_OPERATION_START' } },
+  { name: 'project_read', arguments: { path: 'guide.md' } },
+  {
+    name: 'bash',
+    arguments: { command: 'git show -s --format=%B refs/pull/61/head # RAW_FIRST_COMMAND' },
+  },
+  {
+    name: 'bash',
+    arguments: {
+      command: 'sleep 0.6 && git merge --no-commit refs/pull/61/head # RAW_SECOND_COMMAND',
+    },
+  },
+  { name: 'project_read', arguments: { path: 'missing-file.md' } },
+  { name: 'host_work', arguments: { state: 'done', detail: 'TRACK_OPERATION_END' } },
 ]
 
 export default function shellTerminalProvider(pi: ExtensionAPI) {
@@ -27,9 +39,14 @@ export default function shellTerminalProvider(pi: ExtensionAPI) {
     streamSimple(model, context) {
       const stream = createAssistantMessageEventStream()
       const index = context.messages.filter((entry) => entry.role === 'toolResult').length
-      const command = commands[index]
-      const part = command
-        ? { type: 'toolCall' as const, id: 'shell-' + index, name: 'bash', arguments: { command } }
+      const call = calls[index]
+      const part = call
+        ? {
+            type: 'toolCall' as const,
+            id: 'shell-' + index,
+            name: call.name,
+            arguments: { ...call.arguments },
+          }
         : { type: 'text' as const, text: 'Terminal fixture finished.' }
       const message: AssistantMessage = {
         role: 'assistant',
@@ -37,7 +54,7 @@ export default function shellTerminalProvider(pi: ExtensionAPI) {
         provider: model.provider,
         model: model.id,
         content: [part],
-        stopReason: command ? 'toolUse' : 'stop',
+        stopReason: call ? 'toolUse' : 'stop',
         timestamp: Date.now(),
         usage: {
           input: 1,
@@ -61,7 +78,7 @@ export default function shellTerminalProvider(pi: ExtensionAPI) {
           stream.push({ type: 'text_end', contentIndex: 0, content: part.text, partial: message })
         }
 
-        stream.push({ type: 'done', reason: command ? 'toolUse' : 'stop', message })
+        stream.push({ type: 'done', reason: call ? 'toolUse' : 'stop', message })
         stream.end()
       })
       return stream

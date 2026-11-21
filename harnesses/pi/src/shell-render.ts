@@ -9,6 +9,7 @@ import {
   type Component,
 } from '@earendil-works/pi-tui'
 import { ShellActivity, type ShellCall } from './shell-activity.ts'
+import { compactTool } from './tool-activity.ts'
 import { describeShell } from './shell-outcome.ts'
 
 function commandFrom(args: unknown) {
@@ -204,7 +205,14 @@ export function shellRenderers(activity: ShellActivity): ToolRenderers {
 export function registerShellActivity(pi: ExtensionAPI) {
   const activity = new ShellActivity()
   const shell = shellRenderers(activity)
-  pi.registerToolRenderer((name, next) => (name === 'bash' ? shell : next()))
+  pi.registerToolRenderer((name, next) => {
+    if (name === 'bash') {
+      return shell
+    }
+
+    const base = next()
+    return base?.renderShell === 'self' ? base : compactTool(name, base)
+  })
   pi.on('session_start', (_event, ctx) => {
     if (ctx.mode === 'tui') {
       activity.replay(ctx.sessionManager.getBranch())
