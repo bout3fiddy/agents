@@ -98,6 +98,10 @@ navigation remain available, and consultations retain recent user messages from 
 scope was recorded. Historical `accepted.json` checkpoints remain readable for resumable work but no
 longer establish a host conversation cutoff.
 
+The implementer's pass hands its candidate to workflow verification and independent review. A
+required independent verdict belongs to the workflow. A missing prerequisite for the writer's own
+work remains a blocker with its original host actions.
+
 Omitting design from `workflow` resumes the recorded scope and candidate. Supplying design starts a
 new version from the current project baseline. Existing task ownership and the workflow lock guard
 concurrent dispatch. A failed process launch retains its recorded scope and failed-task evidence so

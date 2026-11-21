@@ -135,6 +135,16 @@ assert.deepEqual(
 )
 assert.ok(task.receipts.every((item) => item.status === 'passed'))
 
+if (basic) {
+  const writer = task.evidence.findLast((item) => item.role === 'implementer')
+  const verdict = task.evidence.findLast((item) => item.role === 'reviewer' && !item.closedReview)
+  assert.equal(writer?.result.verdict, 'pass')
+  assert.ok(verdict?.liveWorkerId && writer?.liveWorkerId)
+  assert.notEqual(verdict.liveWorkerId, writer.liveWorkerId)
+  assert.equal(verdict.snapshot, writer.snapshot)
+  assert.equal(verdict.snapshot, task.snapshot)
+}
+
 const workers = await new WorkersCatalog(root).list()
 
 for (const item of task.evidence) {

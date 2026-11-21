@@ -265,6 +265,25 @@ async function changedSinceBaseline(request: WorkerRequest): Promise<string[]> {
   return [...names].filter((name) => current[name] !== request.baseline[name]).sort()
 }
 
+function submissionInstructions(role: WorkerRequest['role']) {
+  if (role === 'progress-auditor') {
+    return 'Submit a dated scorecard with evidence and identify missing proof.'
+  }
+
+  if (role === 'implementer') {
+    return (
+      'Use submit_result with pass when the implementation is ready for independent review. ' +
+      'Report your checks and any limits. The coordinator owns review and integration. ' +
+      'Use blocked with hostActions when a prerequisite prevents completing your own work.'
+    )
+  }
+
+  return (
+    'Use submit_result when finished. If a host capability is required, return blocked ' +
+    'with hostActions immediately. Do not retry unavailable operations in the sandbox.'
+  )
+}
+
 export async function assignment(request: WorkerRequest) {
   const paths = Object.keys(request.baseline)
   const smallIndex = paths.length <= 100 && Buffer.byteLength(JSON.stringify(paths)) <= 4096
@@ -278,10 +297,6 @@ export async function assignment(request: WorkerRequest) {
     capabilities: capabilities.workers,
     ...(request.documentsOnly ? { retainedFileTypes: ['.md', '.txt', '.rst'] } : {}),
     folderInstructions: await instructions(request.workspace, request.checkpoint.writePaths),
-    output:
-      request.role === 'progress-auditor'
-        ? 'Submit a dated scorecard with evidence and identify missing proof.'
-        : 'Use submit_result when finished. If a host capability is required, return blocked ' +
-          'with hostActions immediately. Do not retry unavailable operations in the sandbox.',
+    output: submissionInstructions(request.role),
   }
 }

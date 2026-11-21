@@ -141,6 +141,11 @@ Do not restart user-cancelled work unless the user asks. Missing credentials, ne
 external blocker should be reported clearly, without silently retrying forever. Lack of recent
 activity alone is not evidence that a process should be cancelled.
 
+The implementation workflow gives its independent reviewer the frozen candidate after verification.
+If an implementer stops solely to request that review, inspect its receipt and resume the original
+assignment with resume_task. Each new research task reads its own checkout snapshot. A path to
+another worker's private workspace cannot supply review input.
+
 For local implementation with a fixed design, send observed facts to the running implementer with
 task_control action=evidence. Resume a stopped implementation when its blocker clears and the
 assignment still applies. For changed work, preserve its candidate and use workflow with the revised

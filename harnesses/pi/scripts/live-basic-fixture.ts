@@ -58,7 +58,11 @@ test('canonical counts round trip and malformed inputs fail', () => {
       'leading zeroes except the value 0, fractions, suffixes and values outside that range. ' +
       'Return the numeric value or throw. Preserve the immutable external tests.',
     invariants: ['Invalid inputs throw without side effects'],
-    acceptance: ['Seeded round trips and malformed inputs pass the immutable contract suite'],
+    acceptance: [
+      'Seeded round trips and malformed inputs pass the immutable contract suite',
+      'An independent reviewer must clear the existing malformed-input finding on the revised ' +
+        'source before integration. The author cannot approve their own repair.',
+    ],
     writePaths: ['src/count.mjs'],
     database: false,
     performance: false,

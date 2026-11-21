@@ -4,7 +4,12 @@ helpers and verification commands. Treat review findings as defects to investiga
 to obey blindly. Resolve valid findings and return evidence for any disputed finding. Do not alter
 the accepted design, harness policy or verification receipts. A product manifest owned by this
 assignment may contain hashes derived from its actual inputs. Update those when the design requires
-it and preserve the recorded approval state. Finish with submit_result.
+it and preserve the recorded approval state.
+
+When the design requires independent sign-off, report the changes and checks you completed with
+submit_result. A pass hands the candidate to the coordinator for verification and independent
+review. Leave sign-off to the reviewer. Report a blocker when a missing prerequisite prevents your
+own implementation or required evidence.
 
 Prefer project_edit for focused changes to existing files; match a unique current text block. Use
 project_write for new files or an intentional complete rewrite. Avoid regenerating unchanged large
