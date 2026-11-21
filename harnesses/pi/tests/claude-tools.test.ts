@@ -205,6 +205,58 @@ test('a missing Claude executable reports its launch error cleanly', async () =>
   }
 })
 
+test('a Claude run that ends without submitting gets one follow-up run to submit', async () => {
+  const item = await fixture()
+  const previous = process.env.PI_HARNESS_CLAUDE_BIN
+  const executable = join(item.base, 'unsubmitting-claude')
+  const script = [
+    '#!/usr/bin/env node',
+    "const fs = require('fs')",
+    'const args = process.argv.slice(2)',
+    'const option = (name) => args[args.indexOf(name) + 1]',
+    "const config = JSON.parse(fs.readFileSync(option('--mcp-config'), 'utf8'))",
+    'const attempt = config.mcpServers.piworker.args.at(-1)',
+    "const prompt = fs.readFileSync(option('--system-prompt-file'), 'utf8')",
+    "if (attempt.endsWith('.submit') && prompt.includes('The rotation code is written')) {",
+    '  const result = { verdict: "pass", summary: "Submitted retained work", findings: [],',
+    '    databaseImpact: false, evidence: ["follow-up"] }',
+    "  fs.writeFileSync(attempt + '.tools.json', JSON.stringify({ commands: [], result }))",
+    '}',
+    "const message = 'The rotation code is written.'",
+    "console.log(JSON.stringify({ type: 'result', is_error: false, result: message }))",
+  ].join('\n')
+  await writeFile(executable, script + '\n', { mode: 0o755 })
+  process.env.PI_HARNESS_CLAUDE_BIN = executable
+  const outputPath = join(item.base, 'unsubmitted.json')
+
+  try {
+    const evidence = await runClaudeWorker(
+      {
+        role: 'progress-auditor',
+        task: 'Finish and report',
+        workspace: item.root,
+        project: await loadProject(item.root),
+        checkpoint: (await item.store.checkpoint())!,
+        model: 'unused',
+        outputPath,
+        baseline: {},
+      },
+      await loadRole('progress-auditor'),
+    )
+    assert.equal(evidence.result.summary, 'Submitted retained work')
+    await stat(`${outputPath}.claude.jsonl`)
+    await stat(`${outputPath}.submit.claude.jsonl`)
+  } finally {
+    if (previous === undefined) {
+      delete process.env.PI_HARNESS_CLAUDE_BIN
+    } else {
+      process.env.PI_HARNESS_CLAUDE_BIN = previous
+    }
+
+    await rm(item.base, { recursive: true, force: true })
+  }
+})
+
 test('Claude traces retain live output and enforce a byte budget for Unicode', async () => {
   const item = await fixture()
   const previous = process.env.PI_HARNESS_CLAUDE_BIN
