@@ -18,22 +18,21 @@ export async function loadPinnedProject(root: string, base: string, signal?: Abo
   })
 }
 
-/** Check policy is host-owned and committed, so a fix on the checkout reaches retained and resumed
- * tasks instead of stalling them on the policy they were dispatched with. Use the checkout's HEAD
- * while it still descends from the task's base; otherwise keep the pinned base's policy. */
+/** Check policy is host-owned and committed, and workers cannot edit .pi/, so a fix on the checkout
+ * reaches retained and resumed tasks instead of stalling them on the policy they were dispatched
+ * with. Tasks are often pinned to unmerged commits, so use the checkout's HEAD whether or not it
+ * descends from the task's base. Fall back to the base only when HEAD cannot be resolved. */
 export async function currentPolicyCommit(
   root: string,
   base: string,
   signal?: AbortSignal,
 ): Promise<string> {
   try {
-    const head = await gitCommand(root, ['rev-parse', '--verify', 'HEAD^{commit}'], signal)
-    await gitCommand(root, ['merge-base', '--is-ancestor', base, head], signal)
-    return head
+    return await gitCommand(root, ['rev-parse', '--verify', 'HEAD^{commit}'], signal)
   } catch (error) {
     signal?.throwIfAborted()
 
-    if (error instanceof Error && !(error instanceof GitCommandError)) {
+    if (!(error instanceof GitCommandError)) {
       throw error
     }
 
