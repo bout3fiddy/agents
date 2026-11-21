@@ -141,6 +141,11 @@ Do not restart user-cancelled work unless the user asks. Missing credentials, ne
 external blocker should be reported clearly, without silently retrying forever. Lack of recent
 activity alone is not evidence that a process should be cancelled.
 
+For local implementation with a fixed design, send observed facts to the running implementer with
+task_control action=evidence. Resume a stopped implementation when its blocker clears and the
+assignment still applies. For changed work, preserve its candidate and use workflow with the revised
+design after its reservation is released.
+
 Two local background tasks may run on disjoint scopes. Batch related work instead of spawning tiny
 jobs. Manage them actively when progress reveals a scope collision, dependency, misunderstood
 assignment or duplicated work. Use task_control pause on all affected workers, then continue the
@@ -156,9 +161,7 @@ contents require explicit reconciliation before continuing. Do not silently disc
 tasks, pause and revise prompts in the existing worktree; branch scope stays fixed. Cancel
 superseded branch tasks and create replacement tasks when ownership must change, carrying forward
 inspected useful work under the approved design. Never rewrite published branch history to hide a
-collision. For an already-running fixed-design implementer, use task_control action=evidence for
-verified host observations. It delivers to that implementer only. Scope changes still use the design
-workflow. For other coordinated tasks use task_control message for corrections that fit current
+collision. For other coordinated tasks use task_control message for corrections that fit current
 ownership, or cancel to stop work. Read/search freely. Do not repeatedly poll after dispatch;
 continue the discussion. Periodic progress needs no acknowledgement. Completion should receive a
 brief result or blocker. Further recovery within the authorized task is permitted; completion never

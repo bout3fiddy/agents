@@ -263,9 +263,10 @@ Use `revise_tasks` after stopping all affected workers to replace their prompts 
 existing authorized scopes as one recoverable batch. Retained edits transfer to their new owner;
 conflicts and scope expansion are rejected, approvals are invalidated, and tasks remain paused until
 resumed. Paused files remain reserved. Explicitly cancelled work needs a new user request. Accepted
-implementation retains its existing design/resume workflow. Agents have no model-turn, child-call or
-total-task duration ceiling. Individual commands still have execution timeouts, and explicit
-cancellation propagates to worker processes.
+implementation can resume its original assignment with `resume_task`. Preserve the candidate and use
+`workflow` with the revised design when that assignment changes and its reservation is released.
+Agents have no model-turn, child-call or total-task duration ceiling. Individual commands still have
+execution timeouts, and explicit cancellation propagates to worker processes.
 
 Older bulky file/search tool results and write/edit/shell arguments are excerpted after four newer
 model steps. Current-request reads remain intact until a successful write/edit supersedes them;

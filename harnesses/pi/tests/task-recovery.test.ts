@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFile, readdir, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { fixture } from './support.ts'
+import { design, fixture } from './support.ts'
 import { StateStore, atomicJson, readJson } from '../src/state.ts'
 import {
   Delegations,
@@ -72,6 +72,46 @@ async function cleanup(jobs: Delegations) {
     }
   }
 }
+
+test('fixed-design recovery keeps the original assignment', async (t) => {
+  const { base, store } = await fixture()
+  t.after(() => rm(base, { recursive: true, force: true }))
+  const jobs = new Delegations(store)
+  const job = await jobs.start(
+    {
+      task: design.objective,
+      context: '',
+      kind: 'implementation',
+      writePaths: design.writePaths,
+      design,
+    },
+    origin,
+    async () => {},
+  )
+  const id = job.request.id
+  const directory = delegationDirectory(store, id)
+  const revision = { tasks: [assignment(id, 'src/counter.ts')] }
+  const checkpoint = await store.checkpoint()
+  const records = () =>
+    Promise.all(
+      ['request.json', 'status.json', 'controls.json'].map((name) =>
+        readFile(join(directory, name), 'utf8'),
+      ),
+    )
+
+  for (const status of ['running', 'needs_attention'] as const) {
+    await atomicJson(join(directory, 'status.json'), { ...job.state, status })
+    const before = await records()
+    await assert.rejects(reviseTasks(jobs, revision), (error: Error) => {
+      assert.match(error.message, /fixed design/)
+      assert.match(error.message, /workflow/)
+      assert.match(error.message, status === 'running' ? /action=evidence/ : /resume_task/)
+      return true
+    })
+    assert.deepEqual(await records(), before)
+    assert.deepEqual(await store.checkpoint(), checkpoint)
+  }
+})
 
 test('pause retains ownership and resume preserves candidate edits', async () => {
   const { base, store, root } = await fixture()

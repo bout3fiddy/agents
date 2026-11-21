@@ -27,6 +27,12 @@ import {
   type TaskControls,
 } from './delegation-state.ts'
 
+export const implementationRecovery =
+  'Local implementation has a fixed design. Send verified observations to a running implementer ' +
+  'with task_control action=evidence. For paused, failed or needs_attention tasks, use ' +
+  'resume_task when unblocked and the assignment is unchanged. For a changed assignment, ' +
+  'preserve the candidate and use workflow with the revised design after the reservation clears.'
+
 export const revisionSchema = Type.Object({
   tasks: Type.Array(
     Type.Object({
@@ -120,13 +126,15 @@ export async function reviseTasks(jobs: Delegations, raw: Revision) {
   return jobs.locked(async () => {
     const selected = await Promise.all(raw.tasks.map((task) => jobs.get(task.id)))
 
+    const fixed = selected.find((job) => job.request.kind === 'implementation')
+
+    if (fixed) {
+      throw new Error(`Task ${fixed.request.id}: ${implementationRecovery}`)
+    }
+
     for (const job of selected) {
       if (!['paused', 'needs_attention', 'failed'].includes(job.state.status)) {
         throw new Error('Pause every selected task and await acknowledgement before revising scope')
-      }
-
-      if (job.request.kind === 'implementation') {
-        throw new Error('Accepted implementation scope requires its existing design workflow')
       }
     }
 

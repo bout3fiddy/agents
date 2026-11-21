@@ -24,7 +24,7 @@ import {
   type Delegation,
   type DelegationRequest,
 } from './delegation-state.ts'
-import { revisionSchema, reviseTasks } from './task-recovery.ts'
+import { implementationRecovery, revisionSchema, reviseTasks } from './task-recovery.ts'
 
 type Launcher = (request: DelegationRequest) => Promise<void>
 const idSchema = Type.String({ minLength: 36, maxLength: 36 })
@@ -466,7 +466,9 @@ export function registerDelegation(
           block: true,
           reason:
             `Task ${job.request.id} owns these files. ` +
-            'Use task_control to steer or pause, then revise_tasks to reassign ownership.',
+            (job.request.kind === 'implementation'
+              ? implementationRecovery
+              : 'Use task_control to steer or pause, then revise_tasks to reassign ownership.'),
         }
       }
     }
@@ -564,7 +566,8 @@ export function registerDelegation(
     name: 'revise_tasks',
     label: 'Revise paused assignments',
     description:
-      'Revise prompts and partition existing scope across stopped tasks as one batch. ' +
+      'Revise stopped documents, maintenance, research or branch tasks. ' +
+      'For a changed local implementation assignment use workflow with the revised design. ' +
       'Supply updated context. Omit writePaths to keep ownership. Transfer edits, reject ' +
       'conflicts, and invalidate old review approvals. Every task remains paused. Branch ' +
       'prompts may change, but moving branch ownership needs replacement tasks.',
