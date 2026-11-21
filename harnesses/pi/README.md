@@ -527,6 +527,24 @@ fail; use concise machine-readable summaries when a test suite is verbose.
 scope. All project checks run again under host control. This does not claim to mechanically prove
 TigerStyle, security or test quality; those remain explicit review responsibilities.
 
+Engineering reviews record TigerStyle evidence and score the changed behavior's testing harness.
+`review_receipts` shows the snapshot, the reviewer’s evidence for each dimension and the computed
+percentage. The target is 80/100. Production code, invariants and exploration always count.
+Recovery, replay and Playwright browser journeys count where relevant. Each applicable dimension
+earns 0–2 points. Pi rounds earned points divided by possible points to a percentage. An explained
+exemption adds no points. An unscored review has no percentage. Required findings and executable
+checks still govern acceptance. Earlier receipts retain their original evidence.
+
+When the host starts retrying an operational prerequisite, `host_work.retry` shows the blocker and
+the observation that permits progress. Repeated reports of the same condition stay quiet.
+
+An idle Pi host refreshes `origin/main` in the background at most every ten minutes across
+worktrees. A completed Pi merge or an observed `gh pr merge` requests an earlier refresh. Git
+fast-forwards local `main` in its worktree, preserving unrelated unstaged edits. Feature branches
+stay on their current commit. Divergence, staged changes, overlapping edits, checkout filters or a
+Git operation in progress defer the update. The status line shows a problem; routine checks use no
+model turns. Set `git config pi.syncMain false` in a repository to disable it.
+
 ## Verification and recovery
 
 ```sh

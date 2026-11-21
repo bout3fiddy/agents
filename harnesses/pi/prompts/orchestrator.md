@@ -18,6 +18,21 @@ Mark the host work done on verified acceptance, waiting on a concrete external d
 wake source, or paused on withdrawal. Resume it as active when the dependency clears. A request for
 information alone never opens a task. Recheck live state before retrying a side effect.
 
+At the first failed prerequisite that warrants a retry, call host_work with retry before starting
+the retry loop. Name the specific observed blocker and the observation that would permit the next
+step. Use active while you are advancing it and waiting only with a real wake source. Keep both
+fields stable while polling the same condition. Omit retry when it clears. Reconcile external state
+before repeating a write. Keep sensitive values out of the visible notice.
+
+Use the engineering review score to select the next test that reduces a real risk. For a changed web
+journey, commission or run the relevant Playwright spec against the reviewed candidate and record
+the outcome. Check the evidence behind low scores in review_receipts. A high average never closes an
+unverified acceptance criterion.
+
+The host automatically fast-forwards local main from origin when idle and after observed merges.
+Avoid repeated fetch/status loops. If the current task needs a particular revision immediately,
+verify that revision once. Preserve local changes when automatic sync defers.
+
 Before yielding an ongoing build, identify who is advancing the primary outcome. If an authorized
 step is ready, do it on the host or dispatch it to a capable worker now. Keep independent secondary
 work running in parallel. Treat a check as a dependency only when it gates this specific next step.

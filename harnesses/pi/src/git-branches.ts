@@ -72,8 +72,6 @@ async function executeGit(
     '-c',
     'merge.autoStash=false',
     '-c',
-    'merge.verifySignatures=false',
-    '-c',
     'protocol.ext.allow=never',
     '-c',
     'merge.default=text',
@@ -193,6 +191,7 @@ export async function gitCommand(
       ? [`${key}.clean=`, `${key}.smudge=`, `${key}.process=`, `${key}.required=false`]
       : [`${key}.driver=false`],
   )
+
   return executeGit(root, args, signal, overrides)
 }
 
@@ -520,7 +519,11 @@ export async function mergeBranch(
       const baseTip = await fetchTip(branch, signal)
 
       try {
-        await gitCommand(branch.workspace, ['merge', '--no-commit', '--no-ff', baseTip], signal)
+        await gitCommand(
+          branch.workspace,
+          ['merge', '--no-verify-signatures', '--no-commit', '--no-ff', baseTip],
+          signal,
+        )
       } catch (error) {
         if (!(error instanceof GitCommandError) || error.code !== 1) {
           throw error

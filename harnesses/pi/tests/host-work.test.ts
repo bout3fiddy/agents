@@ -198,3 +198,76 @@ test('interrupting a host operation keeps it paused on the next user question', 
   assert.ok(entry?.type === 'custom')
   assert.equal((entry.data as { state: string }).state, 'paused')
 })
+
+test('first retry explains the blocker before the next attempt and survives reload', async (t) => {
+  const { root, base } = await fixture()
+  const first = { blocker: 'The endpoint returned the old revision.', resumeWhen: 'it serves v2.' }
+  const second = { blocker: 'The readiness endpoint returned 503.', resumeWhen: 'it returns 200.' }
+  let step = 0
+  const { session, runtime } = await captureSession(root, base, [registerHostWork], async () => {
+    step++
+    const record = (state: string, retry?: typeof first) => [
+      {
+        type: 'toolCall' as const,
+        id: String(step),
+        name: 'host_work',
+        arguments: { state, detail: 'Release version two.', ...(retry && { retry }) },
+      },
+    ]
+
+    if (step === 1 || step === 3) {
+      return record('waiting', first)
+    }
+
+    if (step === 4) {
+      return record('active', second)
+    }
+
+    if (step === 5) {
+      return record('done')
+    }
+
+    assert.ok(step === 2 || step === 6)
+    return [{ type: 'text', text: 'Checkpoint recorded.' }]
+  })
+  t.after(async () => {
+    await session.dispose()
+    await runtime.settleCredentialWrites()
+    await rm(base, { recursive: true, force: true })
+  })
+  const notices = () =>
+    session.sessionManager
+      .getBranch()
+      .flatMap((entry) =>
+        entry.type === 'custom_message' &&
+        entry.customType === 'pi-host-work-blocker' &&
+        entry.display
+          ? [entry.content]
+          : [],
+      )
+  await session.prompt('Start release.')
+  await session.waitForIdle()
+  assert.deepEqual(notices(), [first.blocker + '\nResume condition · ' + first.resumeWhen])
+  await session.reload()
+  await session.prompt('Resume the release and record readiness.')
+  await session.waitForIdle()
+  assert.equal(step, 6)
+  assert.deepEqual(notices(), [
+    first.blocker + '\nResume condition · ' + first.resumeWhen,
+    second.blocker + '\nResume condition · ' + second.resumeWhen,
+  ])
+  const branch = session.sessionManager.getBranch()
+  const notice = branch.findIndex(
+    (e) =>
+      e.type === 'custom_message' &&
+      e.customType === 'pi-host-work-blocker' &&
+      e.content === notices()[1],
+  )
+  const done = branch.findIndex(
+    (e) =>
+      e.type === 'custom' &&
+      e.customType === 'pi-host-work' &&
+      (e.data as { state: string }).state === 'done',
+  )
+  assert.ok(notice >= 0 && notice < done)
+})

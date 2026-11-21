@@ -4,6 +4,7 @@ import { Type } from 'typebox'
 import type { ToolDefinition } from '@earendil-works/pi-coding-agent'
 import {
   auditResultSchema,
+  engineeringResultSchema,
   resultSchema,
   validateResult,
   type CommandResult,
@@ -218,9 +219,32 @@ export function createWorkerTools(request: WorkerRequest, role: Role) {
       name: 'submit_result',
       label: 'Submit worker result',
       description: 'Submit a verdict and evidence. Required findings prevent pass.',
-      parameters: request.decideContinuation ? auditResultSchema : resultSchema,
+      parameters:
+        role.name === 'reviewer'
+          ? engineeringResultSchema
+          : request.decideContinuation
+            ? auditResultSchema
+            : resultSchema,
       async execute(id, raw) {
-        submitted = validateResult(raw, request.decideContinuation)
+        const result = validateResult(raw, request.decideContinuation)
+
+        if (role.name === 'reviewer') {
+          const review = result.engineeringReview
+
+          if (!review) {
+            throw new Error('Engineering review requires TigerStyle evidence and a test assessment')
+          }
+
+          if ('unscored' in review.testing && result.verdict !== 'blocked') {
+            const files = request.changedFiles ?? (await changedSinceBaseline(request))
+
+            if (!files.length || !files.every((file) => /\.(?:md|rst|txt)$/i.test(file))) {
+              throw new Error('Score behavioral changes. Unscored is for blocked or prose reviews.')
+            }
+          }
+        }
+
+        submitted = result
         return textResult({ submitted: true, call: id })
       },
     },

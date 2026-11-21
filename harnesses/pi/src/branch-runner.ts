@@ -1,3 +1,4 @@
+import { childSummary } from './context.ts'
 import { randomUUID } from 'node:crypto'
 import { mkdir, realpath, symlink } from 'node:fs/promises'
 import { join } from 'node:path'
@@ -241,14 +242,7 @@ export async function runBranchTask(
           signal,
         )
         await atomicJson(outputPath, evidence)
-        children.push(
-          ...evidence.children.map((child) => ({
-            role: child.role,
-            model: child.model,
-            verdict: child.result.verdict,
-            ...(child.closedReview && { closedReview: child.closedReview }),
-          })),
-        )
+        children.push(...evidence.children.map(childSummary))
         await save({ children, summary: evidence.result.summary, status: 'checking' })
 
         if (evidence.result.verdict === 'blocked') {

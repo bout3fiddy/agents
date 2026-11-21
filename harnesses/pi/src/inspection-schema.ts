@@ -75,6 +75,8 @@ export const harnessStatusSchema = Type.Object({
             model: string,
             verdict: string,
             summary: string,
+            snapshot: optional,
+            testingScore: Type.Optional(Type.Union([Type.Integer(), Type.Null()])),
             requiredFindings: Type.Array(
               Type.Object({
                 location: string,

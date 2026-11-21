@@ -1,3 +1,4 @@
+import { childSummary } from './context.ts'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { rm } from 'node:fs/promises'
@@ -138,17 +139,13 @@ export async function runDelegation(
               : control.paused
                 ? 'paused'
                 : 'needs_attention',
+        workflowTaskId: task.id,
         summary: task.evidence.at(-1)?.result.summary,
         error: task.error,
         hostActions: task.hostActions,
         candidate: task.candidate,
         receipts: task.receipts,
-        children: task.evidence.map((child) => ({
-          role: child.role,
-          model: child.model,
-          verdict: child.result.verdict,
-          ...(child.closedReview && { closedReview: child.closedReview }),
-        })),
+        children: task.evidence.map(childSummary),
       })
       return state
     }
@@ -207,12 +204,7 @@ export async function runDelegation(
       status: 'checking',
       summary: evidence.result.summary,
       changedPaths: changes(before, after),
-      children: evidence.children.map((child) => ({
-        role: child.role,
-        model: child.model,
-        verdict: child.result.verdict,
-        ...(child.closedReview && { closedReview: child.closedReview }),
-      })),
+      children: evidence.children.map(childSummary),
       hostActions:
         evidence.result.hostActions ??
         evidence.children

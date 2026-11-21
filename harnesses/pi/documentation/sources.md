@@ -55,3 +55,17 @@ model leaderboard or proof that every future generated change is correct.
 - [Claude CLI reference](https://code.claude.com/docs/en/cli-reference): the explicit `--tools`
   selection, print mode and streamed JSON output. Local CLI help and real tool calls verify the
   installed version's behavior.
+
+## Testing evidence
+
+The dimensions and 80/100 target are Pi policy. Unmesh Joshi describes replayable scheduling, fault
+injection and checking safety and recovery through observable histories. [Deterministic Simulation
+Testing][dst]
+
+[dst]: https://martinfowler.com/articles/deterministic-simulation-testing.html
+
+Joe Hellerstein distinguishes guarantees enforced by construction or proof from bounded exploration
+and explains how a separate model can diverge from shipped code.
+[No Room for Bugs](https://jhellerstein.github.io/blog/no-room-for-bugs/)
+
+Browser journey coverage reflects the project's engineering policy for user-facing web behavior.

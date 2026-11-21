@@ -2,6 +2,7 @@ import { join } from 'node:path'
 import type { ExtensionAPI } from '@earendil-works/pi-coding-agent'
 import { Type } from 'typebox'
 import { inspectCiRun } from './ci-timing.ts'
+import { engineeringReviewSchema, testingScore } from './testing-assessment.ts'
 import { githubPrState } from './github-pr-state.ts'
 import { githubCommand } from './branch-github.ts'
 import { receiptView } from './context.ts'
@@ -50,6 +51,19 @@ export async function reviewReceipts(store: StateStore, id: string) {
     path(attempt + '.children.json').then((p) => readJson<{ evidence: WorkerEvidence }[]>(p)),
     path(attempt + '.checks.json').then((p) => readJson<Receipt[]>(p)),
   ])
+  let reviewed = children?.map((child) => child.evidence)
+
+  if (!reviewed && state.workflowTaskId && state.receiptAttempt === attempt) {
+    if (!/^[a-f0-9-]{36}$/.test(state.workflowTaskId)) {
+      throw new Error('Invalid workflow task ID')
+    }
+
+    const task = await readJson<{ evidence: WorkerEvidence[] }>(
+      await safeTrace(store, join(store.directory, 'tasks', state.workflowTaskId + '.json')),
+    )
+    reviewed = task?.evidence
+  }
+
   let checks = provisional
 
   if (state.receipts && state.receiptAttempt === attempt) {
@@ -70,15 +84,18 @@ export async function reviewReceipts(store: StateStore, id: string) {
     state: state.status,
     status: state.status,
     reviews:
-      children
-        ?.filter(({ evidence }) =>
-          ['reviewer', 'database-reviewer', 'performance'].includes(evidence.role),
-        )
-        .map(({ evidence: { role, model, snapshot, result } }) => ({
+      reviewed
+        ?.filter(({ role }) => ['reviewer', 'database-reviewer', 'performance'].includes(role))
+        .map(({ role, model, snapshot, result, closedReview }) => ({
           role,
           model,
           snapshot,
           verdict: result.verdict,
+          ...(closedReview && { reviewedSnapshot: closedReview.snapshot }),
+          ...(result.engineeringReview && {
+            engineeringReview: result.engineeringReview,
+            testingScore: testingScore(result.engineeringReview),
+          }),
           required: result.findings.filter((f) => f.severity === 'required'),
           ...(result.verdict === 'blocked' && { reason: result.summary }),
           hostActions: result.hostActions ?? [],
@@ -99,6 +116,9 @@ const reviewSchema = Type.Object({
   model: Type.String(),
   snapshot: Type.String(),
   verdict: resultSchema.properties.verdict,
+  reviewedSnapshot: Type.Optional(Type.String()),
+  engineeringReview: Type.Optional(engineeringReviewSchema),
+  testingScore: Type.Optional(Type.Union([Type.Integer(), Type.Null()])),
   required: resultSchema.properties.findings,
   reason: Type.Optional(Type.String()),
   hostActions: resultSchema.properties.hostActions,

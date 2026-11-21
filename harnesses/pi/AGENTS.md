@@ -196,3 +196,11 @@ Designs and task receipts own implementation state. Run the project-memory tests
 
 - Use task_control action=evidence for an observed fact needed by a live fixed-design implementer.
   Bind delivery to the accepting worker and original task. Never change its design or review scope.
+
+- Engineering review submissions carry snapshot-specific TigerStyle evidence and the test scorecard.
+  Preserve unscored historical receipts. Exercise the reviewer tool and receipt readers when
+  changing the rubric. Keep Playwright journeys applicable to browser-visible behavior.
+- A retry blocker is a visible transition in host_work. Test deduplication and continuation through
+  the Pi session boundary. Keep routine polling private.
+- Keep main sync independent of the model. Test remote refresh and checkout preservation with real
+  Git repositories and linked worktrees. Preserve fast-forward-only behavior and repository opt-out.

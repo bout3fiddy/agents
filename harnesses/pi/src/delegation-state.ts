@@ -89,12 +89,15 @@ export type DelegationStatus = {
   summary?: string
   error?: string
   changedPaths?: string[]
+  workflowTaskId?: string
   receiptAttempt?: string
   receipts?: Receipt[]
   children?: {
     role: string
     model: string
     verdict: string
+    snapshot?: string
+    testingScore?: number | null
     closedReview?: WorkerEvidence['closedReview']
   }[]
   branch?: string
@@ -721,6 +724,7 @@ export class Delegations {
         hostActions: undefined,
         summary: 'Resuming retained task',
         receipts: undefined,
+        workflowTaskId: undefined,
         receiptAttempt: undefined,
         children: undefined,
         updatedAt: new Date().toISOString(),

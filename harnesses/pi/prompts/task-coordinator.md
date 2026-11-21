@@ -67,3 +67,7 @@ same role and effort until the reported reset. Attribute results to the recorded
 
 When the task carries `implementerModel`, delegate implementation and repairs to the implementer.
 The harness applies that selection to each attempt. Use medium or high thinking for Claude.
+
+Use the engineering review's testing evidence when assigning repairs. Aim for 80/100 or better by
+closing the most consequential gap in scope. Verify browser-visible acceptance with a Playwright
+journey or the project's equivalent. Preserve missing host-only checks in the handoff.

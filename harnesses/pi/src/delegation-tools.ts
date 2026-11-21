@@ -99,7 +99,11 @@ function resultMessage(jobs: Delegation[]): CustomMessageEntryDraft {
   }
 }
 
-export function registerDelegation(pi: ExtensionAPI, launch: Launcher = launchDelegation) {
+export function registerDelegation(
+  pi: ExtensionAPI,
+  launch: Launcher = launchDelegation,
+  afterMerge?: () => void,
+) {
   pi.registerMessageRenderer('pi-task-progress', () => ({ render: () => [], invalidate() {} }))
   let turnJobs: Delegation[] | undefined
   let current: ExtensionContext | undefined
@@ -165,6 +169,18 @@ export function registerDelegation(pi: ExtensionAPI, launch: Launcher = launchDe
 
       for (const job of ready) {
         delivered.add(`${session}:${notificationId(job)}`)
+      }
+
+      if (
+        ready.some(
+          ({ request, state }) =>
+            request.kind === 'branch' &&
+            request.branch?.remote === 'origin' &&
+            state.status === 'complete' &&
+            state.mergeBase,
+        )
+      ) {
+        afterMerge?.()
       }
 
       const messages: CustomMessageEntryDraft[] = ready.length ? [resultMessage(ready)] : []

@@ -3,8 +3,17 @@ import { Type } from 'typebox'
 import { Check } from 'typebox/value'
 import { textResult } from './file-tools.ts'
 
+const retry = Type.Object(
+  {
+    blocker: Type.String({ minLength: 1, maxLength: 400, pattern: '\\S' }),
+    resumeWhen: Type.String({ minLength: 1, maxLength: 400, pattern: '\\S' }),
+  },
+  { additionalProperties: false },
+)
+
 const parameters = Type.Object({
   state: Type.Union(['active', 'waiting', 'done', 'paused'].map((s) => Type.Literal(s))),
+  retry: Type.Optional(retry),
   detail: Type.String({ minLength: 1, maxLength: 800 }),
 })
 const record = Type.Object({ ...parameters.properties, session: Type.String() })
@@ -32,10 +41,33 @@ export function registerHostWork(pi: ExtensionAPI) {
     description:
       'Keep authorized multi-step work moving on this host across status updates. ' +
       'Use active with the objective and next action. Use waiting with the dependency and wake ' +
-      'source, paused for a stop, or done with verified completion evidence. Session-local.',
+      'source, paused for a stop, or done with verified completion evidence. At the first ' +
+      'operational retry set retry.blocker and retry.resumeWhen for a visible update.',
     parameters,
     async execute(_id, input, _signal, _update, ctx) {
+      const previous = latest(ctx)?.retry
+
+      if (input.retry && input.state !== 'active' && input.state !== 'waiting') {
+        throw new Error('Report retry conditions only on active or waiting work')
+      }
+
       pi.appendEntry(recordType, { ...input, session: ctx.sessionManager.getSessionId() })
+
+      if (
+        input.retry &&
+        (previous?.blocker !== input.retry.blocker ||
+          previous.resumeWhen !== input.retry.resumeWhen)
+      ) {
+        pi.sendMessage(
+          {
+            customType: 'pi-host-work-blocker',
+            display: true,
+            content: input.retry.blocker + '\nResume condition · ' + input.retry.resumeWhen,
+          },
+          { triggerTurn: false },
+        )
+      }
+
       return textResult(input)
     },
   })
@@ -44,7 +76,7 @@ export function registerHostWork(pi: ExtensionAPI) {
       const work = latest(ctx)
 
       if (work?.state === 'active') {
-        pi.appendEntry(recordType, { ...work, state: 'paused' })
+        pi.appendEntry(recordType, { ...work, state: 'paused', retry: undefined })
       }
     }
   })
@@ -76,7 +108,11 @@ export function registerHostWork(pi: ExtensionAPI) {
       return {
         entries: [
           ...event.entries,
-          { type: 'custom', customType: recordType, data: { ...work, state: 'paused' } },
+          {
+            type: 'custom',
+            customType: recordType,
+            data: { ...work, state: 'paused', retry: undefined },
+          },
         ],
       }
     }
@@ -98,7 +134,11 @@ export function registerHostWork(pi: ExtensionAPI) {
         return {
           entries: [
             ...event.entries,
-            { type: 'custom', customType: recordType, data: { ...work, state: 'paused' } },
+            {
+              type: 'custom',
+              customType: recordType,
+              data: { ...work, state: 'paused', retry: undefined },
+            },
             {
               type: 'custom_message',
               customType: 'pi-host-work-stalled',

@@ -1,5 +1,6 @@
 import { Type, type Static } from 'typebox'
 import { Check } from 'typebox/value'
+import { engineeringReviewSchema } from './testing-assessment.ts'
 import { hostCapability } from './capabilities.ts'
 
 export const roleNames = [
@@ -127,6 +128,11 @@ export class ProviderQuotaError extends Error {
   }
 }
 
+export const engineeringResultSchema = Type.Object(
+  { ...resultSchema.properties, engineeringReview: engineeringReviewSchema },
+  { additionalProperties: false },
+)
+
 export const auditResultSchema = Type.Object(
   {
     ...resultSchema.properties,
@@ -141,6 +147,7 @@ export const auditResultSchema = Type.Object(
   { additionalProperties: false },
 )
 export type WorkerResult = Static<typeof resultSchema> & {
+  engineeringReview?: Static<typeof engineeringReviewSchema>
   continuation?: Static<typeof auditResultSchema>['continuation']
 }
 export type Role = {
@@ -239,7 +246,9 @@ export function completedResult(verdict: WorkerResult['verdict'], readOnlyReport
 }
 
 export function validateResult(value: unknown, decideContinuation = false): WorkerResult {
-  if (!Check(decideContinuation ? auditResultSchema : resultSchema, value)) {
+  const schema = decideContinuation ? auditResultSchema : resultSchema
+
+  if (!Check(schema, value) && (decideContinuation || !Check(engineeringResultSchema, value))) {
     throw new Error('Invalid worker result')
   }
 

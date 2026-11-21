@@ -72,3 +72,7 @@ On resume, previousHostHandoff records capabilities the previous attempt needed 
 the current assignment and host updates to decide which still apply. Route a check back to the host
 when it still requires an unavailable capability. Retry when its prerequisites changed. Required
 checks stay open until there is passing evidence on the current candidate.
+
+Use the engineering review's testing evidence when assigning repairs. Aim for 80/100 or better by
+closing the most consequential gap in scope. Verify browser-visible acceptance with a Playwright
+journey or the project's equivalent. Preserve missing host-only checks in the handoff.

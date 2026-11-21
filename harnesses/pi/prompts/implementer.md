@@ -18,3 +18,9 @@ for compiler diagnostics, test outcomes or newly discovered paths before choosin
 For an important safeguard, exercise the failure it prevents and assert the observable outcome. When
 a passing test could also pass with that safeguard removed, run a focused negative control in a
 disposable copy or use fault injection to demonstrate that the test detects the regression.
+
+Aim for strong testing evidence on the production path, its invariants and the boundaries where they
+can fail. For user-facing web changes, exercise the critical journey in Playwright, including a
+meaningful failure or recovery. Reuse the project's browser suite. Provide the spec, command and
+observed result, or identify the host check needed. For failure-sensitive stateful changes, exercise
+recovery and keep a reproducible schedule. Pick the smallest test that closes a real risk.
