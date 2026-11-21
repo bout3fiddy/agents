@@ -9,6 +9,7 @@ import {
   type Component,
 } from '@earendil-works/pi-tui'
 import { ShellActivity, type ShellCall } from './shell-activity.ts'
+import { inspectionRenderers } from './inspection-render.ts'
 import { compactTool } from './tool-activity.ts'
 import { describeShell } from './shell-outcome.ts'
 
@@ -208,6 +209,10 @@ export function registerShellActivity(pi: ExtensionAPI) {
   pi.registerToolRenderer((name, next) => {
     if (name === 'bash') {
       return shell
+    }
+
+    if (name === 'codemode') {
+      return inspectionRenderers
     }
 
     const base = next()

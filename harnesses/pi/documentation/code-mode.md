@@ -9,6 +9,10 @@ later scripts in the session. Return the needed excerpts. When the SDK truncates
 can reread the relevant project range. The tool reports the count and first six nested failures even
 when a script catches an error or prints only part of a result.
 
+In the host terminal, an inspection shows its status, inspected paths and any failed calls. Click
+the row or use Pi’s tool expansion key for individual calls and a short output preview. Click **Show
+raw script and output** in that view for the original script, call arguments and returned text.
+
 - `read`, `grep`, `find`, `ls`. Host SDK inspections. Native read returns its SDK shape. The three
   listing/search tools return text.
 
