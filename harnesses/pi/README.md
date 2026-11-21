@@ -48,6 +48,16 @@ Recovery testing follows explicit impact, configured DB paths, SQL/schema files 
 or configuration changes. References in ordinary Markdown do not trigger a specialist. Vyper NatSpec
 annotations are excluded from SQL detection.
 
+## Shell activity in the terminal
+
+Consecutive host shell calls for the same pull request, check or host operation share an activity
+row. It shows the call count, running work, failures and confirmed outcomes. Click its title for the
+individual calls, then click a call for its original command and combined output. Pi’s expand-tools
+shortcut (Ctrl+O by default) opens raw details throughout the transcript. The same view is available
+when resuming a session. Commands, tool results and session traces retain their original contents.
+
+Exercise the terminal view with `uv run --with pexpect --with pyte scripts/check-shell-terminal.py`.
+
 ## Install and run
 
 Requires macOS, `sandbox-exec`, Node 22.19+, Python 3.10+, and Claude Code with `--setting-sources`,

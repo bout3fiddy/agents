@@ -31,6 +31,7 @@ import { registerBranchTools } from './branch-tools.ts'
 import { capabilities } from './capabilities.ts'
 import { registerRecurring } from './recurring-tools.ts'
 import { registerHostWork } from './host-work.ts'
+import { registerShellActivity } from './shell-render.ts'
 import { registerGitHubRunWatch } from './github-run-watch.ts'
 import { registerWorkers } from './workers-command.ts'
 
@@ -52,6 +53,7 @@ export default function harness(pi: ExtensionAPI): void {
   const afterMerge = registerMainSync(pi)
   const delegation = registerDelegation(pi, undefined, afterMerge)
   registerHostWork(pi)
+  registerShellActivity(pi)
   registerProjectMemory(pi, delegation.turnJobs)
   registerBranchTools(pi)
   registerLocalTools(pi)
