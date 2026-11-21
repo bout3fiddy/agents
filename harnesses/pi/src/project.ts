@@ -1,5 +1,4 @@
-import { mkdtemp, symlink, rm, chmod, realpath, stat } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
+import { symlink, rm, chmod, realpath, stat } from 'node:fs/promises'
 import { dirname, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
@@ -13,7 +12,9 @@ import {
 } from './paths.ts'
 import { atomicJson, readJson } from './state.ts'
 import type { Project, ProjectCheck, Receipt } from './contracts.ts'
-import { runSandboxed } from './sandbox.ts'
+import { runOnHost, runSandboxed } from './sandbox.ts'
+import { addGitIndex } from './probe-git.ts'
+import { taskDirectory, temporaryDirectory, type TaskOwner } from './temp.ts'
 
 export const harnessRoot = fileURLToPath(new URL('../', import.meta.url))
 export const defaultDatabasePaths = [
@@ -85,7 +86,8 @@ export async function loadProject(
       !['test', 'database', 'benchmark', 'static'].includes(check.kind) ||
       !Number.isSafeInteger(check.timeoutMs) ||
       check.timeoutMs < 1 ||
-      check.timeoutMs > 900_000
+      check.timeoutMs > 900_000 ||
+      (check.runner !== undefined && !['sandbox', 'host'].includes(check.runner))
     ) {
       throw new Error('Invalid project check')
     }
@@ -98,9 +100,9 @@ export async function loadProject(
   return { root: resolve(root), checks, instrumentationPaths, databasePaths }
 }
 
-export async function installedNodeModules(root: string): Promise<string | null> {
+async function linkedDependency(root: string, name: string): Promise<string | null> {
   try {
-    return await realpath(join(root, 'node_modules'))
+    return await realpath(join(root, name))
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
       return null
@@ -110,12 +112,24 @@ export async function installedNodeModules(root: string): Promise<string | null>
   }
 }
 
+export async function installedNodeModules(root: string): Promise<string | null> {
+  return linkedDependency(root, 'node_modules')
+}
+
+/** The host virtual environment is linked read-only, like node_modules. */
+export async function installedVirtualEnvironment(root: string): Promise<string | null> {
+  return linkedDependency(root, '.venv')
+}
+
 export async function createWorkspace(
   root: string,
   snapshot?: Map<string, Buffer>,
   nodeModules?: string | null,
+  owner?: TaskOwner,
 ): Promise<string> {
-  const workspace = await mkdtemp(join(tmpdir(), 'pi-workspace-'))
+  const workspace = owner
+    ? await taskDirectory('workspace', owner)
+    : await temporaryDirectory('workspace')
   const files = snapshot ?? (await inventory(root))
   await copySnapshot(files, workspace)
 
@@ -127,6 +141,12 @@ export async function createWorkspace(
 
   if (modules) {
     await symlink(modules, join(workspace, 'node_modules'))
+  }
+
+  const environment = nodeModules === null ? null : await installedVirtualEnvironment(root)
+
+  if (environment && ![...files.keys()].some((name) => name.split('/')[0] === '.venv')) {
+    await symlink(environment, join(workspace, '.venv'))
   }
 
   return workspace
@@ -174,64 +194,160 @@ export function hasSkippedTests(output: string): boolean {
 }
 
 type LintBaseline = { files: Map<string, Buffer>; writePaths: string[] }
+type LintFinding = { name: string; key: string; line: string }
 
-/** Attribute a complete harness-lint failure only when every diagnostic names unchanged,
- * out-of-scope input. Unknown or mixed diagnostics follow the ordinary repair path. */
-function classifyLintFindings(
+const harnessLintArgv = () => ['node', join(harnessRoot, 'scripts', 'linting', 'check.mjs'), '.']
+const baselineFindings = new Map<string, Promise<string[]>>()
+
+/** Parse harness-lint diagnostics. Unknown output stays unattributed and keeps the gate closed. */
+function lintFindings(output: string, prefix: string, files: Map<string, Buffer>) {
+  const findings: LintFinding[] = []
+  let unknown = false
+
+  for (const line of output.trim().split('\n')) {
+    if (!line.trim() || /: \d+ inherited line-width findings?$/.test(line)) {
+      continue
+    }
+
+    const diagnostic = /^([^:\r\n]+?)(?::(\d+))?: (.+)$/.exec(line)
+
+    if (!diagnostic) {
+      unknown = true
+      continue
+    }
+
+    const [, raw, number, message] = diagnostic
+    const name = raw!.startsWith(prefix + '/') ? raw!.slice(prefix.length + 1) : raw!
+    const source = files.get(name)
+
+    if (!source) {
+      unknown = true
+      continue
+    }
+
+    // Line numbers move with unrelated edits; the offending text identifies a finding.
+    const text = number ? (source.toString('utf8').split(/\r?\n/)[Number(number) - 1] ?? '') : ''
+    findings.push({
+      name,
+      key: [name, message, text].join('\0'),
+      line: name + line.slice(raw!.length),
+    })
+  }
+
+  return { findings, unknown }
+}
+
+async function lintBaselineFindings(baseline: LintBaseline, signal?: AbortSignal) {
+  const hash = snapshotHash(baseline.files)
+  let pending = baselineFindings.get(hash)
+
+  if (!pending) {
+    pending = (async () => {
+      const directory = await realpath(await temporaryDirectory('lint-baseline'))
+
+      try {
+        await copySnapshot(baseline.files, directory)
+        const result = await runSandboxed(directory, harnessLintArgv(), 120_000, signal)
+
+        if (result.exitCode === 0) {
+          return []
+        }
+
+        if (result.exitCode !== 1 || result.timedOut || result.aborted || result.truncated) {
+          throw new Error('Baseline harness-lint did not complete')
+        }
+
+        return lintFindings(result.output, directory, baseline.files).findings.map(
+          (finding) => finding.key,
+        )
+      } finally {
+        await rm(directory, { recursive: true, force: true })
+      }
+    })()
+    baselineFindings.set(hash, pending)
+    pending.catch(() => baselineFindings.delete(hash))
+  }
+
+  return pending
+}
+
+/** Findings already present on the base commit are reported as debt and never block a task.
+ * A finding blocks only when the candidate adds an occurrence the base did not have. */
+async function attributeLintFindings(
   output: string,
   probe: string,
   files: Map<string, Buffer>,
   baseline: LintBaseline,
-): Pick<Receipt, 'inheritedLintPaths' | 'scopedLintOutput'> {
-  const paths = new Set<string>()
-  let inheritedOnly = true
-  let scopedOutput = ''
+  signal?: AbortSignal,
+): Promise<Pick<Receipt, 'inheritedLintPaths' | 'scopedLintOutput'> & { blocking: boolean }> {
+  const candidate = lintFindings(output, probe, files)
+  const remaining = new Map<string, number>()
 
-  for (const line of output.trim().split('\n')) {
-    const diagnostic = /^([^:\r\n]+)(?::\d+)?: (.+)$/.exec(line)
+  for (const key of await lintBaselineFindings(baseline, signal)) {
+    remaining.set(key, (remaining.get(key) ?? 0) + 1)
+  }
 
-    if (!diagnostic) {
-      inheritedOnly = false
+  const inherited = new Set<string>()
+  let scoped = ''
+
+  for (const finding of candidate.findings) {
+    const count = remaining.get(finding.key) ?? 0
+
+    if (count > 0) {
+      remaining.set(finding.key, count - 1)
+      inherited.add(finding.name)
       continue
     }
 
-    const [, raw, message] = diagnostic
-    const name = raw!.startsWith(probe + '/') ? raw!.slice(probe.length + 1) : raw!
-    const bytes = files.get(name)
-
-    if (bytes && baseline.writePaths.some((scope) => matches(name, scope))) {
-      inheritedOnly = false
-
-      if (scopedOutput.length < 4000) {
-        scopedOutput += name + line.slice(raw!.length) + '\n'
-      }
-
-      continue
+    if (scoped.length < 4000) {
+      scoped += finding.line + '\n'
     }
-
-    if (
-      !bytes ||
-      !baseline.files.get(name)?.equals(bytes) ||
-      ![
-        'line exceeds 100 columns',
-        'invalid JSON',
-        'add a blank line between logical stages',
-        'add a blank line before a standalone comment block',
-        'separate logical stages and standalone comment blocks',
-      ].includes(message!)
-    ) {
-      inheritedOnly = false
-    }
-
-    paths.add(name)
   }
 
   return {
-    ...(inheritedOnly && paths.size > 0 && { inheritedLintPaths: [...paths] }),
-    ...(scopedOutput && { scopedLintOutput: scopedOutput.slice(0, 4000).trimEnd() }),
+    blocking: Boolean(scoped) || candidate.unknown || !candidate.findings.length,
+    ...(inherited.size > 0 && { inheritedLintPaths: [...inherited] }),
+    ...(scoped && { scopedLintOutput: scoped.slice(0, 4000).trimEnd() }),
   }
 }
 
+type CheckRun = { check: ProjectCheck; probe: string; argv: string[] }
+
+async function runCheck(
+  workspace: string,
+  files: Map<string, Buffer>,
+  check: ProjectCheck,
+  project: Project,
+  signal: AbortSignal | undefined,
+  prepare?: (run: CheckRun) => Promise<string[]>,
+) {
+
+  // Every command receives a disposable copy, so test code cannot alter the reviewed candidate.
+  const probe = await realpath(await createWorkspace(workspace, files))
+
+  try {
+    const git = await addGitIndex(probe, workspace, project.root)
+    const argv = prepare ? await prepare({ check, probe, argv: check.argv }) : check.argv
+    const result =
+      check.runner === 'host'
+        ? await runOnHost(probe, argv, check.timeoutMs, signal)
+        : await runSandboxed(probe, argv, check.timeoutMs, signal, { readable: git })
+    return { probe, result }
+  } finally {
+    await rm(probe, { recursive: true, force: true })
+  }
+}
+
+function checkStatus(result: Receipt['result'], tests: boolean): Receipt['status'] {
+  if (result.exitCode !== 0 || result.timedOut || result.aborted || result.truncated) {
+    return 'failed'
+  }
+
+  return tests && hasSkippedTests(result.output) ? 'skipped' : 'passed'
+}
+
+/** Behavioral checks run first and all report. Harness lint and host checks form the final gate:
+ * they run only once every sandbox check passes, so earlier repair rounds never see them. */
 export async function verifyProject(
   workspace: string,
   project: Project,
@@ -253,64 +369,74 @@ export async function verifyProject(
           )
           .map(([name]) => name)
       : []
-  const checks: ProjectCheck[] = [
-    {
+  const checks = project.checks.filter((check) => check.kind !== 'benchmark')
+  const receipts: Receipt[] = []
+  let open = true
+
+  for (const check of checks.filter((item) => item.runner !== 'host')) {
+    const { result } = await runCheck(workspace, files, check, project, signal)
+    const status = checkStatus(result, true)
+    receipts.push({ snapshot: hash, check: check.id, status, result })
+    open &&= status === 'passed' || !check.required
+  }
+
+  if (open) {
+    const lint: ProjectCheck = {
       id: 'harness-lint',
-      argv: ['node', join(harnessRoot, 'scripts', 'linting', 'check.mjs'), '.'],
+      argv: harnessLintArgv(),
       required: true,
       kind: 'static',
       timeoutMs: 120_000,
-    },
-    ...project.checks.filter((check) => check.kind !== 'benchmark'),
-  ]
-  const receipts: Receipt[] = []
+    }
+    let probeRoot = ''
+    const { result } = await runCheck(workspace, files, lint, project, signal, async (run) => {
+      probeRoot = run.probe
 
-  for (const check of checks) {
-
-    // Every command receives a disposable copy, so test code cannot alter the reviewed candidate.
-    const probe = await realpath(await createWorkspace(workspace, files))
-    let result
-
-    try {
-      let argv = check.argv
-
-      if (check === checks[0] && retained.length) {
-        const manifest = '.pi/traces/retained-markdown.json'
-        await atomicJson(join(probe, manifest), retained)
-        argv = [...argv, '--retained-markdown', manifest]
+      if (!retained.length) {
+        return run.argv
       }
 
-      result = await runSandboxed(probe, argv, check.timeoutMs, signal)
-    } finally {
-      await rm(probe, { recursive: true, force: true })
-    }
+      const manifest = '.pi/traces/retained-markdown.json'
+      await atomicJson(join(run.probe, manifest), retained)
+      return [...run.argv, '--retained-markdown', manifest]
+    })
+    let status = checkStatus(result, false)
+    let attribution: Awaited<ReturnType<typeof attributeLintFindings>> | undefined
 
-    const status =
-      result.exitCode !== 0 || result.timedOut || result.aborted || result.truncated
-        ? 'failed'
-        : check !== checks[0] && hasSkippedTests(result.output)
-          ? 'skipped'
-          : 'passed'
-    const lintFindings =
-      check === checks[0] &&
+    if (
+      status === 'failed' &&
       baseline &&
       result.exitCode === 1 &&
       !result.timedOut &&
       !result.aborted &&
       !result.truncated
-        ? classifyLintFindings(result.output, probe, files, baseline)
-        : undefined
-    receipts.push({
+    ) {
+      attribution = await attributeLintFindings(result.output, probeRoot, files, baseline, signal)
+      status = attribution.blocking ? 'failed' : 'passed'
+    }
+
+    receipts.unshift({
       snapshot: hash,
-      check: check.id,
+      check: lint.id,
       status,
       result,
-      ...lintFindings,
+      ...(attribution?.inheritedLintPaths && {
+        inheritedLintPaths: attribution.inheritedLintPaths,
+      }),
+      ...(attribution?.scopedLintOutput && { scopedLintOutput: attribution.scopedLintOutput }),
     })
+    open = status === 'passed'
+  }
 
-    if (status !== 'passed' && check.required) {
-      return receipts
+  for (const check of checks.filter((item) => item.runner === 'host')) {
+    if (!open) {
+      break
     }
+
+    const { result } = await runCheck(workspace, files, check, project, signal)
+    const status = checkStatus(result, true)
+    receipts.push({ snapshot: hash, check: check.id, status, result })
+    open = status === 'passed' || !check.required
   }
 
   for (const kind of ['test', ...(database ? ['database'] : [])]) {

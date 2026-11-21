@@ -59,9 +59,18 @@
 - For scoped verification, report inherited width findings on byte-identical out-of-scope Markdown
   excluded by the unchanged baseline formatting policy. Keep full checks on added, edited or
   assigned files and provide the complete snapshot to project checks.
-- Keep inherited out-of-scope lint failures blocking. On local implementation, send attributable
-  failures directly to the host with the candidate and existing worker handoffs. Mixed failures
-  still go to the writer for repair.
+- Harness lint and runner=host checks form the final gate and run only after every sandbox check
+  passes. Run every sandbox check rather than stopping at the first failure. Attribute lint findings
+  against the base commit by file, message and line text: existing findings are reported as
+  inheritedLintPaths and never block, even in touched files; only added findings go to the writer.
+- Host checks run outside the sandbox only when the project marks them runner=host. Use a disposable
+  copy of the verified snapshot and a minimal environment. Never fall back to host execution
+  silently.
+- Clean up what no live or resumable task needs: finished task worktrees, baselines and temporary
+  copies immediately, idle retained work after the retention period with its patch saved. Keep
+  temporary directories under the per-process or per-task harness roots so a sweep can judge them.
+  Never delete a path outside Pi-owned directories. Test with tests/cleanup.test.ts.
+- Reject dispatch when host node_modules differs from the task's lockfile; workers are offline.
 - Record actual model/effort and request/model/tool timing under project-local `harness/timing/`.
   Respect the selected orchestrator model; implementation remains independently pinned to
   `openai-codex/gpt-6.2-astra` with medium as the default.

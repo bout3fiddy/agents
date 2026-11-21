@@ -29,6 +29,21 @@ preserve each check's exit status before formatting its output. Dependencies and
 readable but not writable. Commands cannot retain generated code: scoped file tools perform retained
 edits. File tools reject traversal, secret/dependency paths and symbolic links.
 
+Each command copy also receives a Git index of its files and, for a checkout, its pinned HEAD.
+Objects resolve through alternates to the project repository, which the profile adds as readable.
+Host `.venv` links are readable together with the interpreter prefix they resolve to.
+
+A project can mark a check `runner: host`. Such checks run in a disposable copy of the verified
+snapshot outside sandbox-exec, with the user's permissions and a minimal environment. They run only
+after every sandbox check and harness lint pass, so they never execute for a candidate that already
+failed. This is an explicit project decision, never a fallback for a failed sandbox run.
+
+Disposable directories live under `$TMPDIR/pi-harness/processes/<pid>-*` and are removed after the
+creating process exits. Retained candidates live under `$TMPDIR/pi-harness/tasks/` with an owner
+record naming the project, state directory and task. A host cleanup pass removes copies, worktrees
+and baselines that no live or resumable task needs, saves an expired candidate's changes as a patch
+and marks the task so a resume reports the expiry.
+
 When process-group cleanup is denied, the runner also tries to stop the command process itself. The
 result retains captured output, elapsed time, timeout or cancellation, and the cleanup error. An
 unconfirmed cleanup always yields a null exit code and fails verification.

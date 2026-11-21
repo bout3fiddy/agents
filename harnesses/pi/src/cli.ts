@@ -1,3 +1,4 @@
+import { cleanup, cleanupSummary, retentionMs } from './cleanup.ts'
 import { access, realpath, mkdtemp, rm } from 'node:fs/promises'
 import { homedir, tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
@@ -93,7 +94,14 @@ if (process.argv[1] && resolve(process.argv[1]) === new URL(import.meta.url).pat
         ),
       )
       break
+    case 'gc': {
+      const dryRun = argument === '--dry-run'
+      const report = await cleanup(store, { retentionMs: retentionMs(), dryRun })
+      console.log(cleanupSummary(report, dryRun))
+      console.log(JSON.stringify(report, null, 2))
+      break
+    }
     default:
-      throw new Error('Commands: doctor, run [provider/model], status')
+      throw new Error('Commands: doctor, gc [--dry-run], run [provider/model], status')
   }
 }

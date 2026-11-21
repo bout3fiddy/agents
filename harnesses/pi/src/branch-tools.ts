@@ -1,3 +1,4 @@
+import { requireDependencies } from './dependencies.ts'
 import { randomUUID } from 'node:crypto'
 import { extname } from 'node:path'
 import { Check } from 'typebox/value'
@@ -59,6 +60,7 @@ export async function startBranchBatch(
     ['show', `${repository.base}:${input.designPath}`],
     signal,
   )
+  await requireDependencies(store.projectRoot, repository.base, signal)
   const local = (await readBoundedFile(await safePath(store.projectRoot, input.designPath)))
     .toString('utf8')
     .trimEnd()

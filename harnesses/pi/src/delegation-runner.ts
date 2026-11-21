@@ -69,7 +69,22 @@ export async function runDelegation(
   coordinate = runTaskCoordinator,
 ): Promise<DelegationStatus> {
   const jobs = new Delegations(store)
-  const { request } = await jobs.get(id)
+  const { request, state: initial } = await jobs.get(id)
+  const expired = await readJson<{ reason: string }>(
+    join(delegationDirectory(store, id), 'expired.json'),
+  )
+
+  // Cleanup removed this task's retained work. Never rebuild it silently from the base.
+  if (expired) {
+    const stopped: DelegationStatus = {
+      ...initial,
+      status: 'needs_attention',
+      error: expired.reason,
+      updatedAt: new Date().toISOString(),
+    }
+    await atomicJson(join(delegationDirectory(store, id), 'status.json'), stopped)
+    return stopped
+  }
 
   if (request.local) {
     return runLocalCandidate(store, request, signal)
@@ -165,8 +180,11 @@ export async function runDelegation(
       throw new Error('Retained candidate identity changed; inspect before resuming')
     }
 
-    const workspace = retained?.workspace ?? (await createWorkspace(request.root))
-    const originals = retained?.originals ?? (await createWorkspace(workspace))
+    const owner = { projectRoot: request.root, stateDirectory: store.directory, taskId: id }
+    const workspace =
+      retained?.workspace ?? (await createWorkspace(request.root, undefined, undefined, owner))
+    const originals =
+      retained?.originals ?? (await createWorkspace(workspace, undefined, undefined, owner))
     const before = await inventory(originals)
 
     if (

@@ -542,7 +542,8 @@ export async function createTaskCoordinatorTools(
       label: 'Run branch acceptance checks',
       description:
         'Run the configured required tests, lint, recovery checks and benchmarks. ' +
-        'Route inheritedLintPaths to the host. Repair in-scope failures and rerun after edits.',
+        'Harness lint and host checks run after sandbox checks pass. inheritedLintPaths are ' +
+        'existing base findings and never block. Repair failures and rerun after edits.',
       parameters: Type.Object({}),
       async execute() {
         pending++

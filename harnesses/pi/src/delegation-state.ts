@@ -1,3 +1,4 @@
+import { requireDependencies } from './dependencies.ts'
 import { Type, type Static } from 'typebox'
 import { Check } from 'typebox/value'
 import { mkdir } from 'node:fs/promises'
@@ -448,6 +449,10 @@ export class Delegations {
     recurring?: DelegationRequest['recurring'],
   ): Promise<Delegation> {
     validateDelegation(input)
+
+    if (input.kind === 'implementation' || input.kind === 'maintenance') {
+      await requireDependencies(this.store.projectRoot)
+    }
 
     return this.locked(async () => {
       const checkpoint = input.kind === 'implementation' ? await this.store.checkpoint() : undefined

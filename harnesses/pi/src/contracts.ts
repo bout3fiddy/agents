@@ -186,6 +186,9 @@ export type ProjectCheck = {
   required: boolean
   kind: 'test' | 'database' | 'benchmark' | 'static'
   timeoutMs: number
+
+  /** Host checks run after sandbox checks pass, outside the worker sandbox. */
+  runner?: 'sandbox' | 'host'
 }
 
 export type Project = {

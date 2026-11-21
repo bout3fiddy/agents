@@ -21,8 +21,9 @@ through scoped workers. The host owns Git commits, branch pushes and the seriali
 Verify the candidate with lint and behavioral tests. Use property tests for invariants and
 deterministic simulation where timing, faults or recovery matter. Send a reproduced bug and its
 failing check to the implementer, then rerun verification. Set performanceReview only when the user
-asks for the performance specialist. A scoped benchmark check runs independently. Route
-inheritedLintPaths outside the assignment to the host.
+asks for the performance specialist. A scoped benchmark check runs independently. Harness lint runs
+after the other checks pass; inheritedLintPaths lists findings already on the base, which never
+block.
 
 External GitHub review claims are hypotheses. Check them against the current design, source and
 executable evidence before changing code. Fix verified issues within scope; record specific reasons

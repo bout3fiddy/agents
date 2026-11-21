@@ -125,6 +125,17 @@ publication is a separate host-managed capability of delegate_branches. Local wo
 delegate_task with kind implementation share one checkpoint and require exclusive local writes.
 Direct local candidates use isolated worktrees. They can run alongside the local workflow.
 
+Project checks in `.pi/harness.json` run in the worker sandbox unless a check sets
+`"runner": "host"`. Set it yourself when workers report a required check failing because the sandbox
+lacks a database server, browser, loopback listener, Docker or process control. Host checks and
+harness lint form the final gate: they run once, after every sandbox check passes, on a disposable
+copy of the exact snapshot. Lint findings already present on the base commit are reported as
+inheritedLintPaths and never block. Dispatch is rejected while host node_modules differs from the
+task's lockfile; run npm ci with the user's authorization, then dispatch again. Create temporary
+host worktrees under `.pi/traces/harness/host-worktrees/` and remove them when done. Pi removes
+finished or long-idle task worktrees, baselines and temporary copies automatically;
+`/harness-cleanup` runs that pass now.
+
 Give the user a short summary when a meaningful checkpoint changes what they can use, decide, or
 expect. This applies to your own work and delegated work. Combine related outcomes across branches,
 name the evidence and what it unlocks or delays, and keep the current discussion moving. Distinguish

@@ -81,7 +81,7 @@ test('run_checks distinguishes inherited lint from a changed failing file', asyn
   }
 
   const inherited = await lint()
-  assert.equal(inherited.status, 'failed')
+  assert.equal(inherited.status, 'passed')
   await assert.rejects(
     invoke(worker.tools, 'delegate_worker', {
       ...assignment('reviewer'),
@@ -91,9 +91,14 @@ test('run_checks distinguishes inherited lint from a changed failing file', asyn
   )
   assert.deepEqual(inherited.inheritedLintPaths, [name])
   await writeFile(join(request.workspace, name), longLine + '// changed\n')
+  const touched = await lint()
+  assert.equal(touched.status, 'passed')
+  assert.deepEqual(touched.inheritedLintPaths, [name])
+  await writeFile(join(request.workspace, name), longLine + '// ' + 'y'.repeat(110) + '\n')
   const changed = await lint()
   assert.equal(changed.status, 'failed')
-  assert.equal(changed.inheritedLintPaths, undefined)
+  assert.deepEqual(changed.inheritedLintPaths, [name])
+  assert.match(changed.scopedLintOutput, /existing\.js:2: line exceeds/)
 })
 
 test('a failing branch sends the regression to the implementer without review', async (t) => {
