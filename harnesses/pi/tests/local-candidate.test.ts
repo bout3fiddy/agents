@@ -221,7 +221,7 @@ test('direct worker can compare a local dependency from baseline and candidate',
   assert.equal(await readFile(join(dependency, 'index.js'), 'utf8'), 'module.exports = 10\n')
 })
 
-test('mixed lint keeps scoped diagnostics in repair feedback', async (t) => {
+test('mixed lint repairs only added findings and completes over inherited ones', async (t) => {
   const f = await localFixture(t)
   const longLine = '// ' + 'x'.repeat(100) + '\n'
   await writeFile(join(f.root, 'zzz.js'), longLine.repeat(140))
@@ -238,21 +238,30 @@ test('mixed lint keeps scoped diagnostics in repair feedback', async (t) => {
 
       if (calls === 2) {
         const [{ output }] = JSON.parse(JSON.parse(w.task).feedback)
-        assert.match(output, /src\/one\.js:1: line exceeds 100 columns/)
+        assert.match(output, /src\/one\.js:\d+: line exceeds 100 columns/)
+        assert.doesNotMatch(output, /zzz\.js/)
       }
 
-      await writeFile(
-        join(w.workspace, 'src/one.js'),
-        calls === 1 ? longLine : 'export const base = 2\n',
-      )
+      // Lint is the final gate, so the first attempt must pass the behavioral check.
+      const source = [
+        'export const base = 1',
+        '',
+        'export function doubled(value) {',
+        '  return value * 2',
+        '}',
+        '',
+      ].join('\n')
+      await writeFile(join(w.workspace, 'src/one.js'), calls === 1 ? source + longLine : source)
       return passingEvidence(w.workspace)
     },
   )
-  assert.equal(state.receipts?.[0]?.inheritedLintPaths?.[0], 'zzz.js', state.error)
-  assert.equal(state.status, 'needs_attention')
+  assert.equal(state.status, 'complete', state.error)
   assert.equal(calls, 2)
-  assert.equal(state.commit, undefined)
-  assert.match(state.receipts[0]!.result.output, /zzz\.js:140:/)
+  assert.ok(state.commit)
+  const lint = state.receipts?.find((receipt) => receipt.check === 'harness-lint')
+  assert.equal(lint?.status, 'passed')
+  assert.deepEqual(lint?.inheritedLintPaths, ['zzz.js'])
+  assert.match(lint!.result.output, /zzz\.js:140:/)
 })
 
 test('local repair returns receipts for a repeated failure', async (t) => {

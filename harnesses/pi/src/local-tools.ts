@@ -1,3 +1,4 @@
+import { requireDependencies } from './dependencies.ts'
 import { randomUUID } from 'node:crypto'
 import { Type } from 'typebox'
 import { Check } from 'typebox/value'
@@ -63,6 +64,7 @@ export async function startLocalBatch(
     ['rev-parse', '--verify', (targetRef || 'HEAD') + '^{commit}'],
     signal,
   )
+  await requireDependencies(root, base, signal)
   const project = await loadPinnedProject(root, base, signal)
 
   if (project.checks.some((check) => check.id === 'local-acceptance')) {

@@ -73,7 +73,11 @@ test('scoped lint distinguishes preserved reference prose from authored changes'
   )
   assert.match(passed[0]!.result.output, /external\.md/)
   assert.equal((await verifyProject(item.root, project, false))[0]!.status, 'failed')
-  assert.equal((await scoped(['external.md']))[0]!.status, 'failed')
+
+  // In scope but byte-identical: the base already had this finding, so it is reported only.
+  const unchanged = (await scoped(['external.md']))[0]!
+  assert.equal(unchanged.status, 'passed')
+  assert.deepEqual(unchanged.inheritedLintPaths, ['external.md'])
   await writeFile(reference, 'b' + original)
   assert.equal((await scoped())[0]!.status, 'failed')
   await writeFile(reference, original)
@@ -81,24 +85,30 @@ test('scoped lint distinguishes preserved reference prose from authored changes'
   assert.equal((await scoped())[0]!.status, 'failed')
   await rm(join(item.root, 'added.md'))
   await writeFile(join(item.root, 'src/value.js'), '// ' + original)
-  assert.equal((await scoped())[0]!.status, 'failed')
+  const authored = (await scoped())[0]!
+  assert.equal(authored.status, 'failed')
+  assert.match(authored.scopedLintOutput!, /src\/value\.js:1: line exceeds/)
   await writeFile(join(item.root, 'src/value.js'), 'export const value = 0\n')
   const ordinary = join(item.root, 'ordinary.md')
   await writeFile(ordinary, original)
   const ordinaryBase = { files: await inventory(item.root), writePaths: ['src/**'] }
   const ordinaryResult = await verifyProject(item.root, project, false, undefined, ordinaryBase)
-  assert.equal(ordinaryResult[0]!.status, 'failed')
+  assert.equal(ordinaryResult[0]!.status, 'passed')
   assert.match(ordinaryResult[0]!.result.output, /ordinary\.md:1: line exceeds/)
+  assert.deepEqual(ordinaryResult[0]!.inheritedLintPaths, ['ordinary.md'])
   await rm(ordinary)
   const script = join(item.root, 'external.js')
   await writeFile(script, '// ' + original)
   const codeBase = { files: await inventory(item.root), writePaths: ['src/**'] }
   const codeResult = await verifyProject(item.root, project, false, undefined, codeBase)
-  assert.equal(codeResult[0]!.status, 'failed')
-  assert.match(codeResult[0]!.result.output, /external\.js:1: line exceeds/)
+  assert.equal(codeResult[0]!.status, 'passed')
+  assert.deepEqual(codeResult[0]!.inheritedLintPaths, ['external.js'])
+  await writeFile(script, '// ' + original + '// ' + 'c'.repeat(101) + '\n')
+  const added = (await verifyProject(item.root, project, false, undefined, codeBase))[0]!
+  assert.equal(added.status, 'failed')
+  assert.match(added.scopedLintOutput!, /external\.js:2: line exceeds/)
+  assert.doesNotMatch(added.scopedLintOutput!, /external\.js:1:/)
   await rm(script)
-  await writeFile(join(item.root, '.prettierignore'), '*.md\n')
-  assert.equal((await scoped())[0]!.status, 'failed')
 })
 
 test('truncated required-check output cannot hide a skipped test', async () => {
@@ -502,26 +512,22 @@ test('a blocked implementation persists the current host handoff', async (t) => 
   assert.deepEqual((await store.task())?.hostActions, hostActions)
 })
 
-test('inherited lint retains the candidate and preserves host actions', async (t) => {
+test('inherited lint is reported without blocking the candidate', async (t) => {
   const item = await fixture()
   t.after(() => rm(item.base, { recursive: true, force: true }))
   await writeFile(join(item.root, 'guide.md'), 'x'.repeat(101) + '\n')
   const calls: string[] = []
   const task = await runWorkflow(item.store, 'fixture/model', undefined, async (request) => {
     calls.push(request.role)
-    assert.equal(calls.length, 1, 'Cannot repair unchanged files outside this scope')
     await writeFile(join(request.workspace, 'src/value.js'), 'export const value = 4\n')
-    return evidence(request, { hostActions: [{ capability: 'network', reason: 'Provider check' }] })
+    return evidence(request)
   })
-  assert.equal(task.status, 'needs_attention')
+  assert.equal(task.status, 'complete', task.error)
+  assert.deepEqual(calls, ['implementer'])
+  assert.equal(task.receipts[0]?.check, 'harness-lint')
+  assert.equal(task.receipts[0]?.status, 'passed')
   assert.deepEqual(task.receipts[0]?.inheritedLintPaths, ['guide.md'])
-  assert.equal(task.receipts[0]?.status, 'failed')
-  assert.deepEqual(
-    task.hostActions?.map((action) => action.capability),
-    ['network', 'project-policy'],
-  )
-  assert.match(await readFile(join(item.root, 'src/value.js'), 'utf8'), /value = 0/)
-  assert.match(await readFile(join(task.candidate!, 'src/value.js'), 'utf8'), /value = 4/)
+  assert.match(await readFile(join(item.root, 'src/value.js'), 'utf8'), /value = 4/)
 })
 
 test('mixed lint findings keep repair with the writer', async (t) => {
@@ -532,11 +538,17 @@ test('mixed lint findings keep repair with the writer', async (t) => {
   const result = await runWorkflow(item.store, 'fixture/model', undefined, async (request) => {
     calls++
     assert.ok(calls <= 2)
+
+    if (calls === 2) {
+      assert.match(request.task, /src\/value\.js:1: line exceeds/)
+      assert.doesNotMatch(request.task, /guide\.md:1/)
+    }
+
     const value = calls === 1 ? '// ' + 'x'.repeat(101) : 'export const value = 3'
     await writeFile(join(request.workspace, 'src/value.js'), value + '\n')
     return evidence(request)
   })
   assert.equal(calls, 2)
   assert.deepEqual(result.receipts[0]?.inheritedLintPaths, ['guide.md'])
-  assert.equal(result.status, 'needs_attention')
+  assert.equal(result.status, 'complete', result.error)
 })

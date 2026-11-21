@@ -23,6 +23,7 @@ import { registerTiming } from './timing.ts'
 import { registerDelegation } from './delegation-tools.ts'
 import { Delegations, delegationView } from './delegation-state.ts'
 import { registerMainSync } from './main-sync.ts'
+import { registerCleanup } from './cleanup.ts'
 import { registerAutoReload } from './auto-reload.ts'
 import { runtimeVersion } from './runtime-version.ts'
 import { registerLocalTools } from './local-tools.ts'
@@ -50,6 +51,7 @@ export default function harness(pi: ExtensionAPI): void {
   const runtime = runtimeVersion(pi)
   registerTiming(pi, runtime.current)
   const afterMerge = registerMainSync(pi)
+  registerCleanup(pi)
   const delegation = registerDelegation(pi, undefined, afterMerge)
   registerHostWork(pi)
   registerShellActivity(pi)

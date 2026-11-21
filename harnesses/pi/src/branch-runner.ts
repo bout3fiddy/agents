@@ -38,23 +38,41 @@ export type BranchAdapters = {
   reviews: typeof mergeReviewLoop
 }
 
+/** Link host dependency directories into a worktree. A virtual environment is linked only when
+ * the repository ignores the link itself, so it never appears as an untracked candidate file. */
 export async function linkBranchDependencies(root: string, workspace: string, signal: AbortSignal) {
-  let modules: string
+  let linked = false
 
-  try {
-    modules = await realpath(join(root, 'node_modules'))
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-      return false
+  for (const name of ['node_modules', '.venv']) {
+    let target: string
+
+    try {
+      target = await realpath(join(root, name))
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+        continue
+      }
+
+      throw error
     }
 
-    throw error
+    if (name === '.venv') {
+      try {
+        await gitCommand(workspace, ['check-ignore', '-q', '--', name], signal)
+      } catch {
+        continue
+      }
+    } else {
+
+      // Dependency links must be ignored by the committed repository policy before host setup.
+      await gitCommand(workspace, ['check-ignore', '-q', 'node_modules/'], signal)
+    }
+
+    await symlink(target, join(workspace, name))
+    linked = true
   }
 
-  // Dependency links must be ignored by the committed repository policy before host setup.
-  await gitCommand(workspace, ['check-ignore', '-q', 'node_modules/'], signal)
-  await symlink(modules, join(workspace, 'node_modules'))
-  return true
+  return linked
 }
 
 export async function runBranchTask(
@@ -179,147 +197,157 @@ export async function runBranchTask(
       const originals = join(store.directory, 'baselines', `${request.id}-${randomUUID()}`)
       await mkdir(join(store.directory, 'baselines'), { recursive: true, mode: 0o700 })
       await prepareBaseline(branch, base, originals, signal)
-      const baseline = await inventory(originals)
-      const document = (await readBoundedFile(await safePath(originals, plan!.designPath)))
-        .toString('utf8')
-        .trimEnd()
 
-      if (digest(document) !== plan!.designHash) {
-        throw new Error('The design document changed on main; retained branch needs reconciliation')
-      }
+      // A baseline worktree serves one validation; failures must not leave it behind.
+      try {
+        const baseline = await inventory(originals)
+        const document = (await readBoundedFile(await safePath(originals, plan!.designPath)))
+          .toString('utf8')
+          .trimEnd()
 
-      const project = { ...(await loadProject(originals)), root: request.root }
-      requireBranchChecks(project, plan!.design)
+        if (digest(document) !== plan!.designHash) {
+          throw new Error(
+            'The design document changed on main; retained branch needs reconciliation',
+          )
+        }
 
-      const checkpoint = {
-        ...plan!.design,
-        version: 1,
-        hash: digest(JSON.stringify(plan!.design)),
-        acceptedAt: request.createdAt,
-      }
-      let revision = 0
+        const project = { ...(await loadProject(originals)), root: request.root }
+        requireBranchChecks(project, plan!.design)
 
-      // Design authority already came from the parent. Review/check repair has no call ceiling.
-      while (true) {
-        await controls()
-        revision++
-        await save({ status: 'running', mergeBase: base, error: undefined })
-        const generation = state.deliveryVersion ? `-run-${state.deliveryVersion}` : ''
-        const progressFile = `orchestrator-${validation}-${revision}${generation}.json`
-        const outputPath = join(directory, progressFile)
-        await save({ progressFile, receipts: undefined, receiptAttempt: undefined })
-        const evidence = await coordinate(
-          {
-            kind: 'branch',
-            designPath: plan!.designPath,
-            thinking: request.thinking,
-            implementerModel: request.implementerModel,
-            task: request.task,
-            workspace: branch.workspace,
-            project,
-            checkpoint,
-            context: JSON.stringify({
+        const checkpoint = {
+          ...plan!.design,
+          version: 1,
+          hash: digest(JSON.stringify(plan!.design)),
+          acceptedAt: request.createdAt,
+        }
+        let revision = 0
+
+        // Design authority already came from the parent. Review/check repair has no call ceiling.
+        while (true) {
+          await controls()
+          revision++
+          await save({ status: 'running', mergeBase: base, error: undefined })
+          const generation = state.deliveryVersion ? `-run-${state.deliveryVersion}` : ''
+          const progressFile = `orchestrator-${validation}-${revision}${generation}.json`
+          const outputPath = join(directory, progressFile)
+          await save({ progressFile, receipts: undefined, receiptAttempt: undefined })
+          const evidence = await coordinate(
+            {
+              kind: 'branch',
               designPath: plan!.designPath,
-              design: plan!.design.design,
-              instruction:
-                'Execute autonomously from this settled design. Resolve test and external PR ' +
-                'feedback yourself. Preserve other tasks. Do not request routine human approval.',
-              phase: validation === 1 && !retained ? 'implementation' : 'integration revalidation',
-              baseCommit: base,
-              conflicts,
-              previousFeedback: feedback,
-              ...(current.previousHostHandoff &&
-                current.previousHostHandoff.forDeliveryVersion === state.deliveryVersion && {
-                  previousHostHandoff: {
-                    attempt: current.previousHostHandoff.attempt,
-                    actions: current.previousHostHandoff.actions,
-                  },
-                }),
-              parentContext: request.context,
-            }),
-            model: request.model,
-            outputPath,
-            originals,
-            baseline: fileHashes(baseline),
-            controlsPath: join(directory, 'controls.json'),
-            resumed: (state.deliveryVersion ?? 0) > 0,
-          },
-          signal,
-        )
-        await atomicJson(outputPath, evidence)
-        children.push(...evidence.children.map(childSummary))
-        await save({ children, summary: evidence.result.summary, status: 'checking' })
-
-        if (evidence.result.verdict === 'blocked') {
-          blockedActions = evidence.result.hostActions
-          throw new Error(`Autonomous orchestrator blocked: ${evidence.result.summary}`)
-        }
-
-        if (evidence.result.verdict !== 'pass') {
-          feedback = JSON.stringify(evidence.result)
-          continue
-        }
-
-        const after = await inventory(branch.workspace)
-        await save({ changedPaths: changes(baseline, after) })
-        let receipts
-
-        try {
-          receipts = await checkDelegation(
-            { ...request, root: originals },
-            branch.workspace,
-            project,
-            baseline,
-            after,
-            evidence,
+              thinking: request.thinking,
+              implementerModel: request.implementerModel,
+              task: request.task,
+              workspace: branch.workspace,
+              project,
+              checkpoint,
+              context: JSON.stringify({
+                designPath: plan!.designPath,
+                design: plan!.design.design,
+                instruction:
+                  'Execute autonomously from this settled design. Resolve test and external PR ' +
+                  'feedback yourself. Preserve other tasks. Do not request routine human approval.',
+                phase:
+                  validation === 1 && !retained ? 'implementation' : 'integration revalidation',
+                baseCommit: base,
+                conflicts,
+                previousFeedback: feedback,
+                ...(current.previousHostHandoff &&
+                  current.previousHostHandoff.forDeliveryVersion === state.deliveryVersion && {
+                    previousHostHandoff: {
+                      attempt: current.previousHostHandoff.attempt,
+                      actions: current.previousHostHandoff.actions,
+                    },
+                  }),
+                parentContext: request.context,
+              }),
+              model: request.model,
+              outputPath,
+              originals,
+              baseline: fileHashes(baseline),
+              controlsPath: join(directory, 'controls.json'),
+              resumed: (state.deliveryVersion ?? 0) > 0,
+            },
             signal,
           )
-        } catch (error) {
+          await atomicJson(outputPath, evidence)
+          children.push(...evidence.children.map(childSummary))
+          await save({ children, summary: evidence.result.summary, status: 'checking' })
+
+          if (evidence.result.verdict === 'blocked') {
+            blockedActions = evidence.result.hostActions
+            throw new Error(`Autonomous orchestrator blocked: ${evidence.result.summary}`)
+          }
+
+          if (evidence.result.verdict !== 'pass') {
+            feedback = JSON.stringify(evidence.result)
+            continue
+          }
+
+          const after = await inventory(branch.workspace)
+          await save({ changedPaths: changes(baseline, after) })
+          let receipts
+
+          try {
+            receipts = await checkDelegation(
+              { ...request, root: originals },
+              branch.workspace,
+              project,
+              baseline,
+              after,
+              evidence,
+              signal,
+            )
+          } catch (error) {
+            if (
+              !(error instanceof DelegationChecksFailed) &&
+              !(error instanceof DelegationRepairRequired)
+            ) {
+              throw error
+            }
+
+            if (error instanceof DelegationChecksFailed) {
+              await save({ receipts: error.receipts, receiptAttempt: progressFile })
+              feedback = JSON.stringify({ checks: error.receipts })
+            } else {
+              feedback = error.message
+            }
+
+            continue
+          }
+
+          const control = await controls()
+
+          if (control.revision !== evidence.controlRevision) {
+            feedback = 'Consume all outstanding scoped task updates and submit a fresh result.'
+            continue
+          }
+
+          const verified = snapshotHash(after)
+
           if (
-            !(error instanceof DelegationChecksFailed) &&
-            !(error instanceof DelegationRepairRequired)
+            snapshotHash(await inventory(branch.workspace)) !== verified ||
+            receipts.some((receipt) => receipt.snapshot !== verified)
           ) {
-            throw error
+            throw new Error('Branch candidate changed during verification')
           }
 
-          if (error instanceof DelegationChecksFailed) {
-            await save({ receipts: error.receipts, receiptAttempt: progressFile })
-            feedback = JSON.stringify({ checks: error.receipts })
-          } else {
-            feedback = error.message
-          }
-
-          continue
+          await save({ receipts, receiptAttempt: progressFile })
+          await atomicJson(join(directory, `validation-${validation}.json`), {
+            base,
+            snapshot: verified,
+            outputPath,
+            receipts,
+            controlRevision: control.revision,
+          })
+          validated = { base, snapshot: verified, evidence, validation }
+          await atomicJson(join(directory, 'validated.json'), validated)
+          return verified
         }
-
-        const control = await controls()
-
-        if (control.revision !== evidence.controlRevision) {
-          feedback = 'Consume all outstanding scoped task updates and submit a fresh result.'
-          continue
-        }
-
-        const verified = snapshotHash(after)
-
-        if (
-          snapshotHash(await inventory(branch.workspace)) !== verified ||
-          receipts.some((receipt) => receipt.snapshot !== verified)
-        ) {
-          throw new Error('Branch candidate changed during verification')
-        }
-
-        await save({ receipts, receiptAttempt: progressFile })
-        await atomicJson(join(directory, `validation-${validation}.json`), {
-          base,
-          snapshot: verified,
-          outputPath,
-          receipts,
-          controlRevision: control.revision,
-        })
-        validated = { base, snapshot: verified, evidence, validation }
-        await atomicJson(join(directory, 'validated.json'), validated)
-        await gitCommand(request.root, ['worktree', 'remove', '--', originals], signal)
-        return verified
+      } finally {
+        await gitCommand(request.root, ['worktree', 'remove', '--force', '--', originals]).catch(
+          () => undefined,
+        )
       }
     }
 

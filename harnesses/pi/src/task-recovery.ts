@@ -333,9 +333,19 @@ export async function reviseTasks(jobs: Delegations, raw: Revision) {
         }
 
         if (request.kind !== 'branch') {
-          const originals = await createWorkspace(jobs.store.projectRoot)
+          const owner = {
+            projectRoot: jobs.store.projectRoot,
+            stateDirectory: jobs.store.directory,
+            taskId: job.request.id,
+          }
+          const originals = await createWorkspace(
+            jobs.store.projectRoot,
+            undefined,
+            undefined,
+            owner,
+          )
           staged.push(originals)
-          const workspace = await createWorkspace(originals)
+          const workspace = await createWorkspace(originals, undefined, undefined, owner)
           staged.push(workspace)
 
           if (

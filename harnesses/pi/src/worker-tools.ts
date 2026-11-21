@@ -15,6 +15,7 @@ import {
 import { fileTools, textResult } from './file-tools.ts'
 import { createWorkspace, harnessRoot, instructions } from './project.ts'
 import { runSandboxed } from './sandbox.ts'
+import { addGitIndex } from './probe-git.ts'
 import { fileHashes, inventory, snapshotPath, writable } from './paths.ts'
 import { checkDocuments } from './document-tools.ts'
 import { capabilities } from './capabilities.ts'
@@ -178,7 +179,9 @@ export function createWorkerTools(request: WorkerRequest, role: Role) {
         'Call run_command directly for shell commands and tests, including independent checks. ' +
         'Run isolated argv. npm/npx use installed tools or offline cache. ' +
         'Preserve each check’s exit status when grouping commands or filtering output. ' +
-        'No network/home access. Retain edits with project_edit/project_write.',
+        'No network/home access; write temporary files under $TMPDIR, since /tmp is denied. ' +
+        'The copy has a Git index and HEAD for read-only git commands. ' +
+        'Retain edits with project_edit/project_write.',
       parameters: Type.Object({
         argv: Type.Array(Type.String(), { minItems: 1, maxItems: 100 }),
         timeoutMs: Type.Optional(Type.Integer({ minimum: 1, maximum: 120000 })),
@@ -188,7 +191,8 @@ export function createWorkerTools(request: WorkerRequest, role: Role) {
         const probe = await createWorkspace(request.workspace)
 
         try {
-          const result = await runSandboxed(probe, argv, timeoutMs, signal)
+          const readable = await addGitIndex(probe, request.workspace, request.project.root)
+          const result = await runSandboxed(probe, argv, timeoutMs, signal, { readable })
           commands.push(result)
           return textResult({ ...result, call: id })
         } finally {

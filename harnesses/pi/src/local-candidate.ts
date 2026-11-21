@@ -369,6 +369,8 @@ async function executeLocalCandidate(
     }
     let feedback = ''
     const failures = new Set<string>()
+    let lastFailure:
+      { revision: number; snapshot: string; message: string; receipts?: Receipt[] } | undefined
 
     while (true) {
       const current = await controls()
@@ -447,6 +449,15 @@ async function executeLocalCandidate(
         throw new Error(`Local implementer ${evidence.result.verdict}: ${evidence.result.summary}`)
       }
 
+      // An unchanged candidate would reproduce the same failure. Return the implementer's host
+      // handoff now instead of spending another verification on identical bytes.
+      if (lastFailure?.snapshot === snapshot && lastFailure.revision === current.revision) {
+        await save({ receipts: lastFailure.receipts, receiptAttempt: progressFile })
+        throw new Error(
+          `Repair made no progress; the candidate is unchanged after: ${lastFailure.message}`,
+        )
+      }
+
       let receipts
 
       try {
@@ -463,7 +474,7 @@ async function executeLocalCandidate(
           await save({ receipts: error.receipts, receiptAttempt: progressFile })
           const failed = error.receipts.filter((r) => r.status !== 'passed')
 
-          if (failed.some((r) => r.inheritedLintPaths?.length || r.status === 'unavailable')) {
+          if (failed.some((r) => r.status === 'unavailable')) {
             throw error
           }
 
@@ -487,6 +498,12 @@ async function executeLocalCandidate(
         }
 
         failures.add(failure)
+        lastFailure = {
+          revision: current.revision,
+          snapshot,
+          message: error.message,
+          receipts: error instanceof DelegationChecksFailed ? error.receipts : undefined,
+        }
         continue
       }
 
@@ -544,6 +561,7 @@ async function executeLocalCandidate(
     if (originals) {
       if (linkedOriginalDependencies) {
         await rm(join(originals, 'node_modules'), { force: true })
+        await rm(join(originals, '.venv'), { force: true })
       }
 
       await gitCommand(request.root, ['worktree', 'remove', '--', originals])

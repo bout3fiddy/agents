@@ -1,8 +1,9 @@
 import { spawn } from 'node:child_process'
-import { access, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { access, realpath, rm, writeFile } from 'node:fs/promises'
+import { homedir } from 'node:os'
+import { dirname, join } from 'node:path'
 import type { CommandResult } from './contracts.ts'
+import { temporaryDirectory } from './temp.ts'
 
 const outputLimit = 64_000
 const workerTermination = new AbortController()
@@ -20,7 +21,11 @@ function quote(value: string): string {
   return JSON.stringify(value)
 }
 
-export async function sandboxProfile(workspace: string, scratch: string): Promise<string> {
+export async function sandboxProfile(
+  workspace: string,
+  scratch: string,
+  extraReadable: string[] = [],
+): Promise<string> {
   if (process.platform !== 'darwin') {
     throw new Error(
       'This installation requires macOS sandbox-exec; no unsandboxed ' + 'fallback exists',
@@ -49,13 +54,30 @@ export async function sandboxProfile(workspace: string, scratch: string): Promis
     readable.push(join(harness, path))
   }
 
-  const nodeModules = join(workspace, 'node_modules')
+  const resolve = async (path: string) => {
+    try {
+      return await realpath(path)
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+        throw error
+      }
 
-  try {
-    readable.push(await realpath(nodeModules))
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
-      throw error
+      return undefined
+    }
+  }
+
+  // Linked dependencies are readable. A virtual environment also needs its interpreter prefix,
+  // which uv keeps below the home directory; nothing else in home becomes readable.
+  const python = await resolve(join(workspace, '.venv', 'bin', 'python'))
+
+  for (const path of [
+    await resolve(join(workspace, 'node_modules')),
+    await resolve(join(workspace, '.venv')),
+    python && dirname(dirname(python)),
+    ...extraReadable,
+  ]) {
+    if (path) {
+      readable.push(path)
     }
   }
 
@@ -75,11 +97,50 @@ export async function sandboxProfile(workspace: string, scratch: string): Promis
   ].join('\n')
 }
 
+type RunOptions = { readable?: string[] }
+
 export async function runSandboxed(
   workspace: string,
   argv: string[],
   timeoutMs = 120_000,
   signal?: AbortSignal,
+  options: RunOptions = {},
+): Promise<CommandResult> {
+  return runCommand(workspace, argv, timeoutMs, signal, { ...options, host: false })
+}
+
+/** Project checks marked runner=host need services the sandbox denies: database servers,
+ * browsers, loopback listeners or Docker. They still run in a disposable copy with a minimal
+ * environment, but with the user's normal filesystem, network and process permissions. */
+export async function runOnHost(
+  workspace: string,
+  argv: string[],
+  timeoutMs = 120_000,
+  signal?: AbortSignal,
+): Promise<CommandResult> {
+  return runCommand(workspace, argv, timeoutMs, signal, { host: true })
+}
+
+function hostEnvironment(scratch: string): NodeJS.ProcessEnv {
+  const inherited = ['PATH', 'USER', 'LOGNAME', 'SHELL', 'DOCKER_HOST', 'DOCKER_CONFIG']
+  return {
+    ...Object.fromEntries(
+      inherited.flatMap((name) => (process.env[name] ? [[name, process.env[name]]] : [])),
+    ),
+    HOME: homedir(),
+    TMPDIR: scratch,
+    LANG: 'en_US.UTF-8',
+    CI: '1',
+    NO_COLOR: '1',
+  }
+}
+
+async function runCommand(
+  workspace: string,
+  argv: string[],
+  timeoutMs: number,
+  signal: AbortSignal | undefined,
+  options: RunOptions & { host: boolean },
 ): Promise<CommandResult> {
   signal = signal ? AbortSignal.any([signal, workerAbortSignal]) : workerAbortSignal
 
@@ -96,12 +157,14 @@ export async function runSandboxed(
   }
 
   signal?.throwIfAborted()
-  const scratch = await mkdtemp(join(tmpdir(), 'pi-command-'))
+  const scratch = await temporaryDirectory('command')
   const profile = join(scratch, 'policy.sb')
   const started = Date.now()
 
   try {
-    await writeFile(profile, await sandboxProfile(workspace, scratch))
+    if (!options.host) {
+      await writeFile(profile, await sandboxProfile(workspace, scratch, options.readable))
+    }
 
     if (signal.aborted) {
       return {
@@ -117,19 +180,24 @@ export async function runSandboxed(
 
     const result = await new Promise<CommandResult>((resolve, reject) => {
       const command = argv[0] === 'node' ? process.execPath : argv[0]!
-      const child = spawn('/usr/bin/sandbox-exec', ['-f', profile, command, ...argv.slice(1)], {
+      const [program, args] = options.host
+        ? [command, argv.slice(1)]
+        : ['/usr/bin/sandbox-exec', ['-f', profile, command, ...argv.slice(1)]]
+      const child = spawn(program, args, {
         cwd: workspace,
-        env: {
-          PATH: '/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin',
-          HOME: scratch,
-          TMPDIR: scratch,
-          LANG: 'en_US.UTF-8',
-          CI: '1',
-          npm_config_offline: 'true',
-          NO_COLOR: '1',
-          PYTHONDONTWRITEBYTECODE: '1',
-          UV_CACHE_DIR: join(scratch, 'uv-cache'),
-        },
+        env: options.host
+          ? hostEnvironment(scratch)
+          : {
+              PATH: '/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin',
+              HOME: scratch,
+              TMPDIR: scratch,
+              LANG: 'en_US.UTF-8',
+              CI: '1',
+              npm_config_offline: 'true',
+              NO_COLOR: '1',
+              PYTHONDONTWRITEBYTECODE: '1',
+              UV_CACHE_DIR: join(scratch, 'uv-cache'),
+            },
         detached: true,
         stdio: ['ignore', 'pipe', 'pipe'],
       })

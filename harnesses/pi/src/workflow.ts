@@ -194,10 +194,16 @@ export async function runWorkflow(
     const before = await inventory(store.projectRoot)
     const lintBaseline = { files: before, writePaths: checkpoint.writePaths }
     const retained = await retainedCandidate(store, checkpoint, before)
-    const workspace = await createWorkspace(retained?.task.candidate ?? store.projectRoot)
-    const originals = await createWorkspace(store.projectRoot)
+    const owner = {
+      projectRoot: store.projectRoot,
+      stateDirectory: store.directory,
+      taskId: randomUUID(),
+    }
+    const source = retained?.task.candidate ?? store.projectRoot
+    const workspace = await createWorkspace(source, undefined, undefined, owner)
+    const originals = await createWorkspace(store.projectRoot, undefined, undefined, owner)
     task = {
-      id: randomUUID(),
+      id: owner.taskId,
       designHash: checkpoint.hash,
       designVersion: checkpoint.version,
       status: 'running',
@@ -354,21 +360,6 @@ export async function runWorkflow(
       if (failures.length) {
         if (failures.some((item) => item.status === 'unavailable')) {
           throw new Error('Configure the missing required checks in .pi/harness.json')
-        }
-
-        const paths = failures.length === 1 ? failures[0]?.inheritedLintPaths : undefined
-
-        if (paths?.length) {
-          const reason =
-            'Required harness-lint failed on unchanged files outside this task: ' +
-            paths.slice(0, 8).join(', ') +
-            '. Route to the owning scope and rerun verification.'
-          const lastWriter = task.evidence.findLast((item) => item.role === 'implementer')
-          task.hostActions = [
-            ...(lastWriter?.result.hostActions ?? []),
-            { capability: 'project-policy', reason },
-          ]
-          throw new Error(reason)
         }
 
         feedback = JSON.stringify({ requiredChecks: failures.map(receiptView) })

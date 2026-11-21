@@ -466,10 +466,23 @@ command names or custom timeouts. Example:
 ```
 
 Allowed check kinds: `test`, `static`, `database`, `benchmark`. Commands are argv arrays; shell
-expansion requires an explicit shell. They run with no network, private home access or credential
-environment. Install dependencies beforehand. Node dependencies are mounted read-only; services and
-virtual environments need an explicit future adapter. Network-backed database checks currently fail
-closed.
+expansion requires an explicit shell. By default they run in the worker sandbox with no network,
+private home access or credential environment. Install dependencies beforehand. Host `node_modules`
+and `.venv` are linked read-only; a virtual environment's interpreter prefix is also readable. Each
+command copy has a Git index of its files and, for a checkout, its pinned HEAD, so read-only
+`git ls-files`, `git diff` and `git rev-parse` work.
+
+Set `"runner": "host"` on a check that needs a database server, browser, loopback listener, Docker
+or process control. Host checks run outside the sandbox in a disposable copy of the exact snapshot,
+with the user's normal permissions and a minimal environment (`PATH`, `HOME`, `USER`, Docker
+variables). They form the final gate with harness lint: both run once, after every sandbox check
+passes. Earlier repair rounds therefore see only behavioral failures. Harness lint compares its
+findings with the base commit's findings by file, message and line text. Existing findings are
+listed in `inheritedLintPaths` and never block; only findings the task adds do.
+
+Dispatch of implementation, maintenance, local and branch work fails when host `node_modules` does
+not match the direct dependencies pinned by the task's `package-lock.json`. Run `npm ci` on the host
+and dispatch again.
 
 Write scopes support exact paths, `directory/**`, and `**`. Pi rejects a new filename wildcard such
 as `tests/unit_*.ts` before dispatch. A prompt-only `revise_tasks` call can omit `writePaths` to
@@ -482,6 +495,26 @@ to individual files. Private paths are checked using Unicode folding and actual 
 New paths ignored by the project's Git policy are rejected before integration; update that policy
 before starting an implementation that requires such files. Required checks with truncated output
 fail; use concise machine-readable summaries when a test suite is verbose.
+
+## Cleanup
+
+Pi removes what no live or resumable task needs. One minute after a session starts and hourly while
+it is idle, it removes:
+
+- worktrees, baselines and temporary copies of complete, cancelled or failed tasks;
+- the same for `needs_attention`, paused or stopped tasks idle for 48 hours. Uncommitted changes are
+  saved to the task's `expired.patch`, `expired.json` records the expiry and a resume reports it
+  instead of starting over;
+- baseline worktrees older than six hours whose task is not running, and clean host worktrees under
+  `.pi/traces/harness/host-worktrees/` older than the retention period;
+- local `pi/*` branches already merged into `main`;
+- temporary directories under `$TMPDIR/pi-harness/` whose creating process exited, and legacy
+  `$TMPDIR/pi-workspace-*` copies older than the retention period that no retained task references.
+
+Set `PI_HARNESS_RETENTION_HOURS` to change the 48-hour retention. `/harness-cleanup` runs the pass
+immediately; `/harness-cleanup --dry-run` reports without removing. From a project root,
+`node --import <harness>/node_modules/tsx/dist/loader.mjs <harness>/src/cli.ts gc [--dry-run]` does
+the same. The last report is in `.pi/traces/harness/cleanup.json`.
 
 ## Where the rules live
 

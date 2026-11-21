@@ -17,13 +17,16 @@ export function receiptView(receipt: Receipt) {
         'node --import tsx --test with equivalent test selection and rerun the gate.',
     }),
     ...(receipt.inheritedLintPaths?.length && { inheritedLintPaths: receipt.inheritedLintPaths }),
+
+    // Blocking lint findings exclude inherited ones; the raw output stays in the receipt.
+    ...(receipt.scopedLintOutput && { scopedLintOutput: receipt.scopedLintOutput }),
     check: receipt.check,
     status: receipt.status,
     snapshot: receipt.snapshot,
     argv: receipt.result.argv,
     exitCode: receipt.result.exitCode,
-    output: receipt.result.output.slice(-limit),
-    outputExcerpted: receipt.result.output.length > limit,
+    output: (receipt.scopedLintOutput ?? receipt.result.output).slice(-limit),
+    outputExcerpted: (receipt.scopedLintOutput ?? receipt.result.output).length > limit,
     timedOut: receipt.result.timedOut,
     aborted: receipt.result.aborted,
     truncated: receipt.result.truncated,
