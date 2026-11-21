@@ -51,6 +51,8 @@ export function taskScope(request: DelegationRequest): Checkpoint {
     invariants: ['Preserve unrelated work and the supplied user decisions.'],
     acceptance: ['Complete the assigned task and provide concrete verification evidence.'],
     writePaths: request.writePaths,
+    review: request.review,
+    performanceReview: request.performanceReview,
     database: false,
     performance: false,
     unresolved: [],

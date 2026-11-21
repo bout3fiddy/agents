@@ -91,7 +91,7 @@ test('two branch orchestrators fan out then revalidate against preceding merges'
   )
 })
 
-test('host check and review failures return to the autonomous orchestrator', async (t) => {
+test('host accepts the verified repair without a review round', async (t) => {
   const setup = await branchRepository(t)
   const { requests } = await setup.launch({ ...setup.input, tasks: [setup.input.tasks[0]!] })
   let rounds = 0
@@ -108,16 +108,12 @@ test('host check and review failures return to the autonomous orchestrator', asy
         assert.match(context.previousFeedback, /failed/)
       }
 
-      if (rounds === 3) {
-        assert.match(context.previousFeedback, /reviewer/)
-      }
-
       await writeFeature(request, rounds === 1)
-      return coordinatorEvidence(request, {}, rounds === 2 ? ['implementer'] : undefined)
+      return coordinatorEvidence(request, {}, ['implementer'])
     },
   )
   assert.equal(state.status, 'complete', state.error)
-  assert.equal(rounds, 3)
+  assert.equal(rounds, 2)
   assert.match(await readCurrentMain(setup.root, 'src/one.js'), /return value \* 2/)
 })
 

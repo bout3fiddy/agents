@@ -98,9 +98,9 @@ navigation remain available, and consultations retain recent user messages from 
 scope was recorded. Historical `accepted.json` checkpoints remain readable for resumable work but no
 longer establish a host conversation cutoff.
 
-The implementer's pass hands its candidate to workflow verification and independent review. A
-required independent verdict belongs to the workflow. A missing prerequisite for the writer's own
-work remains a blocker with its original host actions.
+The implementer's pass hands its candidate to workflow verification and any explicitly selected
+review. A required independent verdict belongs to the workflow. A missing prerequisite for the
+writer's own work remains a blocker with its original host actions.
 
 Omitting design from `workflow` resumes the recorded scope and candidate. Supplying design starts a
 new version from the current project baseline. Existing task ownership and the workflow lock guard
@@ -129,17 +129,11 @@ workers and coordinators let the SDK finish recovery from transient model failur
 classifying a task. A successful retry continues the same session and uses its submitted result. An
 exhausted or permanent error reaches the host with its provider message.
 
-Writable leaf calls serialize against the candidate. The coordinator holds the same reservation
-while engineering and database reviewers work concurrently. It records both outcomes before
-releasing the candidate for fixes. General task workers may edit only the task scope; engineering
-and DB reviewers are read-only; performance retains its benchmark/instrumentation limits. Leaf
-workers cannot delegate. Child receipts bind role, model and candidate snapshot. Requested reviews
-must pass on the final snapshot. For a formatter-only repair the host verifies every changed byte
-against the original review and pinned formatter output, records a separate zero-model-turn receipt
-and preserves host actions, suggestions and required checks. Untagged findings take the normal
-review path. Deciding which reviews a prose task requests remains model policy. Substantive
-maintenance requires fresh engineering review; the host may waive that review for routine low-risk
-maintenance. Required executable checks and conditional DB review remain enforced.
+Writable leaf calls serialize against the candidate. Child receipts identify the role, model and
+snapshot. Independent branch coordinators may work concurrently. Engineering diagnosis on a branch
+requires a failing behavioral check on the current candidate. The repaired branch closes on passing
+executable evidence. Database impact selects recovery checks. Explicitly selected performance
+workers may write benchmarks, instrumentation and reports.
 
 General task candidates are isolated from the live project. Document changes enforce document-only
 extensions, Markdown formatting, write scope and ignored/private path exclusions. Maintenance runs
@@ -212,9 +206,9 @@ Independent remote-branch execution is described in [branches.md](branches.md). 
 pins a committed design and remote-main revision, then starts up to four autonomous Codex branch
 orchestrators in Git worktrees. Their Astra/Fable children and executable checks run independently.
 Tasks publish branches by default; only an explicit merge request authorizes main updates. The
-common-Git-directory merge lock serializes publication to main. Changed bases require fresh review
-and tests. GitHub CI failures feed back into the task's orchestrator. Individual operations remain
-bounded and cancellable; the branch orchestration service loop has no child-call, turn,
+common-Git-directory merge lock serializes publication to main. Changed bases require fresh
+executable checks. GitHub CI failures feed back into the task's orchestrator. Individual operations
+remain bounded and cancellable; the branch orchestration service loop has no child-call, turn,
 implementation repair-round or overall-duration ceiling. External GitHub review feedback follows the
 user's separate maximum of five observe/triage/fix/push rounds, with durable accounting and
 current-head matching. The parent session remains available for conversation.
@@ -242,9 +236,9 @@ attempt. Oversized output fails explicitly.
 
 Each local accepted-design workflow has one project lock and no repair-round ceiling. Repeating an
 identical failure with an unchanged candidate produces an actionable blocker. Commands, output size,
-snapshot file count and size remain bounded. Database review is activated by the checkpoint, changed
-persistence modules, SQL/schema files, database configuration or a worker's explicit impact finding.
-Prose references outside configured DB paths do not trigger review.
+snapshot file count and size remain bounded. Database recovery verification is activated by the
+checkpoint, changed persistence modules, SQL/schema files, database configuration or a worker's
+explicit impact finding. Prose references outside configured DB paths do not trigger review.
 
 The project lock uses a Python helper holding a kernel advisory lock on a stable inode. Its stdin
 pipe closes when the supervisor exits, releasing the lock without stale-file takeover races. An
@@ -276,9 +270,9 @@ coverage.
 
 ## Database and performance scope
 
-The DB review trigger disregards prose in leading JavaScript and TypeScript line comments. It
+The recovery-check trigger disregards prose in leading JavaScript and TypeScript line comments. It
 continues to inspect executable query text and both revisions of changed files. Explicit database
-scopes and declared impact still request review.
+scopes and declared impact still require recovery checks.
 
 Durability is evaluated against a stated failure model: process crash, host/disk loss, region loss
 or malicious changes are different requirements. Replication does not substitute for backup and

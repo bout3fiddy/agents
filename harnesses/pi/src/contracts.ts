@@ -12,7 +12,6 @@ export const roleNames = [
   'task-worker',
   'implementer',
   'reviewer',
-  'database-reviewer',
   'performance',
 ] as const
 
@@ -35,7 +34,6 @@ export const specialistThinkingSchema = Type.Union([Type.Literal('medium'), Type
 export const workflowSpecialistsSchema = Type.Object(
   {
     reviewer: Type.Optional(specialistThinkingSchema),
-    'database-reviewer': Type.Optional(specialistThinkingSchema),
     performance: Type.Optional(specialistThinkingSchema),
   },
   { additionalProperties: false },
@@ -54,6 +52,20 @@ export const writePathSchema = Type.String({
   description: 'Use an exact relative filename, directory/** for a subtree, or ** for all paths.',
 })
 
+export const reviewOptions = {
+  review: Type.Optional(
+    Type.Boolean({
+      description:
+        'Select independent review only for an observed defect or an explicit review request.',
+    }),
+  ),
+  performanceReview: Type.Optional(
+    Type.Boolean({
+      description: 'Set only for an explicit user request for a performance specialist.',
+    }),
+  ),
+}
+
 export const designSchema = Type.Object(
   {
     objective: Type.String({ minLength: 1, maxLength: 2000 }),
@@ -70,6 +82,7 @@ export const designSchema = Type.Object(
       minItems: 1,
       maxItems: 50,
     }),
+    ...reviewOptions,
     database: Type.Boolean(),
     performance: Type.Boolean(),
     unresolved: Type.Array(Type.String({ maxLength: 1000 }), { maxItems: 20 }),
@@ -222,7 +235,7 @@ export type WorkerEvidence = {
   closedReview?: { snapshot: string; model: string; paths: string[] }
   thinking?: string
   liveWorkerId?: string
-  role: WorkerRole
+  role: WorkerRole | 'database-reviewer' // Historical receipts.
   snapshot: string
   result: WorkerResult
   commands: CommandResult[]

@@ -1,3 +1,7 @@
+For a branch diagnosis, start with the supplied reproduction receipt. Trace the failing behavior to
+its cause and identify a regression test or repair. Limit findings and the test assessment to that
+behavior. The coordinator verifies the fix by rerunning the failing check.
+
 Independently review the accepted contract, final diff and tests. Check TigerStyle and Power of Ten
 application, observable correctness, security and unnecessary complexity. Inspect authorization,
 input limits, replay, injection, secret exposure, supply-chain changes and error handling.

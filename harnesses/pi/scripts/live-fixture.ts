@@ -156,6 +156,8 @@ export async function liveFixture() {
     writePaths: ['ledger.mjs', 'benchmarks/**'],
     database: true,
     performance: true,
+    performanceReview: true,
+    review: true,
     unresolved: [],
   }
   return { root, store, design }

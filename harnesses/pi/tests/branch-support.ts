@@ -16,7 +16,7 @@ import { Delegations, type DelegationRequest } from '../src/delegation-state.ts'
 
 export const completed: WorkerResult = {
   verdict: 'pass',
-  summary: 'Implemented and independently reviewed the specified arithmetic.',
+  summary: 'Implemented and tested the specified arithmetic.',
   findings: [],
   databaseImpact: false,
   evidence: ['Executable arithmetic assertions added.'],
@@ -173,7 +173,7 @@ export async function writeFeature(request: TaskCoordinatorRequest, broken = fal
 export async function coordinatorEvidence(
   request: TaskCoordinatorRequest,
   result: Partial<WorkerResult> = {},
-  roles: WorkerRole[] = ['implementer', 'reviewer'],
+  roles: WorkerRole[] = ['implementer'],
 ): Promise<TaskCoordinatorEvidence> {
   const snapshot = snapshotHash(await inventory(request.workspace))
   const children = await Promise.all(

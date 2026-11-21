@@ -3,9 +3,9 @@
 The human-facing orchestrator can start autonomous branch orchestrators through `delegate_branches`
 and immediately continue the conversation. Each branch orchestrator receives a settled design,
 invariants, acceptance criteria and its own write scope. It delegates implementation to the
-configured Astra role and reviews to Fable, consumes their feedback itself, and repairs failures.
-Routine implementation, checks and repairs need no further approval. Publication is the default;
-merging begins only when the user explicitly requests merging to main.
+configured Astra role and handles failures within its scope. Routine implementation, checks and
+repairs need no further approval. Publication is the default; merging begins only when the user
+explicitly requests merging to main.
 
 ## Preparation and authority
 
@@ -38,18 +38,16 @@ Codex branch orchestrator receives explicit prompts from `prompts/branch-orchest
 configuration from `roles/branch-orchestrator.json`. It can inspect files, call scoped workers, run
 project checks and submit an outcome. It cannot perform Git publication or expand its scope.
 
-Agents have no child-call, model-turn or overall-duration ceiling; role definitions contain no
-execution-budget fields. The coordinator continues until completion, a genuine blocker, provider
-failure or cancellation. Individual command timeouts remain enforced. Leaf calls within one worktree
-hold the candidate for edits; paired read-only engineering and database reviews run concurrently and
-join before repairs. Independent branch orchestrators can also run concurrently. All local
-coordinators and leaf workers follow the same uncapped model-execution policy.
+Coordinators and workers have no child-call, turn or overall-duration ceiling. Commands retain
+timeouts. Independent branch orchestrators work concurrently in separate worktrees.
 
-Passing results require executable checks and current engineering review on the exact candidate.
-Database impact also requires database review and recovery checks. Performance tasks require
-performance evidence and benchmarks. Later edits invalidate earlier snapshot evidence. Formatting,
-test and review failures feed back into the autonomous orchestrator. No arbitrary repair-round
-ceiling ends branch work.
+Finish a passing branch with its executable checks. Use lint for readability, property tests for
+invariants and deterministic simulation for timing, faults or recovery where applicable. If coverage
+is weak, ask the implementer for a test that would fail under the suspected regression. For a
+reproduced behavioral bug, fix it directly or use a reviewer for diagnosis when useful. Supply
+bugCheck from run_checks on the current candidate and explain the observed failure. A passing rerun
+on the repaired candidate closes the diagnosis. Benchmark checks run when scoped. Request the
+performance worker only when the user explicitly asks for that specialist.
 
 ## Publication and merging
 
@@ -72,17 +70,17 @@ review duration guides a 2–10 minute wait, with five minutes as the initial es
 observation uses host polling and does not call a model.
 
 Findings go to the branch orchestrator as untrusted claims. It checks whether each is valid, fixes
-verified issues and records reasons for rejecting false positives. Changed candidates pass internal
-review/tests, then are committed and pushed for another external review. After at most five external
-rounds, merging proceeds automatically with ordinary required checks still enforced. The round count
-and consumed comment versions persist across head changes and restarts. An interrupted repair must
-finish even if it was in the fifth round; exhaustion cannot bypass a repair already in progress.
-This specific merge policy does not impose a call or turn limit on implementation orchestration.
-After the review wait, the host refreshes CI and human-review status and checks for scoped updates,
-cancellation or changed merge authority before allowing main publication.
+verified issues and records reasons for rejecting false positives. Changed candidates pass
+executable checks, then are committed and pushed for another external review. After at most five
+external rounds, merging proceeds automatically with ordinary required checks still enforced. The
+round count and consumed comment versions persist across head changes and restarts. An interrupted
+repair must finish even if it was in the fifth round; exhaustion cannot bypass a repair already in
+progress. This specific merge policy does not impose a call or turn limit on implementation
+orchestration. After the review wait, the host refreshes CI and human-review status and checks for
+scoped updates, cancellation or changed merge authority before allowing main publication.
 
 A lock in the common Git directory serializes integration across local worktrees. The host fetches
-current main, merges it into the candidate and refreshes review/tests when the base or contents
+current main, merges it into the candidate and reruns executable checks when the base or contents
 change. Scoped conflicts go back to the autonomous orchestrator; conflicts outside its authority
 retain the branch for reconciliation. GitHub checks must pass on the resulting commit too.
 
@@ -146,7 +144,7 @@ the accepted-design workflow continue to use their original integration paths.
 
 ## Validation
 
-`npm run test:live:branches` runs real Codex/Astra/Fable orchestration against a temporary bare Git
+`npm run test:live:branches` runs real Codex branch orchestration against a temporary bare Git
 remote. `npm run test:live:branches -- --github OWNER/REPO` requires an existing empty fixture
 repository and additionally exercises PR creation, CI and remote main integration. The fixture
 asserts parallel progress, foreground discussion, separate published branches with unchanged main,

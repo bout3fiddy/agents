@@ -6,8 +6,8 @@ import { gitCommand, resolveRemote } from '../src/git-branches.ts'
 
 export const branchDesign = `# Independent utility improvements
 
-These decisions are settled. Implement both tasks autonomously, with independent engineering
-review, meaningful deterministic tests and serialized integration to main. No user choices remain.
+These decisions are settled. Implement both tasks autonomously, with deterministic property tests
+and serialized integration to main. No user choices remain.
 Use only the scoped source and test files. Leave this design and harness configuration unchanged.
 Use dependency-free JavaScript and Node's built-in test runner. Keep implementation straightforward.
 
@@ -37,10 +37,9 @@ idempotence and first-occurrence ordering, comparing against a simple independen
 
 ## Integration
 
-Both tasks are independent and may execute in parallel. Use Astra implementers and Fable
-engineering reviewers. No database or benchmark work is needed. Each branch must pass the full
-required Node test suite and a passing review on its exact final candidate. After another branch
-lands, update against current main and refresh tests and review before merging. Commit and push
+Both tasks are independent and may execute in parallel. Use Astra implementers.
+Each branch must pass the full required Node test suite on its final candidate. After another
+branch lands, update against current main and rerun tests before merging. Commit and push
 each separate branch and merge each to main one at a time. The original checkout stays untouched.
 `
 

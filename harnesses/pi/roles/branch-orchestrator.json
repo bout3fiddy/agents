@@ -13,7 +13,6 @@
     "read_reference",
     "document_check",
     "delegate_worker",
-    "delegate_reviews",
     "run_checks",
     "submit_result",
     "report_progress",

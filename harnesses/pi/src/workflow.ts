@@ -10,7 +10,7 @@ import type {
   WorkerThinking,
 } from './contracts.ts'
 import { StateStore, atomicJson, type TaskState } from './state.ts'
-import { collectWorkerResults, dispatcher, type Dispatcher } from './dispatch.ts'
+import { dispatcher, type Dispatcher } from './dispatch.ts'
 import { createWorkspace, hasSkippedTests, loadProject, verifyProject } from './project.ts'
 import { changes, integrate, recoverIntegration } from './integration.ts'
 import {
@@ -212,12 +212,20 @@ export async function runWorkflow(
     await store.saveTask(task)
     await atomicJson(join(store.directory, 'tasks', `${task.id}.baseline.json`), fileHashes(before))
     const resumedRound = retained?.readyForReview ? retained.task.reviewRound : undefined
-    let needsDatabase = checkpoint.database || Boolean(resumedRound?.database)
+    const priorDatabaseReview = retained?.task.evidence.findLast(
+      (item) => item.role === 'database-reviewer',
+    )
+    const databaseRepair =
+      priorDatabaseReview && priorDatabaseReview.result.verdict !== 'pass'
+        ? priorDatabaseReview.result
+        : undefined
+    let needsDatabase = checkpoint.database || Boolean(resumedRound?.database || databaseRepair)
     let feedback = retained
       ? JSON.stringify({
           assignment:
             'Continue the retained candidate. Resolve prior findings and preserve valid work.',
           error: retained.task.error,
+          ...(databaseRepair && { outstandingDatabaseFinding: databaseRepair }),
           reviews: retained.task.evidence.slice(-4).map((item) => item.result),
           checks: retained.task.receipts.map(receiptView),
         })
@@ -299,7 +307,7 @@ export async function runWorkflow(
       task.phase = 'implementation'
       await store.saveTask(task)
 
-      if (!(round === 1 && retained?.readyForReview)) {
+      if (!(round === 1 && retained?.readyForReview && !databaseRepair)) {
         const implementation = await worker('implementer', feedback)
 
         if (implementation.result.verdict === 'blocked') {
@@ -309,7 +317,7 @@ export async function runWorkflow(
 
         needsDatabase ||= implementation.result.databaseImpact
 
-        if (checkpoint.performance) {
+        if (checkpoint.performanceReview) {
           task.phase = 'performance'
           await store.saveTask(task)
           const measurement = await worker(
@@ -375,21 +383,29 @@ export async function runWorkflow(
         continue
       }
 
-      task.phase = 'review'
       const frozen = task.snapshot
       const reviewRound =
         round === 1 && resumedRound?.snapshot === frozen
           ? resumedRound
           : { snapshot: frozen, start: task.evidence.length, database: needsDatabase }
-      task.reviewRound = reviewRound
-      await store.saveTask(task)
+      const wantsReview =
+        checkpoint.review ||
+        Boolean(
+          resumedRound &&
+          retained?.task.evidence.some(
+            (item) => item.role === 'reviewer' && item.result.verdict !== 'pass',
+          ),
+        )
+
+      if (wantsReview) {
+        task.phase = 'review'
+        task.reviewRound = reviewRound
+        await store.saveTask(task)
+      }
+
       const reviews = task.evidence
         .slice(reviewRound.start)
-        .filter(
-          (item) =>
-            item.snapshot === frozen &&
-            (item.role === 'reviewer' || item.role === 'database-reviewer'),
-        )
+        .filter((item) => item.snapshot === frozen && item.role === 'reviewer')
       const closures = formatterClosures(task.evidence, candidate)
 
       if (closures.length) {
@@ -398,42 +414,23 @@ export async function runWorkflow(
         await store.saveTask(task)
       }
 
-      const changedFiles = changes(before, candidate)
-      const engineeringTask = JSON.stringify({
-        assignment: 'Independently review the complete candidate against the accepted design.',
-        receipts: task.receipts.map(receiptView),
-      })
-      const databaseTask = () =>
-        JSON.stringify({
-          assignment:
-            'Review committed-data recovery, transactions, migration and failure semantics.',
-          receipts: task!.receipts.map(receiptView),
+      if (wantsReview && !reviews.some((item) => item.role === 'reviewer')) {
+        const changedFiles = changes(before, candidate)
+        const engineeringTask = JSON.stringify({
+          assignment: 'Review the candidate against the recorded design and requested concern.',
+          receipts: task.receipts.map(receiptView),
         })
-      const collect = (attempts: Promise<WorkerEvidence>[]) =>
-        collectWorkerResults(attempts, async (finished) => {
-          if (snapshotHash(await inventory(workspace)) !== frozen) {
-            throw new Error('Candidate changed during review')
-          }
+        const review = await dispatchWorker('reviewer', engineeringTask, frozen, changedFiles)
 
-          for (const review of finished) {
-            await bindFormatterProof(review, candidate, workspace, checkpoint!.writePaths)
-          }
+        if (snapshotHash(await inventory(workspace)) !== frozen) {
+          throw new Error('Candidate changed during review')
+        }
 
-          task!.evidence.push(...finished)
-          reviews.push(...finished)
-          await store.saveTask(task!)
-        })
-      const attempts: Promise<WorkerEvidence>[] = []
-
-      if (!reviews.some((item) => item.role === 'reviewer')) {
-        attempts.push(dispatchWorker('reviewer', engineeringTask, frozen, changedFiles))
+        await bindFormatterProof(review, candidate, workspace, checkpoint.writePaths)
+        reviews.push(review)
+        task.evidence.push(review)
+        await store.saveTask(task)
       }
-
-      if (needsDatabase && !reviews.some((item) => item.role === 'database-reviewer')) {
-        attempts.push(dispatchWorker('database-reviewer', databaseTask(), frozen, changedFiles))
-      }
-
-      await collect(attempts)
 
       // Only engineering can reveal previously unknown impact after verification.
       if (!needsDatabase && reviews.some((item) => item.result.databaseImpact)) {
@@ -446,7 +443,6 @@ export async function runWorkflow(
         }
 
         await store.saveTask(task)
-        await collect([dispatchWorker('database-reviewer', databaseTask(), frozen, changedFiles)])
       }
 
       const issues = reviews.filter((item) => item.result.verdict !== 'pass')

@@ -17,7 +17,13 @@ export const design: Design = {
 }
 
 export async function fixture(
-  options: { database?: boolean; performance?: boolean; skip?: boolean } = {},
+  options: {
+    database?: boolean
+    performance?: boolean
+    review?: boolean
+    performanceReview?: boolean
+    skip?: boolean
+  } = {},
 ) {
   const base = await mkdtemp(join(tmpdir(), 'pi-harness-test-'))
   const root = join(base, 'project')

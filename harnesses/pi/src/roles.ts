@@ -13,11 +13,11 @@ import {
 import { validateScope } from './paths.ts'
 
 export async function loadRole(
-  name: RoleName,
+  name: string,
   thinking?: Role['thinking'],
   implementerModel?: ImplementerModel,
 ): Promise<Role> {
-  if (!roleNames.includes(name)) {
+  if (!roleNames.some((active) => active === name)) {
     throw new Error('Unknown role')
   }
 

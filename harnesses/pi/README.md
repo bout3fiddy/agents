@@ -14,7 +14,6 @@ independent Fable reviews.
 | Design advisor           | Fable 5.2 / medium     |
 | Implementer              | GPT 6.2 Astra / medium |
 | Engineering reviewer     | Fable 5.2 / high       |
-| Database reviewer        | Fable 5.2 / high       |
 | Performance investigator | Fable 5.2 / medium     |
 
 Claude specialists prefer Fable 5.2. On a confirmed usage limit the harness selects Opus with the
@@ -36,24 +35,23 @@ selected effort.
 
 The orchestrator can select `thinking` for each background job. On `workflow` and implementation
 jobs it selects Astra's effort. The optional `specialistThinking` object selects each applicable
-workflow specialist by role (`reviewer`, `database-reviewer`, `performance`). On other
-`delegate_task` jobs and each `delegate_branches` task it selects the coordinator's effort. Each
-coordinator chooses its children's effort independently with `delegate_worker`. Use low for
-mechanical changes, medium for implementation from a settled design, and high for difficult
-concurrency problems, uncertain invariants or repairs that need diagnosis.
+workflow specialist by role (`reviewer`, `performance`). On other `delegate_task` jobs and each
+`delegate_branches` task it selects the coordinator's effort. Each coordinator chooses its
+children's effort independently with `delegate_worker`. Use low for mechanical changes, medium for
+implementation from a settled design, and high for difficult concurrency problems, uncertain
+invariants or repairs that need diagnosis.
 
-Engineering and database reviews default to high. Fable supports medium or high in this harness. A
-paired review can specify `engineeringThinking` and `databaseThinking` separately.
-`consult_design.thinking` selects the advisor's effort independently of answer length. The maximum
-for all workers is high. Worker receipts and the worker details view show the selected level.
+Engineering review defaults to high. Fable supports medium and high. `consult_design.thinking`
+selects the advisor's effort independently of answer length. The maximum for all workers is high.
+Worker receipts and the worker details view show the selected level.
 
 A reviewer may tag an exclusively formatting-related required finding with `formatterPath`. The
 harness records a separate formatter receipt when the entire repaired snapshot matches the pinned
 formatter output on those files. Any other edit or unclassified required finding needs independent
 review. Final checks still run. A new concern can request `freshReviewReason`.
 
-DB review follows explicit impact, configured DB paths, SQL/schema files and persistence code or
-configuration changes. References in ordinary Markdown do not trigger a specialist. Vyper NatSpec
+Recovery testing follows explicit impact, configured DB paths, SQL/schema files and persistence code
+or configuration changes. References in ordinary Markdown do not trigger a specialist. Vyper NatSpec
 annotations are excluded from SQL detection.
 
 ## Install and run
@@ -127,7 +125,7 @@ fresh-session repository setup, lint configuration, related document update or o
 can stay on the host. Multiple files do not force delegation, and direct edits have no byte, call or
 turn quota. Substantial product implementation, explicit delegation and distracting unrelated work
 use background workers. Routine setup needs appropriate executable checks, with specialist reviews
-only for substantive risks or explicit requests. Saving a document needs no implementation
+reserved for bug diagnosis or explicit requests. Saving a document needs no implementation
 checkpoint; a Git commit requires user authorization.
 
 `harness_capabilities` reports the boundary. Host tools have ordinary filesystem, network and CLI
@@ -220,13 +218,13 @@ once and use `~/.pi/agent/bin/pi-harness --continue` from the project to resume 
 task ID immediately. Continue the discussion while a separate Codex coordinator reads the project,
 delegates writable tasks and requests Fable reviews when useful. Document workers can use low effort
 for mechanical edits. Implementation uses Astra medium by default. Routine documents need no review
-call. Substantive code maintenance requires passing engineering review; routine low-risk maintenance
-can set `review: false` and retain executable checks. DB changes also require database review and
-recovery checks. A read-only research report can complete with required findings. A blocked research
-assignment still needs attention. Delegated implementation workers record their task ID so the
-worker picker and traces identify the owning task. Blocked implementation results include the
-worker’s structured requests for host actions. Once a coordinator verifies a passing task, the
-completion notice omits host actions from resolved child blockers. Their receipts remain available.
+call. Maintenance uses executable checks by default. A selected engineering review checks a specific
+concern. Database changes require recovery checks. A read-only research report can complete with
+required findings. A blocked research assignment still needs attention. Delegated implementation
+workers record their task ID so the worker picker and traces identify the owning task. Blocked
+implementation results include the worker’s structured requests for host actions. Once a coordinator
+verifies a passing task, the completion notice omits host actions from resolved child blockers.
+Their receipts remain available.
 
 Leaf acceptance covers its assigned work; the coordinator owns subsequent specialist reviews. When
 completion is blocked by an earlier child result, the error names the exact role and write scope
@@ -247,12 +245,11 @@ Two ordinary jobs may run concurrently on disjoint paths. Local implementation r
 exclusively through both `workflow` and `delegate_task` with kind `implementation`. Read-only
 research can continue alongside it. For independent concurrent builds, use `delegate_branches` with
 a committed design and the required checks. Coordinators have no child-call or model-turn limit;
-their writable children run serially and paired read-only reviews run concurrently. Explicit file
-tools and Markdown formatting reject writes to active task paths. Shell ownership is a prompt rule;
-host integration also rejects a changed target file. Document tasks preserve unrelated foreground
-edits. Code maintenance and implementation require the complete project baseline to remain
-unchanged. New scope requires a new task. Acceptance/context reset waits for active tasks to finish
-or cancel.
+their writable children run serially. Explicit file tools and Markdown formatting reject writes to
+active task paths. Shell ownership is a prompt rule; host integration also rejects a changed target
+file. Document tasks preserve unrelated foreground edits. Code maintenance and implementation
+require the complete project baseline to remain unchanged. New scope requires a new task.
+Acceptance/context reset waits for active tasks to finish or cancel.
 
 Jobs survive `/reload` and Pi exit; their process, controls, status and evidence live under
 `.pi/traces/harness/delegations/<id>/`. Stop a job through `task_control`; an ordinary conversation
@@ -406,8 +403,8 @@ pinned worktree. The coordinator reads their full text in pages from the origina
 For an authorized merge, the host detects external review agents such as Codex or Claude, waits for
 feedback, and sends findings to the branch orchestrator for triage and verified fixes. Each fix is
 pushed for another review. After at most five external review rounds, the host proceeds with serial
-merging and passing required checks; it skips that loop when no review agents are triggered. Tests
-and internal reviews are refreshed against current remote `main` before each integration.
+merging and passing required checks; it skips that loop when no review agents are triggered.
+Required checks are refreshed against current remote `main` before each integration.
 
 Branch orchestrators have no child-call, turn or total-duration ceiling. Routine approvals are
 unnecessary; the pinned design supplies their decisions. Cancellation, scope enforcement and
@@ -422,11 +419,10 @@ requirements and recovery. For a single local implementation:
    invariants, acceptance criteria, permitted paths and DB/performance flags.
 2. The runtime records a versioned worker scope and returns a background task ID. No acceptance
    command, session switch or conversation pruning is required. Discussion continues immediately.
-3. Astra implementation, applicable Fable performance work, executable checks, then independent
-   reviews. When database impact is known, engineering and database reviewers start together on the
-   same verified snapshot. If engineering first discovers database impact, recovery checks and
-   database review follow that finding. Both verdicts reach Astra together for repairs without a
-   repair-round ceiling. An unchanged repeated failure returns to the host for diagnosis.
+3. Run executable tests and lint. Database changes require recovery checks. Performance scope runs
+   benchmarks. Set `performanceReview` only for a user-requested performance specialist. Local
+   workflows can select engineering review with `review`. A branch coordinator can ask for bug
+   diagnosis by supplying a current failing behavioral check ID to `delegate_worker`.
 4. A verified candidate is applied and checked again. Concurrent project edits block integration.
    Avoid editing the candidate's files from the orchestrator while this workflow runs.
 
@@ -515,8 +511,8 @@ fail; use concise machine-readable summaries when a test suite is verbose.
 ## Where the rules live
 
 - `prompts/shared.md`: TigerStyle, all ten NASA rules and language adaptations.
-- `prompts/{orchestrator,design-advisor,implementer,reviewer,database-reviewer,performance}.md`:
-  each role's task and evidence requirements.
+- `prompts/{orchestrator,design-advisor,implementer,reviewer,performance}.md`: each role's task and
+  evidence requirements.
 - `roles/*.json`: executable role configuration, including backend and model.
 - `scripts/linting/`: actual JS/TS AST and Python token/AST readability checks, JSON validity,
   Unicode-aware 100-column checks and exclusions.

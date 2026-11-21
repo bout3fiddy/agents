@@ -13,7 +13,6 @@ import {
   auditResultSchema,
   resultSchema,
   thinkingSchema,
-  specialistThinkingSchema,
   ProviderQuotaError,
   completedResult,
   validateResult,
@@ -26,7 +25,7 @@ import {
   type WorkerResult,
   type Role,
 } from './contracts.ts'
-import { collectWorkerResults, dispatcher, type Dispatcher } from './dispatch.ts'
+import { dispatcher, type Dispatcher } from './dispatch.ts'
 import { bindFormatterProof, formatterClosures } from './formatter-review.ts'
 import { textResult } from './file-tools.ts'
 import { changes } from './integration.ts'
@@ -108,7 +107,7 @@ const freshReviewReason = Type.Optional(
   Type.String({
     minLength: 1,
     maxLength: 500,
-    description: 'New concern that needs independent review after a formatter-verified closure.',
+    description: 'New concern that needs independent review on an unchanged snapshot.',
   }),
 )
 
@@ -118,25 +117,20 @@ const delegateSchema = Type.Object(
       Type.Literal('task-worker'),
       Type.Literal('implementer'),
       Type.Literal('reviewer'),
-      Type.Literal('database-reviewer'),
       Type.Literal('performance'),
     ]),
     thinking: Type.Optional(thinkingSchema),
     freshReviewReason,
+    bugCheck: Type.Optional(
+      Type.String({
+        minLength: 1,
+        maxLength: 120,
+        description:
+          'Branch diagnosis only. ID of the failing behavioral check that reproduces the bug.',
+      }),
+    ),
     task: Type.String({ minLength: 1, maxLength: 16000 }),
     writePaths: Type.Array(writePathSchema, { maxItems: 50 }),
-  },
-  { additionalProperties: false },
-)
-
-const reviewTask = Type.String({ minLength: 1, maxLength: 16000 })
-const reviewPairSchema = Type.Object(
-  {
-    engineering: reviewTask,
-    database: reviewTask,
-    freshReviewReason,
-    engineeringThinking: Type.Optional(specialistThinkingSchema),
-    databaseThinking: Type.Optional(specialistThinkingSchema),
   },
   { additionalProperties: false },
 )
@@ -169,7 +163,7 @@ function sameAssignment(left: Delegation, right: Delegation): boolean {
 }
 
 function isReview(role: string): boolean {
-  return role === 'reviewer' || role === 'database-reviewer'
+  return role === 'reviewer'
 }
 
 function reviewVerdicts(results: WorkerEvidence[]) {
@@ -229,9 +223,8 @@ export async function createTaskCoordinatorTools(
   let fatal: unknown
   const failedAssignments = new Set<string>()
   const rejectedModels = new Map<string, ProviderQuotaError>()
-  const missingVerdicts = new Set<string>()
-  let reviewSnapshot: string | undefined
-  let pairedReviewActive = false
+  const engineeringReview = request.review ?? request.checkpoint.review ?? false
+  const performanceReview = request.checkpoint.performanceReview === true
   let pending = 0
   let submitting = false
   let revision = 0
@@ -266,6 +259,14 @@ export async function createTaskCoordinatorTools(
 
     if (request.implementerModel && raw.role === 'task-worker' && raw.writePaths.length) {
       throw new Error('Assign implementation writes to the user-selected implementer')
+    }
+
+    if (raw.role === 'reviewer' && request.kind !== 'branch' && !engineeringReview) {
+      throw new Error('Engineering review was not selected for this assignment')
+    }
+
+    if (raw.role === 'performance' && !performanceReview) {
+      throw new Error('Performance review requires an explicit user request')
     }
 
     if (!scopeContained(raw.writePaths, request.checkpoint.writePaths)) {
@@ -336,6 +337,11 @@ export async function createTaskCoordinatorTools(
                 request.kind === 'branch'
                   ? 'Authorized design-document implementation; resolve reviewer feedback.'
                   : 'Bounded task scope; this is not an accepted implementation design.',
+              ...(raw.bugCheck && {
+                reproduction: checks
+                  .filter((check) => check.check === raw.bugCheck)
+                  .map(receiptView),
+              }),
               ...(raw.freshReviewReason && { freshReviewReason: raw.freshReviewReason }),
               previousFindings: receipts
                 .filter((receipt) => sameAssignment(receipt.assignment, raw))
@@ -360,7 +366,11 @@ export async function createTaskCoordinatorTools(
         }
 
         recoverableFailure = true
-        failedAssignments.add(assignmentKey)
+
+        if (request.kind !== 'branch' || raw.role !== 'reviewer') {
+          failedAssignments.add(assignmentKey)
+        }
+
         throw error
       }
 
@@ -419,134 +429,85 @@ export async function createTaskCoordinatorTools(
     }
   }
 
-  function reviewed(roleName: string, snapshot: string) {
-    return receipts.findLast(
-      ({ evidence }) => evidence.role === roleName && evidence.snapshot === snapshot,
-    )?.evidence
-  }
-
-  async function delegateRound(assignments: Delegation[]): Promise<WorkerEvidence[]> {
-    if (pairedReviewActive) {
-      throw new Error('Wait for both review verdicts before delegating further work')
-    }
-
-    const paired = assignments.length === 2
-
-    if (paired) {
-      pairedReviewActive = true
-    }
-
+  async function delegateRound(assignment: Delegation): Promise<WorkerEvidence[]> {
     pending++
 
     try {
       return await serialize(async () => {
         requireValidCandidate()
         const before = await inventory(request.workspace)
-        const snapshot = snapshotHash(before)
 
-        if (missingVerdicts.size && reviewSnapshot !== snapshot) {
-          throw new Error('Candidate changed while waiting for outstanding review verdicts')
-        }
+        const snapshot = isReview(assignment.role) ? snapshotHash(before) : undefined
 
-        if (missingVerdicts.size && assignments.some((item) => !missingVerdicts.has(item.role))) {
-          throw new Error(
-            'Collect only the outstanding review verdicts with delegate_worker: ' +
-              [...missingVerdicts].join(', '),
-          )
-        }
+        if (request.kind === 'branch' && assignment.role === 'reviewer') {
+          const failure = checks.find((check) => check.check === assignment.bugCheck)
+          const kind = request.project.checks.find(
+            (check) => check.id === assignment.bugCheck,
+          )?.kind
 
-        const single = assignments.length === 1 ? assignments[0] : undefined
-        const requiresBoth =
-          request.kind === 'branch' || (request.kind === 'maintenance' && request.review !== false)
-
-        if (
-          single &&
-          isReview(single.role) &&
-          requiresBoth &&
-          !missingVerdicts.size &&
-          !reviewed(single.role === 'reviewer' ? 'database-reviewer' : 'reviewer', snapshot)
-        ) {
-          const reason = await databaseReviewReason(before)
-
-          if (reason) {
+          if (
+            !failure ||
+            failure.status !== 'failed' ||
+            failure.snapshot !== snapshot ||
+            !['test', 'database'].includes(kind ?? '') ||
+            failure.result.timedOut ||
+            failure.result.aborted ||
+            failure.result.truncated ||
+            receiptView(failure).diagnostic ||
+            [null, 0, 126, 127].includes(failure.result.exitCode)
+          ) {
             throw new Error(
-              'Use delegate_reviews for engineering and database review due to ' +
-                reason +
-                '. If the assignment excludes DB review, report the conflict to the host with ' +
-                'snapshot ' +
-                snapshot +
-                ' and continue permitted work.',
+              'Branch review needs a reproduced bug. Supply bugCheck from a failing ' +
+                'behavioral run_checks receipt on this candidate. Otherwise finish with checks.',
             )
           }
-        }
 
-        const completingReview = missingVerdicts.size > 0
+          const diagnosis = receipts.findLast(
+            (item) =>
+              item.assignment.role === 'reviewer' &&
+              item.assignment.bugCheck === assignment.bugCheck &&
+              item.evidence.snapshot === snapshot,
+          )
 
-        if (paired) {
-          reviewSnapshot = snapshot
-
-          for (const item of assignments) {
-            missingVerdicts.add(item.role)
+          if (diagnosis) {
+            return [diagnosis.evidence]
           }
         }
 
-        const changedFiles = originals && changes(originals, before)
-        const groups = await collectWorkerResults(
-          assignments.map((assignment) => {
-            const prior = receipts.findLast((r) => sameAssignment(assignment, r.assignment))
-
-            if (
-              !assignment.freshReviewReason &&
-              prior?.evidence.closedReview &&
-              prior.evidence.snapshot === snapshot
-            ) {
-              return Promise.resolve([prior])
-            }
-
-            return runChild(assignment, before, changedFiles)
-          }),
-          async (completed) => {
-            const children = completed.flat()
-
-            if (paired && snapshotHash(await inventory(request.workspace)) !== snapshot) {
-              fatal = new Error('Candidate changed during paired review')
-              throw fatal
-            }
-
-            const additions = children.filter((child) => !receipts.includes(child))
-
-            try {
-              await atomicJson(`${request.outputPath}.children.json`, [...receipts, ...additions])
-            } catch (error) {
-              fatal = error
-              throw error
-            }
-
-            receipts.push(...additions)
-
-            for (const child of children) {
-              missingVerdicts.delete(child.assignment.role)
-            }
-          },
-        )
-
-        const finished = groups.flat()
+        const prior = receipts.findLast((item) => sameAssignment(item.assignment, assignment))
 
         if (
-          requiresBoth &&
-          single?.role === 'reviewer' &&
-          finished[0]?.evidence.result.databaseImpact &&
-          !reviewed('database-reviewer', snapshot)
+          isReview(assignment.role) &&
+          !assignment.freshReviewReason &&
+          prior?.evidence.result.verdict === 'pass' &&
+          prior.evidence.snapshot === snapshot &&
+          (prior.evidence.closedReview ||
+            (prior.assignment.bugCheck === assignment.bugCheck &&
+              prior.assignment.task === assignment.task &&
+              prior.assignment.thinking === assignment.thinking &&
+              revision === 0))
         ) {
-          reviewSnapshot = snapshot
-          missingVerdicts.add('database-reviewer')
+          return [prior.evidence]
         }
 
+        const completed = await runChild(
+          assignment,
+          before,
+          originals && changes(originals, before),
+        )
+
+        try {
+          await atomicJson(`${request.outputPath}.children.json`, [...receipts, ...completed])
+        } catch (error) {
+          fatal = error
+          throw error
+        }
+
+        receipts.push(...completed)
         await progress.update({
           stage: 'coordinating',
           role: role.name,
-          child: undefined,
-          message: finished
+          message: completed
             .map(
               ({ evidence }) =>
                 `${evidence.role}: ${evidence.result.verdict}. ` +
@@ -554,72 +515,43 @@ export async function createTaskCoordinatorTools(
             )
             .join(' / '),
         })
-
-        if (completingReview && missingVerdicts.size === 0) {
-          return [reviewed('reviewer', snapshot)!, reviewed('database-reviewer', snapshot)!]
-        }
-
-        return finished.map((child) => child.evidence)
+        return completed.map((item) => item.evidence)
       })
-    } catch (error) {
-      if (paired && missingVerdicts.size && !fatal && !signal.aborted) {
-        throw new Error(
-          `${String(error)}. Outstanding reviews: ${[...missingVerdicts].join(', ')}`,
-          { cause: error },
-        )
-      }
-
-      throw error
     } finally {
-      if (paired) {
-        pairedReviewActive = false
-      }
-
       pending--
     }
   }
 
-  async function databaseReviewReason(
-    candidate?: Map<string, Buffer>,
-  ): Promise<string | undefined> {
-    if (declaredDatabase) {
-      return 'declared database impact in the task or coordinator result'
-    }
-
-    if (receipts.some((receipt) => receipt.evidence.result.databaseImpact)) {
-      return 'database impact reported by a worker'
-    }
-
-    if (
-      originals &&
-      databaseImpact(
-        originals,
-        candidate ?? (await inventory(request.workspace)),
-        request.project.databasePaths,
+  async function needsDatabaseChecks(): Promise<boolean> {
+    return (
+      declaredDatabase ||
+      receipts.some((entry) => entry.evidence.result.databaseImpact) ||
+      Boolean(
+        originals &&
+        databaseImpact(
+          originals,
+          await inventory(request.workspace),
+          request.project.databasePaths,
+        ),
       )
-    ) {
-      return 'changed database paths or persistence code'
-    }
-
-    return undefined
+    )
   }
 
   async function validateBranch(snapshot: string): Promise<void> {
-    const database = Boolean(await databaseReviewReason())
+    const database = await needsDatabaseChecks()
     const performance =
       request.checkpoint.performance ||
       receipts.some((receipt) => receipt.evidence.role === 'performance')
-    const requiredRoles = [
-      'reviewer',
-      ...(database ? ['database-reviewer'] : []),
-      ...(performance ? ['performance'] : []),
-    ]
 
-    for (const name of requiredRoles) {
-      const review = receipts.findLast((receipt) => receipt.evidence.role === name)?.evidence
+    if (performanceReview) {
+      const measurement = receipts.findLast(
+        (entry) => entry.evidence.role === 'performance',
+      )?.evidence
 
-      if (!review || review.result.verdict !== 'pass' || review.snapshot !== snapshot) {
-        throw new Error(`Branch completion requires a passing ${name} on the final candidate`)
+      if (measurement?.result.verdict !== 'pass' || measurement.snapshot !== snapshot) {
+        throw new Error(
+          'Branch completion requires the selected performance work on the final candidate',
+        )
       }
     }
 
@@ -652,13 +584,30 @@ export async function createTaskCoordinatorTools(
 
     requireValidCandidate()
 
-    if (pending || failedAssignments.size || missingVerdicts.size) {
+    if (pending || failedAssignments.size) {
       throw new Error('Unfinished or failed child execution prevents a passing result')
     }
 
     const snapshot = snapshotHash(await inventory(request.workspace))
 
     for (const [index, receipt] of receipts.entries()) {
+      if (request.kind === 'branch' && receipt.assignment.role === 'reviewer') {
+        if (
+          !checks.some(
+            (check) =>
+              check.check === receipt.assignment.bugCheck &&
+              check.status === 'passed' &&
+              check.snapshot === snapshot,
+          )
+        ) {
+          throw new Error(
+            'Run run_checks and resolve the reproduced bug: ' + receipt.assignment.bugCheck,
+          )
+        }
+
+        continue
+      }
+
       if (receipt.evidence.result.verdict === 'pass' && !isReview(receipt.evidence.role)) {
         continue
       }
@@ -738,7 +687,7 @@ export async function createTaskCoordinatorTools(
             requireValidCandidate()
             checks = []
             checkedDatabase = false
-            checkedDatabase = Boolean(await databaseReviewReason())
+            checkedDatabase = await needsDatabaseChecks()
             checks = await verifyProject(
               request.workspace,
               request.project,
@@ -771,7 +720,8 @@ export async function createTaskCoordinatorTools(
       description:
         'Choose thinking for this leaf: low for mechanical tasks, medium for settled designs, ' +
         'high for unresolved tradeoffs or tricky repairs. Fable specialists support medium/high. ' +
-        'Engineering and database reviews default to high.',
+        'Branch review diagnoses a reproduced bug. Supply its failing bugCheck. ' +
+        'Use a performance specialist only on explicit user request.',
       parameters: delegateSchema,
       async execute(_id, raw) {
         const child = validateAssignment(raw)
@@ -784,45 +734,14 @@ export async function createTaskCoordinatorTools(
           )
         }
 
-        const results = await delegateRound([child])
+        const results = await delegateRound(child)
         const result = results[0]!
 
-        if (!isReview(child.role) && results.length > 1) {
+        if (results.length > 1) {
           return textResult({ ...result, closedReviews: reviewVerdicts(results.slice(1)) })
         }
 
-        return textResult(results.length === 1 ? result : reviewVerdicts(results))
-      },
-    },
-    {
-      name: 'delegate_reviews',
-      label: 'Run engineering and database reviews',
-      description:
-        'Use when both reviews apply. Run both on this frozen candidate and return ' +
-        'both verdicts together before assigning any repairs.',
-      parameters: reviewPairSchema,
-      async execute(_id, raw) {
-        if (!Check(reviewPairSchema, raw)) {
-          throw new Error('Provide engineering and database review assignments')
-        }
-
-        const assignments = [
-          validateAssignment({
-            role: 'reviewer',
-            task: raw.engineering,
-            writePaths: [],
-            ...(raw.freshReviewReason && { freshReviewReason: raw.freshReviewReason }),
-            ...(raw.engineeringThinking && { thinking: raw.engineeringThinking }),
-          }),
-          validateAssignment({
-            role: 'database-reviewer',
-            task: raw.database,
-            writePaths: [],
-            ...(raw.freshReviewReason && { freshReviewReason: raw.freshReviewReason }),
-            ...(raw.databaseThinking && { thinking: raw.databaseThinking }),
-          }),
-        ]
-        return textResult(reviewVerdicts(await delegateRound(assignments)))
+        return textResult(result)
       },
     },
     {
@@ -949,7 +868,7 @@ export async function runTaskCoordinator(
     request,
     combined,
     async (child, abortSignal, progress) => {
-      const review = ['reviewer', 'database-reviewer', 'performance'].includes(child.role)
+      const review = ['reviewer', 'performance'].includes(child.role)
       const evidence = await dispatch(
         { ...child, parentWorkerId: live.info.id, reviewOf: review ? lastAuthor : undefined },
         abortSignal,
@@ -1105,7 +1024,11 @@ export async function runTaskCoordinator(
           }),
         folderInstructions: await instructions(request.workspace, request.checkpoint.writePaths),
         capabilities: capabilities.workers,
-        review: request.review ?? true,
+        review:
+          request.kind === 'branch'
+            ? 'diagnose a reproduced bug only'
+            : (request.review ?? request.checkpoint.review ?? false),
+        performanceReview: request.checkpoint.performanceReview === true,
         execution: {
           state: 'running',
           resumed: request.resumed ?? false,
@@ -1129,7 +1052,7 @@ export async function runTaskCoordinator(
 
       await session.prompt(
         request.kind === 'branch'
-          ? 'Continue autonomous implementation, repairs, checks and reviews within the design. ' +
+          ? 'Continue implementation and repairs. Finish when the required checks pass. ' +
               'Use submit_result when complete or genuinely blocked; do not ask for approval.'
           : 'Finish through submit_result, reporting remaining blockers honestly.',
       )

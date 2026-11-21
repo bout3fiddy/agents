@@ -98,7 +98,7 @@ try {
       'separate Git worktrees and branches. One owns src/clamp.mjs and test/clamp.test.mjs; ' +
       'the other owns src/unique.mjs and test/unique.test.mjs. Give each the document decisions, ' +
       'invariants and behavioral acceptance criteria. Each should use Astra implementation and ' +
-      'Fable engineering review, run the required tests and push its branch. Do not merge yet; ' +
+      'run the required tests and push its branch. Do not merge yet; ' +
       'I will ask for merging later. No database or performance work is needed. ' +
       'You have authorization to publish this fixture. They should resolve review ' +
       'feedback autonomously. Return to our discussion while both work; ask me one conceptual ' +
@@ -213,16 +213,6 @@ try {
         (child) =>
           child.role === 'implementer' &&
           child.model === 'openai-codex/gpt-6.2-astra' &&
-          child.verdict === 'pass',
-      ),
-    )
-    assert.ok(
-      job.state.children?.some(
-        (child) =>
-          child.role === 'reviewer' &&
-          /^claude-cli\/(?:claude-fable-5-2|(?:claude-)?opus)(?:-|$)/.test(
-            child.closedReview?.model ?? child.model,
-          ) &&
           child.verdict === 'pass',
       ),
     )

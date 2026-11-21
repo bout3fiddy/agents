@@ -24,7 +24,7 @@ const changesRequested: Partial<WorkerResult> = {
   hostActions: [{ capability: 'git', reason: 'Run the project index check on the host' }],
 }
 
-test('DB review follows changed persistence code, removed adapters and configured scopes', () => {
+test('DB checks follow persistence code, removed adapters and configured scopes', () => {
   const detect = (path: string, before: string, after: string, scopes: string[] = []) =>
     databaseImpact(
       new Map(before ? [[path, Buffer.from(before)]] : []),
@@ -124,8 +124,8 @@ test('formatter closure requires all findings and the entire reviewed tree', asy
   assert.equal(review.result.verdict, 'changes')
 })
 
-test('workflow closes formatting and preserves paired review and checks', async (t) => {
-  const { store, base, root } = await fixture({ database: true })
+test('workflow closes formatting and preserves review evidence and checks', async (t) => {
+  const { store, base, root } = await fixture({ database: true, review: true })
   t.after(() => rm(base, { recursive: true, force: true }))
   let implementations = 0
   const reviewed: string[] = []
@@ -139,9 +139,9 @@ test('workflow closes formatting and preserves paired review and checks', async 
     return evidence(request, request.role === 'reviewer' ? changesRequested : {})
   })
   assert.equal(result.status, 'complete', result.error)
-  assert.deepEqual(reviewed.sort(), ['database-reviewer', 'reviewer'])
+  assert.deepEqual(reviewed.sort(), ['reviewer'])
   const closures = result.evidence.filter((worker) => worker.closedReview)
-  assert.equal(closures.length, 2)
+  assert.equal(closures.length, 1)
   assert.ok(closures.every((worker) => worker.snapshot === result.snapshot))
   assert.deepEqual(
     closures.find((r) => r.role === 'reviewer')?.result.hostActions,

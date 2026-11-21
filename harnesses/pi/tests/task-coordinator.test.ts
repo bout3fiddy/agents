@@ -35,6 +35,7 @@ async function setup(t: TestContext) {
   const request: TaskCoordinatorRequest = {
     task: 'Update a bounded document',
     context: 'Preserve unrelated work',
+    review: true,
     kind: 'documents',
     workspace: root,
     project: { root, checks: [], databasePaths: [], instrumentationPaths: [] },
@@ -353,6 +354,7 @@ test('stale child receipt poisons passing completion', async (t) => {
 test('reviewers and performance workers retain their enforced write restrictions', async (t) => {
   for (const role of ['reviewer', 'performance']) {
     const { request, controller } = await setup(t)
+    request.checkpoint.performanceReview = true
     const worker = await createTaskCoordinatorTools(request, controller.signal, async (child) => {
       await writeFile(join(request.workspace, 'src/value.js'), 'unauthorized\n')
       return receipt(child)
@@ -524,95 +526,25 @@ test('document checks format assigned files and reject every out-of-scope write'
   )
 })
 
-const pairTasks = { engineering: 'Review correctness', database: 'Review recovery' }
-
-test('paired verdicts overlap and hold repairs until both settle', { timeout: 5000 }, async (t) => {
+test('default routing rejects unselected specialists before dispatch', async (t) => {
   const { request, controller } = await setup(t)
-  let start!: () => void
-  const bothStarted = new Promise<void>((resolve) => {
-    start = resolve
-  })
-  let release!: () => void
-  const slow = new Promise<void>((resolve) => {
-    release = resolve
-  })
-  const started = new Set<string>()
-  const worker = await createTaskCoordinatorTools(request, controller.signal, async (child) => {
-    started.add(child.role)
+  delete request.review
+  const worker = await createTaskCoordinatorTools(request, controller.signal, async () =>
+    assert.fail('no specialist may launch'),
+  )
+  assert.equal(
+    worker.tools.some((tool) => tool.name === 'delegate_reviews'),
+    false,
+  )
 
-    if (started.size === 2) {
-      start()
-    }
-
-    if (child.role === 'database-reviewer') {
-      await slow
-    }
-
-    return receipt(child, { summary: child.role, verdict: 'changes' })
-  })
-  const pair = invoke(worker.tools, 'delegate_reviews', pairTasks)
-  await bothStarted
-
-  try {
-    assert.equal(worker.children().length, 0)
-    await assert.rejects(invoke(worker.tools, 'delegate_worker', leaf), /both review verdicts/)
-    await assert.rejects(invoke(worker.tools, 'submit_result', pass), /Wait for all/)
-  } finally {
-    release()
+  for (const role of ['database-reviewer', 'reviewer', 'performance']) {
+    await assert.rejects(
+      invoke(worker.tools, 'delegate_worker', { ...leaf, role, writePaths: [] }),
+      /Invalid leaf|not selected|explicit user request/,
+    )
   }
 
-  const result = await pair
-  assert.match(JSON.stringify(result.content), /database-reviewer/)
-  const children = worker.children()
-  assert.deepEqual(
-    children.map((c) => c.role),
-    ['reviewer', 'database-reviewer'],
-  )
-  assert.equal(children[0]!.snapshot, children[1]!.snapshot)
-  assert.deepEqual(
-    JSON.parse(await readFile(request.outputPath + '.children.json', 'utf8')).map(
-      (item: { evidence: unknown }) => item.evidence,
-    ),
-    children,
-  )
-  await assert.rejects(invoke(worker.tools, 'submit_result', pass), /Resolve child findings/)
-})
-
-test('a failed paired dispatch retains its sibling and fences fixes until retry', async (t) => {
-  const { request, controller } = await setup(t)
-  let fail = true
-  const calls: string[] = []
-  const worker = await createTaskCoordinatorTools(request, controller.signal, async (child) => {
-    calls.push(child.role)
-
-    if (child.role === 'database-reviewer' && fail) {
-      throw new Error('DB reviewer unavailable')
-    }
-
-    return receipt(child)
-  })
-  await assert.rejects(invoke(worker.tools, 'delegate_reviews', pairTasks), /unavailable/)
-  assert.deepEqual(
-    worker.children().map((c) => c.role),
-    ['reviewer'],
-  )
-  await assert.rejects(invoke(worker.tools, 'delegate_worker', leaf), /outstanding review/)
-  await assert.rejects(invoke(worker.tools, 'delegate_reviews', pairTasks), /outstanding review/)
-  fail = false
-  const retry = await invoke(worker.tools, 'delegate_worker', {
-    role: 'database-reviewer',
-    task: 'Retry',
-    writePaths: [],
-  })
-  const resultText = retry.content[0]!
-  assert.equal(resultText.type, 'text')
-  assert.deepEqual(
-    JSON.parse(resultText.text).map((e: { role: string }) => e.role),
-    ['reviewer', 'database-reviewer'],
-  )
-  await invoke(worker.tools, 'submit_result', pass)
-  assert.equal(calls.filter((r) => r === 'reviewer').length, 1)
-  assert.equal(calls.filter((r) => r === 'database-reviewer').length, 2)
+  await assert.rejects(loadRole('database-reviewer'), /Unknown role/)
 })
 
 test('coordinator selects effort per child and rejects invalid levels', async (t) => {
@@ -633,7 +565,7 @@ test('coordinator selects effort per child and rejects invalid levels', async (t
     )
   await assert.rejects(run('reviewer', 'low'), /Unsupported thinking/)
   await assert.rejects(run('implementer', 'xhigh'), /Invalid leaf assignment/)
-  await assert.rejects(run('database-reviewer', 'low'), /Unsupported thinking/)
+  await assert.rejects(run('database-reviewer', 'low'), /Invalid leaf/)
   assert.deepEqual(sent, [])
   await run('task-worker', 'low')
   await run('implementer', 'high')

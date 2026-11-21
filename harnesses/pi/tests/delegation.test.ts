@@ -274,7 +274,7 @@ for (const failure of [
       const jobs = new Delegations(store)
       const task: DelegateInput =
         failure === 'review'
-          ? { ...input, kind: 'maintenance', writePaths: ['src/**'] }
+          ? { ...input, kind: 'maintenance', writePaths: ['src/**'], review: true }
           : {
               ...input,
               writePaths: failure === 'code' ? ['decision.md', 'src/**'] : input.writePaths,
@@ -476,7 +476,7 @@ for (const variant of ['pass', 'routine', 'baseline', 'skip', 'database', 'bench
       }
 
       if (variant === 'database') {
-        assert.match(state.error!, /database-reviewer/)
+        assert.match(state.error!, /required-database/)
       }
 
       if (variant === 'skip' || variant === 'benchmark') {

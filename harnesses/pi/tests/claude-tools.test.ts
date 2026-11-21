@@ -11,7 +11,7 @@ import { claudeArguments, parseClaudeTrace, runClaudeWorker } from '../src/claud
 import { loadRole } from '../src/roles.ts'
 
 test('Claude enables web tools and records successful calls', async () => {
-  for (const name of ['design-advisor', 'reviewer', 'database-reviewer', 'performance'] as const) {
+  for (const name of ['design-advisor', 'reviewer', 'performance'] as const) {
     const role = await loadRole(name)
     const args = claudeArguments(
       { ...role, tools: [...role.tools, 'Bash', 'Read', 'Agent'] },

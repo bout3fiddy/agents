@@ -341,7 +341,7 @@ export async function runBranchTask(
           title: message,
           body:
             `${request.task}\n\nDesign: ${plan.designPath}\n\n` +
-            'Autonomous implementation with independent specialist review and executable tests.\n' +
+            'Autonomous implementation verified with executable checks.\n' +
             `Validation snapshot: ${snapshot}\n`,
         },
         signal,

@@ -17,8 +17,9 @@ const implementer = process.argv.includes('--opus')
   : process.argv.includes('--fable')
     ? 'fable'
     : undefined
-const basic = process.argv.includes('--basic')
-const { root, store, design } = await (basic ? basicFixture() : liveFixture())
+const routine = process.argv.includes('--routine')
+const basic = routine || process.argv.includes('--basic')
+const { root, store, design } = await (basic ? basicFixture(routine) : liveFixture())
 const model = process.env.PI_HARNESS_LIVE_MODEL ?? 'openai-codex/gpt-6.1-sol'
 const reports = join(harnessRoot, 'reports', new Date().toISOString().replaceAll(':', '-'))
 await mkdir(reports, { recursive: true })
@@ -128,14 +129,16 @@ assert.equal(task?.status, 'complete', task?.error ?? output.slice(-4000))
 assert.deepEqual(
   new Set(task.evidence.map((item) => item.role)),
   new Set(
-    basic
-      ? ['implementer', 'reviewer']
-      : ['implementer', 'performance', 'reviewer', 'database-reviewer'],
+    routine
+      ? ['implementer']
+      : basic
+        ? ['implementer', 'reviewer']
+        : ['implementer', 'performance', 'reviewer'],
   ),
 )
 assert.ok(task.receipts.every((item) => item.status === 'passed'))
 
-if (basic) {
+if (basic && !routine) {
   const writer = task.evidence.findLast((item) => item.role === 'implementer')
   const verdict = task.evidence.findLast((item) => item.role === 'reviewer' && !item.closedReview)
   assert.equal(writer?.result.verdict, 'pass')

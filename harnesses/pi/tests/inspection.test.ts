@@ -28,7 +28,6 @@ test('every role tool has an explicit inspection or direct-call policy', async (
     'codemode',
     'consult_design',
     'delegate_branches',
-    'delegate_reviews',
     'delegate_task',
     'delegate_worker',
     'design_consultation',

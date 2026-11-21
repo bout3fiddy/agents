@@ -82,6 +82,13 @@ test('run_checks distinguishes inherited lint from a changed failing file', asyn
 
   const inherited = await lint()
   assert.equal(inherited.status, 'failed')
+  await assert.rejects(
+    invoke(worker.tools, 'delegate_worker', {
+      ...assignment('reviewer'),
+      bugCheck: 'harness-lint',
+    }),
+    /reproduced bug/,
+  )
   assert.deepEqual(inherited.inheritedLintPaths, [name])
   await writeFile(join(request.workspace, name), longLine + '// changed\n')
   const changed = await lint()
@@ -89,127 +96,87 @@ test('run_checks distinguishes inherited lint from a changed failing file', asyn
   assert.equal(changed.inheritedLintPaths, undefined)
 })
 
-test('branch coordinator repairs failing checks and refreshes review before passing', async (t) => {
+test('branch diagnosis opens on red and closes on green', async (t) => {
   const { request, signal } = await setup(t)
   request.project.checks[0]!.argv = [
     'node',
     '-e',
     'import("./src/value.js").then(m => require("node:assert/strict").equal(m.value, 7))',
   ]
-  let implementationCalls = 0
+  const roles: string[] = []
   const worker = await createTaskCoordinatorTools(request, signal, async (child) => {
-    assert.match(child.task, /Authorized design-document implementation/)
-    assert.deepEqual(child.changedFiles, implementationCalls ? ['src/value.js'] : [])
+    roles.push(child.role)
 
-    if (child.role === 'implementer') {
-      implementationCalls++
-      await writeFile(join(request.workspace, 'src/value.js'), 'export const value = 7\n')
+    if (child.role === 'reviewer') {
+      assert.match(child.task, /AssertionError/)
+      return receipt(child, {
+        verdict: 'changes',
+        findings: [
+          {
+            severity: 'required',
+            location: 'src/value.js',
+            problem: 'Expected seven',
+            evidence: 'contract observed zero',
+          },
+        ],
+      })
     }
 
+    await writeFile(join(request.workspace, 'src/value.js'), 'export const value = 7\n')
     return receipt(child)
   })
-  assert.equal(
-    worker.tools.some((tool) => tool.name === 'project_write'),
-    false,
-  )
-  assert.equal(
-    worker.tools.some((tool) => tool.name === 'delegate_task'),
-    false,
-  )
+  const diagnose = () =>
+    invoke(worker.tools, 'delegate_worker', {
+      ...assignment('reviewer'),
+      bugCheck: 'contract',
+    })
+  await assert.rejects(diagnose(), /reproduced bug/)
   await invoke(worker.tools, 'run_checks')
   assert.equal(worker.checks().find((check) => check.check === 'contract')?.status, 'failed')
-  await invoke(worker.tools, 'delegate_worker', assignment('reviewer'))
   await assert.rejects(invoke(worker.tools, 'submit_result', pass), /run_checks/)
+  await diagnose()
+  await diagnose() // Retries reuse the diagnosis for this bug and snapshot.
   await invoke(worker.tools, 'delegate_worker', assignment('implementer', ['src/**']))
-  await assert.rejects(invoke(worker.tools, 'submit_result', pass), /refresh requested reviews/)
-  await invoke(worker.tools, 'delegate_worker', assignment('reviewer'))
-  await assert.rejects(invoke(worker.tools, 'submit_result', pass), /run_checks/)
+  await assert.rejects(diagnose(), /reproduced bug/)
+  await assert.rejects(invoke(worker.tools, 'submit_result', pass))
   await invoke(worker.tools, 'run_checks')
-  assert.ok(worker.checks().every((check) => check.status === 'passed'))
+  await assert.rejects(diagnose(), /reproduced bug/)
   await invoke(worker.tools, 'submit_result', pass)
-  assert.equal(implementationCalls, 1)
-  assert.equal(worker.result()?.verdict, 'pass')
+  assert.deepEqual(roles, ['reviewer', 'implementer'])
 })
 
-test('branch coordinator consumes reviewer findings through repair and fresh review', async (t) => {
-  const { request, signal } = await setup(t)
-  let reviewCalls = 0
-  const worker = await createTaskCoordinatorTools(request, signal, async (child) => {
-    if (child.role === 'reviewer') {
-      reviewCalls++
-
-      if (reviewCalls === 1) {
-        return receipt(child, {
-          verdict: 'changes',
-          findings: [
-            {
-              severity: 'required',
-              location: 'src/value.js',
-              problem: 'The documented value is seven.',
-              evidence: 'The export is zero.',
-            },
-          ],
-        })
-      }
-
-      assert.match(child.task, /The documented value is seven/)
-    }
-
-    if (child.role === 'implementer') {
-      await writeFile(join(request.workspace, 'src/value.js'), 'export const value = 7\n')
-    }
-
-    return receipt(child)
-  })
-  await invoke(worker.tools, 'delegate_worker', assignment('reviewer'))
-  await assert.rejects(invoke(worker.tools, 'submit_result', pass), /Resolve child findings/)
-  await invoke(worker.tools, 'delegate_worker', assignment('implementer', ['src/**']))
-  await invoke(worker.tools, 'run_checks')
-  await invoke(worker.tools, 'delegate_worker', assignment('reviewer'))
-  await invoke(worker.tools, 'submit_result', pass)
-  assert.equal(worker.result()?.verdict, 'pass')
-})
-
-test('branch completion requires database and performance evidence when scoped', async (t) => {
+test('green code passes lint, tests, recovery and benchmarks without review', async (t) => {
   const { request, signal } = await setup(t, { database: true, performance: true })
-  const worker = await createTaskCoordinatorTools(request, signal, (child) => {
-    if (child.role === 'reviewer' || child.role === 'database-reviewer') {
-      assert.equal(child.thinking, child.role === 'reviewer' ? 'medium' : 'high')
-    }
-
+  request.checkpoint.review = true // Older pending branches may carry this flag.
+  const worker = await createTaskCoordinatorTools(request, signal, async (child) => {
+    assert.equal(child.role, 'implementer')
+    await writeFile(join(request.workspace, 'src/value.js'), 'export const value = 7\n')
     return receipt(child)
   })
-  await assert.rejects(invoke(worker.tools, 'submit_result', pass), /passing reviewer/)
+  await invoke(worker.tools, 'delegate_worker', assignment('implementer', ['src/**']))
+  await invoke(worker.tools, 'run_checks')
+
+  for (const check of ['contract', 'recovery', 'latency', 'harness-lint']) {
+    assert.equal(worker.checks().find((item) => item.check === check)?.status, 'passed')
+  }
+
+  await assert.rejects(invoke(worker.tools, 'delegate_worker', assignment('reviewer')), /bugCheck/)
   await assert.rejects(
-    invoke(worker.tools, 'delegate_worker', assignment('reviewer')),
-    /delegate_reviews/,
+    invoke(worker.tools, 'delegate_worker', assignment('performance')),
+    /explicit/,
   )
-  await invoke(worker.tools, 'delegate_reviews', {
-    engineering: 'Verify the implementation.',
-    database: 'Verify recovery.',
-    engineeringThinking: 'medium',
-    databaseThinking: 'high',
-  })
+  await invoke(worker.tools, 'submit_result', pass)
+  assert.equal(worker.children().length, 1)
+})
+
+test('explicit performance request dispatches the performance specialist', async (t) => {
+  const { request, signal } = await setup(t, { performance: true })
+  request.checkpoint.performanceReview = true
+  const worker = await createTaskCoordinatorTools(request, signal, (child) => receipt(child))
   await assert.rejects(invoke(worker.tools, 'submit_result', pass), /performance/)
   await invoke(worker.tools, 'delegate_worker', assignment('performance', ['benchmarks/**']))
   await invoke(worker.tools, 'run_checks')
-  assert.equal(worker.checks().find((check) => check.check === 'recovery')?.status, 'passed')
-  assert.equal(worker.checks().find((check) => check.check === 'latency')?.status, 'passed')
   await invoke(worker.tools, 'submit_result', pass)
-})
-
-test('changed database paths explain a review conflict before dispatch', async (t) => {
-  const { request, signal } = await setup(t)
-  request.checkpoint.database = false
-  request.project.databasePaths = ['src/**']
-  await writeFile(join(request.workspace, 'src/value.js'), 'export const value = 9\n')
-  const worker = await createTaskCoordinatorTools(request, signal, async () => {
-    assert.fail('A single review cannot start')
-  })
-  await assert.rejects(
-    invoke(worker.tools, 'delegate_worker', assignment('reviewer')),
-    /delegate_reviews.*changed database paths or persistence code.*host.*snapshot [a-f0-9]{64}/,
-  )
 })
 
 test('newly detected database changes invalidate checks lacking recovery coverage', async (t) => {
@@ -221,8 +188,7 @@ test('newly detected database changes invalidate checks lacking recovery coverag
   )
   await invoke(worker.tools, 'run_checks')
   database = true
-  await invoke(worker.tools, 'delegate_worker', assignment('reviewer'))
-  await invoke(worker.tools, 'delegate_worker', assignment('database-reviewer'))
+  await invoke(worker.tools, 'delegate_worker', assignment('implementer'))
   await assert.rejects(invoke(worker.tools, 'submit_result', pass), /run_checks/)
   await invoke(worker.tools, 'run_checks')
   await invoke(worker.tools, 'submit_result', pass)
@@ -265,7 +231,6 @@ test('branch document scopes reject misrouted manifests before any write', async
   await invoke(worker.tools, 'delegate_worker', assignment('task-worker', ['src/**']))
   await invoke(worker.tools, 'delegate_worker', assignment('implementer', [manifest]))
   await invoke(worker.tools, 'run_checks')
-  await invoke(worker.tools, 'delegate_worker', assignment('reviewer'))
   await invoke(worker.tools, 'submit_result', pass)
   assert.equal(worker.result()?.verdict, 'pass')
 })
@@ -283,7 +248,7 @@ test('branch edits cannot use a general task worker to bypass the implementer', 
     /requires the implementer/,
   )
   await assert.rejects(
-    invoke(worker.tools, 'delegate_worker', assignment('reviewer')),
+    invoke(worker.tools, 'delegate_worker', assignment('implementer')),
     /requires the implementer.*Submit blocked/,
   )
   await assert.rejects(invoke(worker.tools, 'run_checks'), /Submit blocked/)
@@ -298,12 +263,10 @@ test('coordinator-reported database impact also requires fresh recovery evidence
   request.checkpoint.database = false
   const worker = await createTaskCoordinatorTools(request, signal, (child) => receipt(child))
   await invoke(worker.tools, 'run_checks')
-  await invoke(worker.tools, 'delegate_worker', assignment('reviewer'))
   await assert.rejects(
     invoke(worker.tools, 'submit_result', { ...pass, databaseImpact: true }),
-    /database-reviewer/,
+    /run_checks/,
   )
-  await invoke(worker.tools, 'delegate_worker', assignment('database-reviewer'))
   await assert.rejects(invoke(worker.tools, 'submit_result', pass), /run_checks/)
   await invoke(worker.tools, 'run_checks')
   await invoke(worker.tools, 'submit_result', pass)
@@ -314,7 +277,7 @@ test('branch coordination continues beyond the old child-call ceiling', async (t
   const worker = await createTaskCoordinatorTools(request, signal, (child) => receipt(child))
 
   for (let call = 0; call < 30; call++) {
-    await invoke(worker.tools, 'delegate_worker', assignment('reviewer'))
+    await invoke(worker.tools, 'delegate_worker', assignment('task-worker'))
   }
 
   assert.equal(worker.children().length, 30)
@@ -325,49 +288,4 @@ test('branch coordination continues beyond the old child-call ceiling', async (t
   assert.equal('maxTurns' in role, false)
   assert.equal('timeoutMs' in role, false)
   assert.ok(role.tools.includes('run_checks'))
-})
-
-test('formatter repair closes branch review and preserves final checks', async (t) => {
-  const { request, signal } = await setup(t)
-  const path = 'src/guide.md'
-  const original = '# Guide\n\n```ts\nsubmit(work);\n```\n'
-  await writeFile(join(request.workspace, path), original)
-  let reviews = 0
-  const worker = await createTaskCoordinatorTools(request, signal, async (child) => {
-    if (child.role === 'reviewer' && ++reviews === 1) {
-      return receipt(child, {
-        verdict: 'changes',
-        findings: [
-          {
-            severity: 'required',
-            location: path + ':4',
-            problem: 'Format the example.',
-            evidence: 'Pinned formatter removes the trailing semicolon.',
-            formatterPath: path,
-          },
-        ],
-      })
-    }
-
-    if (child.role === 'task-worker') {
-      await writeFile(join(child.workspace, path), original.replace('work);', 'work)'))
-    }
-
-    return receipt(child)
-  })
-  await invoke(worker.tools, 'run_checks')
-  await invoke(worker.tools, 'delegate_worker', assignment('reviewer'))
-  const repair = await invoke(worker.tools, 'delegate_worker', assignment('task-worker', [path]))
-  assert.match(JSON.stringify(repair), /closedReviews/)
-  await invoke(worker.tools, 'delegate_worker', assignment('reviewer'))
-  assert.equal(reviews, 1)
-  assert.equal(worker.children().filter((child) => child.closedReview).length, 1)
-  await assert.rejects(invoke(worker.tools, 'submit_result', pass), /run_checks/)
-  await invoke(worker.tools, 'run_checks')
-  await invoke(worker.tools, 'delegate_worker', {
-    ...assignment('reviewer'),
-    freshReviewReason: 'Investigate a newly reported failure.',
-  })
-  assert.equal(reviews, 2)
-  await invoke(worker.tools, 'submit_result', pass)
 })

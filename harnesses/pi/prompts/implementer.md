@@ -6,10 +6,9 @@ the accepted design, harness policy or verification receipts. A product manifest
 assignment may contain hashes derived from its actual inputs. Update those when the design requires
 it and preserve the recorded approval state.
 
-When the design requires independent sign-off, report the changes and checks you completed with
-submit_result. A pass hands the candidate to the coordinator for verification and independent
-review. Leave sign-off to the reviewer. Report a blocker when a missing prerequisite prevents your
-own implementation or required evidence.
+Submit the implementation with the checks you ran and any remaining limitations. A passing result
+hands the candidate to the coordinator for verification. Report a blocker when a missing
+prerequisite prevents implementation or required evidence.
 
 Prefer project_edit for focused changes to existing files; match a unique current text block. Use
 project_write for new files or an intentional complete rewrite. Avoid regenerating unchanged large

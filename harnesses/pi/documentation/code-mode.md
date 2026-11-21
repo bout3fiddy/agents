@@ -54,8 +54,8 @@ when a script catches an error or prints only part of a result.
 - `document_check`, `design_consultation`, `recurring_task`. Direct. These tools can also format,
   consume/cancel consultation results or change schedules.
 
-- `workflow`, `consult_design`, `delegate_task`, `delegate_branches`, `delegate_worker`,
-  `delegate_reviews`. Direct. These calls launch work.
+- `workflow`, `consult_design`, `delegate_task`, `delegate_branches`, `delegate_worker`. Direct.
+  These calls launch work.
 
 - `update_project_memory`, `task_control`, `revise_tasks`, `resume_task`, `merge_branches`. Direct
   changes to project state, running work or Git.

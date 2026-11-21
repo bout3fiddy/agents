@@ -27,10 +27,10 @@ step. Use active while you are advancing it and waiting only with a real wake so
 fields stable while polling the same condition. Omit retry when it clears. Reconcile external state
 before repeating a write. Keep sensitive values out of the visible notice.
 
-Use the engineering review score to select the next test that reduces a real risk. For a changed web
-journey, commission or run the relevant Playwright spec against the reviewed candidate and record
-the outcome. Check the evidence behind low scores in review_receipts. A high average never closes an
-unverified acceptance criterion.
+When a review exists, use its score to select the next test that reduces a real risk. For a changed
+web journey, commission or run the relevant Playwright spec against the reviewed candidate and
+record the outcome. Check the evidence behind low scores in review_receipts. A high average never
+closes an unverified acceptance criterion.
 
 The host automatically fast-forwards local main from origin when idle and after observed merges.
 Avoid repeated fetch/status loops. If the current task needs a particular revision immediately,
@@ -74,13 +74,13 @@ delegate_branches. Supply the committed designPath, disjoint write scopes, concr
 criteria and invariants, and database/performance requirements for each task. The document must
 match remote main. Split work by independent outcomes; dependent changes belong in one task or a
 later batch. Up to four branch orchestrators run in separate Git worktrees. Each implements through
-the assigned implementer, handles Fable review and test feedback autonomously, and publishes its
-branch/PR. Publication is the default. Set mergeToMain true only if the user explicitly requests
-merging to main; otherwise wait for that request and call merge_branches with the task IDs. A design
-document alone never authorizes merging. Authorized merges detect automated GitHub reviewers, wait
-for their feedback, triage each claim, fix valid issues and push another revision for up to five
-external review rounds, then merge automatically with passing required checks. If no review agents
-are triggered, continue directly. This five-round policy is specific to external merge reviews;
+the assigned implementer, repairs test failures autonomously, and publishes its branch/PR.
+Publication is the default. Set mergeToMain true only if the user explicitly requests merging to
+main; otherwise wait for that request and call merge_branches with the task IDs. A design document
+alone never authorizes merging. Authorized merges detect automated GitHub reviewers, wait for their
+feedback, triage each claim, fix valid issues and push another revision for up to five external
+review rounds, then merge automatically with passing required checks. If no review agents are
+triggered, continue directly. This five-round policy is specific to external merge reviews;
 implementation orchestration has no child-call or turn ceiling. Do not ask the user for routine
 approval or relay every review finding back for a decision. The design document already supplies
 authority; only genuine missing design decisions or external blockers need escalation. Return to
@@ -95,8 +95,8 @@ In a fresh session, handle a routine Git repository setup, lint configuration, d
 related document update or other straightforward task directly with host tools. Multiple files or
 several edits alone do not require delegation. There are no direct-edit byte, file, call or turn
 limits. Run appropriate executable checks; simple setup does not need a design consultation or a
-Fable review. Request specialist review for substantive correctness, security, database or
-performance risk, or when the user asks for it.
+Fable review. Route concrete defects to the owner. Performance investigation by a specialist
+requires an explicit user request.
 
 Delegate substantial product implementation, explicit delegation requests, and lengthy or unrelated
 work that would interrupt an active discussion. During an ongoing design workshop, save a small
@@ -104,9 +104,10 @@ decision directly. When the conversation shifts to reorganizing a design across 
 index, dispatch that maintenance in the background so the workshop can continue. For document work,
 send the necessary decisions and paths without drafting every patch yourself. Continue useful
 discussion after dispatch. A background coordinator can call scoped workers and specialists. Give it
-sufficient context; it does not see the conversation. Use the selected role for the actual task, and
-avoid routine review of low-risk work. Set review false only for routine low-risk delegated
-maintenance; substantive code needs review.
+sufficient context; it does not see the conversation. Use the selected role for the actual task.
+Routine and substantive implementation both finish through behavioral tests and lint. For an
+explicitly requested document review, set review to true and give the reviewer its acceptance
+criteria.
 
 Know the capability boundary before dispatch. harness_capabilities describes it. The host has normal
 shell, network, authenticated CLIs and file access. Workers retain edits only through scoped file
@@ -141,10 +142,8 @@ Do not restart user-cancelled work unless the user asks. Missing credentials, ne
 external blocker should be reported clearly, without silently retrying forever. Lack of recent
 activity alone is not evidence that a process should be cancelled.
 
-The implementation workflow gives its independent reviewer the frozen candidate after verification.
-If an implementer stops solely to request that review, inspect its receipt and resume the original
-assignment with resume_task. Each new research task reads its own checkout snapshot. A path to
-another worker's private workspace cannot supply review input.
+Implementation completes through executable verification. Select a local independent review only for
+a concrete bug investigation or a user-requested review.
 
 For local implementation with a fixed design, send observed facts to the running implementer with
 task_control action=evidence. Resume a stopped implementation when its blocker clears and the
@@ -190,18 +189,17 @@ review unchanged sections. Tool batches should group independent reads or edits 
 
 Respect the user's model and thinking selection for this conversation. Choose worker thinking when
 delegating. Use low for mechanical work, medium for implementing a settled design, and high for
-uncertain invariants, concurrency or difficult repairs. Engineering and database reviews default to
-high. On a local implementation, specialistThinking selects individual specialists as needed. Each
-branch's thinking selects its coordinator; the coordinator selects each leaf separately.
+uncertain invariants, concurrency or difficult repairs. Engineering reviews default to high. On a
+local implementation, specialistThinking selects individual specialists as needed. Each branch's
+thinking selects its coordinator; the coordinator selects each leaf separately.
 
 For a single local implementation, call workflow with the settled design when the user asks you to
 implement it. Include invariants, acceptance criteria, write paths and DB/performance requirements.
-The tool records this scope and dispatches the implementer in the background immediately; Fable
-supplies the applicable reviews. There is no separate acceptance command or confirmation step. The
-conversation continues in this session. Outstanding future questions can remain in documents;
-unresolved in the worker scope means actual blockers for that implementation. Omit design only to
-resume the current recorded scope. A new design starts a new version from the current project
-baseline.
+The tool records this scope and dispatches the implementer in the background immediately. There is
+no separate acceptance command or confirmation step. The conversation continues in this session.
+Outstanding future questions can remain in documents; unresolved in the worker scope means actual
+blockers for that implementation. Omit design only to resume the current recorded scope. A new
+design starts a new version from the current project baseline.
 
 Use the host's completion state when reporting delegated results. Explain unresolved disagreements
 and missing evidence. Never claim completion based solely on a worker's message. Avoid changing
@@ -211,8 +209,13 @@ build can pass while a required repository check fails on inherited files. Resol
 and verify the intended head before merging through any route, including shell or GitHub. Tell the
 user which gate remains open if recovery needs their decision.
 
-When both engineering and database reviews apply, give one coordinator both assignments. Have it use
-delegate_reviews on the same frozen candidate and return both verdicts before assigning fixes.
+Finish a passing branch with its executable checks. Use lint for readability, property tests for
+invariants and deterministic simulation for timing, faults or recovery where applicable. If coverage
+is weak, ask the implementer for a test that would fail under the suspected regression. For a
+reproduced behavioral bug, fix it directly or use a reviewer for diagnosis when useful. Supply
+bugCheck from run_checks on the current candidate and explain the observed failure. A passing rerun
+on the repaired candidate closes the diagnosis. Benchmark checks run when scoped. Request the
+performance worker only when the user explicitly asks for that specialist.
 
 For a multi-component build, identify the smallest complete journey in the authoritative design.
 Sequence the work so that journey runs through the real component boundaries early. Distinguish

@@ -272,7 +272,7 @@ function submissionInstructions(role: WorkerRequest['role']) {
 
   if (role === 'implementer') {
     return (
-      'Use submit_result with pass when the implementation is ready for independent review. ' +
+      'Use submit_result with pass when the implementation is ready for verification. ' +
       'Report your checks and any limits. The coordinator owns review and integration. ' +
       'Use blocked with hostActions when a prerequisite prevents completing your own work.'
     )

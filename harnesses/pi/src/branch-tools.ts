@@ -136,7 +136,7 @@ export async function startBranchBatch(
     base: repository.base,
     tasks: jobs.map(delegationView),
     next:
-      'Continue discussion. Independent orchestrators handle implementation, tests, reviews, ' +
+      'Continue discussion. Independent orchestrators handle implementation, verification, ' +
       'branch publication and any explicitly authorized merge. Outcomes arrive automatically.',
   }
 }
@@ -148,7 +148,7 @@ export function registerBranchTools(pi: ExtensionAPI, launch = launchDelegation)
     description:
       'Execute independent tasks from a settled design document on remote main. ' +
       'Each task gets an autonomous orchestrator, worktree and remote branch, with required ' +
-      'reviews/tests. Set mergeToMain true only when the user explicitly requested merging. ' +
+      'executable checks. Set mergeToMain true only when the user explicitly requested merging. ' +
       'Otherwise publish for later merge_branches. Returns immediately; no acceptance command ' +
       'or routine human approval is needed. Supply disjoint scopes and complete design decisions.',
     parameters: fanoutSchema,
@@ -161,7 +161,7 @@ export function registerBranchTools(pi: ExtensionAPI, launch = launchDelegation)
     label: 'Merge authorized branch tasks',
     description:
       'Use only when the user explicitly asks to merge these tasks to main. ' +
-      'Triage external agent reviews for up to five rounds and refresh tests/reviews, ' +
+      'Triage external agent reviews for up to five rounds and refresh executable checks, ' +
       'and merge serially in the background. Published tasks resume in their existing worktrees.',
     parameters: Type.Object({
       ids: Type.Array(Type.String({ minLength: 36, maxLength: 36 }), { minItems: 1, maxItems: 4 }),

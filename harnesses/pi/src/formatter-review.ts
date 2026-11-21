@@ -78,17 +78,13 @@ export function formatterClosures(
   history: WorkerEvidence[],
   candidate: Map<string, Buffer>,
 ): WorkerEvidence[] {
-  const reviews = ['reviewer', 'database-reviewer']
-    .map((role) => history.findLast((review) => review.role === role))
-    .filter((review): review is WorkerEvidence => Boolean(review))
-  const source = reviews.find((review) => review.formatterProof?.length)
+  const review = history.findLast((item) => item.role === 'reviewer')
+  const proof = review?.formatterProof
 
-  if (!source) {
+  if (!review || !proof?.length) {
     return []
   }
 
-  const sameSnapshot = reviews.filter((review) => review.snapshot === source.snapshot)
-  const proof = sameSnapshot.flatMap((review) => review.formatterProof ?? [])
   const hashes = fileHashes(candidate)
 
   if (
@@ -103,19 +99,18 @@ export function formatterClosures(
     hashes[file.path] = file.before
   }
 
-  if (digest(JSON.stringify(hashes)) !== source.snapshot) {
+  if (digest(JSON.stringify(hashes)) !== review.snapshot) {
     return []
   }
 
   const paths = [...new Set(proof.map((file) => file.path))]
-  return sameSnapshot
-    .filter((review) => review.formatterProof?.length || review.result.verdict === 'pass')
-    .map((review) => ({
+  return [
+    {
       role: review.role,
       model: 'harness/formatter',
       turns: 0,
       snapshot,
-      closedReview: { snapshot: source.snapshot, model: review.model, paths },
+      closedReview: { snapshot: review.snapshot, model: review.model, paths },
       result: {
         ...review.result,
         verdict: 'pass',
@@ -125,5 +120,6 @@ export function formatterClosures(
         findings: review.result.findings.filter((finding) => finding.severity !== 'required'),
       },
       commands: [],
-    }))
+    },
+  ]
 }

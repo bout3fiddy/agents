@@ -508,8 +508,8 @@ export function registerDelegation(
       'current discussion. Routine setup and related small work may stay on the host. Workers ' +
       'cannot install dependencies, use the network or publish Git; declare host requirements. ' +
       'Return immediately and continue discussion. Supply context and scoped writePaths. ' +
-      'Only implementation accepts specialistThinking. For documents, put reviewer requests in ' +
-      'the task. Include the settled implementation design unless resuming its scope.',
+      'Only select review for an observed defect or a user-requested review. Put implementation ' +
+      'review options inside its design. Omit design to resume the recorded scope.',
     parameters: delegateSchema,
     async execute(_id, args, _signal, _update, ctx) {
       return start(ctx, args)

@@ -122,7 +122,7 @@ export default function harness(pi: ExtensionAPI): void {
     name: 'workflow',
     label: 'Run delegated workflow',
     description:
-      'Start user-requested implementation, checks and reviews in the background. ' +
+      'Start user-requested implementation and verification in the background. ' +
       'Supply the settled design for new work; omit it only to resume the recorded scope. ' +
       'Returns immediately and preserves this conversation.',
     parameters: Type.Object({
@@ -134,7 +134,7 @@ export default function harness(pi: ExtensionAPI): void {
     async execute(_id, args, _signal, _update, ctx) {
       return delegation.start(ctx, {
         kind: 'implementation',
-        task: 'Implement the settled design with its required checks and specialist reviews.',
+        task: 'Implement the settled design and verify it with the required checks.',
         implementerModel: args.implementerModel,
         ...(args.design ? { design: args.design } : {}),
         ...(args.thinking ? { thinking: args.thinking } : {}),

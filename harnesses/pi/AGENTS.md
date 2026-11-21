@@ -65,7 +65,7 @@
   `openai-codex/gpt-6.2-astra` with medium as the default.
 - Orchestrators choose worker thinking up to high. Use medium for settled implementation, low for
   mechanical work, and high for difficult diagnosis. Fable specialists accept medium or high.
-  Engineering/DB reviews default to high. Preserve optional-field compatibility in stored jobs.
+  Engineering reviews default to high. Preserve optional-field compatibility in stored jobs.
 - Runtime traces belong under the target project’s gitignored `.pi/traces/`; keep them out of worker
   snapshots. The launcher persists local sessions; ordinary Pi sessions are mirrored.
 - Keep prompts in `prompts/`, role definitions in `roles/`, and harness validation evidence in
@@ -84,13 +84,13 @@
   completion once at a safe boundary and wake an idle orchestrator for a brief acknowledgement.
   Batch simultaneous results and prioritize queued user input. Test against the real Pi SDK.
 - Apply document candidates only after scope, format, control revision and changed-file conflict
-  checks. Maintenance code also requires final specialist review and executable project checks.
-  Never replace a pending integration journal. Keep subprocess cancellation bounded and propagated.
+  checks. Maintenance code requires executable project checks. Never replace a pending integration
+  journal. Keep subprocess cancellation bounded and propagated.
 - Choose direct work or delegation from context, complexity and disruption. Routine setup and
   related edits may stay on the host; substantive implementation, explicit delegation and
   distracting lengthy work go to workers. No direct-edit file/byte/call quota exists. Simple setup
-  does not need Fable review. Required checks still apply; specialist review follows actual risk or
-  user requests.
+  does not need Fable review. Required checks still apply; select engineering review for bug
+  diagnosis or an explicit request. Branch diagnosis requires a current failing behavioral check.
 - Inspect host/worker capabilities before dispatch. Workers cannot install dependencies, retain
   shell-generated lockfiles, configure host policy or publish Git. Handle authorized host operations
   directly, reject incompatible declared requirements, and use structured hostActions for handoff.
@@ -119,9 +119,9 @@
   raw receipts, substantive notices and progress from a later resumption.
 - Formatting-only findings require an explicit formatterPath and a trusted exact-snapshot proof.
   Preserve the original verdict, record formatter closures separately and retain final checks. Route
-  DB review by declared impact, configured paths or changed persistence code and config.
-- Pair engineering and database reviews on one frozen candidate whenever both apply. Join both
-  verdicts before fixes. Keep writers exclusive, preserve partial evidence and retry missing roles.
+  recovery checks by declared impact, configured paths or changed persistence code and config.
+- Branch review is optional diagnosis of a reproduced bug with a current failing behavioral check.
+  Complete passing branches through executable checks. Performance specialists require user opt-in.
 - Keep later specialist reviews with the coordinator instead of blocking leaf acceptance on them.
   Completion diagnostics must identify the outstanding role and write scope. Require matching-scope
   clearance and reuse passing reviews when the candidate is unchanged.
