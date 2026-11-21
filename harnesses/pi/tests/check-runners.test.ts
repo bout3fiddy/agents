@@ -96,6 +96,26 @@ test('command copies have a Git index and the checkout HEAD', async (t) => {
   )
 })
 
+test('tracked files below an ignored directory are not reported deleted', async (t) => {
+  const item = await project(t, [])
+  await mkdir(join(item.root, 'policy'))
+  await writeFile(join(item.root, 'policy', 'tracked.json'), '{}\n')
+  await writeFile(join(item.root, '.gitignore'), 'policy\n')
+  await gitCommand(item.root, ['add', '-f', '.gitignore', 'policy/tracked.json'])
+  await gitCommand(item.root, [
+    'commit',
+    '--quiet',
+    '-m',
+    'Track a file below an ignored directory',
+  ])
+  item.checks.push(check('unchanged', ['sh', '-c', 'test -z "$(git diff --name-only HEAD)"']))
+  const receipts = await verifyProject(item.root, item, false)
+  assert.ok(
+    receipts.every((receipt) => receipt.status === 'passed'),
+    JSON.stringify(receipts.map((receipt) => [receipt.check, receipt.result.output])),
+  )
+})
+
 test('a plain copy of the project uses the project HEAD', async (t) => {
   const item = await project(t, [])
   const copy = await createWorkspace(item.root)
