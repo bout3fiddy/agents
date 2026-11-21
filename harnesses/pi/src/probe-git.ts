@@ -49,6 +49,11 @@ export async function addGitIndex(
 
     if (head) {
       await git(['update-ref', '--no-deref', 'HEAD', head])
+
+      // Start from HEAD's index, as a checkout does. Tracked files that an ignore rule also
+      // matches (a tracked .pi/harness.json below an ignored .pi, say) are then updated rather
+      // than skipped, so they never appear deleted to tools that diff against HEAD.
+      await git(['read-tree', 'HEAD'])
     }
 
     await git(['add', '--all'])
