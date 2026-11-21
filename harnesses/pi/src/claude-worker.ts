@@ -123,9 +123,11 @@ async function runClaudeAttempt(
   request: WorkerRequest,
   role: Role,
   retry: boolean,
+  unsubmitted?: string,
 ): Promise<WorkerEvidence> {
   const progress = progressReporter(request.outputPath, request.role)
-  const attemptPath = retry ? request.outputPath + '.opus' : request.outputPath
+  const attemptPath =
+    (retry ? request.outputPath + '.opus' : request.outputPath) + (unsubmitted ? '.submit' : '')
   await progress.update({ stage: 'model', message: 'Claude worker starting' })
   const scratch = await mkdtemp(join(tmpdir(), 'pi-claude-'))
   const requestPath = `${attemptPath}.request.json`
@@ -168,9 +170,15 @@ async function runClaudeAttempt(
       ? '\nYou are Opus, the authorized quota fallback. Apply the assignment criteria as written.'
       : ''
   const continuation =
-    retry && role.name === 'implementer'
+    (retry && role.name === 'implementer'
       ? '\nInspect the current scoped files for retained work from Fable and continue the task.'
-      : ''
+      : '') +
+    (unsubmitted === undefined
+      ? ''
+      : '\nYour previous run on this assignment ended without calling submit_result. Its final ' +
+        'message follows. Check the retained scoped files, run only what you need to confirm ' +
+        'them, then call submit_result. Do not redo finished work.\n' +
+        unsubmitted)
   await writeFile(promptPath, system + identity + continuation)
 
   try {
@@ -259,6 +267,14 @@ async function runClaudeAttempt(
     )
 
     if (!evidence?.result) {
+
+      // A finished run that only answered in prose keeps its retained edits. One short follow-up
+      // run submits them instead of discarding the work as a failed task.
+      if (unsubmitted === undefined) {
+        await live.finish('needs_attention', 'Ended without submitting; requesting the result')
+        return runClaudeAttempt(request, role, retry, (response.result ?? '').slice(0, 6000))
+      }
+
       throw new Error(`Claude did not submit a scoped result: ${response.result?.slice(0, 2000)}`)
     }
 

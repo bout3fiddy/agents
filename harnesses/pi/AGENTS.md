@@ -71,6 +71,8 @@
   Keep temporary directories under the per-process or per-task harness roots so a sweep can judge
   them. Never delete a path outside Pi-owned directories. Test with tests/cleanup.test.ts.
 - Reject dispatch when host node_modules differs from the task's lockfile; workers are offline.
+- A Claude worker that ends without submit_result gets one fresh follow-up run with its final
+  message to submit the retained work, matching the SDK workers' in-session reminder.
 - Pin files a local acceptance command names, except in an independent task whose write scope
   assigns that file. Explicit workloads and competitions stay pinned.
 - Stop local repair when the candidate is unchanged, or when edits leave the failing checks naming
