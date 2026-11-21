@@ -298,6 +298,39 @@ test('a check policy fixed on the checkout reaches a task pinned to the old poli
   assert.equal(state.receipts?.find((receipt) => receipt.check === 'behavior')?.status, 'passed')
 })
 
+test('a task pinned to an unmerged commit uses the checkout policy', async (t) => {
+  const f = await localFixture(t)
+  const policy = join(f.root, '.pi/harness.json')
+  const original = await readFile(policy, 'utf8')
+  const broken = JSON.parse(original)
+  broken.checks[0].argv = ['node', '-e', 'process.exit(3)']
+  await gitCommand(f.root, ['switch', '--quiet', '-c', 'stacked'])
+  await writeFile(policy, JSON.stringify(broken, null, 2) + '\n')
+  await gitCommand(f.root, ['add', '.pi/harness.json'])
+  await gitCommand(f.root, ['commit', '-m', 'Stack work with the old policy'])
+  f.request.local!.base = await gitCommand(f.root, ['rev-parse', 'HEAD'])
+  await gitCommand(f.root, ['switch', '--quiet', 'cleanup'])
+  const state = await runLocalCandidate(
+    f.store,
+    f.request,
+    new AbortController().signal,
+    async (w) => {
+      const source = [
+        'export const base = 1',
+        '',
+        'export function doubled(value) {',
+        '  return value * 2',
+        '}',
+        '',
+      ].join('\n')
+      await writeFile(join(w.workspace, 'src/one.js'), source)
+      return passingEvidence(w.workspace)
+    },
+  )
+  assert.equal(state.status, 'complete', state.error)
+  assert.equal(state.receipts?.find((receipt) => receipt.check === 'behavior')?.status, 'passed')
+})
+
 test('local repair returns receipts for a repeated failure', async (t) => {
   const f = await localFixture(t)
   let calls = 0

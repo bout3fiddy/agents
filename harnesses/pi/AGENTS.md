@@ -143,8 +143,9 @@
   inventories under project-local `harness/runtime/`; attach the load ID to request timing. Never
   report a newer disk revision as the version already loaded in a process. Keep role/prompt policy
   fixed for that loaded generation. `/harness-version` must show this receipt without a model call.
-- Local verification reads check policy committed at the checkout's HEAD while it descends from the
-  task's base, so policy fixes reach retained and resumed tasks; the workload stays pinned.
+- Local verification reads check policy committed at the checkout's HEAD, even when the task is
+  pinned to an unmerged commit, so policy fixes reach retained and resumed tasks. The workload stays
+  pinned.
 - Local fan-out pins the current checkout commit and runs implementers directly. Preserve the shared
   workload, isolated candidates, single competition winner and local-only integration. Exercise the
   local host tools and changed-base revalidation with the local-candidate tests.
