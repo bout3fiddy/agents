@@ -26,7 +26,7 @@ import {
 import { changes } from './integration.ts'
 import type { LocalPlan } from './local-contracts.ts'
 import { acquireLock, type ReleaseLock } from './lock.ts'
-import { digest, fileHashes, inventory, matches, snapshotHash } from './paths.ts'
+import { digest, fileHashes, inventory, matches, snapshotHash, writable } from './paths.ts'
 import { trackDispatch } from './progress.ts'
 import { currentPolicyCommit, loadPinnedProject } from './pinned-project.ts'
 import { atomicJson, readJson, StateStore } from './state.ts'
@@ -105,15 +105,24 @@ export async function verifyLocalSnapshot(
       workload.add(path)
     }
 
+    // Files the acceptance command merely names are pinned so a candidate cannot weaken its own
+    // test. An independent task explicitly assigned to repair such a file must be able to change
+    // it; explicit workloads and competitions stay pinned.
+    const implied = (path: string) =>
+      plan.mode === 'competition' || !writable(path, request.writePaths)
+
     for (const arg of plan.acceptance.argv) {
       const path = arg.replace(/^\.\//, '')
 
-      if (policy.has(path)) {
+      if (policy.has(path) && implied(path)) {
         workload.add(path)
       }
     }
 
-    if (['npm', 'bun', 'pnpm', 'yarn'].includes(plan.acceptance.argv[0]!)) {
+    if (
+      ['npm', 'bun', 'pnpm', 'yarn'].includes(plan.acceptance.argv[0]!) &&
+      implied('package.json')
+    ) {
       workload.add('package.json')
     }
 

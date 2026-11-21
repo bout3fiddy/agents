@@ -416,6 +416,28 @@ test('local repair returns receipts for a repeated failure', async (t) => {
   assert.equal(state.commit, undefined)
 })
 
+test('an independent task may repair the acceptance script it is assigned', async (t) => {
+  const f = await localFixture(t)
+  await writeFile(join(f.root, 'check.mjs'), 'process.exit(1)\n')
+  await gitCommand(f.root, ['add', 'check.mjs'])
+  await gitCommand(f.root, ['commit', '-m', 'Add a broken check script'])
+  f.request.local!.base = await gitCommand(f.root, ['rev-parse', 'HEAD'])
+  f.request.local!.mode = 'independent'
+  f.request.local!.workloadPaths = []
+  f.request.local!.acceptance = { ...f.request.local!.acceptance, argv: ['node', 'check.mjs'] }
+  f.request.writePaths = ['check.mjs']
+  const state = await runLocalCandidate(
+    f.store,
+    f.request,
+    new AbortController().signal,
+    async (w) => {
+      await writeFile(join(w.workspace, 'check.mjs'), 'process.exit(0)\n')
+      return passingEvidence(w.workspace)
+    },
+  )
+  assert.equal(state.status, 'complete', state.error)
+})
+
 test('a candidate cannot replace its acceptance workload or commit after a pause', async (t) => {
   for (const act of ['workload', 'pause']) {
     const f = await localFixture(t)
