@@ -67,9 +67,9 @@
   copy of the verified snapshot and a minimal environment. Never fall back to host execution
   silently.
 - Clean up what no live or resumable task needs: finished task worktrees, baselines and temporary
-  copies immediately, idle retained work after the retention period with its patch saved. Keep
-  temporary directories under the per-process or per-task harness roots so a sweep can judge them.
-  Never delete a path outside Pi-owned directories. Test with tests/cleanup.test.ts.
+  copies on the next idle pass, idle retained work after the retention period with its patch saved.
+  Keep temporary directories under the per-process or per-task harness roots so a sweep can judge
+  them. Never delete a path outside Pi-owned directories. Test with tests/cleanup.test.ts.
 - Reject dispatch when host node_modules differs from the task's lockfile; workers are offline.
 - Record actual model/effort and request/model/tool timing under project-local `harness/timing/`.
   Respect the selected orchestrator model; implementation remains independently pinned to
