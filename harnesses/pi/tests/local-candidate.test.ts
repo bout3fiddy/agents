@@ -179,6 +179,34 @@ test('resume reconciles a verified local commit after a lost final status write'
   assert.notEqual(fresh.progressFile, recovered.progressFile)
 })
 
+test('a dependency link ignored by a file-or-directory rule still commits', async (t) => {
+  const f = await localFixture(t)
+  await writeFile(join(f.root, '.gitignore'), 'node_modules\n')
+  await gitCommand(f.root, ['add', '.gitignore'])
+  await gitCommand(f.root, ['commit', '-m', 'Ignore dependency links too'])
+  f.request.local!.base = await gitCommand(f.root, ['rev-parse', 'HEAD'])
+  await mkdir(join(f.root, 'node_modules', 'pi-local-fixture'), { recursive: true })
+  const state = await runLocalCandidate(
+    f.store,
+    f.request,
+    new AbortController().signal,
+    async (w) => {
+      const source = [
+        'export const base = 1',
+        '',
+        'export function doubled(value) {',
+        '  return value * 2',
+        '}',
+        '',
+      ].join('\n')
+      await writeFile(join(w.workspace, 'src/one.js'), source)
+      return passingEvidence(w.workspace)
+    },
+  )
+  assert.equal(state.status, 'complete', state.error)
+  assert.equal(await gitCommand(f.root, ['ls-tree', state.commit!, '--', 'node_modules']), '')
+})
+
 test('direct worker can compare a local dependency from baseline and candidate', async (t) => {
   const f = await localFixture(t)
   const dependency = join(f.root, 'node_modules', 'pi-local-fixture')

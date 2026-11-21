@@ -396,7 +396,26 @@ export async function commitVerifiedTree(
       throw new Error('Unexpected dependency link in candidate worktree')
     }
 
-    paths.push(':(top,exclude)node_modules')
+    // A file-or-directory rule already ignores the link, and Git rejects a pathspec naming an
+    // ignored path, so exclude the link only when the ignore rule does not cover it.
+    const ignored = await gitCommand(
+      branch.workspace,
+      ['check-ignore', '-q', '--', 'node_modules'],
+      signal,
+    ).then(
+      () => true,
+      (error: unknown) => {
+        if (error instanceof GitCommandError && error.code === 1) {
+          return false
+        }
+
+        throw error
+      },
+    )
+
+    if (!ignored) {
+      paths.push(':(top,exclude)node_modules')
+    }
   }
 
   const names = [
