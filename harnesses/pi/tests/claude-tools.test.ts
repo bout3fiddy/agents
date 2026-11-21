@@ -11,14 +11,17 @@ import { claudeArguments, parseClaudeTrace, runClaudeWorker } from '../src/claud
 import { loadRole } from '../src/roles.ts'
 
 test('Claude enables web tools and records successful calls', async () => {
-  for (const name of ['design-advisor', 'reviewer', 'performance'] as const) {
+  for (const name of ['design-advisor', 'progress-auditor', 'performance'] as const) {
     const role = await loadRole(name)
     const args = claudeArguments(
       { ...role, tools: [...role.tools, 'Bash', 'Read', 'Agent'] },
       '/config.json',
       '/system.txt',
     )
-    assert.equal(args[args.indexOf('--tools') + 1], 'WebSearch,WebFetch')
+    assert.deepEqual(args[args.indexOf('--tools') + 1]!.split(',').sort(), [
+      'WebFetch',
+      'WebSearch',
+    ])
     assert.equal(args.includes('--max-turns'), false)
     assert.equal(args[args.indexOf('--effort') + 1], role.thinking)
     assert.equal(JSON.parse(args[args.indexOf('--settings') + 1]!).maxEffortLevel, role.thinking)
@@ -146,7 +149,10 @@ test('Claude bridge gives performance scoped writes and denies product writes', 
     const args = claudeArguments(await loadRole('performance'), '/config.json', '/system.txt')
     assert.ok(args.includes('--dangerously-skip-permissions'))
     assert.ok(args.includes('--strict-mcp-config'))
-    assert.equal(args[args.indexOf('--tools') + 1], 'WebSearch,WebFetch')
+    assert.deepEqual(args[args.indexOf('--tools') + 1]!.split(',').sort(), [
+      'WebFetch',
+      'WebSearch',
+    ])
     assert.equal(args.includes('--max-turns'), false)
     assert.equal(args[args.indexOf('--setting-sources') + 1], '')
   } finally {
@@ -164,7 +170,7 @@ test('a missing Claude executable reports its launch error cleanly', async () =>
     await assert.rejects(
       runClaudeWorker(
         {
-          role: 'reviewer',
+          role: 'progress-auditor',
           task: 'Read-only launch probe',
           workspace: item.root,
           project: await loadProject(item.root),
@@ -173,7 +179,7 @@ test('a missing Claude executable reports its launch error cleanly', async () =>
           outputPath: join(item.base, 'output.json'),
           baseline: {},
         },
-        await loadRole('reviewer'),
+        await loadRole('progress-auditor'),
       ),
       { code: 'ENOENT' },
     )
@@ -202,7 +208,7 @@ test('Claude traces retain live output and enforce a byte budget for Unicode', a
     await assert.rejects(
       runClaudeWorker(
         {
-          role: 'reviewer',
+          role: 'progress-auditor',
           task: 'Exercise the trace byte limit',
           workspace: item.root,
           project: await loadProject(item.root),
@@ -211,7 +217,7 @@ test('Claude traces retain live output and enforce a byte budget for Unicode', a
           outputPath,
           baseline: {},
         },
-        await loadRole('reviewer'),
+        await loadRole('progress-auditor'),
       ),
       /trace exceeded the 16 MB output budget/,
     )

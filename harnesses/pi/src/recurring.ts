@@ -137,7 +137,29 @@ export class RecurringTasks {
   }
 
   private async read() {
-    return (await readJson<Schedule[]>(this.file)) ?? []
+    const rows = (await readJson<Schedule[]>(this.file)) ?? []
+
+    for (const { definition } of rows) {
+      const work = definition.work
+
+      if (work.kind !== 'audit') {
+
+        // Retired selectors may exist in schedules created before 0.6.64.
+        Reflect.deleteProperty(work, 'review')
+
+        if (work.design) {
+          Reflect.deleteProperty(work.design, 'review')
+        }
+
+        if (work.specialistThinking) {
+          for (const role of ['reviewer', 'database-reviewer'] as const) {
+            Reflect.deleteProperty(work.specialistThinking, role)
+          }
+        }
+      }
+    }
+
+    return rows
   }
 
   private async locked<T>(operation: (rows: Schedule[]) => Promise<T>) {

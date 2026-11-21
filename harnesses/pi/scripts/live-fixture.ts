@@ -157,7 +157,6 @@ export async function liveFixture() {
     database: true,
     performance: true,
     performanceReview: true,
-    review: true,
     unresolved: [],
   }
   return { root, store, design }

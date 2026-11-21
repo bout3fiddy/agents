@@ -11,7 +11,6 @@ export const roleNames = [
   'branch-orchestrator',
   'task-worker',
   'implementer',
-  'reviewer',
   'performance',
 ] as const
 
@@ -33,7 +32,6 @@ export type ImplementerModel = Static<typeof implementerModelSchema>
 export const specialistThinkingSchema = Type.Union([Type.Literal('medium'), Type.Literal('high')])
 export const workflowSpecialistsSchema = Type.Object(
   {
-    reviewer: Type.Optional(specialistThinkingSchema),
     performance: Type.Optional(specialistThinkingSchema),
   },
   { additionalProperties: false },
@@ -52,19 +50,11 @@ export const writePathSchema = Type.String({
   description: 'Use an exact relative filename, directory/** for a subtree, or ** for all paths.',
 })
 
-export const reviewOptions = {
-  review: Type.Optional(
-    Type.Boolean({
-      description:
-        'Select independent review only for an observed defect or an explicit review request.',
-    }),
-  ),
-  performanceReview: Type.Optional(
-    Type.Boolean({
-      description: 'Set only for an explicit user request for a performance specialist.',
-    }),
-  ),
-}
+export const performanceReviewSchema = Type.Optional(
+  Type.Boolean({
+    description: 'Set only for an explicit user request for a performance specialist.',
+  }),
+)
 
 export const designSchema = Type.Object(
   {
@@ -82,7 +72,7 @@ export const designSchema = Type.Object(
       minItems: 1,
       maxItems: 50,
     }),
-    ...reviewOptions,
+    performanceReview: performanceReviewSchema,
     database: Type.Boolean(),
     performance: Type.Boolean(),
     unresolved: Type.Array(Type.String({ maxLength: 1000 }), { maxItems: 20 }),
@@ -143,6 +133,11 @@ export class ProviderQuotaError extends Error {
 
 export const engineeringResultSchema = Type.Object(
   { ...resultSchema.properties, engineeringReview: engineeringReviewSchema },
+  { additionalProperties: false },
+)
+
+export const implementerResultSchema = Type.Object(
+  { ...resultSchema.properties, engineeringReview: Type.Optional(engineeringReviewSchema) },
   { additionalProperties: false },
 )
 
@@ -235,7 +230,7 @@ export type WorkerEvidence = {
   closedReview?: { snapshot: string; model: string; paths: string[] }
   thinking?: string
   liveWorkerId?: string
-  role: WorkerRole | 'database-reviewer' // Historical receipts.
+  role: WorkerRole | 'reviewer' | 'database-reviewer' // Historical receipts.
   snapshot: string
   result: WorkerResult
   commands: CommandResult[]

@@ -153,8 +153,8 @@ export function registerWorkshop(pi: ExtensionAPI, runner?: AdviceRunner) {
     label: 'Consult Claude on design',
     description:
       'Parallel second design opinion for an explicit design workshop or unresolved material ' +
-      'choice. Name the alternatives and the decision this advice could change. Use the ' +
-      'reviewer for code or test assessments. Resolve operational facts from source, receipts ' +
+      'choice. Name the alternatives and the decision this advice could change. ' +
+      'Resolve operational facts from source, receipts ' +
       'or assigned researchers. Continue your own work while advice runs.',
     parameters: consultationSchema,
     async execute(_id, args, signal, _update, ctx) {

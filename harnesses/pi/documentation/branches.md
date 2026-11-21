@@ -41,13 +41,10 @@ project checks and submit an outcome. It cannot perform Git publication or expan
 Coordinators and workers have no child-call, turn or overall-duration ceiling. Commands retain
 timeouts. Independent branch orchestrators work concurrently in separate worktrees.
 
-Finish a passing branch with its executable checks. Use lint for readability, property tests for
-invariants and deterministic simulation for timing, faults or recovery where applicable. If coverage
-is weak, ask the implementer for a test that would fail under the suspected regression. For a
-reproduced behavioral bug, fix it directly or use a reviewer for diagnosis when useful. Supply
-bugCheck from run_checks on the current candidate and explain the observed failure. A passing rerun
-on the repaired candidate closes the diagnosis. Benchmark checks run when scoped. Request the
-performance worker only when the user explicitly asks for that specialist.
+Verify the candidate with lint and behavioral tests. Use property tests for invariants and
+deterministic simulation where timing, faults or recovery matter. Send a reproduced bug and its
+failing check to the implementer, then rerun verification. Set performanceReview only when the user
+asks for the performance specialist. A scoped benchmark check runs independently.
 
 ## Publication and merging
 

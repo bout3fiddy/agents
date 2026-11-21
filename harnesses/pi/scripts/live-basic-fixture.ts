@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { StateStore, atomicJson } from '../src/state.ts'
 
-export async function basicFixture(routine = false) {
+export async function basicFixture() {
   const root = await mkdtemp(join(tmpdir(), 'pi-live-counter-'))
   await mkdir(join(root, 'src'))
   await mkdir(join(root, 'tests'))
@@ -58,12 +58,8 @@ test('canonical counts round trip and malformed inputs fail', () => {
       'leading zeroes except the value 0, fractions, suffixes and values outside that range. ' +
       'Return the numeric value or throw. Preserve the immutable external tests.',
     invariants: ['Invalid inputs throw without side effects'],
-    acceptance: [
-      'Seeded round trips and malformed inputs pass the immutable contract suite',
-      ...(routine ? [] : ['An independent reviewer must clear the malformed-input finding.']),
-    ],
+    acceptance: ['Seeded round trips and malformed inputs pass the immutable contract suite'],
     writePaths: ['src/count.mjs'],
-    ...(routine ? {} : { review: true }),
     database: false,
     performance: false,
     unresolved: [],

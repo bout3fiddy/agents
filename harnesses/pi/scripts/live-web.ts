@@ -44,9 +44,9 @@ try {
   assert.match(advice.text, /https:\/\/(?:nodejs\.org|nodejs\.org\/)/)
   console.log(JSON.stringify({ advisor: 'passed', tools: advice.toolsUsed }))
   const before = fileHashes(await inventory(root))
-  const review = await dispatcher(store)(
+  const audit = await dispatcher(store)(
     {
-      role: 'reviewer',
+      role: 'progress-auditor',
       task:
         'Use project_read to read requirements.md, perform its requested web research, then ' +
         'use submit_result with your findings and the source URL in evidence. ' +
@@ -60,8 +60,8 @@ try {
     },
     controller.signal,
   )
-  assert.equal(review.result.verdict, 'pass')
-  assert.match(JSON.stringify(review.result), /https:\/\/nodejs\.org/)
+  assert.equal(audit.result.verdict, 'pass')
+  assert.match(JSON.stringify(audit.result), /https:\/\/nodejs\.org/)
   assert.deepEqual(fileHashes(await inventory(root)), before)
   const traces = (await readdir(join(store.directory, 'attempts'))).filter((path) =>
     path.endsWith('.claude.jsonl'),
@@ -79,10 +79,10 @@ try {
     root,
     state: store.directory,
     advice,
-    review,
-    reviewerTools: toolsUsed,
+    audit,
+    auditorTools: toolsUsed,
   })
-  console.log(JSON.stringify({ status: 'passed', reviewerTools: toolsUsed, reports }))
+  console.log(JSON.stringify({ status: 'passed', auditorTools: toolsUsed, reports }))
 } finally {
   clearTimeout(timer)
 }

@@ -59,6 +59,20 @@ export async function checkDelegation(
     }
   }
 
+  if (request.branch?.design.performanceReview ?? request.performanceReview) {
+    const review = evidence.children.findLast((child) => child.role === 'performance')
+
+    if (
+      !review ||
+      !completedResult(review.result.verdict, request.kind === 'research') ||
+      review.snapshot !== snapshotHash(after)
+    ) {
+      throw new DelegationRepairRequired(
+        'Task requires the requested performance evidence on the final snapshot',
+      )
+    }
+  }
+
   if ((!changed.length && request.kind !== 'branch') || request.kind === 'documents') {
     return []
   }
@@ -68,26 +82,10 @@ export async function checkDelegation(
     evidence.result.databaseImpact ||
     evidence.children.some((child) => child.result.databaseImpact) ||
     databaseImpact(before, after, project.databasePaths)
-  const snapshot = snapshotHash(after)
 
   const performance =
     request.branch?.design.performance ||
     evidence.children.some((child) => child.role === 'performance')
-
-  for (const role of [
-    ...(request.kind !== 'branch' && request.review ? ['reviewer'] : []),
-    ...((request.branch?.design.performanceReview ?? request.performanceReview)
-      ? ['performance']
-      : []),
-  ]) {
-    const review = evidence.children.findLast((child) => child.role === role)
-
-    if (!review || review.result.verdict !== 'pass' || review.snapshot !== snapshot) {
-      throw new DelegationRepairRequired(
-        `Changed code requires a passing ${role} on the final snapshot`,
-      )
-    }
-  }
 
   const receipts = await verifyProject(workspace, project, database, signal, {
     files: before,

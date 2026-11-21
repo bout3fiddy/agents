@@ -35,7 +35,6 @@ async function setup(t: TestContext) {
   const request: TaskCoordinatorRequest = {
     task: 'Update a bounded document',
     context: 'Preserve unrelated work',
-    review: true,
     kind: 'documents',
     workspace: root,
     project: { root, checks: [], databasePaths: [], instrumentationPaths: [] },
@@ -119,7 +118,7 @@ test('coordinator exposes bounded delegation and no retained write tools', async
       ...leaf,
       role: 'reviewer',
     }),
-    /empty write scope/,
+    /Invalid leaf/,
   )
   await invoke(worker.tools, 'delegate_worker', { ...leaf, writePaths: ['src/value.js'] })
   assert.equal(dispatched, 1)
@@ -309,14 +308,15 @@ test('ordinary coordinators continue beyond the former eight-child limit', async
   await invoke(worker.tools, 'submit_result', pass)
 })
 
-test('completed Claude review survives 46 turns without duplication', async (t) => {
+test('completed performance work survives 46 turns without duplication', async (t) => {
   const { request, controller } = await setup(t)
+  request.checkpoint.performanceReview = true
   let reviews = 0
   const worker = await createTaskCoordinatorTools(request, controller.signal, async (child) => {
     reviews++
     return { ...(await receipt(child)), turns: 46 }
   })
-  await invoke(worker.tools, 'delegate_worker', { ...leaf, role: 'reviewer', writePaths: [] })
+  await invoke(worker.tools, 'delegate_worker', { ...leaf, role: 'performance', writePaths: [] })
   await invoke(worker.tools, 'submit_result', pass)
   assert.equal(reviews, 1)
   assert.equal(worker.children()[0]?.turns, 46)
@@ -351,24 +351,18 @@ test('stale child receipt poisons passing completion', async (t) => {
   assert.equal(worker.result()?.verdict, 'blocked')
 })
 
-test('reviewers and performance workers retain their enforced write restrictions', async (t) => {
-  for (const role of ['reviewer', 'performance']) {
-    const { request, controller } = await setup(t)
-    request.checkpoint.performanceReview = true
-    const worker = await createTaskCoordinatorTools(request, controller.signal, async (child) => {
-      await writeFile(join(request.workspace, 'src/value.js'), 'unauthorized\n')
-      return receipt(child)
-    })
-    await assert.rejects(
-      invoke(worker.tools, 'delegate_worker', {
-        ...leaf,
-        role,
-        writePaths: role === 'reviewer' ? [] : ['src/**'],
-      }),
-      /outside its role or assignment/,
-    )
-    await assert.rejects(invoke(worker.tools, 'submit_result', pass), /failed child execution/)
-  }
+test('performance worker cannot retain product edits', async (t) => {
+  const { request, controller } = await setup(t)
+  request.checkpoint.performanceReview = true
+  const worker = await createTaskCoordinatorTools(request, controller.signal, async (child) => {
+    await writeFile(join(request.workspace, 'src/value.js'), 'unauthorized\n')
+    return receipt(child)
+  })
+  await assert.rejects(
+    invoke(worker.tools, 'delegate_worker', { ...leaf, role: 'performance' }),
+    /outside its role or assignment/,
+  )
+  await assert.rejects(invoke(worker.tools, 'submit_result', pass), /failed child execution/)
 })
 
 test('required findings need a same-role passing child on the final candidate', async (t) => {
@@ -402,17 +396,14 @@ test('required findings need a same-role passing child on the final candidate', 
   assert.equal(worker.result()?.verdict, 'pass')
 })
 
-test('completion identifies unresolved scope and reuses unchanged reviews', async (t) => {
+test('completion identifies unresolved worker scope', async (t) => {
   const { request, controller } = await setup(t)
   let calls = 0
-  let reviews = 0
   const worker = await createTaskCoordinatorTools(request, controller.signal, async (child) => {
     calls++
-    reviews += Number(child.role === 'reviewer')
     return receipt(child, calls === 1 ? { verdict: 'blocked' } : {})
   })
   await invoke(worker.tools, 'delegate_worker', leaf)
-  await invoke(worker.tools, 'delegate_worker', { ...leaf, role: 'reviewer', writePaths: [] })
   await invoke(worker.tools, 'delegate_worker', { ...leaf, writePaths: [] })
   await assert.rejects(invoke(worker.tools, 'submit_result', pass), (error: Error) => {
     assert.match(error.message, /"role":"task-worker","writePaths":\["src\/\*\*"\]/)
@@ -423,24 +414,6 @@ test('completion identifies unresolved scope and reuses unchanged reviews', asyn
   await invoke(worker.tools, 'delegate_worker', leaf)
   await invoke(worker.tools, 'submit_result', pass)
   assert.equal(worker.result()?.verdict, 'pass')
-  assert.equal(reviews, 1)
-})
-
-test('an edit invalidates an earlier requested engineering review', async (t) => {
-  const { request, controller } = await setup(t)
-  const worker = await createTaskCoordinatorTools(request, controller.signal, async (child) => {
-    if (child.role === 'task-worker') {
-      await writeFile(join(request.workspace, 'src/value.js'), 'changed after review\n')
-    }
-
-    return receipt(child)
-  })
-  const review = { ...leaf, role: 'reviewer', writePaths: [] }
-  await invoke(worker.tools, 'delegate_worker', review)
-  await invoke(worker.tools, 'delegate_worker', leaf)
-  await assert.rejects(invoke(worker.tools, 'submit_result', pass), /refresh requested reviews/)
-  await invoke(worker.tools, 'delegate_worker', review)
-  await invoke(worker.tools, 'submit_result', pass)
 })
 
 test('cancellation reaches the dispatcher and blocks subsequent completion', async (t) => {
@@ -528,7 +501,6 @@ test('document checks format assigned files and reject every out-of-scope write'
 
 test('default routing rejects unselected specialists before dispatch', async (t) => {
   const { request, controller } = await setup(t)
-  delete request.review
   const worker = await createTaskCoordinatorTools(request, controller.signal, async () =>
     assert.fail('no specialist may launch'),
   )
@@ -544,11 +516,27 @@ test('default routing rejects unselected specialists before dispatch', async (t)
     )
   }
 
-  await assert.rejects(loadRole('database-reviewer'), /Unknown role/)
+  for (const retired of ['reviewer', 'database-reviewer']) {
+    await assert.rejects(loadRole(retired), /Unknown role/)
+  }
+})
+
+test('explicit read-only performance request requires its measurement', async (t) => {
+  const { request, controller } = await setup(t)
+  request.kind = 'research'
+  request.checkpoint.performanceReview = true
+  const worker = await createTaskCoordinatorTools(request, controller.signal, (child) =>
+    receipt(child),
+  )
+  await assert.rejects(invoke(worker.tools, 'submit_result', pass), /performance evidence/)
+  await invoke(worker.tools, 'delegate_worker', { ...leaf, role: 'performance', writePaths: [] })
+  await invoke(worker.tools, 'submit_result', pass)
+  assert.equal(worker.result()?.verdict, 'pass')
 })
 
 test('coordinator selects effort per child and rejects invalid levels', async (t) => {
   const { request, controller } = await setup(t)
+  request.checkpoint.performanceReview = true
   const sent: unknown[] = []
   const worker = await createTaskCoordinatorTools(request, controller.signal, async (child) => {
     sent.push([child.role, child.thinking])
@@ -563,24 +551,25 @@ test('coordinator selects effort per child and rejects invalid levels', async (t
       undefined,
       {} as Parameters<typeof tool.execute>[4],
     )
-  await assert.rejects(run('reviewer', 'low'), /Unsupported thinking/)
+  await assert.rejects(run('performance', 'low'), /Unsupported thinking/)
   await assert.rejects(run('implementer', 'xhigh'), /Invalid leaf assignment/)
   await assert.rejects(run('database-reviewer', 'low'), /Invalid leaf/)
   assert.deepEqual(sent, [])
   await run('task-worker', 'low')
   await run('implementer', 'high')
-  await run('reviewer', 'medium')
-  await run('reviewer')
+  await run('performance', 'medium')
+  await run('performance')
   assert.deepEqual(sent, [
     ['task-worker', 'low'],
     ['implementer', 'high'],
-    ['reviewer', 'medium'],
-    ['reviewer', undefined],
+    ['performance', 'medium'],
+    ['performance', undefined],
   ])
 })
 
 test('hard quota rejection skips repeat review launches until new host guidance', async (t) => {
   const { request, controller } = await setup(t)
+  request.checkpoint.performanceReview = true
   let dispatched = 0
   const worker = await createTaskCoordinatorTools(request, controller.signal, async (child) => {
     dispatched++
@@ -591,7 +580,7 @@ test('hard quota rejection skips repeat review launches until new host guidance'
 
     return receipt(child)
   })
-  const review = { role: 'reviewer', task: 'Review the candidate', writePaths: [] }
+  const review = { role: 'performance', task: 'Review the candidate', writePaths: [] }
   await assert.rejects(invoke(worker.tools, 'delegate_worker', review), /quota exhausted/)
   await assert.rejects(invoke(worker.tools, 'delegate_worker', review), /quota exhausted/)
   assert.equal(dispatched, 1)
@@ -676,6 +665,7 @@ test('branch coordinators apply the requested writer and accept its scoped recei
 
 test('coordinator accepts an Opus review only with matching fallback provenance', async (t) => {
   const { request, controller } = await setup(t)
+  request.checkpoint.performanceReview = true
 
   for (const authorized of [true, false]) {
     const worker = await createTaskCoordinatorTools(request, controller.signal, async (child) => ({
@@ -684,7 +674,7 @@ test('coordinator accepts an Opus review only with matching fallback provenance'
       ...(authorized && { quotaFallbackFrom: 'claude-fable-5-2' }),
     }))
     const review = invoke(worker.tools, 'delegate_worker', {
-      role: 'reviewer',
+      role: 'performance',
       writePaths: [],
       task: 'Review the scoped candidate',
     })

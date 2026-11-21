@@ -20,7 +20,6 @@ export async function fixture(
   options: {
     database?: boolean
     performance?: boolean
-    review?: boolean
     performanceReview?: boolean
     skip?: boolean
   } = {},

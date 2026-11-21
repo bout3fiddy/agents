@@ -24,7 +24,6 @@ import {
 } from './paths.ts'
 import { runSandboxed } from './sandbox.ts'
 import { retainedCandidate } from './resume.ts'
-import { bindFormatterProof, formatterClosures } from './formatter-review.ts'
 import { receiptView } from './context.ts'
 
 // A changed adapter can alter transaction semantics below an unchanged driver import.
@@ -212,20 +211,21 @@ export async function runWorkflow(
     await store.saveTask(task)
     await atomicJson(join(store.directory, 'tasks', `${task.id}.baseline.json`), fileHashes(before))
     const resumedRound = retained?.readyForReview ? retained.task.reviewRound : undefined
-    const priorDatabaseReview = retained?.task.evidence.findLast(
-      (item) => item.role === 'database-reviewer',
-    )
-    const databaseRepair =
-      priorDatabaseReview && priorDatabaseReview.result.verdict !== 'pass'
-        ? priorDatabaseReview.result
-        : undefined
-    let needsDatabase = checkpoint.database || Boolean(resumedRound?.database || databaseRepair)
+    const outstanding = ['reviewer', 'database-reviewer'].flatMap((role) => {
+      const prior = retained?.task.evidence.findLast((item) => item.role === role)
+      return prior && prior.result.verdict !== 'pass' ? [prior.result] : []
+    })
+    let needsDatabase =
+      checkpoint.database ||
+      Boolean(resumedRound?.database) ||
+      outstanding.some((finding) => finding.databaseImpact) ||
+      Boolean(retained?.task.evidence.some((item) => item.role === 'database-reviewer'))
     let feedback = retained
       ? JSON.stringify({
           assignment:
             'Continue the retained candidate. Resolve prior findings and preserve valid work.',
           error: retained.task.error,
-          ...(databaseRepair && { outstandingDatabaseFinding: databaseRepair }),
+          outstandingFindings: outstanding,
           reviews: retained.task.evidence.slice(-4).map((item) => item.result),
           checks: retained.task.receipts.map(receiptView),
         })
@@ -236,23 +236,14 @@ export async function runWorkflow(
       baseline,
     )
 
-    async function dispatchWorker(
-      role: WorkflowRole,
-      assignment: string,
-      frozen?: string,
-      changedFiles?: string[],
-    ) {
+    async function worker(role: WorkflowRole, assignment: string): Promise<WorkerEvidence> {
       signal?.throwIfAborted()
       const implementer = task?.evidence.findLast((item) => item.role === 'implementer')
-      const measurement =
-        frozen &&
-        task?.evidence.findLast((item) => item.role === 'performance' && item.snapshot === frozen)
-      const author = measurement && implementer?.snapshot !== frozen ? measurement : implementer
       const evidence = await dispatch(
         {
           role,
           ...(role === 'implementer' && { implementerModel }),
-          reviewOf: frozen || role === 'performance' ? author?.liveWorkerId : undefined,
+          reviewOf: role === 'performance' ? implementer?.liveWorkerId : undefined,
           thinking: thinking[role],
           task: assignment,
           workspace,
@@ -260,7 +251,6 @@ export async function runWorkflow(
           checkpoint: checkpoint!,
           model,
           baseline: fileHashes(before),
-          changedFiles,
           originals,
         },
         signal,
@@ -270,16 +260,11 @@ export async function runWorkflow(
 
       if (
         evidence.role !== role ||
-        evidence.snapshot !== (frozen ?? snapshotHash(await inventory(workspace)))
+        evidence.snapshot !== snapshotHash(await inventory(workspace))
       ) {
         throw new Error(`Stale or mismatched ${role} evidence`)
       }
 
-      return evidence
-    }
-
-    async function worker(role: WorkflowRole, assignment: string): Promise<WorkerEvidence> {
-      const evidence = await dispatchWorker(role, assignment)
       task!.evidence.push(evidence)
       await store.saveTask(task!)
       return evidence
@@ -307,7 +292,7 @@ export async function runWorkflow(
       task.phase = 'implementation'
       await store.saveTask(task)
 
-      if (!(round === 1 && retained?.readyForReview && !databaseRepair)) {
+      if (!(round === 1 && retained?.readyForReview && !outstanding.length)) {
         const implementation = await worker('implementer', feedback)
 
         if (implementation.result.verdict === 'blocked') {
@@ -316,6 +301,11 @@ export async function runWorkflow(
         }
 
         needsDatabase ||= implementation.result.databaseImpact
+
+        if (implementation.result.verdict === 'changes') {
+          feedback = JSON.stringify(implementation.result)
+          continue
+        }
 
         if (checkpoint.performanceReview) {
           task.phase = 'performance'
@@ -330,6 +320,8 @@ export async function runWorkflow(
               previousFeedback: feedback,
             }),
           )
+
+          needsDatabase ||= measurement.result.databaseImpact
 
           if (measurement.result.verdict !== 'pass') {
             feedback = JSON.stringify(measurement.result)
@@ -383,78 +375,6 @@ export async function runWorkflow(
         continue
       }
 
-      const frozen = task.snapshot
-      const reviewRound =
-        round === 1 && resumedRound?.snapshot === frozen
-          ? resumedRound
-          : { snapshot: frozen, start: task.evidence.length, database: needsDatabase }
-      const wantsReview =
-        checkpoint.review ||
-        Boolean(
-          resumedRound &&
-          retained?.task.evidence.some(
-            (item) => item.role === 'reviewer' && item.result.verdict !== 'pass',
-          ),
-        )
-
-      if (wantsReview) {
-        task.phase = 'review'
-        task.reviewRound = reviewRound
-        await store.saveTask(task)
-      }
-
-      const reviews = task.evidence
-        .slice(reviewRound.start)
-        .filter((item) => item.snapshot === frozen && item.role === 'reviewer')
-      const closures = formatterClosures(task.evidence, candidate)
-
-      if (closures.length) {
-        reviews.push(...closures)
-        task.evidence.push(...closures)
-        await store.saveTask(task)
-      }
-
-      if (wantsReview && !reviews.some((item) => item.role === 'reviewer')) {
-        const changedFiles = changes(before, candidate)
-        const engineeringTask = JSON.stringify({
-          assignment: 'Review the candidate against the recorded design and requested concern.',
-          receipts: task.receipts.map(receiptView),
-        })
-        const review = await dispatchWorker('reviewer', engineeringTask, frozen, changedFiles)
-
-        if (snapshotHash(await inventory(workspace)) !== frozen) {
-          throw new Error('Candidate changed during review')
-        }
-
-        await bindFormatterProof(review, candidate, workspace, checkpoint.writePaths)
-        reviews.push(review)
-        task.evidence.push(review)
-        await store.saveTask(task)
-      }
-
-      // Only engineering can reveal previously unknown impact after verification.
-      if (!needsDatabase && reviews.some((item) => item.result.databaseImpact)) {
-        needsDatabase = true
-        reviewRound.database = true
-        task.receipts = await verifyProject(workspace, project, true, signal, lintBaseline)
-
-        if (checkpoint.performance) {
-          task.receipts.push(...(await benchmarks(workspace, project, signal)))
-        }
-
-        await store.saveTask(task)
-      }
-
-      const issues = reviews.filter((item) => item.result.verdict !== 'pass')
-
-      if (issues.length || failed(task.receipts, project).length) {
-        feedback = JSON.stringify({
-          reviews: reviews.map(({ role, result }) => ({ role, ...result })),
-          checks: task.receipts.map(receiptView),
-        })
-        continue
-      }
-
       if (snapshotHash(await inventory(workspace)) !== task.snapshot) {
         throw new Error('Candidate changed after verification')
       }
@@ -466,7 +386,7 @@ export async function runWorkflow(
       }
 
       if (snapshotHash(await inventory(store.projectRoot)) !== snapshotHash(before)) {
-        throw new Error('Project changed during review; preserve both versions and rerun')
+        throw new Error('Project changed during verification; preserve both versions and rerun')
       }
 
       task.status = 'applying'

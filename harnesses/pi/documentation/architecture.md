@@ -98,9 +98,8 @@ navigation remain available, and consultations retain recent user messages from 
 scope was recorded. Historical `accepted.json` checkpoints remain readable for resumable work but no
 longer establish a host conversation cutoff.
 
-The implementer's pass hands its candidate to workflow verification and any explicitly selected
-review. A required independent verdict belongs to the workflow. A missing prerequisite for the
-writer's own work remains a blocker with its original host actions.
+The implementer submits the candidate for executable verification. It returns a blocked result with
+host actions when a prerequisite prevents its own work.
 
 Omitting design from `workflow` resumes the recorded scope and candidate. Supplying design starts a
 new version from the current project baseline. Existing task ownership and the workflow lock guard
@@ -130,10 +129,10 @@ classifying a task. A successful retry continues the same session and uses its s
 exhausted or permanent error reaches the host with its provider message.
 
 Writable leaf calls serialize against the candidate. Child receipts identify the role, model and
-snapshot. Independent branch coordinators may work concurrently. Engineering diagnosis on a branch
-requires a failing behavioral check on the current candidate. The repaired branch closes on passing
-executable evidence. Database impact selects recovery checks. Explicitly selected performance
-workers may write benchmarks, instrumentation and reports.
+snapshot. Independent branch coordinators may work concurrently. The coordinator routes a failing
+behavioral check to the implementer. The repaired branch closes on passing executable evidence.
+Database impact selects recovery checks. Explicitly selected performance workers may write
+benchmarks, instrumentation and reports.
 
 General task candidates are isolated from the live project. Document changes enforce document-only
 extensions, Markdown formatting, write scope and ignored/private path exclusions. Maintenance runs
@@ -280,9 +279,9 @@ tested restore. Sharding and replicas need a measured or availability-driven jus
 consistency and recovery semantics reviewed explicitly.
 
 The performance role writes benchmarks, opt-in instrumentation and reports. Default scope excludes
-product code. Approved instrumentation paths are a capability grant; engineering review must still
-reject disguised optimization or semantic changes. Tests verify disabled instrumentation behavior
-where such instrumentation is introduced. Measured bottlenecks go to the implementer.
+product code. Approved instrumentation paths are a capability grant; measurement work must preserve
+product behavior. Tests verify disabled instrumentation behavior where such instrumentation is
+introduced. Measured bottlenecks go to the implementer.
 
 Baseline and candidate benchmark receipts retain raw output, snapshot and command. If benchmark
 definitions or workloads differ, do not calculate a speedup. Missing or failed baselines must be

@@ -28,3 +28,7 @@ can fail. For user-facing web changes, exercise the critical journey in Playwrig
 meaningful failure or recovery. Reuse the project's browser suite. Provide the spec, command and
 observed result, or identify the host check needed. For failure-sensitive stateful changes, exercise
 recovery and keep a reproducible schedule. Pick the smallest test that closes a real risk.
+
+For a testing assessment, submit engineeringReview with TigerStyle evidence and a test scorecard.
+Cite the tests on this candidate, including replay, invariants, failure injection or browser
+journeys where relevant. Give the reason for each inapplicable dimension.

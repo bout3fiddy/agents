@@ -204,7 +204,7 @@ test('worker assignments identify added, deleted and edited paths', async (t) =>
   await writeFile(join(item.root, 'src/value.js'), 'new')
   const payload = await assignment({
     task: 'Review changes',
-    role: 'reviewer',
+    role: 'progress-auditor',
     workspace: item.root,
     outputPath: item.base,
     checkpoint: (await item.store.checkpoint())!,
@@ -225,7 +225,7 @@ test('large project paths are available through paginated listings', async (t) =
   const baseline = await hashes(item.root)
   const payload = await assignment({
     task: 'Inspect',
-    role: 'reviewer',
+    role: 'progress-auditor',
     workspace: item.root,
     outputPath: item.base,
     checkpoint: (await item.store.checkpoint())!,

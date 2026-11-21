@@ -121,11 +121,10 @@ test('truncated required-check output cannot hide a skipped test', async () => {
   }
 })
 
-test('selected engineering and performance work runs with required checks', async () => {
+test('selected performance work runs with required checks', async () => {
   const item = await fixture({
     database: true,
     performance: true,
-    review: true,
     performanceReview: true,
   })
   const called: string[] = []
@@ -151,12 +150,11 @@ test('selected engineering and performance work runs with required checks', asyn
           )
         }
 
-        if (request.role === 'reviewer') {
+        if (request.role === 'performance') {
           assert.equal(request.reviewOf, 'fixture-author')
-          assert.deepEqual(request.changedFiles, ['src/value.js'])
         }
 
-        if (request.role === 'reviewer' && reviews++ === 0) {
+        if (request.role === 'performance' && reviews++ === 0) {
           return evidence(request, {
             verdict: 'changes',
             findings: [
@@ -183,7 +181,7 @@ test('selected engineering and performance work runs with required checks', asyn
       await readFile(join(item.root, 'src/value.js'), 'utf8'),
       'export const value = 2\n',
     )
-    assert.deepEqual(new Set(called), new Set(['implementer', 'reviewer', 'performance']))
+    assert.deepEqual(new Set(called), new Set(['implementer', 'performance']))
     assert.ok(result.receipts.every((receipt) => receipt.status === 'passed'))
   } finally {
     await rm(item.base, { recursive: true, force: true })
@@ -211,7 +209,7 @@ test('required skips never become completion', async () => {
 })
 
 test('productive repair continues beyond three rounds', async () => {
-  const item = await fixture({ review: true })
+  const item = await fixture()
   let attempts = 0
 
   try {
@@ -225,7 +223,7 @@ test('productive repair continues beyond three rounds', async () => {
 
       return evidence(
         request,
-        request.role === 'reviewer' && attempts < 5
+        attempts < 5
           ? {
               verdict: 'changes',
               summary: 'Another productive repair is required',
@@ -273,7 +271,7 @@ test('missing required acceptance checks fail before any model dispatch', async 
 })
 
 test('concurrent user edits are preserved and invalidate the candidate', async () => {
-  const item = await fixture({ review: true })
+  const item = await fixture()
 
   try {
     const result = await runWorkflow(item.store, 'fixture/model', undefined, async (request) => {
@@ -281,7 +279,7 @@ test('concurrent user edits are preserved and invalidate the candidate', async (
         await writeFile(join(request.workspace, 'src/value.js'), 'export const value = 2\n')
       }
 
-      if (request.role === 'reviewer') {
+      if (request.role === 'implementer') {
         await writeFile(join(item.root, 'src/value.js'), 'export const value = 99\n')
       }
 
@@ -295,31 +293,28 @@ test('concurrent user edits are preserved and invalidate the candidate', async (
   }
 })
 
-test(
-  'stale review receipts fail closed; no database role for an unrelated' + ' change',
-  async () => {
-    const item = await fixture({ review: true })
-    const roles: string[] = []
+test('stale implementation receipts prevent completion', async () => {
+  const item = await fixture()
+  const roles: string[] = []
 
-    try {
-      const result = await runWorkflow(item.store, 'fixture/model', undefined, async (request) => {
-        roles.push(request.role)
-        const output = await evidence(request)
+  try {
+    const result = await runWorkflow(item.store, 'fixture/model', undefined, async (request) => {
+      roles.push(request.role)
+      const output = await evidence(request)
 
-        if (request.role === 'reviewer') {
-          output.snapshot = 'stale'
-        }
+      if (request.role === 'implementer') {
+        output.snapshot = 'stale'
+      }
 
-        return output
-      })
-      assert.equal(result.status, 'needs_attention')
-      assert.match(result.error!, /Stale/)
-      assert.ok(!roles.includes('database-reviewer'))
-    } finally {
-      await rm(item.base, { recursive: true, force: true })
-    }
-  },
-)
+      return output
+    })
+    assert.equal(result.status, 'needs_attention')
+    assert.match(result.error!, /Stale/)
+    assert.ok(!roles.includes('database-reviewer'))
+  } finally {
+    await rm(item.base, { recursive: true, force: true })
+  }
+})
 
 test('cancellation retains work and releases the project lock', async () => {
   const item = await fixture()
@@ -343,8 +338,8 @@ test('cancellation retains work and releases the project lock', async () => {
   }
 })
 
-test('interrupted review resumes retained code and rejects a changed baseline', async () => {
-  const item = await fixture({ database: true, review: true })
+test('interrupted work resumes only on the original baseline', async () => {
+  const item = await fixture({ database: true })
   const controller = new AbortController()
 
   try {
@@ -357,7 +352,7 @@ test('interrupted review resumes retained code and rejects a changed baseline', 
           await writeFile(join(request.workspace, 'src/value.js'), 'export const value = 2\n')
         }
 
-        if (request.role === 'reviewer') {
+        if (request.role === 'implementer') {
           controller.abort()
         }
 
@@ -377,7 +372,7 @@ test('interrupted review resumes retained code and rejects a changed baseline', 
     })
     assert.equal(resumed.status, 'complete', resumed.error)
     assert.equal(resumed.resumedFrom, first.id)
-    assert.deepEqual(roles, ['reviewer'])
+    assert.deepEqual(roles, ['implementer'])
     assert.match(await readFile(join(item.root, 'src/value.js'), 'utf8'), /2/)
   } finally {
     await rm(item.base, { recursive: true, force: true })
@@ -465,11 +460,18 @@ test('retired database findings resume with a writer and recovery checks', async
       evidence: [],
     },
   })
+  const previous = paused.evidence.at(-1)!
+  paused.evidence.push({
+    ...previous,
+    role: 'reviewer',
+    result: { ...previous.result, summary: 'Reject duplicate acknowledgements' },
+  })
   await store.saveTask(paused)
   const calls: string[] = []
   const resumed = await runWorkflow(store, 'fixture/model', undefined, async (request) => {
     calls.push(request.role)
     assert.match(request.task, /Recovery misses the last acknowledged value/)
+    assert.match(request.task, /Reject duplicate acknowledgements/)
     await writeFile(join(request.workspace, 'src/value.js'), 'export const value = 7\n')
     return evidence(request)
   })
@@ -478,45 +480,15 @@ test('retired database findings resume with a writer and recovery checks', async
   assert.ok(resumed.receipts.some((r) => r.check === 'recovery' && r.status === 'passed'))
 })
 
-test('impact discovered by engineering runs recovery checks', async (t) => {
-  const item = await fixture({ database: true, review: true })
+test('impact reported by implementation runs recovery on the candidate', async (t) => {
+  const item = await fixture({ database: true })
   t.after(() => rm(item.base, { recursive: true, force: true }))
-  await item.store.pin({ ...design, database: false, review: true })
-  const roles: string[] = []
-  const result = await runWorkflow(item.store, 'fixture/model', undefined, async (request) => {
-    roles.push(request.role)
-
-    return evidence(request, { databaseImpact: request.role === 'reviewer' })
-  })
+  await item.store.pin({ ...design, database: false })
+  const result = await runWorkflow(item.store, 'fixture/model', undefined, (request) =>
+    evidence(request, { databaseImpact: true }),
+  )
   assert.equal(result.status, 'complete', result.error)
   assert.ok(result.receipts.some((r) => r.check === 'recovery' && r.status === 'passed'))
-  assert.deepEqual(roles, ['implementer', 'reviewer'])
-})
-
-test('a candidate change during review invalidates its verdict', async (t) => {
-  const item = await fixture({ database: true, review: true })
-  t.after(() => rm(item.base, { recursive: true, force: true }))
-  let frozen = ''
-  const result = await runWorkflow(item.store, 'fixture/model', undefined, async (request) => {
-    if (request.role === 'implementer') {
-      const first = await evidence(request)
-      frozen = first.snapshot
-      return first
-    }
-
-    if (request.role === 'reviewer') {
-      await writeFile(join(request.workspace, 'src/value.js'), 'export const value = 9\n')
-    }
-
-    return { ...(await evidence(request)), snapshot: frozen }
-  })
-  assert.equal(result.status, 'needs_attention')
-  assert.match(result.error!, /Candidate changed during review/)
-  assert.deepEqual(
-    result.evidence.map((e) => e.role),
-    ['implementer'],
-  )
-  assert.equal(await readFile(join(item.root, 'src/value.js'), 'utf8'), 'export const value = 0\n')
 })
 
 test('a blocked implementation persists the current host handoff', async (t) => {

@@ -141,7 +141,7 @@ test('invalid or busy implementation dispatch cannot replace recorded scope', as
       { ...implementation, design: { ...design, writePaths: ['src/**/*'] } },
       { ...input, writePaths: ['handbook_*.md'] },
       { ...input, design },
-      { ...input, specialistThinking: { reviewer: 'high' as const } },
+      { ...input, specialistThinking: { performance: 'high' as const } },
     ]) {
       await assert.rejects(jobs.start(bad, origin, async () => {}))
       assert.deepEqual(await store.checkpoint(), recorded)
@@ -274,7 +274,7 @@ for (const failure of [
       const jobs = new Delegations(store)
       const task: DelegateInput =
         failure === 'review'
-          ? { ...input, kind: 'maintenance', writePaths: ['src/**'], review: true }
+          ? { ...input, kind: 'maintenance', writePaths: ['src/**'], performanceReview: true }
           : {
               ...input,
               writePaths: failure === 'code' ? ['decision.md', 'src/**'] : input.writePaths,
@@ -433,7 +433,7 @@ for (const variant of ['pass', 'routine', 'baseline', 'skip', 'database', 'bench
     try {
       const jobs = new Delegations(store)
       const job = await jobs.start(
-        { ...input, kind: 'maintenance', writePaths: ['src/**'], review: variant !== 'routine' },
+        { ...input, kind: 'maintenance', writePaths: ['src/**'] },
         origin,
         async () => {},
       )
@@ -445,7 +445,7 @@ for (const variant of ['pass', 'routine', 'baseline', 'skip', 'database', 'bench
 
         if (variant !== 'routine') {
           output.children.push({
-            role: 'reviewer',
+            role: 'implementer',
             model: 'claude-cli/claude-fable-5-2',
             snapshot,
             turns: 1,

@@ -37,5 +37,5 @@ export const capabilities = {
   routing:
     'Use context, complexity and risk. Routine setup may stay on the host with executable ' +
     'checks. Delegate substantial implementation, explicit requests, or work that disrupts the ' +
-    'current discussion. Specialist reviews are conditional; simple setup needs no Fable review.',
+    'current discussion. Use the performance specialist on explicit request.',
 }

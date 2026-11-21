@@ -109,7 +109,6 @@ try {
           'Keep each document concise. Continue quizzing me on the next critical decision boundary.'
       : 'We chose capacity 100 and rejection of new jobs when full. Record those decisions in ' +
           'design/queue.md via a subagent, keeping persistence as an open future question. ' +
-          'Have that agent get a Fable reviewer to verify the document against these decisions. ' +
           'Continue quizzing me on the next critical decision boundary while that task runs. ' +
           'Keep the document under 150 words and your response concise.',
   )
@@ -155,16 +154,9 @@ try {
   assert.equal(foregroundWrites, 0)
   assert.equal((await jobs.list()).length, 1)
   assert.ok(job.state.children?.some((child) => child.role === 'task-worker'))
-  assert.ok(
-    automatic ||
-      job.state.children?.some(
-        (child) =>
-          child.role === 'reviewer' &&
-          /^claude-cli\/(?:claude-fable-5-2|(?:claude-)?opus)(?:-|$)/.test(
-            child.closedReview?.model ?? child.model,
-          ) &&
-          child.verdict === 'pass',
-      ),
+  assert.equal(
+    job.state.children?.some((child) => child.role === 'reviewer'),
+    false,
   )
   const document = await readFile(join(root, 'design/queue.md'), 'utf8')
   assert.match(document, /100/)

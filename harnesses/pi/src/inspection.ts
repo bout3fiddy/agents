@@ -85,7 +85,13 @@ export async function reviewReceipts(store: StateStore, id: string) {
     status: state.status,
     reviews:
       reviewed
-        ?.filter(({ role }) => ['reviewer', 'database-reviewer', 'performance'].includes(role))
+        ?.filter(
+          ({ role, result }) =>
+            role === 'performance' ||
+            role === 'reviewer' ||
+            role === 'database-reviewer' ||
+            Boolean(result.engineeringReview),
+        )
         .map(({ role, model, snapshot, result, closedReview }) => ({
           role,
           model,

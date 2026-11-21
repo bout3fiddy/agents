@@ -1,7 +1,7 @@
 import { Type, type Static } from 'typebox'
 import {
   implementerModelSchema,
-  reviewOptions,
+  performanceReviewSchema,
   taskTitleSchema,
   thinkingSchema,
   type WorkerThinking,
@@ -28,7 +28,7 @@ export const branchTaskSchema = Type.Object(
       minItems: 1,
       maxItems: 30,
     }),
-    performanceReview: reviewOptions.performanceReview,
+    performanceReview: performanceReviewSchema,
     database: Type.Boolean(),
     performance: Type.Boolean(),
   },

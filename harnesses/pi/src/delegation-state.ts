@@ -10,7 +10,7 @@ import { matches, validateWriteScope } from './paths.ts'
 import type { Receipt, WorkerEvidence } from './contracts.ts'
 import {
   implementerModelSchema,
-  reviewOptions,
+  performanceReviewSchema,
   taskTitleSchema,
   thinkingSchema,
   workflowSpecialistsSchema,
@@ -41,7 +41,7 @@ export const delegateSchema = Type.Object(
     writePaths: Type.Array(writePathSchema, { maxItems: 30 }),
     requires: Type.Optional(Type.Array(hostCapability, { maxItems: 4 })),
     design: Type.Optional(designSchema),
-    ...reviewOptions,
+    performanceReview: performanceReviewSchema,
   },
   { additionalProperties: false },
 )
@@ -285,10 +285,7 @@ export function validateDelegation(input: DelegateInput): void {
     throw new Error('Specialist thinking overrides apply only to implementation workflows')
   }
 
-  if (
-    input.kind === 'implementation' &&
-    (input.review !== undefined || input.performanceReview !== undefined)
-  ) {
+  if (input.kind === 'implementation' && input.performanceReview !== undefined) {
     throw new Error('Set review options inside the implementation design')
   }
 

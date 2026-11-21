@@ -1,6 +1,6 @@
 {
   "name": "@swadhin/pi-harness",
-  "version": "0.6.63",
+  "version": "0.6.64",
   "private": true,
   "type": "module",
   "engines": {

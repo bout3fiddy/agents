@@ -130,18 +130,13 @@ test('accepted workflows expose active worker progress', async () => {
         assert.equal(current.state.progress?.child?.role, request.role)
         assert.equal(current.state.health, 'active')
 
-        if (request.role === 'reviewer') {
-          assert.match(current.milestone ?? '', /reached independent review/)
-        } else {
-          assert.equal(current.milestone, undefined)
-        }
-
+        assert.equal(current.milestone, undefined)
         roles.push(request.role)
         return evidence(request)
       }, output),
     )
     assert.equal(result.status, 'complete', result.error)
-    assert.deepEqual(roles, ['implementer', 'reviewer'])
+    assert.deepEqual(roles, ['implementer'])
   } finally {
     await rm(item.base, { recursive: true, force: true })
   }

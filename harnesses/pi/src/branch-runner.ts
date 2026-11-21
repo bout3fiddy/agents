@@ -100,7 +100,11 @@ export async function runBranchTask(
       throw new Error('Missing independent branch design')
     }
 
-    validateDesign(plan.design)
+    // Queued plans retain their pinned design, including the retired review selection.
+    const { review: _legacyReview, ...activeDesign } = plan.design as typeof plan.design & {
+      review?: boolean
+    }
+    validateDesign(activeDesign)
 
     const referenced =
       plan.design.design === pinnedDesignInstruction(plan.designPath, plan.designHash)
@@ -217,7 +221,7 @@ export async function runBranchTask(
               designPath: plan!.designPath,
               design: plan!.design.design,
               instruction:
-                'Execute autonomously from this settled design. Resolve test and reviewer ' +
+                'Execute autonomously from this settled design. Resolve test and external PR ' +
                 'feedback yourself. Preserve other tasks. Do not request routine human approval.',
               phase: validation === 1 && !retained ? 'implementation' : 'integration revalidation',
               baseCommit: base,

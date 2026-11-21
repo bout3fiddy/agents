@@ -4,7 +4,7 @@ import { Type } from 'typebox'
 import type { ToolDefinition } from '@earendil-works/pi-coding-agent'
 import {
   auditResultSchema,
-  engineeringResultSchema,
+  implementerResultSchema,
   resultSchema,
   validateResult,
   type CommandResult,
@@ -22,7 +22,7 @@ import { memoryRepository } from './memory-repository.ts'
 import { capabilities } from './capabilities.ts'
 import { atomicJson } from './state.ts'
 
-import { formatSource } from './formatter-review.ts'
+import { formatSource } from './source-format.ts'
 
 export const references: Record<string, string> = {
   benchmarking: 'skills/zig/references/benchmarking.md',
@@ -220,22 +220,18 @@ export function createWorkerTools(request: WorkerRequest, role: Role) {
       label: 'Submit worker result',
       description: 'Submit a verdict and evidence. Required findings prevent pass.',
       parameters:
-        role.name === 'reviewer'
-          ? engineeringResultSchema
+        role.name === 'implementer'
+          ? implementerResultSchema
           : request.decideContinuation
             ? auditResultSchema
             : resultSchema,
       async execute(id, raw) {
         const result = validateResult(raw, request.decideContinuation)
 
-        if (role.name === 'reviewer') {
+        if (role.name === 'implementer') {
           const review = result.engineeringReview
 
-          if (!review) {
-            throw new Error('Engineering review requires TigerStyle evidence and a test assessment')
-          }
-
-          if ('unscored' in review.testing && result.verdict !== 'blocked') {
+          if (review && 'unscored' in review.testing && result.verdict !== 'blocked') {
             const files = request.changedFiles ?? (await changedSinceBaseline(request))
 
             if (!files.length || !files.every((file) => /\.(?:md|rst|txt)$/i.test(file))) {
@@ -273,7 +269,7 @@ function submissionInstructions(role: WorkerRequest['role']) {
   if (role === 'implementer') {
     return (
       'Use submit_result with pass when the implementation is ready for verification. ' +
-      'Report your checks and any limits. The coordinator owns review and integration. ' +
+      'Report your checks and any limits. The coordinator verifies and integrates. ' +
       'Use blocked with hostActions when a prerequisite prevents completing your own work.'
     )
   }

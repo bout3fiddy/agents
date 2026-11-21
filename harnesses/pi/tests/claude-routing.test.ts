@@ -11,7 +11,7 @@ import { atomicJson } from '../src/state.ts'
 test('Fable quota shares cooldown and restores preference after reset', async (t) => {
   const directory = await mkdtemp(join(tmpdir(), 'pi-quota-'))
   t.after(() => rm(directory, { recursive: true, force: true }))
-  const role = await loadRole('reviewer')
+  const role = await loadRole('performance')
   const reset = Date.now() + 30000
   const calls: string[] = []
   const run = () =>
@@ -67,7 +67,13 @@ test('Fable writers retain effort and scope on quota fallback', async (t) => {
   for (const selection of ['fable', 'opus'] as const) {
     const role = await loadRole('implementer', 'high', selection)
     const model = selection === 'opus' ? 'claude-opus-5-5' : 'claude-fable-5-2'
-    assert.deepEqual(role, { ...defaultRole, backend: 'claude-cli', model, thinking: 'high' })
+    assert.deepEqual(role, {
+      ...defaultRole,
+      backend: 'claude-cli',
+      model,
+      thinking: 'high',
+      tools: defaultRole.tools.filter((tool) => tool !== 'codemode'),
+    })
     const attempts: string[] = []
     const limit = new ProviderQuotaError('quota', Date.now() + 60000)
     const run = () =>
@@ -95,7 +101,7 @@ test('Fable writers retain effort and scope on quota fallback', async (t) => {
       assert.deepEqual(attempts, [model])
     }
 
-    await assert.rejects(loadRole('reviewer', 'medium', selection), /implementer role/)
+    await assert.rejects(loadRole('performance', 'medium', selection), /implementer role/)
     await assert.rejects(loadRole('implementer', 'low', selection), /Unsupported thinking/)
   }
 })

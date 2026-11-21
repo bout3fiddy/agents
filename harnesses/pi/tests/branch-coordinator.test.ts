@@ -87,7 +87,7 @@ test('run_checks distinguishes inherited lint from a changed failing file', asyn
       ...assignment('reviewer'),
       bugCheck: 'harness-lint',
     }),
-    /reproduced bug/,
+    /Invalid leaf assignment/,
   )
   assert.deepEqual(inherited.inheritedLintPaths, [name])
   await writeFile(join(request.workspace, name), longLine + '// changed\n')
@@ -96,7 +96,7 @@ test('run_checks distinguishes inherited lint from a changed failing file', asyn
   assert.equal(changed.inheritedLintPaths, undefined)
 })
 
-test('branch diagnosis opens on red and closes on green', async (t) => {
+test('a failing branch sends the regression to the implementer without review', async (t) => {
   const { request, signal } = await setup(t)
   request.project.checks[0]!.argv = [
     'node',
@@ -107,21 +107,6 @@ test('branch diagnosis opens on red and closes on green', async (t) => {
   const worker = await createTaskCoordinatorTools(request, signal, async (child) => {
     roles.push(child.role)
 
-    if (child.role === 'reviewer') {
-      assert.match(child.task, /AssertionError/)
-      return receipt(child, {
-        verdict: 'changes',
-        findings: [
-          {
-            severity: 'required',
-            location: 'src/value.js',
-            problem: 'Expected seven',
-            evidence: 'contract observed zero',
-          },
-        ],
-      })
-    }
-
     await writeFile(join(request.workspace, 'src/value.js'), 'export const value = 7\n')
     return receipt(child)
   })
@@ -130,24 +115,23 @@ test('branch diagnosis opens on red and closes on green', async (t) => {
       ...assignment('reviewer'),
       bugCheck: 'contract',
     })
-  await assert.rejects(diagnose(), /reproduced bug/)
+  await assert.rejects(diagnose(), /Invalid leaf assignment/)
   await invoke(worker.tools, 'run_checks')
   assert.equal(worker.checks().find((check) => check.check === 'contract')?.status, 'failed')
   await assert.rejects(invoke(worker.tools, 'submit_result', pass), /run_checks/)
-  await diagnose()
-  await diagnose() // Retries reuse the diagnosis for this bug and snapshot.
+  await assert.rejects(diagnose(), /Invalid leaf assignment/)
   await invoke(worker.tools, 'delegate_worker', assignment('implementer', ['src/**']))
-  await assert.rejects(diagnose(), /reproduced bug/)
+  await assert.rejects(diagnose(), /Invalid leaf assignment/)
   await assert.rejects(invoke(worker.tools, 'submit_result', pass))
   await invoke(worker.tools, 'run_checks')
-  await assert.rejects(diagnose(), /reproduced bug/)
+  await assert.rejects(diagnose(), /Invalid leaf assignment/)
   await invoke(worker.tools, 'submit_result', pass)
-  assert.deepEqual(roles, ['reviewer', 'implementer'])
+  assert.deepEqual(roles, ['implementer'])
 })
 
 test('green code passes lint, tests, recovery and benchmarks without review', async (t) => {
   const { request, signal } = await setup(t, { database: true, performance: true })
-  request.checkpoint.review = true // Older pending branches may carry this flag.
+  Object.assign(request.checkpoint, { review: true }) // Older pending branch.
   const worker = await createTaskCoordinatorTools(request, signal, async (child) => {
     assert.equal(child.role, 'implementer')
     await writeFile(join(request.workspace, 'src/value.js'), 'export const value = 7\n')
@@ -160,7 +144,10 @@ test('green code passes lint, tests, recovery and benchmarks without review', as
     assert.equal(worker.checks().find((item) => item.check === check)?.status, 'passed')
   }
 
-  await assert.rejects(invoke(worker.tools, 'delegate_worker', assignment('reviewer')), /bugCheck/)
+  await assert.rejects(
+    invoke(worker.tools, 'delegate_worker', assignment('reviewer')),
+    /Invalid leaf assignment/,
+  )
   await assert.rejects(
     invoke(worker.tools, 'delegate_worker', assignment('performance')),
     /explicit/,

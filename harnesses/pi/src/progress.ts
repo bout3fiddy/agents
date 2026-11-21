@@ -64,9 +64,6 @@ export function trackDispatch(dispatch: Dispatcher, output: string): Dispatcher 
       stage: 'child',
       role: request.role,
       child: undefined,
-      ...(request.role === 'reviewer'
-        ? { milestone: `Candidate reached independent review for ${request.checkpoint.objective}.` }
-        : {}),
     })
 
     try {

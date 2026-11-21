@@ -503,12 +503,12 @@ export function registerDelegation(
     name: 'delegate_task',
     label: 'Delegate background task',
     description:
-      'Start a background coordinator that can delegate workers and specialist reviews. ' +
+      'Start a background coordinator that can delegate scoped workers. ' +
       'Use for substantial implementation, explicit delegation or work that would disrupt the ' +
       'current discussion. Routine setup and related small work may stay on the host. Workers ' +
       'cannot install dependencies, use the network or publish Git; declare host requirements. ' +
       'Return immediately and continue discussion. Supply context and scoped writePaths. ' +
-      'Only select review for an observed defect or a user-requested review. Put implementation ' +
+      'Select performanceReview only when the user asks for performance work. Put implementation ' +
       'review options inside its design. Omit design to resume the recorded scope.',
     parameters: delegateSchema,
     async execute(_id, args, _signal, _update, ctx) {

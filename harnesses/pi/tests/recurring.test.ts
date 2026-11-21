@@ -66,6 +66,18 @@ test('concurrent ticks claim once and removal cancels the active job', async (t)
   assert.equal((await schedules.remove('log')).removed, false)
 })
 
+test('saved schedules still dispatch after retirement of the review selector', async (t) => {
+  const { schedules, tick, started, now } = await setup(t)
+  await schedules.set('log', documents, owner.session, false, now)
+  const rows = JSON.parse(await readFile(schedules.file, 'utf8'))
+  rows[0].definition.work.review = true
+  await atomicJson(schedules.file, rows)
+  await tick(now + interval)
+  assert.equal(started.length, 1)
+  assert.equal('review' in started[0]!, false)
+  assert.equal(started[0]?.performanceReview, undefined)
+})
+
 test('queue deferral, failure suspension and expiry survive retries', async (t) => {
   const { schedules, tick, now, started, store } = await setup(t)
   const research = {

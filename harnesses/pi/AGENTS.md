@@ -26,7 +26,7 @@
 - The orchestrator has normal host shell and file tools. It workshops designs and makes small, quick
   edits directly. Honor explicit delegation and send lengthy work to background task coordinators
   while discussion continues. Delegate substantial implementation to Astra; Fable 5.2 medium or high
-  supplies independent design advice and specialist reviews.
+  supplies independent design advice and explicitly requested performance measurements.
 - For a multi-step operation owned by the host, use session-local host_work. Preserve explicit
   pauses, external waits and newer user input. Test actual settlement with tests/host-work.test.ts.
 - When an external Actions run gates host work, persist the run watch in its originating session.
@@ -65,7 +65,7 @@
   `openai-codex/gpt-6.2-astra` with medium as the default.
 - Orchestrators choose worker thinking up to high. Use medium for settled implementation, low for
   mechanical work, and high for difficult diagnosis. Fable specialists accept medium or high.
-  Engineering reviews default to high. Preserve optional-field compatibility in stored jobs.
+  Preserve optional-field compatibility in stored jobs.
 - Runtime traces belong under the target project’s gitignored `.pi/traces/`; keep them out of worker
   snapshots. The launcher persists local sessions; ordinary Pi sessions are mirrored.
 - Keep prompts in `prompts/`, role definitions in `roles/`, and harness validation evidence in
@@ -88,9 +88,8 @@
   journal. Keep subprocess cancellation bounded and propagated.
 - Choose direct work or delegation from context, complexity and disruption. Routine setup and
   related edits may stay on the host; substantive implementation, explicit delegation and
-  distracting lengthy work go to workers. No direct-edit file/byte/call quota exists. Simple setup
-  does not need Fable review. Required checks still apply; select engineering review for bug
-  diagnosis or an explicit request. Branch diagnosis requires a current failing behavioral check.
+  distracting lengthy work go to workers. No direct-edit file/byte/call quota exists. Verify changed
+  behavior with executable tests and lint.
 - Inspect host/worker capabilities before dispatch. Workers cannot install dependencies, retain
   shell-generated lockfiles, configure host policy or publish Git. Handle authorized host operations
   directly, reject incompatible declared requirements, and use structured hostActions for handoff.
@@ -98,7 +97,7 @@
   user cancellation without a new request.
 - Pi worker batches containing retained writes or formatting execute in tool-call order. Use
   project_edit.additionalEdits for multiple exact replacements validated before one file write.
-- Give reviewers changed paths from the original snapshot, including additions and deletions. Keep
+- Give workers changed paths from the original snapshot, including additions and deletions. Keep
   baseline hashes in host evidence. Preserve full folder rules on default reads and when they
   change.
 - Workers use project_edit for focused existing-file changes. Preserve exact text, reject ambiguous
@@ -117,14 +116,9 @@
   related outcomes, preserve pending user input, and deduplicate across reload. Routine worker
   activity stays private. Keep only the latest routine progress per task in model context. Preserve
   raw receipts, substantive notices and progress from a later resumption.
-- Formatting-only findings require an explicit formatterPath and a trusted exact-snapshot proof.
-  Preserve the original verdict, record formatter closures separately and retain final checks. Route
-  recovery checks by declared impact, configured paths or changed persistence code and config.
-- Branch review is optional diagnosis of a reproduced bug with a current failing behavioral check.
-  Complete passing branches through executable checks. Performance specialists require user opt-in.
-- Keep later specialist reviews with the coordinator instead of blocking leaf acceptance on them.
-  Completion diagnostics must identify the outstanding role and write scope. Require matching-scope
-  clearance and reuse passing reviews when the candidate is unchanged.
+- Verify formatting with executable lint. Run recovery checks for actual persistence impact.
+- Performance measurement is the only review role and requires explicit user selection. Route defect
+  reproduction and repairs to the implementer and verify the final candidate.
 - Pause affected tasks before scope reassignment. Keep paused paths reserved, preserve candidate
   edits, and revise assignments as a recoverable batch before resuming with fresh context. Reject
   conflicts and scope expansion. Invalidate approvals after revisions. Published branch ownership
@@ -199,9 +193,10 @@ Designs and task receipts own implementation state. Run the project-memory tests
 - Use task_control action=evidence for an observed fact needed by a live fixed-design implementer.
   Bind delivery to the accepting worker and original task. Never change its design or review scope.
 
-- Engineering review submissions carry snapshot-specific TigerStyle evidence and the test scorecard.
-  Preserve unscored historical receipts. Exercise the reviewer tool and receipt readers when
-  changing the rubric. Keep Playwright journeys applicable to browser-visible behavior.
+- Optional implementer assessments carry snapshot-specific TigerStyle evidence and the test
+  scorecard. Preserve unscored historical receipts. Exercise the implementer submission tool and
+  receipt readers when changing the rubric. Keep Playwright journeys applicable to browser-visible
+  behavior.
 - A retry blocker is a visible transition in host_work. Test deduplication and continuation through
   the Pi session boundary. Keep routine polling private.
 - Keep main sync independent of the model. Test remote refresh and checkout preservation with real

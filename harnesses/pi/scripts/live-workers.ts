@@ -134,12 +134,10 @@ try {
   await session.prompt(
     'Delegate a small document task in the background, then keep discussing with me. ' +
       'Record capacity 100 and reject new jobs when full in design/queue.md; keep persistence ' +
-      'open. Use one task-worker, then an independent Claude reviewer. Use the configured ' +
-      'Fable preference and accept the configured Opus quota fallback for this review. ' +
+      'open. Use one task-worker. ' +
       'Tell the editing worker to report_progress with a brief summary, then run_command ' +
       'node -e "setTimeout(() => {}, 20000)" once before editing. ' +
-      'It may receive guidance while waiting. The reviewer should independently check ' +
-      'the final current decisions, and also run that 20-second command once before its verdict. ' +
+      'It may receive guidance while waiting. ' +
       'Keep the document below 100 words. No other files, commits or publication. ' +
       'Return to this discussion immediately after dispatch.',
   )
@@ -153,13 +151,6 @@ try {
   const discussionStart = performance.now()
   await session.prompt('While the worker continues, explain the overload tradeoff in one sentence.')
   const discussionMs = performance.now() - discussionStart
-  const reviewer = await waitWorker('reviewer')
-  await guide(
-    reviewer,
-    'Review the final capacity 120 decision and rejection when full. ' +
-      'Keep persistence open. Include REVIEW GUIDANCE RECEIVED in your final summary. ' +
-      'This is guidance for the current review; do not ask for another review.',
-  )
   let job = (await jobs.list())[0]!
 
   while (activeTask(job.state) && Date.now() < deadline) {
@@ -173,16 +164,9 @@ try {
   assert.doesNotMatch(document, /100/)
   const rows = await catalog.list()
 
-  for (const target of [worker, reviewer]) {
-    const row = rows.find((item) => item.id === target.id)!
-    assert.equal(row.active, false)
-    assert.equal(row.guidance[0]?.status, 'delivered')
-  }
-
-  assert.match(
-    rows.find((item) => item.id === reviewer.id)!.state.summary!,
-    /REVIEW GUIDANCE RECEIVED/,
-  )
+  const completed = rows.find((item) => item.id === worker.id)!
+  assert.equal(completed.active, false)
+  assert.equal(completed.guidance[0]?.status, 'delivered')
   await view.refresh()
   view.activeTab = false
   await atomicJson(join(reports, 'result.json'), {

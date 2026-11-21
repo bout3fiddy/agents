@@ -62,9 +62,9 @@ test('browser journeys contribute to the score and exemptions never earn points'
 test('review receipts bind testing evidence to the candidate snapshot', async (t) => {
   const { base, root, store } = await fixture()
   t.after(() => rm(base, { recursive: true, force: true }))
-  const role = await loadRole('reviewer')
+  const role = await loadRole('implementer')
   const request = {
-    role: role.name as 'reviewer',
+    role: role.name as 'implementer',
     task: 'Review draft save.',
     workspace: root,
     project: await loadProject(root),
@@ -78,8 +78,8 @@ test('review receipts bind testing evidence to the candidate snapshot', async (t
   const tool = worker.tools.find((item) => item.name === 'submit_result')!
   const submit = (raw: Record<string, unknown>) =>
     tool.execute('review', raw, undefined, undefined, {} as ExtensionToolContext)
-  assert.equal(Check(tool.parameters, result), false)
-  await assert.rejects(submit(result), /requires TigerStyle/)
+  assert.equal(Check(tool.parameters, result), true)
+  await submit(result)
   const prose = { ...engineeringReview, testing: { unscored: 'Prose only.' } }
   await assert.rejects(submit({ ...result, engineeringReview: prose }), /Score behavioral/)
   await assert.rejects(
@@ -102,7 +102,7 @@ test('review receipts bind testing evidence to the candidate snapshot', async (t
   const workflowTaskId = randomUUID()
   const directory = delegationDirectory(store, id)
   const evidence = {
-    role: 'reviewer',
+    role: 'implementer',
     model: role.model,
     snapshot: 'candidate',
     result: worker.result(),

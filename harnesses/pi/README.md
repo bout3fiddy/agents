@@ -3,7 +3,7 @@
 Codex workshops designs with the user and parallel Fable advice. It has shell and file tools for
 investigation, setup and small quick edits. Background task coordinators handle delegated work while
 discussion continues. Substantial implementation uses isolated Astra workers, executable checks and
-independent Fable reviews.
+optional performance measurement.
 
 | Role                     | Model / default effort |
 | ------------------------ | ---------------------- |
@@ -13,7 +13,6 @@ independent Fable reviews.
 | General task worker      | Codex / medium         |
 | Design advisor           | Fable 5.2 / medium     |
 | Implementer              | GPT 6.2 Astra / medium |
-| Engineering reviewer     | Fable 5.2 / high       |
 | Performance investigator | Fable 5.2 / medium     |
 
 Claude specialists prefer Fable 5.2. On a confirmed usage limit the harness selects Opus with the
@@ -35,20 +34,15 @@ selected effort.
 
 The orchestrator can select `thinking` for each background job. On `workflow` and implementation
 jobs it selects Astra's effort. The optional `specialistThinking` object selects each applicable
-workflow specialist by role (`reviewer`, `performance`). On other `delegate_task` jobs and each
+workflow specialist by role (`performance`). On other `delegate_task` jobs and each
 `delegate_branches` task it selects the coordinator's effort. Each coordinator chooses its
 children's effort independently with `delegate_worker`. Use low for mechanical changes, medium for
 implementation from a settled design, and high for difficult concurrency problems, uncertain
 invariants or repairs that need diagnosis.
 
-Engineering review defaults to high. Fable supports medium and high. `consult_design.thinking`
-selects the advisor's effort independently of answer length. The maximum for all workers is high.
-Worker receipts and the worker details view show the selected level.
-
-A reviewer may tag an exclusively formatting-related required finding with `formatterPath`. The
-harness records a separate formatter receipt when the entire repaired snapshot matches the pinned
-formatter output on those files. Any other edit or unclassified required finding needs independent
-review. Final checks still run. A new concern can request `freshReviewReason`.
+Fable supports medium and high. `consult_design.thinking` selects the advisor's effort independently
+of answer length. The maximum for all workers is high. Worker receipts and the worker details view
+show the selected level.
 
 Recovery testing follows explicit impact, configured DB paths, SQL/schema files and persistence code
 or configuration changes. References in ordinary Markdown do not trigger a specialist. Vyper NatSpec
@@ -94,11 +88,11 @@ tools use the scoped MCP bridge.
 ## Design workshop and routine work
 
 Use a design consultation for an explicit second design opinion or a consequential choice still open
-after checking the evidence. Operational reconciliation uses source and receipts. Independent code
-reviews and audits go to the specialist with repository access. Reuse advice for settled choices,
-quiz presentation and mechanical edits. Codex quotes the user's wording separately from its own
-proposal and develops its own answer while Fable runs. These routing rules are prompt policy,
-exercised by the live workshop scenarios; they are not a semantic authorization gate.
+after checking the evidence. Operational reconciliation uses source and receipts. The host handles
+requested code reviews. Reuse advice for settled choices, quiz presentation and mechanical edits.
+Codex quotes the user's wording separately from its own proposal and develops its own answer while
+Fable runs. These routing rules are prompt policy, exercised by the live workshop scenarios; they
+are not a semantic authorization gate.
 
 Fable receives up to twelve recent user messages, selected documents, folder instructions and
 confirmed context. `historyMessages` can select 0–12; omitted history is counted explicitly. Supply
@@ -124,9 +118,9 @@ The orchestrator chooses direct work or delegation from task complexity, context
 fresh-session repository setup, lint configuration, related document update or other routine task
 can stay on the host. Multiple files do not force delegation, and direct edits have no byte, call or
 turn quota. Substantial product implementation, explicit delegation and distracting unrelated work
-use background workers. Routine setup needs appropriate executable checks, with specialist reviews
-reserved for bug diagnosis or explicit requests. Saving a document needs no implementation
-checkpoint; a Git commit requires user authorization.
+use background workers. Routine setup needs appropriate executable checks, with performance work by
+explicit request. Saving a document needs no implementation checkpoint; a Git commit requires user
+authorization.
 
 `harness_capabilities` reports the boundary. Host tools have ordinary filesystem, network and CLI
 access. Worker commands have no network/home access, Git publication or retained shell writes;
@@ -153,7 +147,7 @@ subsequent replacements in `additionalEdits` to validate them all in order befor
 executes tool batches containing retained edits in order. Independent read calls can share one model
 response.
 
-Workers receive the paths changed since the original snapshot. Reviewers can inspect both versions
+Workers receive the paths changed since the original snapshot. Workers can inspect both versions
 directly. Small projects also include a filename index. For larger projects, list paths by prefix
 and follow `nextAfterPath` to continue. File reads report total lines and the next line and column
 for bounded excerpts. Reads include folder instructions by default. Set `reuseInstructions` when the
@@ -216,30 +210,28 @@ once and use `~/.pi/agent/bin/pi-harness --continue` from the project to resume 
 `delegate_task` accepts a task, complete context, a kind and repository-relative write paths:
 `documents`, read-only `research`, bounded `maintenance`, or scoped `implementation`. It returns a
 task ID immediately. Continue the discussion while a separate Codex coordinator reads the project,
-delegates writable tasks and requests Fable reviews when useful. Document workers can use low effort
-for mechanical edits. Implementation uses Astra medium by default. Routine documents need no review
-call. Maintenance uses executable checks by default. A selected engineering review checks a specific
-concern. Database changes require recovery checks. A read-only research report can complete with
-required findings. A blocked research assignment still needs attention. Delegated implementation
-workers record their task ID so the worker picker and traces identify the owning task. Blocked
-implementation results include the worker’s structured requests for host actions. Once a coordinator
-verifies a passing task, the completion notice omits host actions from resolved child blockers.
-Their receipts remain available.
+delegates writable tasks and validates their results. Document workers can use low effort for
+mechanical edits. Implementation uses Astra medium by default. Routine documents need no review
+call. Maintenance uses executable checks by default. Database changes require recovery checks. A
+read-only research report can complete with required findings. A blocked research assignment still
+needs attention. Delegated implementation workers record their task ID so the worker picker and
+traces identify the owning task. Blocked implementation results include the worker’s structured
+requests for host actions. Once a coordinator verifies a passing task, the completion notice omits
+host actions from resolved child blockers. Their receipts remain available.
 
-Leaf acceptance covers its assigned work; the coordinator owns subsequent specialist reviews. When
-completion is blocked by an earlier child result, the error names the exact role and write scope
-that must pass. Verification-only follow-ups retain that scope. Passing reviews remain reusable
-while the candidate is unchanged.
+Leaf acceptance covers its assigned work; the coordinator owns verification. When completion is
+blocked by an earlier child result, the error names the exact role and write scope that must pass.
+Verification-only follow-ups retain that scope. Checks apply to the verified candidate.
 
 `task_control` with `action: "evidence"` passes host observations to the active implementer on the
 specified task through its existing mailbox. The receipt identifies the worker and queued message.
-The accepted design and independent reviews keep their original scope. Other actions send a scoped
-update, pause or cancellation. `task_status` inspects durable state and evidence. Completion reaches
-the originating session once at a safe model/tool boundary. While idle, it wakes the orchestrator
-for a brief acknowledgement; while busy, it joins the current discussion. Simultaneous completions
-are batched, queued user input takes priority, and reload does not repeat the notification. Routine
-progress does not start model calls. Recovery within the original authorization is permitted;
-unrelated work and publication need their own authorization.
+The accepted design keeps its original scope. Other actions send a scoped update, pause or
+cancellation. `task_status` inspects durable state and evidence. Completion reaches the originating
+session once at a safe model/tool boundary. While idle, it wakes the orchestrator for a brief
+acknowledgement; while busy, it joins the current discussion. Simultaneous completions are batched,
+queued user input takes priority, and reload does not repeat the notification. Routine progress does
+not start model calls. Recovery within the original authorization is permitted; unrelated work and
+publication need their own authorization.
 
 Two ordinary jobs may run concurrently on disjoint paths. Local implementation reserves writes
 exclusively through both `workflow` and `delegate_task` with kind `implementation`. Read-only
@@ -272,9 +264,10 @@ intact. Full raw payloads stay in the session trace; persisted context edits sur
 compaction. Read current file sections when exact text is needed for editing.
 
 Fable can research current platform details and engineering practices during design advice and
-specialist reviews. Its shared `prompts/web-research.md` prefers primary sources, requires source
-links and version/context qualifications, and keeps private data out of search queries. Web calls
-and their results are recorded in the Claude JSONL trace. Research supplements project tests.
+performance measurements and progress audits. Its shared `prompts/web-research.md` prefers primary
+sources, requires source links and version/context qualifications, and keeps private data out of
+search queries. Web calls and their results are recorded in the Claude JSONL trace. Research
+supplements project tests.
 
 Run `npm run test:live:delegation -- --automatic` to exercise document routing from an ordinary
 request, concurrent discussion, completion acknowledgement and reload receipts.
@@ -371,7 +364,8 @@ workflow.
 Workers started before this feature expose their saved coordinator conversation and task controls;
 the picker labels guidance as routed to that coordinator. Direct child channels are available for
 workers started with this version. Design consultations remain available through
-`design_consultation`; the picker covers execution workers and their coordinators/reviewers.
+`design_consultation`; the picker covers execution workers, performance specialists and their
+coordinators.
 
 An older coordinator can also start newer children after an installation update. The picker keeps
 that coordinator visible, reconstructs missing parent links from the durable task ID and routes
@@ -394,11 +388,11 @@ a fresh load ID with reason `reload`; it preserves conversation and background t
 
 For independent work from a settled design document, ask for parallel branch execution. The
 orchestrator uses `delegate_branches` to launch up to four autonomous orchestrators with disjoint
-scopes, each in a Git worktree on its own branch. They implement through Astra, handle Fable review
-feedback, fix test failures, push branches and open GitHub PRs. Publication is the default. Only an
-explicit user request authorizes merging, either through `mergeToMain: true` at dispatch or a later
-`merge_branches` call. Published tasks resume in their existing worktrees. Large designs stay in the
-pinned worktree. The coordinator reads their full text in pages from the original snapshot.
+scopes, each in a Git worktree on its own branch. They implement through Astra, fix test failures,
+push branches and open GitHub PRs. Publication is the default. Only an explicit user request
+authorizes merging, either through `mergeToMain: true` at dispatch or a later `merge_branches` call.
+Published tasks resume in their existing worktrees. Large designs stay in the pinned worktree. The
+coordinator reads their full text in pages from the original snapshot.
 
 For an authorized merge, the host detects external review agents such as Codex or Claude, waits for
 feedback, and sends findings to the branch orchestrator for triage and verified fixes. Each fix is
@@ -420,19 +414,17 @@ requirements and recovery. For a single local implementation:
 2. The runtime records a versioned worker scope and returns a background task ID. No acceptance
    command, session switch or conversation pruning is required. Discussion continues immediately.
 3. Run executable tests and lint. Database changes require recovery checks. Performance scope runs
-   benchmarks. Set `performanceReview` only for a user-requested performance specialist. Local
-   workflows can select engineering review with `review`. A branch coordinator can ask for bug
-   diagnosis by supplying a current failing behavioral check ID to `delegate_worker`.
+   benchmarks. Set `performanceReview` only for a user-requested performance specialist.
 4. A verified candidate is applied and checked again. Concurrent project edits block integration.
    Avoid editing the candidate's files from the orchestrator while this workflow runs.
 
 An interrupted workflow retains its candidate. Call `workflow` without a design to resume its
 recorded scope: the original project baseline must still match. An unchanged candidate goes through
-fresh checks and resumes any outstanding reviews from the interrupted round. Supplying a new design
-starts a new version from the current project baseline. Active or paused conflicting work prevents
-replacing its scope.
+fresh checks and routes any outstanding findings to the writer. Supplying a new design starts a new
+version from the current project baseline. Active or paused conflicting work prevents replacing its
+scope.
 
-Reviewers receive the recorded design, changed files, original file snapshots and command receipts.
+Workers receive the recorded design, changed files, original file snapshots and command receipts.
 They start with fresh context. The performance investigator can measure, instrument and report;
 optimization belongs to the implementer. There is no automatic commit, push, publication or
 deployment.
@@ -511,8 +503,8 @@ fail; use concise machine-readable summaries when a test suite is verbose.
 ## Where the rules live
 
 - `prompts/shared.md`: TigerStyle, all ten NASA rules and language adaptations.
-- `prompts/{orchestrator,design-advisor,implementer,reviewer,performance}.md`: each role's task and
-  evidence requirements.
+- `prompts/{orchestrator,design-advisor,implementer,performance}.md`: each role's task and evidence
+  requirements.
 - `roles/*.json`: executable role configuration, including backend and model.
 - `scripts/linting/`: actual JS/TS AST and Python token/AST readability checks, JSON validity,
   Unicode-aware 100-column checks and exclusions.
@@ -526,9 +518,9 @@ fail; use concise machine-readable summaries when a test suite is verbose.
 scope. All project checks run again under host control. This does not claim to mechanically prove
 TigerStyle, security or test quality; those remain explicit review responsibilities.
 
-Engineering reviews record TigerStyle evidence and score the changed behavior's testing harness.
-`review_receipts` shows the snapshot, the reviewer’s evidence for each dimension and the computed
-percentage. The target is 80/100. Production code, invariants and exploration always count.
+Implementer assessments can record TigerStyle evidence and score the changed behavior's testing
+harness. `review_receipts` shows the snapshot, the worker’s evidence for each dimension and the
+computed percentage. The target is 80/100. Production code, invariants and exploration always count.
 Recovery, replay and Playwright browser journeys count where relevant. Each applicable dimension
 earns 0–2 points. Pi rounds earned points divided by possible points to a percentage. An explained
 exemption adds no points. An unscored review has no percentage. Required findings and executable
@@ -564,16 +556,16 @@ The workshop live case uses real Codex and Fable calls to check parallel guidanc
 delivery, shell access and direct document updates despite unresolved workshop questions. It spawns
 no implementation workers.
 
-The web live case verifies successful WebSearch and WebFetch calls in both the design advisor and an
-engineering reviewer, including source citations and the scoped MCP result handoff.
+The web live case verifies successful WebSearch and WebFetch calls in both the design advisor and a
+progress auditor, including source citations and the scoped MCP result handoff.
 
-The basic live case exercises a seeded parser contract and confirms that database and performance
-roles stay inactive when the accepted design does not need them.
+The basic live case exercises a seeded parser contract and confirms that implementation completes
+without a specialist.
 
-The workers live case sends guidance to real Codex and Fable workers while the host continues a
-separate discussion. It checks delivery, final integration and the Past view. The deterministic
-terminal fixture exercises the installed CLI, keyboard focus, hierarchy, guidance, metadata, panel
-and resizing without model requests:
+The workers live case sends guidance to a real Codex worker while the host continues a separate
+discussion. It checks delivery, final integration and the Past view. The deterministic terminal
+fixture exercises the installed CLI, keyboard focus, hierarchy, guidance, metadata, panel and
+resizing without model requests:
 
 ```sh
 uv run --with pexpect --with pyte --with pillow python scripts/check-workers-terminal.py
