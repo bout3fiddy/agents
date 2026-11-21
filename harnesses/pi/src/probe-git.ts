@@ -23,10 +23,11 @@ async function checkoutHead(source: string): Promise<string | undefined> {
   }
 }
 
-/** Give a disposable command copy read-only Git metadata. Its index lists the copied files and,
- * for a checkout, HEAD is the checkout's pinned commit. Objects resolve through alternates to the
- * project repository, which the sandbox may read but not write. Returns paths the sandbox must
- * read. Any failure leaves the copy without Git metadata, as before. */
+/** Give a disposable command copy read-only Git metadata. Its index lists the copied files. HEAD is
+ * the checkout's pinned commit, or the project's HEAD when the source is a plain copy taken from
+ * the project, so `git diff HEAD` and `--base HEAD` tools see the candidate's changes. Objects
+ * resolve through alternates to the project repository, which the sandbox may read but not write.
+ * Returns paths the sandbox must read. Any failure leaves the copy without Git metadata. */
 export async function addGitIndex(
   probe: string,
   source: string,
@@ -44,7 +45,7 @@ export async function addGitIndex(
   try {
     await git(['init', '--quiet'])
     await writeFile(join(probe, '.git', 'objects', 'info', 'alternates'), objects + '\n')
-    const head = await checkoutHead(source)
+    const head = (await checkoutHead(source)) ?? (await checkoutHead(projectRoot))
 
     if (head) {
       await git(['update-ref', '--no-deref', 'HEAD', head])

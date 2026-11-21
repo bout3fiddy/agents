@@ -96,6 +96,23 @@ test('command copies have a Git index and the checkout HEAD', async (t) => {
   )
 })
 
+test('a plain copy of the project uses the project HEAD', async (t) => {
+  const item = await project(t, [])
+  const copy = await createWorkspace(item.root)
+  t.after(() => rm(copy, { recursive: true, force: true }))
+  await writeFile(join(copy, 'value.txt'), 'two\n')
+  const head = await gitCommand(item.root, ['rev-parse', 'HEAD'])
+  item.checks.push(
+    check('head', ['git', 'rev-parse', '--verify', head + '^{commit}']),
+    check('changed', ['sh', '-c', 'test "$(git diff --name-only HEAD)" = value.txt']),
+  )
+  const receipts = await verifyProject(copy, item, false)
+  assert.ok(
+    receipts.every((receipt) => receipt.status === 'passed'),
+    JSON.stringify(receipts.map((receipt) => [receipt.check, receipt.result.output])),
+  )
+})
+
 test('dependency drift names missing and mismatched direct packages', async (t) => {
   const item = await project(t, [])
   const lock = {
