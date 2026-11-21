@@ -128,8 +128,10 @@ def exercise(launcher, project, reports, resume):
 
         if not resume:
             cli.click("project read · guide.md")
-            cli.until(lambda text: "fileSha256" in text, "opening a single tool result")
-            cli.click('project_read {"path":"guide.md"}')
+            details = cli.until(lambda text: "fileSha256" in text, "opening a single tool result")
+            assert '"path": "guide.md"' in [line.strip() for line in details.splitlines()]
+            assert 'project_read {"path"' not in details, details
+            cli.click('project read · arguments')
             cli.until(lambda text: "fileSha256" not in text, "closing the tool result")
             cli.click("PR #61")
             view = cli.until(lambda text: "Inspect Git state" in text, "opening call list")
@@ -142,6 +144,9 @@ def exercise(launcher, project, reports, resume):
             cli.click("PR #61")
             cli.until(compact, "closing call list")
 
+        # Inspect all expanded cards together after checking the compact 45-row viewport.
+        cli.screen.resize(lines=90, columns=80)
+        cli.process.setwinsize(90, 80)
         cli.process.send("\x0f")
         view = cli.until(lambda text: all(marker in text for marker in
                                          (RAW_FIRST, RAW_SECOND, RAW_OUTPUT, "TRACK_OPERATION_END",

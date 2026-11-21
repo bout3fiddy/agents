@@ -55,8 +55,8 @@ row. It shows the call count, running work, failures and confirmed outcomes. Cli
 individual calls, then click a call for its original command and combined output. Pi’s expand-tools
 shortcut (Ctrl+O by default) opens raw details throughout the transcript. The same view is available
 when resuming a session. Routine host bookkeeping stays hidden. Other tools use a single activity
-row with failures visible. Click a row or use Ctrl+O for detail. Blockers still show the condition
-for resuming work.
+row with failures visible. Click a row or use Ctrl+O for labeled arguments and results with indented
+JSON. Blockers still show the condition for resuming work.
 
 Exercise the terminal view with `uv run --with pexpect --with pyte scripts/check-shell-terminal.py`.
 

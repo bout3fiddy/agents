@@ -1,4 +1,4 @@
-import type { ToolRenderers, Theme } from '@earendil-works/pi-coding-agent'
+import { highlightCode, type ToolRenderers, type Theme } from '@earendil-works/pi-coding-agent'
 import {
   Text,
   replaceControlCharacters,
@@ -29,8 +29,61 @@ function row(text: string, theme: Theme, error = false): Component {
   ])
 }
 
-function detail(text: string) {
-  return new Text(stripTerminalSequences(text).split('\n').map(line).join('\n'), 0, 0)
+function clean(text: string) {
+  return stripTerminalSequences(text).split('\n').map(line).join('\n')
+}
+
+function jsonDetail(text: string) {
+  const formatted = clean(text)
+  return formatted.length <= 16000 ? highlightCode(formatted, 'json').join('\n') : formatted
+}
+
+// Preserve the original JSON tokens, including numeric precision, escape sequences and key order.
+function prettyBlock(text: string) {
+  const trimmed = text.trim()
+
+  if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) {
+    return clean(text)
+  }
+
+  try {
+    JSON.parse(trimmed)
+  } catch {
+    return clean(text)
+  }
+
+  const pieces: string[] = []
+  let depth = 0
+  let previous = ''
+
+  for (const [token] of trimmed.matchAll(/"(?:[^"\\]|\\.)*"|[{}[\],:]|[^\s{}[\],:"]+/g)) {
+    const closing = token === '}' || token === ']'
+    const afterOpen = previous === '{' || previous === '['
+
+    if (closing) {
+      depth--
+    }
+
+    if ((afterOpen && !closing) || (closing && !afterOpen) || previous === ',') {
+      pieces.push('\n', '  '.repeat(Math.min(depth, 32)))
+    } else if (previous === ':') {
+      pieces.push(' ')
+    }
+
+    pieces.push(token)
+
+    if (token === '{' || token === '[') {
+      depth++
+    }
+
+    previous = token
+  }
+
+  return jsonDetail(pieces.join(''))
+}
+
+function section(label: string, blocks: string[], theme: Theme) {
+  return new Text([theme.fg('toolTitle', theme.bold(label)), ...blocks].join('\n'), 0, 0)
 }
 
 function field(args: unknown, key: string) {
@@ -53,7 +106,7 @@ export function compactTool(name: string, base?: ToolRenderers): ToolRenderers {
       if (ctx.expanded) {
         return (
           base?.renderCall?.(args, theme, expandedContext(ctx)) ??
-          detail(name + ' ' + JSON.stringify(args ?? {}))
+          section(title + ' · arguments', [jsonDetail(JSON.stringify(args ?? {}, null, 2))], theme)
         )
       }
 
@@ -61,15 +114,22 @@ export function compactTool(name: string, base?: ToolRenderers): ToolRenderers {
         return hidden
       }
 
-      const target = field(args, 'path') || field(args, 'title')
+      const target =
+        name === 'task_control'
+          ? [field(args, 'action'), field(args, 'id').slice(0, 8)].filter(Boolean).join(' · ')
+          : field(args, 'path') || field(args, 'title')
       return row('▸ ' + title + (target ? ' · ' + target : ''), theme, ctx.isError)
     },
     renderResult(result, options, theme, ctx) {
       if (options.expanded) {
         return (
           base?.renderResult?.(result, options, theme, expandedContext(ctx)) ??
-          detail(
-            result.content.flatMap((part) => (part.type === 'text' ? [part.text] : [])).join('\n'),
+          section(
+            ctx.isError ? 'Error' : 'Result',
+            result.content.flatMap((part) =>
+              part.type === 'text' ? [prettyBlock(part.text)] : [],
+            ),
+            theme,
           )
         )
       }
