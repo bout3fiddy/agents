@@ -13,7 +13,7 @@ import {
   withoutBriefEntry,
 } from './memory-files.ts'
 import type { MemoryStore, MemoryFact } from './memory-store.ts'
-import { ownerBrief } from './memory-owners.ts'
+import { ownerBrief, ownerChanges } from './memory-owners.ts'
 import type { Delegation } from './delegation-state.ts'
 
 const factSchema = Type.Object({
@@ -379,7 +379,7 @@ export function registerProjectMemory(
       return
     }
 
-    const changes = Object.fromEntries(
+    const changes: Record<string, unknown> = Object.fromEntries(
       (Object.keys(current) as (keyof typeof current)[])
         .filter((key) => JSON.stringify(current[key]) !== JSON.stringify(previous[key]))
         .map((key) => [
@@ -389,6 +389,16 @@ export function registerProjectMemory(
             : current[key],
         ]),
     )
+
+    if ('owners' in changes) {
+      const owners = ownerChanges(previous.owners, current.owners)
+
+      if (owners.length) {
+        changes.owners = owners
+      } else {
+        delete changes.owners
+      }
+    }
 
     if (Object.keys(changes).length) {
       lastPlan = current

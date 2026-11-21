@@ -168,7 +168,8 @@ try {
     'Read requirements.md. Workshop whether overload should reject new jobs or evict old ones. ' +
       'Start parallel Fable advice and give your own Codex recommendation while it runs. ' +
       'Also use bash to run pwd to verify shell access. Keep guidance under 150 words. ' +
-      'Read reference.md once; it is a context-retention fixture and should not go to Fable. ' +
+      'Use the direct read tool once on reference.md with no line limit. The context-retention ' +
+      'fixture exercises direct file results. Keep that file out of code mode and Fable input. ' +
       'Wait for my choice before editing design documents. Do not call implementation workflow.',
   )
   await advised
@@ -241,6 +242,18 @@ try {
   assert.match(transcript, /"toolName":"bash"/)
   assert.match(transcript, /claude-cli\/(?:claude-fable-5-2|(?:claude-)?opus)\b/)
   assert.doesNotMatch(transcript, /"toolName":"(?:workflow|propose_design)"/)
+  await writeFile(join(root, 'release-gate.md'), 'Admission needs bin/admit, per ops v1.\n')
+  await mkdir(join(root, 'bin'))
+  await writeFile(join(root, 'bin/admit'), '#!/bin/sh\nexit 0\n')
+  const reconcile = await measure(
+    'reconcile an operational blocker',
+    'Read release-gate.md. A release probe says the admission tool is missing. Reconcile the ' +
+      'report against the approved artifact in this checkout and identify the next host action. ' +
+      'Keep admission closed. Make no edits or deployments.',
+  )
+  assert.equal(reconcile.consultations, 0, 'Source reconciliation needs no second design opinion')
+  const answer = session.messages.findLast((m) => m.role === 'assistant')
+  assert.match(JSON.stringify(answer?.content), /bin\/admit/)
   await atomicJson(join(reports, 'result.json'), {
     status: 'passed',
     root,

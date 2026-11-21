@@ -152,10 +152,10 @@ export function registerWorkshop(pi: ExtensionAPI, runner?: AdviceRunner) {
     name: 'consult_design',
     label: 'Consult Claude on design',
     description:
-      'Consult Claude for a material new decision, conflict, feasibility question or explicit ' +
-      'second opinion. Routine choices and document edits reuse existing advice. Supply the ' +
-      'user question, confirmed constraints and small document excerpts. Advice arrives between ' +
-      'model steps; default 350 words. Continue your own analysis.',
+      'Parallel second design opinion for an explicit design workshop or unresolved material ' +
+      'choice. Name the alternatives and the decision this advice could change. Use the ' +
+      'reviewer for code or test assessments. Resolve operational facts from source, receipts ' +
+      'or assigned researchers. Continue your own work while advice runs.',
     parameters: consultationSchema,
     async execute(_id, args, signal, _update, ctx) {
       current = ctx

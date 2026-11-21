@@ -41,6 +41,8 @@
   user requests implementation, records its scope and starts work without a separate acceptance
   command. Scope snapshots must not reset sessions or filter host/advisor conversation by date. Keep
   normal Pi compaction and tree navigation; preserve compatibility with stored worker scope.
+- Check source and active research before requesting design advice. Route code reviews and audits to
+  repo-capable roles. Exercise operational reconciliation and explicit design workshops live.
 - Deliver consultation results once at the next safe model/tool boundary. Persist consumption for
   late waits, discard obsolete automatic delivery after newer user input, and preserve raw advice.
   Test delivery with actual Pi runtime events; boundary messages emit `entry_appended`.

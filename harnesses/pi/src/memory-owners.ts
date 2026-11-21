@@ -101,3 +101,66 @@ export async function ownerBrief(
     )
     .filter(Boolean)
 }
+
+type Owner = NonNullable<Awaited<ReturnType<typeof ownerBrief>>[number]>
+
+// Owners show a rolling window of jobs. Falling out of the window does not imply completion.
+export function ownerChanges(previous: (Owner | undefined)[], current: (Owner | undefined)[]) {
+  const remaining = new Map(
+    previous.flatMap((owner) => (owner ? [[owner.host, owner] as const] : [])),
+  )
+  const changed: object[] = []
+
+  for (const owner of current) {
+    if (!owner) {
+      continue
+    }
+
+    const prior = remaining.get(owner.host)
+    remaining.delete(owner.host)
+
+    if (!prior) {
+      changed.push(owner)
+      continue
+    }
+
+    const fields: Record<string, unknown> = {}
+    const before = new Map(Object.entries(prior))
+    const after = new Map(Object.entries(owner))
+
+    for (const key of new Set([...before.keys(), ...after.keys()])) {
+      if (key === 'jobs') {
+        continue
+      }
+
+      const value = after.get(key)
+
+      if (JSON.stringify(value) !== JSON.stringify(before.get(key))) {
+        fields[key] = value ?? null
+      }
+    }
+
+    const jobs = new Map(prior.jobs.map((job) => [job.task, job]))
+    const updates = owner.jobs.filter((job) => {
+      const old = jobs.get(job.task)
+      jobs.delete(job.task)
+
+      // Heartbeats can refresh the timestamp while every planning fact stays the same.
+      return !old || JSON.stringify(job) !== JSON.stringify({ ...old, updated: job.updated })
+    })
+
+    if (updates.length) {
+      fields.jobs = updates
+    }
+
+    if (jobs.size) {
+      fields.jobsNoLongerListed = [...jobs.keys()]
+    }
+
+    if (Object.keys(fields).length) {
+      changed.push({ host: owner.host, ...fields })
+    }
+  }
+
+  return [...changed, ...Array.from(remaining.keys(), (host) => ({ host, noLongerListed: true }))]
+}

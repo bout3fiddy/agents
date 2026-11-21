@@ -95,10 +95,11 @@ tools use the scoped MCP bridge.
 
 ## Design workshop and routine work
 
-Consult Fable for new substantive architecture/security decisions, conflicting constraints,
-uncertain platform feasibility or an explicit second opinion. Routine choices, quiz presentation and
-mechanical document edits reuse existing advice. Codex quotes the user's wording separately from its
-own proposal and develops its own answer while Fable runs. These routing rules are prompt policy,
+Use a design consultation for an explicit second design opinion or a consequential choice still open
+after checking the evidence. Operational reconciliation uses source and receipts. Independent code
+reviews and audits go to the specialist with repository access. Reuse advice for settled choices,
+quiz presentation and mechanical edits. Codex quotes the user's wording separately from its own
+proposal and develops its own answer while Fable runs. These routing rules are prompt policy,
 exercised by the live workshop scenarios; they are not a semantic authorization gate.
 
 Fable receives up to twelve recent user messages, selected documents, folder instructions and
@@ -310,10 +311,11 @@ private until the orchestrator checkpoints a shareable decision.
 
 Each revision keeps its source, supporting quote, classification and relevant file paths. Pi checks
 those paths in the active checkout, reads current designs and worker receipts from their owners, and
-reconciles the plan again when project evidence changes before dispatch, showing the changed
-sections. Ask “what next?” or “why did that change?” in a fresh chat. Pi can retrieve the prior
-revisions. A worker's test result retains the checkout, candidate or commit recorded by its
-coordinator. Deployment and customer acceptance need their own evidence.
+reconciles the plan again when project evidence changes before dispatch, showing the changed owner
+fields and job receipts. Tasks leaving the ten-job window are identified separately. Ask “what
+next?” or “why did that change?” in a fresh chat. Pi can retrieve the prior revisions. A worker's
+test result retains the checkout, candidate or commit recorded by its coordinator. Deployment and
+customer acceptance need their own evidence.
 
 Run `npm run test:live:memory` for the demo and correction rehearsal across linked worktrees, then
 recall from a fresh clone containing only the committed brief. The branch-result portion uses a

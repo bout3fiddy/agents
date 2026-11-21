@@ -1,3 +1,4 @@
+import { ownerChanges } from '../src/memory-owners.ts'
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { execFileSync } from 'node:child_process'
@@ -731,4 +732,35 @@ test('a fresh worktree hides unscoped legacy priority, including wrapped brief t
   await host.session.waitForIdle()
   assert.equal(host.session.messages.findLast((m) => m.role === 'assistant')?.stopReason, 'stop')
   assert.equal(db.history('current-priority')[0]?.text, stale)
+})
+
+test('dispatch reconciliation isolates a new assignment among ten rolling job receipts', () => {
+  const job = (task: string) => ({
+    task,
+    title: 'Prior work ' + task,
+    observed: 'complete' as const,
+    source: task + '/status.json',
+    updated: 'then',
+    branch: undefined,
+    commit: undefined,
+    base: undefined,
+    candidate: undefined,
+    checks: undefined,
+    reason: undefined,
+  })
+  const jobs = Array.from({ length: 10 }, (_, i) => job(String(i)))
+  const before = { host: '/repo', design: undefined, workflow: undefined, otherJobs: 20, jobs }
+  const added = { ...job('new'), observed: 'running' as const }
+  const after = { ...before, otherJobs: 21, jobs: [added, ...jobs.slice(0, 9)] }
+  assert.deepEqual(ownerChanges([before], [after]), [
+    { host: '/repo', otherJobs: 21, jobs: [added], jobsNoLongerListed: ['9'] },
+  ])
+  assert.deepEqual(ownerChanges([after], [{ ...after, jobs: [...after.jobs].reverse() }]), [])
+  const tick = { ...added, updated: 'now' }
+  assert.deepEqual(ownerChanges([after], [{ ...after, jobs: [tick, ...jobs.slice(0, 9)] }]), [])
+  assert.deepEqual(ownerChanges([before], []), [{ host: '/repo', noLongerListed: true }])
+  const failed = { ...added, observed: 'needs_attention' as const, reason: 'Lost dependency' }
+  assert.deepEqual(ownerChanges([after], [{ ...after, jobs: [failed, ...jobs.slice(0, 9)] }]), [
+    { host: '/repo', jobs: [failed] },
+  ])
 })
