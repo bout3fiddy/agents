@@ -80,7 +80,6 @@ function resultMessage(jobs: Delegation[]): CustomMessageEntryDraft {
     display: false,
     content:
       'Background task outcome. Assess material changes to project dependencies or priorities. ' +
-      'Use the task receipt as evidence for any resulting project-memory change. ' +
       (actionableAudit
         ? 'An audit identified work for the host. Check the required findings against the ' +
           'latest user priority. Advance the authorized next step or identify its concrete ' +
@@ -108,7 +107,6 @@ export function registerDelegation(
   afterMerge?: () => void,
 ) {
   pi.registerMessageRenderer('pi-task-progress', () => ({ render: () => [], invalidate() {} }))
-  let turnJobs: Delegation[] | undefined
   let current: ExtensionContext | undefined
   let closed = false
   let collecting = false
@@ -364,9 +362,7 @@ export function registerDelegation(
         return
       }
 
-      if (
-        ['pi-project-memory', 'pi-active-tasks', 'pi-task-progress'].includes(previous.customType)
-      ) {
+      if (['pi-active-tasks', 'pi-task-progress'].includes(previous.customType)) {
         continue
       }
 
@@ -402,7 +398,6 @@ export function registerDelegation(
   pi.on('before_agent_start', async (_event, ctx) => {
     current = ctx
     const jobs = await new Delegations(await storeFor(ctx.cwd)).list()
-    turnJobs = jobs
     const active = jobs.filter((job) => ownsTaskPaths(job.state))
 
     if (active.length) {
@@ -611,5 +606,5 @@ export function registerDelegation(
       )
     },
   })
-  return { start, turnJobs: () => turnJobs }
+  return { start }
 }

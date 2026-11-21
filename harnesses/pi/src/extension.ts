@@ -22,7 +22,6 @@ import { registerDocumentTools } from './document-tools.ts'
 import { registerTiming } from './timing.ts'
 import { registerDelegation } from './delegation-tools.ts'
 import { Delegations, delegationView } from './delegation-state.ts'
-import { registerProjectMemory } from './project-memory.ts'
 import { registerMainSync } from './main-sync.ts'
 import { registerAutoReload } from './auto-reload.ts'
 import { runtimeVersion } from './runtime-version.ts'
@@ -54,7 +53,6 @@ export default function harness(pi: ExtensionAPI): void {
   const delegation = registerDelegation(pi, undefined, afterMerge)
   registerHostWork(pi)
   registerShellActivity(pi)
-  registerProjectMemory(pi, delegation.turnJobs)
   registerBranchTools(pi)
   registerLocalTools(pi)
   const storeFor = async (cwd: string) => new StateStore(await realpath(cwd))

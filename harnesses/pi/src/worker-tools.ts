@@ -17,8 +17,6 @@ import { createWorkspace, harnessRoot, instructions } from './project.ts'
 import { runSandboxed } from './sandbox.ts'
 import { fileHashes, inventory, snapshotPath, writable } from './paths.ts'
 import { checkDocuments } from './document-tools.ts'
-import { readBriefBytes } from './memory-files.ts'
-import { memoryRepository } from './memory-repository.ts'
 import { capabilities } from './capabilities.ts'
 import { atomicJson } from './state.ts'
 
@@ -44,26 +42,12 @@ export function createWorkerTools(request: WorkerRequest, role: Role) {
     request.role === 'performance'
       ? [...role.writes, ...request.project.instrumentationPaths]
       : role.writes
-  let brief: Promise<Buffer> | undefined
-
-  async function readSharedBrief() {
-    const repo = await memoryRepository(request.project.root)
-    const bytes = readBriefBytes(repo?.home ?? request.project.root)
-
-    if (bytes === undefined) {
-      throw new Error('No shared project brief exists in the primary checkout')
-    }
-
-    return bytes
-  }
-
   const tools: ToolDefinition[] = fileTools(
     request.workspace,
     writeScopes,
     roleScopes,
     request.documentsOnly,
     snapshotPath,
-    () => (brief ??= readSharedBrief()),
   )
 
   if (request.originals) {

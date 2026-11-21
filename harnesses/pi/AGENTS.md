@@ -35,7 +35,7 @@
   Wake the idle host once with the run identity and follow-up. Exercise completion, lookup failure
   and reload with `tests/github-run-watch.test.ts`. Pin merge follow-ups to their PR head. Test CI
   timing and same-head discovery with `tests/ci-timing.test.ts`. Keep one-time merge authority in
-  the task. Exercise priority retirement through `tests/project-memory.test.ts`.
+  the task.
 - Keep trusted policy and receipts outside worker workspaces. Delegated product edits go through
   scoped workers and snapshot-bound verification. Never silently fall back from worker sandboxing.
 - Workshop document edits require no acceptance checkpoint, implementation worker or test adapter.
@@ -188,12 +188,6 @@ display and retain the raw transcript behind the r key.
 Automatic updates use the completed local install receipt and Pi’s TUI command dispatch. Exercise
 install, deferred reload and build verification in a disposable terminal with
 `uv run --with pexpect scripts/check-auto-reload.py` after changing this path.
-
-Keep the editable brief in the primary checkout at `.pi/project-state.md` and private SQLite
-evidence in its ignored `.pi/local-memory/`. Import legacy agent-directory state on first use,
-validate evidence in the active checkout, preserve prior revisions and reconcile competing writes.
-Designs and task receipts own implementation state. Run the project-memory tests and
-`npm run test:live:memory` for changes to capture, recall or planning.
 
 - Use task_control action=evidence for an observed fact needed by a live fixed-design implementer.
   Bind delivery to the accepting worker and original task. Never change its design or review scope.

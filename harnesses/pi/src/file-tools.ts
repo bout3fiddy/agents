@@ -6,7 +6,6 @@ import { instructions } from './project.ts'
 import {
   digest,
   inventory,
-  projectBriefPath,
   maxFileBytes,
   safePath,
   sensitive,
@@ -97,7 +96,6 @@ export function fileTools(
   roleScopes?: string[],
   documentsOnly = false,
   resolveFile = safePath,
-  readSharedBrief?: () => Promise<Buffer>,
 ): ToolDefinition[] {
   let deliveredInstructions = ''
 
@@ -121,7 +119,6 @@ export function fileTools(
       content: Type.String(),
       totalLines: Type.Integer(),
       fileSha256: Type.String(),
-      source: Type.Optional(Type.Literal('shared project brief')),
       nextStartLine: Type.Optional(Type.Integer()),
       nextStartColumn: Type.Optional(Type.Integer()),
       instructions: Type.Optional(Type.String()),
@@ -130,15 +127,11 @@ export function fileTools(
     }),
     async execute(id, raw) {
       const args = raw as Static<typeof readParameters>
-      const shared = args.path === projectBriefPath && readSharedBrief
-      const source = shared
-        ? await shared()
-        : await readBoundedFile(await resolveFile(root, args.path))
+      const source = await readBoundedFile(await resolveFile(root, args.path))
       const rules = await instructions(root, [args.path])
       return structuredResult({
         ...readWindow(source.toString('utf8'), args),
         fileSha256: digest(source),
-        ...(shared && { source: 'shared project brief' }),
         ...folderRules(rules, args.reuseInstructions === true),
         call: id,
       })

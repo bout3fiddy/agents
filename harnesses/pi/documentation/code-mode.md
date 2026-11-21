@@ -14,9 +14,7 @@ when a script catches an error or prints only part of a result.
 
 - `project_search`, `project_read`. Host and Pi worker inspections. Literal search exposes hits with
   path, line and text, and hasMore. Listings expose matches and an optional nextAfterPath. Reads
-  include content, folder rules, the full-file hash and any continuation coordinates. For explicit
-  worker reads of .pi/project-state.md, the source is the shared brief in the primary checkout,
-  captured on first read for consistent paging. It is outside the candidate snapshot. For literal
+  include content, folder rules, the full-file hash and any continuation coordinates. For literal
   searches, use pathPrefix to restrict the files scanned. Return hits and hasMore when you need
   locations. Each entry in matches repeats the same path, line and text. An explicitly excluded
   prefix returns an error, or scopeNote when the same prefix matches visible sibling names. Report
@@ -31,8 +29,6 @@ when a script catches an error or prints only part of a result.
   Both task_status and review_receipts expose the same task lifecycle as status and state. Receipt
   verdicts and individual check statuses apply to their recorded snapshots. Harness status includes
   runtime, workflow and delegations.
-
-- `project_memory_history`. Host inspection of sourced revisions for a specific fact.
 
 - `inspect_ci_run`. Batch run IDs for the baseline and candidate. Compare wallMs, lastFinishingJob,
   longestJobs and sameHeadRuns. Check jobsObserved against jobsTotal before generalizing.
@@ -61,8 +57,8 @@ when a script catches an error or prints only part of a result.
 - `workflow`, `consult_design`, `delegate_task`, `delegate_branches`, `delegate_worker`. Direct.
   These calls launch work.
 
-- `update_project_memory`, `task_control`, `revise_tasks`, `resume_task`, `merge_branches`. Direct
-  changes to project state, running work or Git.
+- `task_control`, `revise_tasks`, `resume_task`, `merge_branches`. Direct changes to running work or
+  Git.
 
 - `run_checks`, `verify_loop`, `submit_result`, `report_progress`, `report_milestone`. Direct
   coordinator or worker actions that execute checks or record evidence.

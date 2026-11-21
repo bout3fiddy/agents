@@ -289,40 +289,6 @@ Pi batches independent inspections during ordinary project work. See the
 [tool inventory and examples](documentation/code-mode.md) for host and worker result shapes, role
 boundaries and usage measurement.
 
-## Project memory
-
-Start Pi in any worktree of a local Git repository and talk normally. On the first substantive
-request it inspects a bounded set of README, design, documentation, entry point and test excerpts.
-Other worktrees reuse that source index. The orchestrator records consequential evidence during its
-ordinary turn. Routine conversation adds no fact.
-
-Pi keeps shared project decisions in `.pi/project-state.md` in the primary checkout. The first
-shareable fact creates the brief. It is ordinary editable Markdown that travels with a Git commit. A
-fresh clone reads it on its first turn. Linked worktrees use the same primary copy immediately. A
-checkpoint commit can include this file. In repositories that ignore all of `.pi/`, Pi can stage the
-reviewed brief alone with `git add -f -- .pi/project-state.md`.
-
-Private evidence, source quotes, revision history and pending brief edits live in
-`.pi/local-memory/memory.sqlite` in the same checkout. That directory ignores its own contents.
-SQLite serializes concurrent publication. Pi preserves manual edits and asks the orchestrator to
-reconcile competing changes to the same entry. A fresh clone starts its own private evidence store.
-On first use after an upgrade, Pi imports the old per-clone database from the Pi agent directory,
-including its history and source index. Opening another session picks up late writes from older
-hosts. Competing legacy revisions remain in private history. Previously recorded material stays
-private until the orchestrator checkpoints a shareable decision.
-
-Each revision keeps its source, supporting quote, classification and relevant file paths. Pi checks
-those paths in the active checkout, reads current designs and worker receipts from their owners, and
-reconciles the plan again when project evidence changes before dispatch, showing the changed owner
-fields and job receipts. Tasks leaving the ten-job window are identified separately. Ask “what
-next?” or “why did that change?” in a fresh chat. Pi can retrieve the prior revisions. A worker's
-test result retains the checkout, candidate or commit recorded by its coordinator. Deployment and
-customer acceptance need their own evidence.
-
-Run `npm run test:live:memory` for the demo and correction rehearsal across linked worktrees, then
-recall from a fresh clone containing only the committed brief. The branch-result portion uses a
-coordinator receipt fixture.
-
 ## Automatic harness updates
 
 An interactive host checks the completed local install receipt every three seconds. It applies a new
@@ -626,12 +592,9 @@ scripts; formatting changes to those scripts preserve their behavior.
 Local implementation hands unchanged, out-of-scope harness lint failures to the host when all
 diagnostics can be attributed. The gate stays failed and the candidate remains available.
 
-One-time commands and approvals stay with their task. A cross-task priority requires a quoted
-milestone boundary. Pi checks its relevance before planning and can retire it on evidence from the
-user, checkout or worker. History retains its revisions. Older priorities without a boundary drop
-out of active recall on upgrade. Required audit findings reach the host with their report path. An
-empty first response to an actionable audit gets one follow-up opportunity at idle, subject to
-queued user input.
+One-time commands and approvals stay with their task. Required audit findings reach the host with
+their report path. An empty first response to an actionable audit gets one follow-up opportunity at
+idle, subject to queued user input.
 
 ### GitHub Actions follow-up
 
@@ -654,7 +617,7 @@ The orchestrator uses `host_work` for an authorized multi-step task it must exec
 update can finish while the task keeps running. The session continues at the next model boundary
 while the host owns a runnable step. An explicit wait, pause or verified completion stops the
 continuation. A continuation that only restates a plan surfaces a stalled notice. State lives in the
-originating Pi conversation. Other chats and repository memory cannot resume it.
+originating Pi conversation.
 
 Local fan-out, competing candidates and evidence-based integration are described in
 [Independent branch orchestration](documentation/branches.md#local-candidates).

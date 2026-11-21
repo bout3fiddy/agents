@@ -26,7 +26,6 @@ export const nestedInspectionTools = new Set([
   'task_status',
   'harness_status',
   'harness_capabilities',
-  'project_memory_history',
   'review_receipts',
   'inspect_pr',
   'inspect_ci_run',

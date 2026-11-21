@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { readFile, rm } from 'node:fs/promises'
+import { access, readFile, rm } from 'node:fs/promises'
+import { execFileSync } from 'node:child_process'
 import { basename, join } from 'node:path'
 import {
   createAgentSession,
@@ -19,6 +20,7 @@ import { loadRole } from '../src/roles.ts'
 
 test('scope snapshots preserve Pi conversation lifecycle', async () => {
   const item = await fixture()
+  execFileSync('git', ['init', '--quiet', item.root])
   const store = new StateStore(item.root)
   const payloads: string[] = []
   const modelRuntime = await ModelRuntime.create({
@@ -135,6 +137,14 @@ test('scope snapshots preserve Pi conversation lifecycle', async () => {
     await session.prompt('PENDING_CONSTRAINT_MARKER')
     assert.match(payloads.at(-1)!, /FINAL_SCHEMA_MARKER/)
     assert.match(payloads.at(-1)!, /EARLY_USER_CONSTRAINT/)
+    assert.doesNotMatch(payloads.at(-1)!, /Repository project brief \(evidence\)/)
+    assert.ok(
+      !manager
+        .getEntries()
+        .some((e) => e.type === 'custom_message' && e.customType === 'pi-project-memory'),
+    )
+    await assert.rejects(access(join(item.root, '.pi/local-memory')), { code: 'ENOENT' })
+    await assert.rejects(access(join(item.root, '.pi/project-state.md')), { code: 'ENOENT' })
     const earlierBranch = session.sessionManager.getLeafId()!
     await store.pin({ ...design, design: 'UPDATED_SCHEMA_MARKER' })
     await session.prompt('Continue our discussion after recording the implementation scope')
@@ -156,9 +166,13 @@ test('scope snapshots preserve Pi conversation lifecycle', async () => {
     )
     assert.match(mirror, /PENDING_CONSTRAINT_MARKER/)
     session.dispose()
+    const legacy = SessionManager.open(sessionFile)
+    legacy.appendCustomMessageEntry('pi-project-memory', 'OBSOLETE_PRIORITY', false)
     session = await create(SessionManager.open(sessionFile))
     await session.prompt('Continue after resume')
     assert.match(payloads.at(-1)!, /UPDATED_SCHEMA_MARKER/)
+    assert.doesNotMatch(payloads.at(-1)!, /OBSOLETE_PRIORITY/)
+    assert.match(await readFile(sessionFile, 'utf8'), /OBSOLETE_PRIORITY/)
     await session.navigateTree(earlierBranch, { summarize: true })
     await session.prompt('Continue after navigating the earlier branch')
     assert.match(payloads.at(-1)!, /EARLY_USER_CONSTRAINT/)

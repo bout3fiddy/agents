@@ -65,7 +65,7 @@ function currentReads(entries: ProjectedSessionEntry[]): Set<string> {
 
 type ContextMessage = ProjectedSessionEntry['messages'][number]
 
-function supersededProgress(messages: ContextMessage[]): Set<ContextMessage> {
+function obsoleteContext(messages: ContextMessage[]): Set<ContextMessage> {
   const newer = new Set<string>()
   const obsolete = new Set<ContextMessage>()
 
@@ -77,11 +77,10 @@ function supersededProgress(messages: ContextMessage[]): Set<ContextMessage> {
     }
 
     if (message.customType === 'pi-project-memory') {
-      if (newer.has(message.customType)) {
-        obsolete.add(message)
-      }
 
-      newer.add(message.customType)
+      // Legacy sessions can still carry a brief from the removed project-memory extension.
+      obsolete.add(message)
+      continue
     }
 
     const details = message.details as { taskId?: unknown; taskIds?: unknown } | undefined
@@ -111,7 +110,7 @@ function supersededProgress(messages: ContextMessage[]): Set<ContextMessage> {
 }
 
 export function workshopContextEdits(entries: ProjectedSessionEntry[]): ContextEditEntryDraft[] {
-  const obsolete = supersededProgress(entries.flatMap((entry) => entry.messages))
+  const obsolete = obsoleteContext(entries.flatMap((entry) => entry.messages))
   const edits: ContextEditEntryDraft[] = entries
     .filter((entry) => entry.messages.length === 1 && obsolete.has(entry.messages[0]!))
     .map((entry) => ({ type: 'context_edit', targetId: entry.sourceEntry.id, replacement: null }))
@@ -212,7 +211,7 @@ export function registerWorkshopContext(pi: ExtensionAPI): void {
 
   // Idle workers can publish several updates before the next turn boundary.
   pi.on('context', ({ messages }) => {
-    const obsolete = supersededProgress(messages)
+    const obsolete = obsoleteContext(messages)
     return obsolete.size
       ? { messages: messages.filter((message) => !obsolete.has(message)) }
       : undefined

@@ -51,7 +51,6 @@ export async function explicitResources(prompt: string): Promise<ResourceLoader>
         'when only a count, a subset or reuse across turns is needed. Store it before printing, ' +
         'then use load(key) to inspect further slices. Use direct tools for one simple read, ' +
         'commands, edits, reports and delegation. ' +
-        'The primary checkout shares .pi/project-state.md through project_read. ' +
         'Skip searches for .pi/audit and .pi/audits: only the host can read those reports. ' +
         'Use supplied excerpts and report what you verified. Request specific host evidence ' +
         'when it affects a decision.',

@@ -7,9 +7,6 @@ import { captureSession } from './session-support.ts'
 import assert from 'node:assert/strict'
 import { access, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { execFileSync } from 'node:child_process'
-import { memoryRepository } from '../src/memory-repository.ts'
-import { repositoryStore } from '../src/memory-files.ts'
 import { tmpdir } from 'node:os'
 import { randomUUID } from 'node:crypto'
 import test from 'node:test'
@@ -50,7 +47,6 @@ test('every role tool has an explicit inspection or direct-call policy', async (
     'verify_loop',
     'submit_result',
     'task_control',
-    'update_project_memory',
     'watch_github_run',
     'host_work',
     'workflow',
@@ -351,30 +347,9 @@ test('a verdict-only script retains a failed check on the reviewed snapshot', as
   }
 })
 
-test('host scripts receive typed task, harness, history and file reads', async (t) => {
+test('host scripts receive typed task, harness and file reads', async (t) => {
   const item = await fixture()
   t.after(() => rm(item.base, { recursive: true, force: true }))
-  execFileSync('git', ['-C', item.root, 'init', '--quiet'])
-  const repo = await memoryRepository(item.root)
-  assert.ok(repo)
-  const memory = repositoryStore(repo)
-
-  try {
-    memory.update([
-      {
-        key: 'scope',
-        revision: 0,
-        kind: 'decision',
-        text: 'Use fixture',
-        source: 'fixture.md',
-        quote: 'Use fixture',
-        paths: ['lookup:fixture.md'],
-      },
-    ])
-  } finally {
-    memory.close()
-  }
-
   const id = randomUUID()
   const dir = delegationDirectory(new StateStore(item.root), id)
   await atomicJson(join(dir, 'status.json'), { id, status: 'running', updatedAt: 'now' })
@@ -387,16 +362,16 @@ test('host scripts receive typed task, harness, history and file reads', async (
   })
   await writeFile(join(item.root, 'lookup:fixture.md'), 'Read this marker\n')
   const code = [
-    'const [job,cap,harness,history,search,receipt] = await Promise.all([',
+    'const [job,cap,harness,search,receipt] = await Promise.all([',
     'tools.task_status({id:' + JSON.stringify(id) + '}),tools.harness_capabilities({}),',
-    'tools.harness_status({}),tools.project_memory_history({key:"scope"}),',
+    'tools.harness_status({}),',
     'tools.project_search({query:"this marker",pathPrefix:"lookup:"}),',
     'tools.review_receipts({id:' + JSON.stringify(id) + '})]);',
     'text([receipt,job].map(x=>[x.state,x.status].join("/")).join(","));',
     'const hit=search.hits[0];',
     'const file=await tools.project_read({path:hit.path,startLine:hit.line});',
     'text([job.status,Array.isArray(cap.host.tasks),!!harness.runtime.version,',
-    'history[0].paths[0]===hit.path,hit.path,search.hasMore,',
+    'hit.path,search.hasMore,',
     'file.content.includes("Read this marker")]);',
   ].join('')
   let response = ''
@@ -420,7 +395,7 @@ test('host scripts receive typed task, harness, history and file reads', async (
     await session.prompt('Inspect the fixture.')
     assert.match(response, /Script completed/)
     assert.match(response, /running\/running,running\/running/)
-    assert.match(response, /running.*true,true,true.*lookup:fixture.md.*false,true/)
+    assert.match(response, /running.*true,true.*lookup:fixture.md.*false,true/)
   } finally {
     await session.dispose()
     await runtime.settleCredentialWrites()

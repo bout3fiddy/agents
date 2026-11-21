@@ -60,8 +60,6 @@ export function digest(value: string | Buffer): string {
   return createHash('sha256').update(value).digest('hex')
 }
 
-export const projectBriefPath = '.pi/project-state.md'
-
 export const maxFileBytes = 2_000_000
 
 export async function readBoundedFile(path: string, limit = maxFileBytes): Promise<Buffer> {
@@ -210,7 +208,7 @@ export async function inventory(root: string, pathPrefix = ''): Promise<Map<stri
       const path = join(directory, entry.name)
       const name = relative(root, path).split(sep).join('/')
 
-      if (name === projectBriefPath || sensitive(name) || entry.isSymbolicLink()) {
+      if (sensitive(name) || entry.isSymbolicLink()) {
         continue
       }
 
@@ -262,7 +260,7 @@ export async function inventory(root: string, pathPrefix = ''): Promise<Map<stri
 
   if (names) {
     for (const name of names) {
-      if (!name.startsWith(pathPrefix) || name === projectBriefPath || sensitive(name)) {
+      if (!name.startsWith(pathPrefix) || sensitive(name)) {
         continue
       }
 
