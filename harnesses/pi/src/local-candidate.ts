@@ -28,11 +28,12 @@ import type { LocalPlan } from './local-contracts.ts'
 import { acquireLock, type ReleaseLock } from './lock.ts'
 import { digest, fileHashes, inventory, matches, snapshotHash } from './paths.ts'
 import { trackDispatch } from './progress.ts'
-import { loadPinnedProject } from './pinned-project.ts'
+import { currentPolicyCommit, loadPinnedProject } from './pinned-project.ts'
 import { atomicJson, readJson, StateStore } from './state.ts'
 
 async function localProject(request: DelegationRequest, signal: AbortSignal) {
-  const project = await loadPinnedProject(request.root, request.local!.base, signal)
+  const policy = await currentPolicyCommit(request.root, request.local!.base, signal)
+  const project = await loadPinnedProject(request.root, policy, signal)
   const acceptance = request.local!.acceptance
 
   if (project.checks.some((check) => check.id === acceptance.id)) {
@@ -42,7 +43,8 @@ async function localProject(request: DelegationRequest, signal: AbortSignal) {
   return { ...project, root: request.root, checks: [...project.checks, acceptance] }
 }
 
-/** Use the original workload and project configuration even on a later integration target. */
+/** Use the original workload even on a later integration target. Project checks come from the
+ * policy committed at the checkout's current HEAD; see currentPolicyCommit. */
 export async function verifyLocalSnapshot(
   request: DelegationRequest,
   originals: string,
