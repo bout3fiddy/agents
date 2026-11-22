@@ -78,6 +78,11 @@
 - Stop local and branch repair when the candidate is unchanged, when edits leave the failing checks
   naming the same repository locations, or after six failed verification rounds at one guidance
   revision. New guidance resets the count. Coordinator review rounds remain uncapped.
+- tests/repair-simulation.test.ts runs seeded local repair scenarios: generated repository shapes
+  and adverse implementers (idle, churning, out of scope, blocked, crashing). Every scenario must
+  end within the repair bound, commit only assigned paths and keep the copy's Git view clean. Extend
+  it when a harness bug escapes; reproduce with PI_SIMULATION_SEED=<n>, widen with
+  PI_SIMULATION_SEEDS=<count>.
 - Assert internal invariants with src/invariant.ts; keep ordinary errors for invalid input. Every
   discarded error states why. Harness lint ends with a completion marker; attribute diagnostics only
   when it is present, ignoring stray output, and keep the gate closed when it is missing.
