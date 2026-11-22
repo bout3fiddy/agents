@@ -32,6 +32,37 @@ test('Git ignores protect nested roots and prevent ignored additions', async () 
   }
 })
 
+test('failed verifications stop at the repair budget while the candidate changes', async () => {
+  const item = await fixture()
+
+  try {
+    const adapterPath = join(item.root, '.pi/harness.json')
+    const adapter = JSON.parse(await readFile(adapterPath, 'utf8'))
+    adapter.checks[0].argv = ['node', '-e', 'process.exit(1)']
+    await writeFile(adapterPath, JSON.stringify(adapter, null, 2) + '\n')
+    let implementations = 0
+    const result = await runWorkflow(item.store, 'fixture/model', undefined, async (request) => {
+      if (request.role === 'implementer') {
+        implementations++
+        const source = `export const value = ${implementations}\n`
+        await writeFile(join(request.workspace, 'src/value.js'), source)
+      }
+
+      return evidence(request)
+    })
+    assert.equal(result.status, 'needs_attention')
+    assert.match(result.error!, /Workflow repair stopped after 6 failed rounds/)
+    assert.equal(implementations, 6)
+    assert.equal(result.round, 6)
+    assert.equal(
+      await readFile(join(item.root, 'src/value.js'), 'utf8'),
+      'export const value = 0\n',
+    )
+  } finally {
+    await rm(item.base, { recursive: true, force: true })
+  }
+})
+
 test('skip detection covers test runners and accepts explicit zero counts', () => {
   for (const output of [
     '# skipped 1',
@@ -211,7 +242,7 @@ test('required skips never become completion', async () => {
     )
     assert.equal(result.status, 'needs_attention')
     assert.equal(result.round, 2)
-    assert.match(result.error!, /same failure persisted without candidate changes/)
+    assert.match(result.error!, /Workflow repair made no progress on the same candidate/)
     assert.ok(result.receipts.some((receipt) => receipt.status === 'skipped'))
   } finally {
     await rm(item.base, { recursive: true, force: true })
