@@ -83,6 +83,9 @@
   tasks step validate → publish → settle, and each validation steps coordinate → verify → accept.
   The workflow tool steps implement → verify → integrate. Keep new behavior inside a step or add a
   step rather than growing the driver. RepairProgress owns repair stopping for every loop.
+- Register each tool and hook through its own function. Keep state shared across tools in a small
+  class (TaskFeed for host notifications, Coordinator for a coordinator run), not closures inside
+  one registration function.
 - tests/repair-simulation.test.ts runs seeded local repair scenarios: generated repository shapes
   and adverse implementers (idle, churning, out of scope, blocked, crashing). Every scenario must
   end within the repair bound, commit only assigned paths and keep the copy's Git view clean. Extend
