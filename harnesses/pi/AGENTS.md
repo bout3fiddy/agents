@@ -79,9 +79,10 @@
   naming the same repository locations, or after six failed verification rounds at one guidance
   revision. New guidance resets the count. Coordinator review rounds remain uncapped.
 - Orchestration loops are explicit state machines: each step is a small function returning the next
-  step, and a short driver runs them. Local candidates step implement → verify → commit; keep new
-  behavior inside a step or add a step rather than growing the driver. RepairProgress owns repair
-  stopping for every loop.
+  step, and a short driver runs them. Local candidates step implement → verify → commit. Branch
+  tasks step validate → publish → settle, and each validation steps coordinate → verify → accept.
+  Keep new behavior inside a step or add a step rather than growing the driver. RepairProgress owns
+  repair stopping for every loop.
 - tests/repair-simulation.test.ts runs seeded local repair scenarios: generated repository shapes
   and adverse implementers (idle, churning, out of scope, blocked, crashing). Every scenario must
   end within the repair bound, commit only assigned paths and keep the copy's Git view clean. Extend
