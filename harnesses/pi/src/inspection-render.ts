@@ -22,6 +22,8 @@ function parse(value: string): unknown {
   try {
     return JSON.parse(value)
   } catch {
+
+    // Display-only parse; malformed text renders unformatted.
     return undefined
   }
 }

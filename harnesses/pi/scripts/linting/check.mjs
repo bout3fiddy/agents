@@ -93,12 +93,21 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     console.log(finding)
   }
 
+  const diagnostics = failures
+    .join('\n')
+    .split('\n')
+    .filter((line) => line.trim())
+
   if (failures.length) {
-    console.error(failures.join('\n'))
+    console.error(diagnostics.join('\n'))
     process.exitCode = 1
   } else if (inherited.length) {
     console.log('Scoped lint passed with inherited reference findings.')
   } else {
     console.log('Readability, JSON and 100-column checks passed')
   }
+
+  // Callers attribute diagnostics only when this marker proves the run finished, so stray output
+  // such as runtime warnings cannot hide or invent findings, and a crash still blocks.
+  console.log(`harness-lint complete: ${diagnostics.length} diagnostic lines`)
 }

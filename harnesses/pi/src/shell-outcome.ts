@@ -116,6 +116,8 @@ function gitHubState(command: string, output: string): string | undefined {
   try {
     value = JSON.parse(output.slice(output.lastIndexOf('\n{') + 1))
   } catch {
+
+    // Display-only parse; an unrecognized command keeps its raw form.
     return undefined
   }
 

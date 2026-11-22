@@ -581,6 +581,8 @@ export class WorkersView implements Focusable {
       try {
         return JSON.stringify(JSON.parse(row.info.task), null, 2)
       } catch {
+
+        // Display-only parse; the stored task text is shown as written.
         return row.info.task
       }
     }

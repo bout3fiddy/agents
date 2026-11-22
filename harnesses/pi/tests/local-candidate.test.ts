@@ -16,6 +16,7 @@ import { runLocalCandidate } from '../src/local-candidate.ts'
 import { inventory, snapshotHash } from '../src/paths.ts'
 import { atomicJson } from '../src/state.ts'
 import { branchRepository, completed } from './branch-support.ts'
+import { repairRoundsWithoutGuidance } from '../src/repair-budget.ts'
 
 async function localFixture(t: TestContext) {
   const setup = await branchRepository(t)
@@ -399,6 +400,51 @@ test('edits that leave a failure at the same locations stop the repair loop', as
   assert.equal(state.status, 'needs_attention')
   assert.equal(calls, 2)
   assert.match(state.error!, /same failure repeated after edits/)
+})
+
+test('failed repair rounds without new guidance are bounded', async (t) => {
+  const f = await localFixture(t)
+  const policy = join(f.root, '.pi/harness.json')
+  const adapter = JSON.parse(await readFile(policy, 'utf8'))
+  const moving =
+    "const n = require('fs').readFileSync('src/one.js', 'utf8').split('\\n').length; " +
+    "console.error('src/one.js:' + n + ': still failing'); process.exit(1)"
+  adapter.checks.push({
+    id: 'moving',
+    argv: ['node', '-e', moving],
+    kind: 'static',
+    required: true,
+    timeoutMs: 10000,
+  })
+  await writeFile(policy, JSON.stringify(adapter, null, 2) + '\n')
+  await gitCommand(f.root, ['add', '.pi/harness.json'])
+  await gitCommand(f.root, ['commit', '-m', 'Add a check whose failure moves with every edit'])
+  f.request.local!.base = await gitCommand(f.root, ['rev-parse', 'HEAD'])
+  let calls = 0
+  const state = await runLocalCandidate(
+    f.store,
+    f.request,
+    new AbortController().signal,
+    async (w) => {
+      calls++
+      assert.ok(calls <= repairRoundsWithoutGuidance, 'Repair rounds must stay bounded')
+      const lines = [
+        'export const base = 1',
+        '',
+        'export function doubled(value) {',
+        '  return value * 2',
+        '}',
+      ]
+      await writeFile(
+        join(w.workspace, 'src/one.js'),
+        [...lines, ...Array(calls).fill('// edit'), ''].join('\n'),
+      )
+      return passingEvidence(w.workspace)
+    },
+  )
+  assert.equal(state.status, 'needs_attention')
+  assert.equal(calls, repairRoundsWithoutGuidance)
+  assert.match(state.error!, /failed rounds without new guidance/)
 })
 
 test('local repair returns receipts for a repeated failure', async (t) => {

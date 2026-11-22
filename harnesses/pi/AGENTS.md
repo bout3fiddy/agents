@@ -75,8 +75,12 @@
   message to submit the retained work, matching the SDK workers' in-session reminder.
 - Pin files a local acceptance command names, except in an independent task whose write scope
   assigns that file. Explicit workloads and competitions stay pinned.
-- Stop local repair when the candidate is unchanged, or when edits leave the failing checks naming
-  the same repository locations at the same guidance revision. New guidance continues the loop.
+- Stop local and branch repair when the candidate is unchanged, when edits leave the failing checks
+  naming the same repository locations, or after six failed verification rounds at one guidance
+  revision. New guidance resets the count. Coordinator review rounds remain uncapped.
+- Assert internal invariants with src/invariant.ts; keep ordinary errors for invalid input. Every
+  discarded error states why. Harness lint ends with a completion marker; attribute diagnostics only
+  when it is present, ignoring stray output, and keep the gate closed when it is missing.
 - Record actual model/effort and request/model/tool timing under project-local `harness/timing/`.
   Respect the selected orchestrator model; implementation remains independently pinned to
   `openai-codex/gpt-6.2-astra` with medium as the default.

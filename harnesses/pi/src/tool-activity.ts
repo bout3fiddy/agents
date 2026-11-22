@@ -49,6 +49,8 @@ function prettyBlock(text: string) {
   try {
     JSON.parse(trimmed)
   } catch {
+
+    // Display-only parse; malformed payloads render as cleaned text.
     return clean(text)
   }
 

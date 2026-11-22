@@ -117,6 +117,26 @@ test('host accepts the verified repair without a review round', async (t) => {
   assert.match(await readCurrentMain(setup.root, 'src/one.js'), /return value \* 2/)
 })
 
+test('a branch that keeps failing the same checks returns to the host', async (t) => {
+  const setup = await branchRepository(t)
+  const { requests } = await setup.launch({ ...setup.input, tasks: [setup.input.tasks[0]!] })
+  let rounds = 0
+  const state = await runBranchTask(
+    setup.store,
+    requests[0]!,
+    new AbortController().signal,
+    async (request) => {
+      rounds++
+      assert.ok(rounds <= 2, 'An unchanged failing candidate must not loop')
+      await writeFeature(request, true)
+      return coordinatorEvidence(request, {}, ['implementer'])
+    },
+  )
+  assert.equal(state.status, 'needs_attention')
+  assert.equal(rounds, 2)
+  assert.match(state.error!, /Branch repair made no progress/)
+})
+
 test('paused branches retain worktrees and revalidate revised instructions', async (t) => {
   const setup = await branchRepository(t)
   const { requests } = await setup.launch({ ...setup.input, tasks: [setup.input.tasks[0]!] })

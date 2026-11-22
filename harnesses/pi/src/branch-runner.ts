@@ -29,6 +29,7 @@ import { loadProject } from './project.ts'
 import { pinnedDesignInstruction, requireBranchChecks } from './branch-contracts.ts'
 import { changes } from './integration.ts'
 import { digest, fileHashes, inventory, snapshotHash, readBoundedFile, safePath } from './paths.ts'
+import { failureLocations, RepairBudget, repairRoundsWithoutGuidance } from './repair-budget.ts'
 import { validateDesign } from './contracts.ts'
 import { mergeReviewLoop } from './merge-reviews.ts'
 
@@ -222,9 +223,13 @@ export async function runBranchTask(
         }
         let revision = 0
 
-        // Design authority already came from the parent. Review/check repair has no call ceiling.
+        // Design authority already came from the parent. Calls within a round are unbounded;
+        // failed verification rounds stop on repeated failures or the guidance-round budget.
+        const budget = new RepairBudget()
+        const seen = new Set<string>()
+
         while (true) {
-          await controls()
+          const round = await controls()
           revision++
           await save({ status: 'running', mergeBase: base, error: undefined })
           const generation = state.deliveryVersion ? `-run-${state.deliveryVersion}` : ''
@@ -311,6 +316,33 @@ export async function runBranchTask(
               feedback = JSON.stringify({ checks: error.receipts })
             } else {
               feedback = error.message
+            }
+
+            // An unchanged candidate, or edits that leave the failure at the same repository
+            // locations, will not pass on another round; return the work to the host instead.
+            const located =
+              error instanceof DelegationChecksFailed
+                ? failureLocations(error.receipts, after)
+                : undefined
+            const keys = [
+              `${round.revision}/${snapshotHash(after)}/${error.message}`,
+              ...(located ? [`${round.revision}/located/${located}`] : []),
+            ]
+
+            if (keys.some((key) => seen.has(key))) {
+              throw new Error(`Branch repair made no progress: ${error.message}`, { cause: error })
+            }
+
+            for (const key of keys) {
+              seen.add(key)
+            }
+
+            if (budget.failed(round.revision)) {
+              throw new Error(
+                `Branch repair stopped after ${repairRoundsWithoutGuidance} failed rounds ` +
+                  `without new guidance: ${error.message}`,
+                { cause: error },
+              )
             }
 
             continue
