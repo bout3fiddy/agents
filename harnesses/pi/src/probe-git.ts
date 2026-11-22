@@ -68,6 +68,9 @@ export async function addGitIndex(
       await git(['read-tree', 'HEAD'])
     }
 
+    // The harness links host dependencies into each copy. A directory-only ignore rule such as
+    // node_modules/ does not match those symlinks, so exclude them from the copy's own index.
+    await writeFile(join(probe, '.git', 'info', 'exclude'), '/node_modules\n/.venv\n')
     await git(['add', '--all'])
     return [objects]
   } catch {
