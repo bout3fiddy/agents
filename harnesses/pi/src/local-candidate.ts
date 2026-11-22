@@ -3,7 +3,7 @@ import { mkdir, realpath, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import { linkBranchDependencies } from './branch-runner.ts'
 import { childSummary } from './context.ts'
-import type { Checkpoint, Receipt, WorkerEvidence } from './contracts.ts'
+import type { Checkpoint, Project, Receipt, WorkerEvidence } from './contracts.ts'
 import {
   checkDelegation,
   DelegationChecksFailed,
@@ -28,7 +28,7 @@ import type { LocalPlan } from './local-contracts.ts'
 import { acquireLock, type ReleaseLock } from './lock.ts'
 import { digest, fileHashes, inventory, matches, snapshotHash, writable } from './paths.ts'
 import { trackDispatch } from './progress.ts'
-import { failureLocations, RepairBudget, repairRoundsWithoutGuidance } from './repair-budget.ts'
+import { RepairProgress } from './repair-budget.ts'
 import { currentPolicyCommit, loadPinnedProject } from './pinned-project.ts'
 import { atomicJson, readJson, StateStore } from './state.ts'
 
@@ -248,17 +248,32 @@ export async function runLocalCandidate(
   }
 }
 
-async function executeLocalCandidate(
+/** Status persistence and task controls for one supervisor run of a local candidate. */
+type LocalTask = {
+  store: StateStore
+  request: DelegationRequest
+  local: LocalPlan
+  signal: AbortSignal
+  directory: string
+  dispatch?: Dispatcher
+  state: () => DelegationStatus
+  save: (update: Partial<DelegationStatus>) => Promise<void>
+  controls: () => Promise<TaskControls>
+  finish: (revision: number, update: Partial<DelegationStatus>) => Promise<boolean>
+}
+
+function localTask(
   store: StateStore,
   request: DelegationRequest,
   signal: AbortSignal,
   directory: string,
   lock: ReleaseLock,
-  dispatch?: Dispatcher,
-): Promise<DelegationStatus> {
+  initial: DelegationStatus,
+  dispatch: Dispatcher | undefined,
+): LocalTask {
   const statusPath = join(directory, 'status.json')
   const controlsPath = join(directory, 'controls.json')
-  let state = (await readJson<DelegationStatus>(statusPath))!
+  let state = initial
   const save = async (update: Partial<DelegationStatus>) => {
     state = { ...state, ...update, updatedAt: new Date().toISOString() }
     await atomicJson(statusPath, state)
@@ -274,7 +289,6 @@ async function executeLocalCandidate(
 
     return current
   }
-
   const finish = (revision: number, update: Partial<DelegationStatus>) =>
     new Delegations(store).locked(async () => {
       if ((await controls()).revision !== revision) {
@@ -284,312 +298,103 @@ async function executeLocalCandidate(
       await save({ ...update, status: 'complete', error: undefined })
       return true
     })
+  return {
+    store,
+    request,
+    local: request.local!,
+    signal,
+    directory,
+    dispatch,
+    state: () => state,
+    save,
+    controls,
+    finish,
+  }
+}
 
-  let originals: string | undefined
-  let linkedOriginalDependencies = false
+/** One candidate checkout verified against a disposable worktree of its pinned base. */
+type LocalSession = {
+  task: LocalTask
+  branch: CandidateCheckout & { branch: string }
+  basePath: string
+  project: Project
+  before: Map<string, Buffer>
+  checkpoint: Checkpoint
+  progress: RepairProgress
+  head: string
+}
+
+/** An implementer round whose candidate snapshot awaits verification. */
+type Round = {
+  revision: number
+  progressFile: string
+  evidence: WorkerEvidence
+  after: Map<string, Buffer>
+  snapshot: string
+}
+
+/** The repair loop as explicit states. Each step returns the next; only commit completes. */
+type LocalStep =
+  | { kind: 'implement'; feedback: string }
+  | { kind: 'verify'; round: Round }
+  | { kind: 'commit'; round: Round; receipts: Receipt[] }
+  | { kind: 'complete' }
+
+const guidanceFeedback = 'Read the newly received scoped guidance and verify the candidate again.'
+
+async function executeLocalCandidate(
+  store: StateStore,
+  request: DelegationRequest,
+  signal: AbortSignal,
+  directory: string,
+  lock: ReleaseLock,
+  dispatch?: Dispatcher,
+): Promise<DelegationStatus> {
+  const initial = (await readJson<DelegationStatus>(join(directory, 'status.json')))!
+  const task = localTask(store, request, signal, directory, lock, initial, dispatch)
+  const baseline: { path?: string; linked: boolean } = { linked: false }
 
   try {
-    const local = request.local
-
-    if (!local || !/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(local.base)) {
+    if (!request.local || !/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(request.local.base)) {
       throw new Error('Missing local candidate or invalid pinned commit')
     }
 
-    await controls()
+    await task.controls()
 
-    if (state.status === 'complete') {
-      return state
+    if (task.state().status === 'complete') {
+      return task.state()
     }
 
-    await save({ status: 'running', pid: process.pid, hostActions: undefined, error: undefined })
+    await task.save({
+      status: 'running',
+      pid: process.pid,
+      hostActions: undefined,
+      error: undefined,
+    })
     const branch = await checkoutCandidate(store, request, signal)
-    await save({ candidate: branch.workspace, branch: branch.branch, base: local.base })
-    const preparedPath = join(directory, 'local-commit.json')
-    const prepared = await readJson<PreparedCommit>(preparedPath)
-    let initialHead = await checkRecordedHead(branch, prepared, signal)
+    await task.save({
+      candidate: branch.workspace,
+      branch: branch.branch,
+      base: request.local.base,
+    })
+    const recovered = await recoverPreparedCommit(task, branch)
 
-    if (prepared && (await controls()).revision === prepared.revision) {
-      const evidence = await readJson<WorkerEvidence>(join(directory, prepared.progressFile))
-      const files = await inventory(branch.workspace)
-
-      if (
-        evidence?.role !== 'implementer' ||
-        evidence.result.verdict !== 'pass' ||
-        evidence.snapshot !== prepared.snapshot ||
-        snapshotHash(files) !== prepared.snapshot ||
-        !prepared.receipts.some((r) => r.check === local.acceptance.id && r.status === 'passed') ||
-        prepared.receipts.some((r) => r.snapshot !== prepared.snapshot)
-      ) {
-        throw new Error('Retained candidate no longer matches its verified evidence')
-      }
-
-      const commit = await commitVerifiedTree(
-        branch,
-        {
-          message: request.task.slice(0, 200).replaceAll('\n', ' '),
-          writePaths: request.writePaths,
-          expectedSnapshot: prepared.snapshot,
-        },
-        branch.base,
-        signal,
-        async (tree) => {
-          if (tree !== prepared.tree) {
-            throw new Error('Retained candidate index differs from its verified tree')
-          }
-        },
-      )
-      initialHead = commit
-      const recovered = await finish(prepared.revision, {
-        commit,
-        receipts: prepared.receipts,
-        children: [childSummary(evidence)],
-        progressFile: prepared.progressFile,
-        receiptAttempt: prepared.progressFile,
-        summary: evidence.result.summary,
-        error: undefined,
-      })
-
-      if (recovered) {
-        return state
-      }
+    if (recovered.complete) {
+      return task.state()
     }
 
-    await mkdir(join(store.directory, 'baselines'), { recursive: true, mode: 0o700 })
-    const basePath = join(store.directory, 'baselines', randomUUID())
-    await gitCommand(
-      request.root,
-      ['worktree', 'add', '--detach', '--', basePath, local.base],
-      signal,
-    )
-    originals = basePath
-    linkedOriginalDependencies = await linkBranchDependencies(request.root, basePath, signal)
-    const project = await localProject(request, signal)
-    const before = await inventory(basePath)
-    const baseline = fileHashes(before)
-    const checkpoint: Checkpoint = {
-      objective: local.mode === 'competition' ? request.task : local.objective,
-      design: request.context || request.task,
-      writePaths: request.writePaths,
-      acceptance: [JSON.stringify(local.acceptance.argv)],
-      invariants: ['Preserve the pinned workload and all unrelated behavior.'],
-      unresolved: [],
-      database: false,
-      performance: false,
-      version: 1,
-      hash: digest(JSON.stringify(request)),
-      acceptedAt: request.createdAt,
+    const session = await prepareSession(task, branch, recovered.head, baseline)
+    let step: LocalStep = { kind: 'implement', feedback: '' }
+
+    // Bounded per guidance revision by RepairProgress; new guidance comes only from the host.
+    while (step.kind !== 'complete') {
+      step = await advance(session, step)
     }
-    let feedback = ''
-    const failures = new Set<string>()
-    const budget = new RepairBudget()
-    let lastFailure:
-      { revision: number; snapshot: string; message: string; receipts?: Receipt[] } | undefined
 
-    while (true) {
-      const current = await controls()
-      const progressFile = `implementer-${randomUUID()}.json`
-      const output = join(directory, progressFile)
-      await save({
-        status: 'running',
-        progressFile,
-        receipts: undefined,
-        receiptAttempt: undefined,
-      })
-      const child = trackDispatch(
-        dispatch ?? dispatcher(new StateStore(request.root, directory)),
-        output,
-      )
-
-      // The worker cannot open Git metadata. Capture checkout evidence before each handoff,
-      // including repairs that keep uncommitted edits from the previous attempt.
-      const status = await gitCommand(
-        branch.workspace,
-        ['status', '--porcelain=v2', '--branch', '--no-ahead-behind', '--untracked-files=normal'],
-        signal,
-      )
-      const lines = status.split('\n')
-
-      if (
-        !lines.includes('# branch.oid ' + initialHead) ||
-        !lines.includes('# branch.head ' + branch.branch)
-      ) {
-        throw new Error('Candidate branch or HEAD changed before implementation')
-      }
-
-      const checkout = {
-        pinnedBase: branch.base,
-        head: initialHead,
-        clean: lines.every((line) => line.startsWith('# ')),
-      }
-      const evidence = await child(
-        {
-          role: 'implementer',
-          thinking: request.thinking,
-          implementerModel: request.implementerModel,
-          task: JSON.stringify({
-            task: request.task,
-            updates: current.messages,
-            feedback,
-            previousHostHandoff: current.previousHostHandoff,
-          }),
-          model: request.model,
-          workspace: branch.workspace,
-          checkout,
-          project,
-          checkpoint,
-          baseline,
-          originals,
-        },
-        signal,
-      )
-      await atomicJson(output, evidence)
-      await controls()
-      const after = await inventory(branch.workspace)
-      const snapshot = snapshotHash(after)
-      await save({
-        summary: evidence.result.summary,
-        status: 'checking',
-        children: [...(state.children ?? []), childSummary(evidence)],
-        changedPaths: changes(before, after),
-        hostActions: evidence.result.hostActions,
-      })
-
-      if (
-        evidence.role !== 'implementer' ||
-        evidence.result.verdict !== 'pass' ||
-        evidence.snapshot !== snapshot
-      ) {
-        throw new Error(`Local implementer ${evidence.result.verdict}: ${evidence.result.summary}`)
-      }
-
-      // An unchanged candidate would reproduce the same failure. Return the implementer's host
-      // handoff now instead of spending another verification on identical bytes.
-      if (lastFailure?.snapshot === snapshot && lastFailure.revision === current.revision) {
-        await save({ receipts: lastFailure.receipts, receiptAttempt: progressFile })
-        throw new Error(
-          `Repair made no progress; the candidate is unchanged after: ${lastFailure.message}`,
-        )
-      }
-
-      let receipts
-
-      try {
-        receipts = await verifyLocalSnapshot(request, basePath, branch.workspace, evidence, signal)
-      } catch (error) {
-        if (
-          !(error instanceof DelegationChecksFailed) &&
-          !(error instanceof DelegationRepairRequired)
-        ) {
-          throw error
-        }
-
-        if (error instanceof DelegationChecksFailed) {
-          await save({ receipts: error.receipts, receiptAttempt: progressFile })
-          const failed = error.receipts.filter((r) => r.status !== 'passed')
-
-          if (failed.some((r) => r.status === 'unavailable')) {
-            throw error
-          }
-
-          feedback = JSON.stringify(
-            failed.map((r) => ({
-              check: r.check,
-              status: r.status,
-              output: r.scopedLintOutput ?? r.result.output.slice(-4000),
-            })),
-          )
-        } else {
-          feedback = error.message
-        }
-
-        const failure = `${current.revision}/${snapshot}/${error.message}`
-
-        if (failures.has(failure)) {
-          throw new Error(`Repair made no progress on the same local candidate: ${error.message}`, {
-            cause: error,
-          })
-        }
-
-        // Edits that leave a failure at the same repository locations did not reach it, such as
-        // a comment change while an inherited defect fails the gate. Hand off instead of looping.
-        const located =
-          error instanceof DelegationChecksFailed
-            ? failureLocations(error.receipts, after)
-            : undefined
-        const repeated = located && `${current.revision}/located/${located}`
-
-        if (repeated && failures.has(repeated)) {
-          throw new Error(
-            `Repair made no progress; the same failure repeated after edits: ${error.message}`,
-            { cause: error },
-          )
-        }
-
-        failures.add(failure)
-
-        if (repeated) {
-          failures.add(repeated)
-        }
-
-        if (budget.failed(current.revision)) {
-          throw new Error(
-            `Repair stopped after ${repairRoundsWithoutGuidance} failed rounds without new ` +
-              `guidance: ${error.message}`,
-            { cause: error },
-          )
-        }
-
-        lastFailure = {
-          revision: current.revision,
-          snapshot,
-          message: error.message,
-          receipts: error instanceof DelegationChecksFailed ? error.receipts : undefined,
-        }
-        continue
-      }
-
-      await save({ receipts, receiptAttempt: progressFile })
-
-      if ((await controls()).revision !== current.revision) {
-        feedback = 'Read the newly received scoped guidance and verify the candidate again.'
-        continue
-      }
-
-      if ((await currentCommit(branch, signal)) !== initialHead) {
-        throw new Error('Candidate branch HEAD changed during verification')
-      }
-
-      const commit = await commitVerifiedTree(
-        branch,
-        {
-          message: request.task.slice(0, 200).replaceAll('\n', ' '),
-          writePaths: request.writePaths,
-          expectedSnapshot: snapshot,
-        },
-        branch.base,
-        signal,
-        (tree) =>
-          atomicJson(preparedPath, {
-            parent: initialHead,
-            tree,
-            snapshot,
-            revision: current.revision,
-            progressFile,
-            receipts,
-          } satisfies PreparedCommit),
-      )
-      initialHead = commit
-      const accepted = await finish(current.revision, { commit })
-
-      if (accepted) {
-        return state
-      }
-
-      feedback = 'Read the newly received scoped guidance and verify the candidate again.'
-    }
+    return task.state()
   } catch (error) {
-    const control = await readJson<TaskControls>(controlsPath)
-    await save({
+    const control = await readJson<TaskControls>(join(directory, 'controls.json'))
+    await task.save({
       status: control?.paused
         ? 'paused'
         : signal.aborted || control?.cancelled
@@ -597,15 +402,320 @@ async function executeLocalCandidate(
           : 'needs_attention',
       error: String(error),
     })
-    return state
+    return task.state()
   } finally {
-    if (originals) {
-      if (linkedOriginalDependencies) {
-        await rm(join(originals, 'node_modules'), { force: true })
-        await rm(join(originals, '.venv'), { force: true })
+    if (baseline.path) {
+      if (baseline.linked) {
+        await rm(join(baseline.path, 'node_modules'), { force: true })
+        await rm(join(baseline.path, '.venv'), { force: true })
       }
 
-      await gitCommand(request.root, ['worktree', 'remove', '--', originals])
+      await gitCommand(request.root, ['worktree', 'remove', '--', baseline.path])
     }
   }
+}
+
+/** A checked tree may have been committed just before the supervisor stopped. Finish from that
+ * record when its guidance revision is still current. */
+async function recoverPreparedCommit(
+  task: LocalTask,
+  branch: CandidateCheckout,
+): Promise<{ complete: boolean; head: string }> {
+  const prepared = await readJson<PreparedCommit>(join(task.directory, 'local-commit.json'))
+  const head = await checkRecordedHead(branch, prepared, task.signal)
+
+  if (!prepared || (await task.controls()).revision !== prepared.revision) {
+    return { complete: false, head }
+  }
+
+  const evidence = await readJson<WorkerEvidence>(join(task.directory, prepared.progressFile))
+  const files = await inventory(branch.workspace)
+
+  if (
+    evidence?.role !== 'implementer' ||
+    evidence.result.verdict !== 'pass' ||
+    evidence.snapshot !== prepared.snapshot ||
+    snapshotHash(files) !== prepared.snapshot ||
+    !prepared.receipts.some((r) => r.check === task.local.acceptance.id && r.status === 'passed') ||
+    prepared.receipts.some((r) => r.snapshot !== prepared.snapshot)
+  ) {
+    throw new Error('Retained candidate no longer matches its verified evidence')
+  }
+
+  const commit = await commitVerifiedTree(
+    branch,
+    {
+      message: task.request.task.slice(0, 200).replaceAll('\n', ' '),
+      writePaths: task.request.writePaths,
+      expectedSnapshot: prepared.snapshot,
+    },
+    branch.base,
+    task.signal,
+    async (tree) => {
+      if (tree !== prepared.tree) {
+        throw new Error('Retained candidate index differs from its verified tree')
+      }
+    },
+  )
+  const complete = await task.finish(prepared.revision, {
+    commit,
+    receipts: prepared.receipts,
+    children: [childSummary(evidence)],
+    progressFile: prepared.progressFile,
+    receiptAttempt: prepared.progressFile,
+    summary: evidence.result.summary,
+    error: undefined,
+  })
+  return { complete, head: commit }
+}
+
+async function prepareSession(
+  task: LocalTask,
+  branch: LocalSession['branch'],
+  head: string,
+  baseline: { path?: string; linked: boolean },
+): Promise<LocalSession> {
+  const { request, local, store, signal } = task
+  await mkdir(join(store.directory, 'baselines'), { recursive: true, mode: 0o700 })
+  const basePath = join(store.directory, 'baselines', randomUUID())
+  await gitCommand(
+    request.root,
+    ['worktree', 'add', '--detach', '--', basePath, local.base],
+    signal,
+  )
+  baseline.path = basePath
+  baseline.linked = await linkBranchDependencies(request.root, basePath, signal)
+  const checkpoint: Checkpoint = {
+    objective: local.mode === 'competition' ? request.task : local.objective,
+    design: request.context || request.task,
+    writePaths: request.writePaths,
+    acceptance: [JSON.stringify(local.acceptance.argv)],
+    invariants: ['Preserve the pinned workload and all unrelated behavior.'],
+    unresolved: [],
+    database: false,
+    performance: false,
+    version: 1,
+    hash: digest(JSON.stringify(request)),
+    acceptedAt: request.createdAt,
+  }
+  return {
+    task,
+    branch,
+    basePath,
+    project: await localProject(request, signal),
+    before: await inventory(basePath),
+    checkpoint,
+    progress: new RepairProgress('Repair'),
+    head,
+  }
+}
+
+async function advance(session: LocalSession, step: LocalStep): Promise<LocalStep> {
+  switch (step.kind) {
+    case 'implement':
+      return implementRound(session, step.feedback)
+    case 'verify':
+      return verifyRound(session, step.round)
+    case 'commit':
+      return commitRound(session, step.round, step.receipts)
+    case 'complete':
+      return step
+  }
+}
+
+/** Hand the candidate to the implementer and capture the snapshot it returns. */
+async function implementRound(session: LocalSession, feedback: string): Promise<LocalStep> {
+  const { task, branch } = session
+  const current = await task.controls()
+  const progressFile = `implementer-${randomUUID()}.json`
+  const output = join(task.directory, progressFile)
+  await task.save({
+    status: 'running',
+    progressFile,
+    receipts: undefined,
+    receiptAttempt: undefined,
+  })
+  const child = trackDispatch(
+    task.dispatch ?? dispatcher(new StateStore(task.request.root, task.directory)),
+    output,
+  )
+  const evidence = await child(
+    {
+      role: 'implementer',
+      thinking: task.request.thinking,
+      implementerModel: task.request.implementerModel,
+      task: JSON.stringify({
+        task: task.request.task,
+        updates: current.messages,
+        feedback,
+        previousHostHandoff: current.previousHostHandoff,
+      }),
+      model: task.request.model,
+      workspace: branch.workspace,
+      checkout: await checkoutEvidence(session),
+      project: session.project,
+      checkpoint: session.checkpoint,
+      baseline: fileHashes(session.before),
+      originals: session.basePath,
+    },
+    task.signal,
+  )
+  await atomicJson(output, evidence)
+  await task.controls()
+  const after = await inventory(branch.workspace)
+  const snapshot = snapshotHash(after)
+  await task.save({
+    summary: evidence.result.summary,
+    status: 'checking',
+    children: [...(task.state().children ?? []), childSummary(evidence)],
+    changedPaths: changes(session.before, after),
+    hostActions: evidence.result.hostActions,
+  })
+
+  if (
+    evidence.role !== 'implementer' ||
+    evidence.result.verdict !== 'pass' ||
+    evidence.snapshot !== snapshot
+  ) {
+    throw new Error(`Local implementer ${evidence.result.verdict}: ${evidence.result.summary}`)
+  }
+
+  // An unchanged candidate would reproduce the same failure. Return the implementer's host
+  // handoff now instead of spending another verification on identical bytes.
+  const repeated = session.progress.unchanged(current.revision, snapshot)
+
+  if (repeated) {
+    await task.save({ receipts: repeated.receipts, receiptAttempt: progressFile })
+    throw session.progress.stalledUnchanged(repeated)
+  }
+
+  return {
+    kind: 'verify',
+    round: { revision: current.revision, progressFile, evidence, after, snapshot },
+  }
+}
+
+/** The worker cannot open Git metadata. Capture checkout evidence before each handoff,
+ * including repairs that keep uncommitted edits from the previous attempt. */
+async function checkoutEvidence(session: LocalSession) {
+  const { branch, head } = session
+  const status = await gitCommand(
+    branch.workspace,
+    ['status', '--porcelain=v2', '--branch', '--no-ahead-behind', '--untracked-files=normal'],
+    session.task.signal,
+  )
+  const lines = status.split('\n')
+
+  if (
+    !lines.includes('# branch.oid ' + head) ||
+    !lines.includes('# branch.head ' + branch.branch)
+  ) {
+    throw new Error('Candidate branch or HEAD changed before implementation')
+  }
+
+  return { pinnedBase: branch.base, head, clean: lines.every((line) => line.startsWith('# ')) }
+}
+
+/** Run the gate. A failure returns to the implementer until RepairProgress stops the loop. */
+async function verifyRound(session: LocalSession, round: Round): Promise<LocalStep> {
+  const { task } = session
+  let receipts
+
+  try {
+    receipts = await verifyLocalSnapshot(
+      task.request,
+      session.basePath,
+      session.branch.workspace,
+      round.evidence,
+      task.signal,
+    )
+  } catch (error) {
+    if (
+      !(error instanceof DelegationChecksFailed) &&
+      !(error instanceof DelegationRepairRequired)
+    ) {
+      throw error
+    }
+
+    let feedback = error.message
+    let failedReceipts: Receipt[] | undefined
+
+    if (error instanceof DelegationChecksFailed) {
+      await task.save({ receipts: error.receipts, receiptAttempt: round.progressFile })
+      const failed = error.receipts.filter((r) => r.status !== 'passed')
+
+      if (failed.some((r) => r.status === 'unavailable')) {
+        throw error
+      }
+
+      failedReceipts = error.receipts
+      feedback = JSON.stringify(
+        failed.map((r) => ({
+          check: r.check,
+          status: r.status,
+          output: r.scopedLintOutput ?? r.result.output.slice(-4000),
+        })),
+      )
+    }
+
+    session.progress.failed(
+      {
+        revision: round.revision,
+        snapshot: round.snapshot,
+        message: error.message,
+        receipts: failedReceipts,
+      },
+      round.after,
+      error,
+    )
+    return { kind: 'implement', feedback }
+  }
+
+  await task.save({ receipts, receiptAttempt: round.progressFile })
+
+  if ((await task.controls()).revision !== round.revision) {
+    return { kind: 'implement', feedback: guidanceFeedback }
+  }
+
+  return { kind: 'commit', round, receipts }
+}
+
+/** Commit the verified bytes, recording the prepared commit first so a restart can finish it. */
+async function commitRound(
+  session: LocalSession,
+  round: Round,
+  receipts: Receipt[],
+): Promise<LocalStep> {
+  const { task, branch } = session
+
+  if ((await currentCommit(branch, task.signal)) !== session.head) {
+    throw new Error('Candidate branch HEAD changed during verification')
+  }
+
+  const commit = await commitVerifiedTree(
+    branch,
+    {
+      message: task.request.task.slice(0, 200).replaceAll('\n', ' '),
+      writePaths: task.request.writePaths,
+      expectedSnapshot: round.snapshot,
+    },
+    branch.base,
+    task.signal,
+    (tree) =>
+      atomicJson(join(task.directory, 'local-commit.json'), {
+        parent: session.head,
+        tree,
+        snapshot: round.snapshot,
+        revision: round.revision,
+        progressFile: round.progressFile,
+        receipts,
+      } satisfies PreparedCommit),
+  )
+  session.head = commit
+
+  if (await task.finish(round.revision, { commit })) {
+    return { kind: 'complete' }
+  }
+
+  return { kind: 'implement', feedback: guidanceFeedback }
 }
