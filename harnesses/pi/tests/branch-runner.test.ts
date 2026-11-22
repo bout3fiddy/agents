@@ -135,6 +135,7 @@ test('a branch that keeps failing the same checks returns to the host', async (t
   assert.equal(state.status, 'needs_attention')
   assert.equal(rounds, 2)
   assert.match(state.error!, /Branch repair made no progress/)
+  assert.ok(state.receipts?.some((receipt) => receipt.status === 'failed'))
 })
 
 test('paused branches retain worktrees and revalidate revised instructions', async (t) => {
