@@ -3,7 +3,8 @@ import { tmpdir } from 'node:os'
 import { join, relative, sep } from 'node:path'
 import type { ExtensionAPI, ExtensionContext } from '@earendil-works/pi-coding-agent'
 import { Delegations, type DelegationStatus } from './delegation-state.ts'
-import { gitCommand } from './git-branches.ts'
+import { gitCommand, GitCommandError } from './git-branches.ts'
+import { invariant } from './invariant.ts'
 import { atomicJson, readJson, StateStore, type TaskState } from './state.ts'
 import { processAlive, sweepTemporary, temporaryRoot, type SweepReport } from './temp.ts'
 
@@ -74,15 +75,29 @@ function temporaryCopy(path: string | undefined): path is string {
   })
 }
 
+/** A nonzero Git exit answers the question asked (no such ref, not an ancestor, not a
+ * repository); any other failure is unexpected and propagates. */
 async function git(root: string, args: string[]): Promise<string | undefined> {
   try {
     return await gitCommand(root, args)
-  } catch {
-    return undefined
+  } catch (error) {
+    if (error instanceof GitCommandError) {
+      return undefined
+    }
+
+    throw error
   }
 }
 
-async function removeWorktree(root: string, path: string, dryRun: boolean | undefined) {
+async function removeWorktree(store: StateStore, path: string, dryRun: boolean | undefined) {
+  const owner = relative(store.directory, path).split(sep)[0]
+  invariant(
+    ['worktrees', 'baselines', 'host-worktrees'].includes(owner ?? '') &&
+      !relative(store.directory, path).startsWith('..'),
+    `cleanup removes only Pi-owned worktrees: ${path}`,
+  )
+  const root = store.projectRoot
+
   if (dryRun) {
     return
   }
@@ -179,7 +194,7 @@ async function pruneDelegation(
       patch = await savePatch(worktree, join(directory, 'expired.patch'))
     }
 
-    await removeWorktree(root, worktree, options.dryRun)
+    await removeWorktree(store, worktree, options.dryRun)
     report.worktrees.push(worktree)
   }
 
@@ -316,7 +331,7 @@ export async function pruneProject(store: StateStore, options: PruneOptions) {
     }
 
     report.baselines.push(path)
-    await removeWorktree(root, path, options.dryRun)
+    await removeWorktree(store, path, options.dryRun)
   }
 
   for (const name of await entries(join(store.directory, 'host-worktrees'))) {
@@ -330,7 +345,7 @@ export async function pruneProject(store: StateStore, options: PruneOptions) {
 
     if (status === '') {
       report.hostWorktrees.push(path)
-      await removeWorktree(root, path, options.dryRun)
+      await removeWorktree(store, path, options.dryRun)
     }
   }
 
@@ -425,6 +440,8 @@ export function registerCleanup(pi: ExtensionAPI) {
     try {
       return ctx.isIdle() && !ctx.hasPendingMessages()
     } catch {
+
+      // Pi can invalidate an SDK context before session_shutdown; treat it as busy.
       return false
     }
   }

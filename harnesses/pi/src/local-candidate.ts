@@ -28,42 +28,9 @@ import type { LocalPlan } from './local-contracts.ts'
 import { acquireLock, type ReleaseLock } from './lock.ts'
 import { digest, fileHashes, inventory, matches, snapshotHash, writable } from './paths.ts'
 import { trackDispatch } from './progress.ts'
+import { failureLocations, RepairBudget, repairRoundsWithoutGuidance } from './repair-budget.ts'
 import { currentPolicyCommit, loadPinnedProject } from './pinned-project.ts'
 import { atomicJson, readJson, StateStore } from './state.ts'
-
-/** Repository locations a failure names, as path:line[:column] matched against the candidate's
- * files. Edits in a failing file shift these; edits elsewhere leave an unrelated failure identical.
- * Returns undefined when a failed check names no repository location. */
-export function failureLocations(receipts: Receipt[], files: Map<string, Buffer>) {
-  const parts: string[] = []
-
-  for (const receipt of receipts.filter((item) => item.status !== 'passed')) {
-    const locations = new Set<string>()
-
-    for (const token of receipt.result.output.match(/[\w@./-]+\.[A-Za-z0-9]{1,8}:\d+(?::\d+)?/g) ??
-      []) {
-      const [path, ...position] = token.split(':')
-      const segments = path!.split('/').filter(Boolean)
-
-      for (let start = 0; start < segments.length; start++) {
-        const name = segments.slice(start).join('/')
-
-        if (files.has(name)) {
-          locations.add([name, ...position].join(':'))
-          break
-        }
-      }
-    }
-
-    if (!locations.size) {
-      return undefined
-    }
-
-    parts.push(`${receipt.check}:${[...locations].sort().join(',')}`)
-  }
-
-  return parts.length ? parts.join('|') : undefined
-}
 
 async function localProject(request: DelegationRequest, signal: AbortSignal) {
   const policy = await currentPolicyCommit(request.root, request.local!.base, signal)
@@ -414,6 +381,7 @@ async function executeLocalCandidate(
     }
     let feedback = ''
     const failures = new Set<string>()
+    const budget = new RepairBudget()
     let lastFailure:
       { revision: number; snapshot: string; message: string; receipts?: Receipt[] } | undefined
 
@@ -561,6 +529,14 @@ async function executeLocalCandidate(
 
         if (repeated) {
           failures.add(repeated)
+        }
+
+        if (budget.failed(current.revision)) {
+          throw new Error(
+            `Repair stopped after ${repairRoundsWithoutGuidance} failed rounds without new ` +
+              `guidance: ${error.message}`,
+            { cause: error },
+          )
         }
 
         lastFailure = {

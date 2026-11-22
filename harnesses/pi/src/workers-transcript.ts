@@ -97,6 +97,8 @@ function parseObject(text: string): Record<string, unknown> | undefined {
     const value = JSON.parse(text)
     return value && typeof value === 'object' && !Array.isArray(value) ? value : undefined
   } catch {
+
+    // Display-only parse; a malformed entry is omitted from the summary.
     return undefined
   }
 }

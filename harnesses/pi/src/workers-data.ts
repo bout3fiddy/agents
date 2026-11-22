@@ -34,6 +34,8 @@ export function taskTitle(raw: string): string {
     const value = JSON.parse(raw) as { task?: string; assignment?: string }
     return value.task ?? value.assignment ?? raw
   } catch {
+
+    // Display-only parse; malformed JSON renders as raw text.
     return raw
   }
 }

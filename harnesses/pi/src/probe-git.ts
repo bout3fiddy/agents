@@ -1,6 +1,6 @@
 import { realpath, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { gitCommand } from './git-branches.ts'
+import { gitCommand, GitCommandError } from './git-branches.ts'
 
 async function objectsDirectory(projectRoot: string): Promise<string | undefined> {
   try {
@@ -10,16 +10,28 @@ async function objectsDirectory(projectRoot: string): Promise<string | undefined
       '--git-common-dir',
     ])
     return await realpath(join(common, 'objects'))
-  } catch {
-    return undefined
+  } catch (error) {
+
+    // Outside a Git repository the copy simply has no Git metadata.
+    if (error instanceof GitCommandError || (error as NodeJS.ErrnoException).code === 'ENOENT') {
+      return undefined
+    }
+
+    throw error
   }
 }
 
 async function checkoutHead(source: string): Promise<string | undefined> {
   try {
     return await gitCommand(source, ['rev-parse', '--verify', 'HEAD^{commit}'])
-  } catch {
-    return undefined
+  } catch (error) {
+
+    // A plain copy is not a checkout and has no HEAD of its own.
+    if (error instanceof GitCommandError) {
+      return undefined
+    }
+
+    throw error
   }
 }
 

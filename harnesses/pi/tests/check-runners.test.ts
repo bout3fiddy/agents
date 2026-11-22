@@ -6,7 +6,7 @@ import test, { type TestContext } from 'node:test'
 import type { Project, ProjectCheck } from '../src/contracts.ts'
 import { dependencyDrift, requireDependencies } from '../src/dependencies.ts'
 import { gitCommand } from '../src/git-branches.ts'
-import { createWorkspace, loadProject, verifyProject } from '../src/project.ts'
+import { createWorkspace, lintFindings, loadProject, verifyProject } from '../src/project.ts'
 import { sandboxProfile } from '../src/sandbox.ts'
 
 async function project(t: TestContext, checks: ProjectCheck[]): Promise<Project> {
@@ -184,4 +184,16 @@ test('a linked virtual environment and its interpreter prefix are readable', asy
   assert.equal(await realpath(join(workspace, '.venv')), await realpath(join(item.root, '.venv')))
   const profile = await sandboxProfile(workspace, workspace)
   assert.ok(profile.includes(`(allow file-read* (subpath ${JSON.stringify(prefix)}))`), profile)
+})
+
+test('lint attribution ignores stray output but blocks a crash or a lost diagnostic', () => {
+  const files = new Map([['existing.js', Buffer.from('// ' + 'x'.repeat(110) + '\n')]])
+  const finding = 'existing.js:1: line exceeds 100 columns'
+  const noise = 'EPERM: Failed to write file /tmp/v8/coverage-1.json'
+  const complete = (count: number) => `harness-lint complete: ${count} diagnostic lines`
+  const noisy = lintFindings([finding, noise, complete(1)].join('\n'), '/copy', files)
+  assert.equal(noisy.unknown, false)
+  assert.equal(noisy.findings.length, 1)
+  assert.equal(lintFindings([finding, noise].join('\n'), '/copy', files).unknown, true)
+  assert.equal(lintFindings([finding, complete(2)].join('\n'), '/copy', files).unknown, true)
 })

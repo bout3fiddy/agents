@@ -197,10 +197,12 @@ type LintFinding = { name: string; key: string; line: string }
 const harnessLintArgv = () => ['node', join(harnessRoot, 'scripts', 'linting', 'check.mjs'), '.']
 const baselineFindings = new Map<string, Promise<string[]>>()
 
-/** Parse harness-lint diagnostics. Unknown output stays unattributed and keeps the gate closed. */
-function lintFindings(output: string, prefix: string, files: Map<string, Buffer>) {
+/** Parse harness-lint diagnostics. The run's completion marker states how many diagnostic lines
+ * it printed; other lines (runtime warnings, say) are ignored. A missing marker or fewer parsed
+ * diagnostics than it states leaves output unattributed and keeps the gate closed. */
+export function lintFindings(output: string, prefix: string, files: Map<string, Buffer>) {
   const findings: LintFinding[] = []
-  let unknown = false
+  const marker = /^harness-lint complete: (\d+) diagnostic lines$/m.exec(output)
 
   for (const line of output.trim().split('\n')) {
     if (!line.trim() || /: \d+ inherited line-width findings?$/.test(line)) {
@@ -208,22 +210,16 @@ function lintFindings(output: string, prefix: string, files: Map<string, Buffer>
     }
 
     const diagnostic = /^([^:\r\n]+?)(?::(\d+))?: (.+)$/.exec(line)
+    const raw = diagnostic?.[1]
+    const name = raw?.startsWith(prefix + '/') ? raw.slice(prefix.length + 1) : raw
+    const source = name ? files.get(name) : undefined
 
-    if (!diagnostic) {
-      unknown = true
-      continue
-    }
-
-    const [, raw, number, message] = diagnostic
-    const name = raw!.startsWith(prefix + '/') ? raw!.slice(prefix.length + 1) : raw!
-    const source = files.get(name)
-
-    if (!source) {
-      unknown = true
+    if (!diagnostic || !name || !source) {
       continue
     }
 
     // Line numbers move with unrelated edits; the offending text identifies a finding.
+    const [, , number, message] = diagnostic
     const text = number ? (source.toString('utf8').split(/\r?\n/)[Number(number) - 1] ?? '') : ''
     findings.push({
       name,
@@ -232,7 +228,7 @@ function lintFindings(output: string, prefix: string, files: Map<string, Buffer>
     })
   }
 
-  return { findings, unknown }
+  return { findings, unknown: !marker || findings.length < Number(marker[1]) }
 }
 
 async function lintBaselineFindings(baseline: LintBaseline, signal?: AbortSignal) {

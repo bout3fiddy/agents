@@ -1,3 +1,4 @@
+import { invariant } from './invariant.ts'
 import { spawn } from 'node:child_process'
 import { appendFileSync } from 'node:fs'
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
@@ -119,12 +120,29 @@ export async function runClaudeWorker(request: WorkerRequest, role: Role): Promi
   return routeClaude(role, (selected, retry) => runClaudeAttempt(request, selected, retry))
 }
 
+/** At most two runs: the assignment, then one follow-up that only submits retained work. */
 async function runClaudeAttempt(
   request: WorkerRequest,
   role: Role,
   retry: boolean,
-  unsubmitted?: string,
 ): Promise<WorkerEvidence> {
+  const first = await runClaudeProcess(request, role, retry)
+
+  if (!('unsubmitted' in first)) {
+    return first
+  }
+
+  const second = await runClaudeProcess(request, role, retry, first.unsubmitted)
+  invariant(!('unsubmitted' in second), 'a follow-up Claude run submits or fails')
+  return second
+}
+
+async function runClaudeProcess(
+  request: WorkerRequest,
+  role: Role,
+  retry: boolean,
+  unsubmitted?: string,
+): Promise<WorkerEvidence | { unsubmitted: string }> {
   const progress = progressReporter(request.outputPath, request.role)
   const attemptPath =
     (retry ? request.outputPath + '.opus' : request.outputPath) + (unsubmitted ? '.submit' : '')
@@ -272,7 +290,7 @@ async function runClaudeAttempt(
       // run submits them instead of discarding the work as a failed task.
       if (unsubmitted === undefined) {
         await live.finish('needs_attention', 'Ended without submitting; requesting the result')
-        return runClaudeAttempt(request, role, retry, (response.result ?? '').slice(0, 6000))
+        return { unsubmitted: (response.result ?? '').slice(0, 6000) }
       }
 
       throw new Error(`Claude did not submit a scoped result: ${response.result?.slice(0, 2000)}`)

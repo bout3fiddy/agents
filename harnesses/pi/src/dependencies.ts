@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { gitCommand } from './git-branches.ts'
+import { gitCommand, GitCommandError } from './git-branches.ts'
 
 type LockEntry = {
   version?: string
@@ -29,8 +29,14 @@ async function lockfile(root: string, commit: string | undefined, signal?: Abort
 
   try {
     return await gitCommand(root, ['show', `${commit}:package-lock.json`], signal)
-  } catch {
-    return undefined
+  } catch (error) {
+
+    // A commit without a lockfile has nothing to compare; other failures propagate.
+    if (error instanceof GitCommandError) {
+      return undefined
+    }
+
+    throw error
   }
 }
 
