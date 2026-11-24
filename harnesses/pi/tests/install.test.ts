@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { spawnSync } from 'node:child_process'
 import test from 'node:test'
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -28,6 +29,15 @@ test('installer backs up only Pi assets and preserves auth and provider choice',
     assert.ok(settings.defaultTools.includes('write'))
     assert.ok(settings.defaultTools.includes('consult_design'))
     const launcher = await readFile(result.wrapper, 'utf8')
+    const update = spawnSync(result.wrapper, ['update', '--help'], {
+      encoding: 'utf8',
+      env: { ...process.env, NODE_OPTIONS: '--throw-deprecation' },
+      timeout: 15_000,
+    })
+    assert.equal(update.error, undefined)
+    assert.equal(update.status, 0, update.stderr)
+    assert.match(update.stdout, /Usage: pi-harness update/)
+    assert.doesNotMatch(update.stderr, /DEP0205|DeprecationWarning/)
     assert.match(launcher, /--no-extensions/)
     assert.doesNotMatch(launcher, /--tools(?:\s|$)/)
     assert.match(await readFile(result.wrapper, 'utf8'), /--session-dir.*\.pi\/traces\/sessions/)
