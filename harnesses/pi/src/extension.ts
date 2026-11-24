@@ -1,6 +1,7 @@
 import { capabilitySchema, harnessStatusSchema } from './inspection-schema.ts'
 import { registerInspectionMode } from './inspection-mode.ts'
 import { inspectionTools, nestedInspectionTools } from './inspection.ts'
+import { furnishTigerStyle } from './tiger-style.ts'
 import { realpath } from 'node:fs/promises'
 import { Type } from 'typebox'
 import type { ExtensionAPI } from '@earendil-works/pi-coding-agent'
@@ -60,6 +61,7 @@ export default function harness(pi: ExtensionAPI): void {
   const storeFor = async (cwd: string) => new StateStore(await realpath(cwd))
 
   pi.on('session_start', async (event, ctx) => {
+    await furnishTigerStyle(ctx.cwd)
     const [role] = await orchestratorPolicy
     pi.setActiveTools(role.tools)
     await runtime.record(ctx, event.reason, role.tools)
@@ -93,6 +95,7 @@ export default function harness(pi: ExtensionAPI): void {
     return {
       systemPrompt: [
         prompt,
+        await furnishTigerStyle(ctx.cwd),
         runtime.current()?.toolWarning,
         await instructions(ctx.cwd, []),
         checkpoint

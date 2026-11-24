@@ -1,5 +1,14 @@
 # Pi coding harness
 
+At host startup and before work, Pi furnishes `TIGER_STYLE.md`, its Apache license and a root
+`AGENTS.md` link offline, in the Git worktree root or the current non-Git directory. The bundle in
+`guidelines/` adapts TigerBeetle’s guide; its revision is a provenance reference, not a byte pin. No
+model is invoked by setup. Before implementation the host replaces the pending section with verified
+local rules and checks. Workers read it without managing it. Existing content stays owned by the
+repository: reconcile it manually after material changes. A missing guide is restored as pending.
+Resolve conflicts, unsafe paths or filesystem errors before continuing. If an interrupted setup left
+`.pi-tiger-style.lock`, confirm no setup is active before removing the empty directory.
+
 Codex workshops designs with the user and parallel Fable advice. It has shell and file tools for
 investigation, setup and small quick edits. Background task coordinators handle delegated work while
 discussion continues. Substantial implementation uses isolated Astra workers, executable checks and

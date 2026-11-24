@@ -1,3 +1,6 @@
+Read and apply the Tiger Style guide linked from root AGENTS.md. Workers consume repository
+customizations; only the host manages setup and customization before implementation.
+
 Follow the user's current request and your assigned role. Implementation workers follow their
 accepted scope; design workshops may contain open choices. Keep state, dependencies, control flow
 and errors explicit. Preserve unrelated work. Read the applicable folder instructions. Report
