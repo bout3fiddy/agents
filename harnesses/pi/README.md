@@ -553,7 +553,8 @@ the same. The last report is in `.pi/traces/harness/cleanup.json`.
 
 ## Where the rules live
 
-- `prompts/shared.md`: TigerStyle, all ten NASA rules and language adaptations.
+- `prompts/shared.md`: TigerStyle, all ten NASA rules, language adaptations and the escaped-bug
+  regression policy.
 - `prompts/{orchestrator,design-advisor,implementer,performance}.md`: each role's task and evidence
   requirements.
 - `roles/*.json`: executable role configuration, including backend and model.
@@ -597,6 +598,15 @@ npm run test:live:workshop
 npm run test:live:web
 npm run test:live:workers
 ```
+
+Every confirmed bug is an escaped test or verification gap. The repair records its root cause, the
+missing invariant and a regression that fails before the fix in the existing result or handoff
+evidence, or cites adequate existing coverage. Infrastructure failures and correct validation
+rejections are classified separately. `tests/regression-policy.test.ts` checks that every rendered
+role prompt carries the policy and that repair-owning roles apply it. Seeded simulations share
+`tests/simulation.ts`; replay one seed with `PI_SIMULATION_SEED=<n>` and widen a run with
+`PI_SIMULATION_SEEDS=<count>`. `npm test` keeps bounded deterministic defaults without sleeps or
+network; live and browser campaigns run where the escaped path needs them.
 
 The live test uses real model calls and a disposable SQLite ledger. It exercises seeded
 replay/conflict properties, invalid inputs, SIGKILL recovery, file-backed benchmarks and the
@@ -659,9 +669,9 @@ limitations.
 
 Pi installation writes only `~/.pi/`. `bin/sync.sh` preserves the existing Codex instruction/skill
 installation. Claude global cleanup is a separate, explicit operation under `../claude/`; Pi
-supplies its Claude workers' prompts at launch. Canonical `SKILL.md` content and
-`instructions/global.md` are unchanged. Repository-wide lint also covers the executable skill
-scripts; formatting changes to those scripts preserve their behavior.
+supplies its Claude workers' prompts at launch. Pi installation never rewrites canonical `SKILL.md`
+content or `instructions/global.md`. Repository-wide lint also covers the executable skill scripts;
+formatting changes to those scripts preserve their behavior.
 
 Local implementation hands unchanged, out-of-scope harness lint failures to the host when all
 diagnostics can be attributed. The gate stays failed and the candidate remains available.

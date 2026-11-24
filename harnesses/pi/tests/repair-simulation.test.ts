@@ -15,13 +15,12 @@ import { inventory, snapshotHash } from '../src/paths.ts'
 import { repairRoundsWithoutGuidance } from '../src/repair-budget.ts'
 import { atomicJson } from '../src/state.ts'
 import { branchRepository, completed } from './branch-support.ts'
+import { generator, pick, simulationSeeds } from './simulation.ts'
 
 // Seeded scenarios combine generated repository shapes with adverse implementer behavior. Every
 // scenario must terminate within the repair bound; a completed task commits only its assigned
 // paths. A failing seed reproduces with PI_SIMULATION_SEED=<seed>.
-const only = process.env.PI_SIMULATION_SEED
-const count = Number(process.env.PI_SIMULATION_SEEDS ?? 16)
-const seeds = only ? [Number(only)] : Array.from({ length: count }, (_, index) => index + 1)
+const seeds = simulationSeeds(16)
 const behaviors = ['fix', 'noop', 'churn', 'outOfScope', 'blocked', 'crash'] as const
 
 // Terminal behaviors end a scenario at once, so they are rarer; most rounds reach the gate.
@@ -45,22 +44,6 @@ const stopReasons = [
 ]
 
 type Behavior = (typeof behaviors)[number]
-
-/** mulberry32: small, fast and fully determined by its seed. */
-function generator(seed: number) {
-  let state = seed >>> 0
-  return () => {
-    state = (state + 0x6d2b79f5) >>> 0
-    let value = state
-    value = Math.imul(value ^ (value >>> 15), value | 1)
-    value ^= value + Math.imul(value ^ (value >>> 7), value | 61)
-    return ((value ^ (value >>> 14)) >>> 0) / 4294967296
-  }
-}
-
-function pick<T>(next: () => number, items: readonly T[]): T {
-  return items[Math.floor(next() * items.length)]!
-}
 
 function weighted(next: () => number): Behavior {
   const total = behaviors.reduce((sum, behavior) => sum + weights[behavior], 0)

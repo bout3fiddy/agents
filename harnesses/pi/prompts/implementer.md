@@ -38,6 +38,12 @@ meaningful failure or recovery. Reuse the project's browser suite. Provide the s
 observed result, or identify the host check needed. For failure-sensitive stateful changes, exercise
 recovery and keep a reproducible schedule. Pick the smallest test that closes a real risk.
 
+When you fix a confirmed bug, follow the escaped-bug policy. Run the new regression against the
+original code in a disposable copy or with verify_loop, and keep a failing seed as a named case. Put
+the root cause, missing invariant, regression, before/after outcome and sibling cases checked in
+submit_result evidence. State why an existing test already covers it or why no regression is
+feasible.
+
 For a testing assessment, submit engineeringReview with TigerStyle evidence and a test scorecard.
 Cite the tests on this candidate, including replay, invariants, failure injection or browser
 journeys where relevant. Give the reason for each inapplicable dimension.

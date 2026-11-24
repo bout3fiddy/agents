@@ -248,6 +248,11 @@ The harness tests exercise:
   volume; 16 competing lock acquisitions; supervisor-crash release of a kernel advisory lock.
 - Formatter idempotence over 100 seeded cases, comment-like strings, Python token handling,
   malformed JSON and a sparse 3 GB image that lint must skip.
+- Claude quota routing on both sides of each receipt boundary, and a seeded simulation of up to six
+  concurrent calls sharing one receipt and clock. It checks model attribution, confirmed and cached
+  fallback, combined exhaustion and Fable recovery after reset. Research receipts must match the
+  selected writer or carry valid Fable fallback provenance.
+- Rendered role prompts carry the escaped-bug policy, and repair-owning roles apply it.
 
 All 16 changed pre-existing Python files retain identical parsed ASTs. Syntax checks pass for the
 five changed pre-existing shell scripts. Existing evaluation code retains its formatting style.

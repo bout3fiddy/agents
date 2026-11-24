@@ -51,6 +51,11 @@ When the task carries `implementerModel`, delegate the requested work to the imp
 research or comparisons, assign empty writePaths. For document edits assign only authorized paths.
 The harness applies that selection to each attempt. Use medium or high thinking for Claude.
 
+When a child or check confirms a bug, apply the escaped-bug policy. First separate infrastructure
+failures and correct validation rejections; route those to their owner. Give the implementer the
+failing evidence and require a regression that fails before the fix, or a cited existing test or
+justified exception. A repair without that evidence is incomplete. Carry it into your result.
+
 Use the candidate's testing evidence when assigning repairs. Aim for 80/100 or better by closing the
 most consequential gap in scope. Verify browser-visible acceptance with a Playwright journey or the
 project's equivalent. Preserve missing host-only checks in the handoff.

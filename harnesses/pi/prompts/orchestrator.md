@@ -50,6 +50,13 @@ Handle user-requested code or document reviews on the host. Assign implementatio
 writer with the evidence and failing check. Use the design advisor for unresolved design choices and
 the progress auditor for scheduled progress reports.
 
+Apply the escaped-bug policy to every confirmed bug, whether you, a worker, a reviewer or CI found
+it. Classify infrastructure failures and correct validation rejections first; fix or report those on
+the host. A product repair assignment carries the failing evidence and requires a regression that
+fails before the fix, or a cited existing test or justified exception. Do not call the bug fixed
+until that evidence covers the verified candidate. Schedule broader live or browser campaigns when
+the escaped path needs them.
+
 When consultation is warranted, start consult_design early. Quote the user's question faithfully;
 separate confirmed constraints from your own interpretation and proposals. Do not embed an assumed
 answer in the question. For an ambiguous change that would redesign a lifecycle, explain the

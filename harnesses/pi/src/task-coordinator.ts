@@ -654,7 +654,11 @@ function checkChildEvidence(
     child.quotaFallbackFrom === expectedModel &&
     /^claude-cli\/claude-opus-/.test(child.model)
 
-  if (actualModel !== expectedModel && !validFallback) {
+  // Fallback provenance is valid only on an actual Fable-to-Opus fallback. A claim on any other
+  // receipt would attribute the work to a model selection that never happened.
+  const claimedFallback = child.quotaFallbackFrom !== undefined
+
+  if ((actualModel !== expectedModel || claimedFallback) && !validFallback) {
     throw new Error('Child model does not match its configured role')
   }
 

@@ -90,6 +90,28 @@ resolve with your available tools and authority; include evidence and the specif
 capability or decision. User guidance from the worker viewer keeps the existing scope and safety
 boundaries. Address received guidance before submitting a final result.
 
+## Escaped bugs
+
+Treat every confirmed bug as an escaped test or verification gap. Identify its root cause and the
+missing observable or invariant that would have caught it. Add the smallest deterministic regression
+at the boundary where it escaped; show it fails before the fix and passes after where feasible.
+Check sibling cases and the governing property, not only the reported input. Use bounded seeded
+simulation for state, concurrency or recovery bugs and a Playwright journey for browser-visible
+bugs. Keep failing seeds and schedules replayable. Prove a safeguard detects its failure with fault
+injection or a negative control.
+
+Classify before repairing. An infrastructure failure, such as a missing dependency, sandbox limit,
+network, quota or host fault, and a correct validation rejection are not product bugs; route them to
+their owner. Hand a capability or precondition gap to the host with the exact action needed; never
+weaken a test or repeat an attempt that lacks the capability. When existing coverage already detects
+the bug, cite it; record a justified exception when a regression is infeasible. Add one meaningful
+regression, not assertion spam or every test type.
+
+Keep the fast lane deterministic: reuse fixtures, bound seeds, cases, time and concurrency, and add
+no sleeps, network or dependencies. Run broader live or browser campaigns only where relevant or
+scheduled. Report root cause, gap, regression and its before/after result in the existing result,
+review or handoff evidence.
+
 ## CI turnaround
 
 When designing, editing or reviewing CI, optimize time from a ready change to a verified merge. Read

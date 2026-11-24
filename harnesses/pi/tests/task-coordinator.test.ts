@@ -662,6 +662,45 @@ test('explicit research and document selections dispatch a scoped Claude leaf', 
   }
 })
 
+test('research receipts must match the selected writer or its attributed fallback', async (t) => {
+  const fable = { model: 'claude-cli/claude-fable-5-2' }
+  const opus = { model: 'claude-cli/claude-opus-5-5' }
+  const fallback = { ...opus, quotaFallbackFrom: 'claude-fable-5-2', thinking: 'high' as const }
+  const cases = [
+    { selection: 'fable', report: fable, accepted: true },
+    { selection: 'fable', report: opus, accepted: false },
+    { selection: 'fable', report: fallback, accepted: true },
+    { selection: 'opus', report: opus, accepted: true },
+    { selection: 'opus', report: fable, accepted: false },
+    { selection: 'opus', report: fallback, accepted: false },
+  ] as const
+
+  for (const { selection, report, accepted } of cases) {
+    const { request, controller } = await setup(t)
+    Object.assign(request, { kind: 'research', implementerModel: selection })
+    request.checkpoint.writePaths = []
+    const worker = await createTaskCoordinatorTools(request, controller.signal, async (child) => {
+      assert.equal(child.role, 'implementer')
+      assert.equal(child.implementerModel, selection)
+      return { ...(await evidence(child)), ...report }
+    })
+    const delegation = invoke(worker.tools, 'delegate_worker', {
+      ...leaf,
+      writePaths: [],
+      thinking: 'high',
+    })
+    const label = `${selection} selection with ${JSON.stringify(report)}`
+
+    if (accepted) {
+      await delegation
+      await invoke(worker.tools, 'submit_result', pass)
+    } else {
+      await assert.rejects(delegation, /model does not match/, label)
+      await assert.rejects(invoke(worker.tools, 'submit_result', pass), label)
+    }
+  }
+})
+
 test('coordinator accepts an Opus review only with matching fallback provenance', async (t) => {
   const { request, controller } = await setup(t)
   request.checkpoint.performanceReview = true
