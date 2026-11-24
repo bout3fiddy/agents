@@ -28,7 +28,10 @@ function adviceMessage(result: Consultation): CustomMessageEntryDraft {
     customType: 'pi-design-advice',
     content:
       `Claude design consultation · ${result.status}\n` +
-      `Model: ${result.advice?.model ?? 'claude-cli'}\n\n` +
+      `Model: ${result.advice?.model ?? result.actualModel ?? 'claude-cli'}\n\n` +
+      (result.fallbackReason
+        ? `Requested: ${result.requestedModel} (${result.fallbackReason})\n`
+        : '') +
       `Question: ${result.question}\n\n` +
       (result.status === 'complete' ? result.advice!.text : `Error: ${result.error}`),
     display: true,
@@ -205,6 +208,15 @@ export function registerWorkshop(pi: ExtensionAPI, runner?: AdviceRunner) {
         signal,
         epoch,
         args.thinking,
+        (route) => {
+          if (!closed && ctx.sessionManager.getSessionId() === session) {
+            ctx.ui.notify(
+              `Consultation: ${route.requestedModel} → ${route.actualModel} ` +
+                `(${route.fallbackReason})`,
+              'warning',
+            )
+          }
+        },
       )
       revisions.set(job.id, inputRevision)
       return textResult({
@@ -262,7 +274,7 @@ export function registerWorkshop(pi: ExtensionAPI, runner?: AdviceRunner) {
         status.delivery?.via === 'cancelled' || status.delivery?.via === 'superseded'
       return textResult({
         ...status,
-        model: advice?.model,
+        model: advice?.model ?? status.actualModel,
         tracePath: join(store.directory, 'consultations', `${args.id}.json`),
         next: discarded
           ? 'Automatic delivery suppressed; raw advice is retained in the trace.'

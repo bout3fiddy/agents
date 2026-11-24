@@ -278,6 +278,20 @@ class Coordinator {
       throw new Error('Task is already submitted')
     }
 
+    if (
+      request.implementerModel &&
+      raw.role === 'task-worker' &&
+      (request.kind === 'research' || request.kind === 'documents')
+    ) {
+      return this.validateSelectedAssignment({ ...raw, role: 'implementer' })
+    }
+
+    return this.validateSelectedAssignment(raw)
+  }
+
+  private validateSelectedAssignment(raw: Delegation): Delegation {
+    const { request } = this
+
     if (request.implementerModel && raw.role === 'task-worker' && raw.writePaths.length) {
       throw new Error('Assign implementation writes to the user-selected implementer')
     }
@@ -407,7 +421,9 @@ class Coordinator {
           role: raw.role,
           thinking: raw.thinking,
           implementerModel,
-          documentsOnly: request.kind === 'branch' && raw.role === 'task-worker',
+          documentsOnly:
+            (request.kind === 'documents' && Boolean(implementerModel)) ||
+            (request.kind === 'branch' && raw.role === 'task-worker'),
           task: this.childTask(raw),
           workspace: request.workspace,
           project: request.project,
@@ -530,6 +546,24 @@ class Coordinator {
     }
   }
 
+  checkSelectedEvidence(snapshot: string) {
+    const { kind, implementerModel } = this.request
+
+    if (!implementerModel || (kind !== 'research' && kind !== 'documents')) {
+      return
+    }
+
+    const latest = this.receipts.findLast(({ assignment }) => assignment.role === 'implementer')
+
+    if (
+      !latest ||
+      latest.evidence.snapshot !== snapshot ||
+      !completedResult(latest.evidence.result.verdict, kind === 'research')
+    ) {
+      throw new Error('Delegate the scoped task to the selected implementer before completion')
+    }
+  }
+
   checkPerformanceEvidence(snapshot: string) {
     if (!this.performanceReview) {
       return
@@ -557,6 +591,7 @@ class Coordinator {
     }
 
     const snapshot = snapshotHash(await inventory(this.request.workspace))
+    this.checkSelectedEvidence(snapshot)
     this.checkPerformanceEvidence(snapshot)
     requireResolvedFindings(this.receipts, snapshot)
 
@@ -719,10 +754,12 @@ function submitTool(coordinator: Coordinator): ToolDefinition {
         if (result.verdict === 'pass') {
           await coordinator.validatePass()
         } else if (
-          coordinator.performanceReview &&
+          (request.implementerModel || coordinator.performanceReview) &&
           completedResult(result.verdict, request.kind === 'research')
         ) {
-          coordinator.checkPerformanceEvidence(snapshotHash(await inventory(request.workspace)))
+          const snapshot = snapshotHash(await inventory(request.workspace))
+          coordinator.checkSelectedEvidence(snapshot)
+          coordinator.checkPerformanceEvidence(snapshot)
         }
 
         if (submittedRevision !== coordinator.revision) {

@@ -8,7 +8,7 @@ import { setTimeout as delay } from 'node:timers/promises'
 import { StateStore, atomicJson, readJson } from './state.ts'
 import { acquireLock } from './lock.ts'
 import { matches, validateWriteScope } from './paths.ts'
-import type { Receipt, WorkerEvidence } from './contracts.ts'
+import type { ModelRoute, Receipt, WorkerEvidence } from './contracts.ts'
 import {
   implementerModelSchema,
   performanceReviewSchema,
@@ -92,14 +92,14 @@ export type DelegationStatus = {
   workflowTaskId?: string
   receiptAttempt?: string
   receipts?: Receipt[]
-  children?: {
+  children?: (Partial<ModelRoute> & {
     role: string
     model: string
     verdict: string
     snapshot?: string
     testingScore?: number | null
     closedReview?: WorkerEvidence['closedReview']
-  }[]
+  })[]
   branch?: string
   base?: string
   commit?: string
@@ -304,10 +304,6 @@ export function delegationView(job: Delegation) {
 export function validateDelegation(input: DelegateInput): void {
   if (!Check(delegateSchema, input)) {
     throw new Error('Invalid delegated task; provide task, context, kind and writePaths')
-  }
-
-  if (input.implementerModel && !['implementation', 'maintenance'].includes(input.kind)) {
-    throw new Error('Select a Claude implementer for implementation or maintenance tasks')
   }
 
   if (input.implementerModel && input.kind === 'implementation' && input.thinking === 'low') {

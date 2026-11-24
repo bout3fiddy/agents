@@ -16,6 +16,7 @@ import {
   scopeContained,
   type TaskCoordinatorRequest,
 } from '../src/task-coordinator.ts'
+import { validateDelegation } from '../src/delegation-state.ts'
 import { readProgress } from '../src/progress.ts'
 import { evidence, fixture, hashes } from './support.ts'
 
@@ -633,6 +634,32 @@ test('branch coordinators apply the requested writer and accept its scoped recei
     invoke(worker.tools, 'delegate_worker', { ...leaf, role: 'implementer', thinking: 'low' }),
     /Unsupported thinking/,
   )
+})
+
+test('explicit research and document selections dispatch a scoped Claude leaf', async (t) => {
+  for (const kind of ['research', 'documents'] as const) {
+    const { request, controller } = await setup(t)
+    const writePaths = kind === 'research' ? [] : ['docs/report.md']
+    const selection = { kind, implementerModel: 'fable' as const }
+    validateDelegation({ ...selection, task: request.task, context: request.context, writePaths })
+    Object.assign(request, selection)
+    request.checkpoint.writePaths = writePaths
+    let calls = 0
+    const worker = await createTaskCoordinatorTools(request, controller.signal, async (child) => {
+      calls++
+      assert.equal(child.role, 'implementer')
+      assert.equal(child.implementerModel, 'fable')
+      assert.equal(child.thinking, 'high')
+      assert.deepEqual(child.checkpoint.writePaths, writePaths)
+      assert.equal(child.documentsOnly, kind === 'documents')
+      return { ...(await evidence(child)), model: 'claude-cli/claude-fable-5-2' }
+    })
+    await assert.rejects(invoke(worker.tools, 'submit_result', pass), /selected implementer/)
+    await invoke(worker.tools, 'delegate_worker', { ...leaf, writePaths, thinking: 'high' })
+    await assert.rejects(invoke(worker.tools, 'delegate_worker', leaf), /scope exceeds/)
+    assert.equal(calls, 1)
+    await invoke(worker.tools, 'submit_result', pass)
+  }
 })
 
 test('coordinator accepts an Opus review only with matching fallback provenance', async (t) => {

@@ -26,7 +26,8 @@ export const thinkingSchema = Type.Union([
   Type.Literal('high'),
 ])
 export const implementerModelSchema = Type.Union([Type.Literal('opus'), Type.Literal('fable')], {
-  description: 'Only set when the user explicitly requests this Claude implementation model.',
+  description:
+    'Explicitly requested Claude implementer for scoped work, including research or documents.',
 })
 export type ImplementerModel = Static<typeof implementerModelSchema>
 export const specialistThinkingSchema = Type.Union([Type.Literal('medium'), Type.Literal('high')])
@@ -229,7 +230,15 @@ export type WorkerRequest = {
   reviewOf?: string
 }
 
-export type WorkerEvidence = {
+export type ModelRoute = {
+  requestedModel: string
+  actualModel: string
+  fallbackReason?: 'quota-cached' | 'quota-confirmed'
+  confirmedAt?: number
+  retryAt?: number
+}
+
+export type WorkerEvidence = Partial<ModelRoute> & {
   quotaFallbackFrom?: string
   formatterProof?: { path: string; before: string; after: string }[]
   closedReview?: { snapshot: string; model: string; paths: string[] }

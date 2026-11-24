@@ -19,6 +19,7 @@ import {
   ProviderQuotaError,
   type CommandResult,
   type Role,
+  type ModelRoute,
   type WorkerEvidence,
   type WorkerRequest,
   type WorkerResult,
@@ -117,7 +118,9 @@ export function parseClaudeTrace(output: string) {
 }
 
 export async function runClaudeWorker(request: WorkerRequest, role: Role): Promise<WorkerEvidence> {
-  return routeClaude(role, (selected, retry) => runClaudeAttempt(request, selected, retry))
+  return routeClaude(role, (selected, retry, route) =>
+    runClaudeAttempt(request, selected, retry, route),
+  )
 }
 
 /** At most two runs: the assignment, then one follow-up that only submits retained work. */
@@ -125,14 +128,15 @@ async function runClaudeAttempt(
   request: WorkerRequest,
   role: Role,
   retry: boolean,
+  route: ModelRoute,
 ): Promise<WorkerEvidence> {
-  const first = await runClaudeProcess(request, role, retry)
+  const first = await runClaudeProcess(request, role, retry, route)
 
   if (!('unsubmitted' in first)) {
     return first
   }
 
-  const second = await runClaudeProcess(request, role, retry, first.unsubmitted)
+  const second = await runClaudeProcess(request, role, retry, route, first.unsubmitted)
   invariant(!('unsubmitted' in second), 'a follow-up Claude run submits or fails')
   return second
 }
@@ -141,18 +145,20 @@ async function runClaudeProcess(
   request: WorkerRequest,
   role: Role,
   retry: boolean,
+  route: ModelRoute,
   unsubmitted?: string,
 ): Promise<WorkerEvidence | { unsubmitted: string }> {
   const progress = progressReporter(request.outputPath, request.role)
   const attemptPath =
     (retry ? request.outputPath + '.opus' : request.outputPath) + (unsubmitted ? '.submit' : '')
-  await progress.update({ stage: 'model', message: 'Claude worker starting' })
+  await progress.update({ ...route, stage: 'model', message: 'Claude worker starting' })
   const scratch = await mkdtemp(join(tmpdir(), 'pi-claude-'))
   const requestPath = `${attemptPath}.request.json`
   const configPath = join(scratch, 'mcp.json')
   const promptPath = join(scratch, 'system.txt')
   const live = await LiveWorker.start(request.project.root, {
     role: request.role,
+    ...route,
     model: `claude-cli/${role.model}`,
     thinking: role.thinking,
     task: request.task,
@@ -296,7 +302,9 @@ async function runClaudeProcess(
       throw new Error(`Claude did not submit a scoped result: ${response.result?.slice(0, 2000)}`)
     }
 
-    await progress.update({ stage: 'complete', message: evidence.result.summary })
+    const actualModel = Object.keys(response.modelUsage ?? {})[0] ?? role.model
+    await live.recordClaudeModel(actualModel)
+    await progress.update({ actualModel, stage: 'complete', message: evidence.result.summary })
     await live.finish(
       completedResult(evidence.result.verdict, request.role === 'progress-auditor')
         ? 'complete'
@@ -305,13 +313,15 @@ async function runClaudeProcess(
     )
     return {
       role: request.role,
-      ...(role.model === 'opus' && { quotaFallbackFrom: 'claude-fable-5-2' }),
+      ...route,
+      actualModel,
+      ...(route.fallbackReason && { quotaFallbackFrom: route.requestedModel }),
       liveWorkerId: live.info.id,
       snapshot: snapshotHash(await inventory(request.workspace)),
       result: validateResult(evidence.result, request.decideContinuation),
       commands: evidence.commands,
       turns: response.num_turns ?? 0,
-      model: `claude-cli/${Object.keys(response.modelUsage ?? {})[0] ?? role.model}`,
+      model: `claude-cli/${actualModel}`,
       thinking: role.thinking,
     }
   } catch (error) {

@@ -4,7 +4,9 @@ import { randomUUID } from 'node:crypto'
 import { StateStore, atomicJson } from './state.ts'
 import { WorkerMailbox } from './worker-mailbox.ts'
 
-export type LiveWorkerInfo = {
+import type { ModelRoute } from './contracts.ts'
+
+export type LiveWorkerInfo = Partial<ModelRoute> & {
   id: string
   taskId?: string
   parentId?: string
@@ -115,6 +117,14 @@ export class LiveWorker {
     await atomicJson(join(live.directory, 'info.json'), live.info)
     await live.update({})
     return live
+  }
+
+  async recordClaudeModel(actualModel: string): Promise<void> {
+    if (this.info.actualModel !== actualModel) {
+      this.info.actualModel = actualModel
+      this.info.model = `claude-cli/${actualModel}`
+      await atomicJson(join(this.directory, 'info.json'), this.info)
+    }
   }
 
   update(change: Partial<LiveWorkerState>, streaming = false): Promise<void> {

@@ -457,7 +457,8 @@ export class WorkersView implements Focusable {
   }
 
   private renderChat(row: WorkerRow, width: number): string[] {
-    const model = row.legacy ? 'Model unrecorded' : modelLabel(row.info.model)
+    const model =
+      row.legacy && !row.info.actualModel ? 'Model unrecorded' : modelLabel(row.info.model)
     const effort = row.info.thinking ?? 'effort unrecorded'
     const heading = [names[row.info.role] ?? row.info.role, model, effort, status(row)].join(' · ')
     const attention = ['needs_attention', 'failed', 'blocked'].includes(
@@ -549,9 +550,12 @@ export class WorkersView implements Focusable {
     if (this.mode === 'details') {
       return [
         `Worker: ${row.id}`,
-        row.legacy
+        row.legacy && !row.info.actualModel
           ? 'Worker model and effort unrecorded'
           : `Model: ${row.info.model} · ${row.info.thinking ?? 'effort unrecorded'}`,
+        row.info.fallbackReason
+          ? `Requested: ${row.info.requestedModel} · Fallback: ${row.info.fallbackReason}`
+          : '',
         `Delegated by: ${row.delegatedBy}`,
         `Task status: ${row.taskStatus ?? row.state.status}`,
         `Repository: ${row.info.projectRoot}`,

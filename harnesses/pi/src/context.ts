@@ -37,6 +37,13 @@ export function childSummary(child: WorkerEvidence) {
   return {
     role: child.role,
     model: child.model,
+    ...(child.requestedModel && {
+      requestedModel: child.requestedModel,
+      actualModel: child.actualModel,
+      fallbackReason: child.fallbackReason,
+      confirmedAt: child.confirmedAt,
+      retryAt: child.retryAt,
+    }),
     verdict: child.result.verdict,
     ...(child.result.engineeringReview && {
       snapshot: child.snapshot,

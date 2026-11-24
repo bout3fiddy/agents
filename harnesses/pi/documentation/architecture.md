@@ -2,7 +2,11 @@
 
 The orchestrator is a Pi extension. Workers are fresh processes selected by the role's `backend`: Pi
 SDK for Codex task coordination/general work and Astra implementation at medium by default, Claude
-Code CLI for specialists and explicitly requested Claude implementers. A separate Fable design
+Code CLI for specialists and explicitly requested Claude implementers. Model selection does not
+change the assignment: research has no writes, and document jobs retain only authorized documents.
+Fable falls back to Opus only on confirmed quota. A shared versioned receipt can skip the Fable
+probe before reset for less than 15 minutes after confirmation. Live routing status distinguishes
+cached from newly confirmed quota; final evidence records the model used. A separate Claude design
 advisor runs concurrently with the orchestrator. Claude receives shared and role-specific system
 prompts directly. Its native tools are limited to WebSearch and WebFetch; its only MCP server is the
 harness bridge. The bridge implements the same scoped tools used by Pi workers.

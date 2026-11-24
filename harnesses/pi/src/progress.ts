@@ -1,7 +1,9 @@
 import { atomicJson, readJson } from './state.ts'
 import type { Dispatcher } from './dispatch.ts'
 
-export type TaskProgress = {
+import type { ModelRoute } from './contracts.ts'
+
+export type TaskProgress = Partial<ModelRoute> & {
   stage: string
   updatedAt: string
   role?: string

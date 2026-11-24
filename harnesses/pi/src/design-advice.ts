@@ -9,7 +9,12 @@ import { Type, type Static } from 'typebox'
 import { Check } from 'typebox/value'
 import { claudeArguments, parseClaudeTrace } from './claude-worker.ts'
 import { routeClaude } from './claude-routing.ts'
-import { ProviderQuotaError, type Role, specialistThinkingSchema } from './contracts.ts'
+import {
+  ProviderQuotaError,
+  type ModelRoute,
+  type Role,
+  specialistThinkingSchema,
+} from './contracts.ts'
 import { loadRole, rolePrompt } from './roles.ts'
 import { atomicJson, readJson, type StateStore } from './state.ts'
 import { readBoundedFile, safePath } from './paths.ts'
@@ -35,8 +40,13 @@ export const consultationSchema = Type.Object({
 })
 
 export type ConsultationInput = Static<typeof consultationSchema>
-export type Advice = { text: string; model: string; thinking?: string; toolsUsed?: string[] }
-export type Consultation = {
+export type Advice = Partial<ModelRoute> & {
+  text: string
+  model: string
+  thinking?: string
+  toolsUsed?: string[]
+}
+export type Consultation = Partial<ModelRoute> & {
   id: string
   session: string
   question: string
@@ -53,6 +63,7 @@ export type AdviceRunner = (
   signal: AbortSignal,
   tracePath?: string,
   thinking?: ConsultationInput['thinking'],
+  routed?: (route: ModelRoute) => Promise<void>,
 ) => Promise<Advice>
 
 export async function consultationInput(
@@ -119,17 +130,20 @@ export async function runDesignAdvice(
   signal: AbortSignal,
   tracePath?: string,
   thinking?: ConsultationInput['thinking'],
+  routed?: (route: ModelRoute) => Promise<void>,
 ): Promise<Advice> {
   signal.throwIfAborted()
   const role = await loadRole('design-advisor', thinking)
-  return routeClaude(role, (selected, retry) =>
-    runAdviceAttempt(
+  return routeClaude(role, async (selected, retry, route) => {
+    await routed?.(route)
+    const advice = await runAdviceAttempt(
       input,
       signal,
       selected,
       tracePath && retry ? tracePath + '.opus.jsonl' : tracePath,
-    ),
-  )
+    )
+    return { ...advice, ...route, actualModel: advice.model.replace(/^claude-cli\//, '') }
+  })
 }
 
 async function runAdviceAttempt(
@@ -257,6 +271,7 @@ export class DesignConsultations {
     signal?: AbortSignal,
     epoch = this.epoch,
     thinking?: ConsultationInput['thinking'],
+    fallback?: (route: ModelRoute) => void,
   ): Promise<Consultation> {
     signal?.throwIfAborted()
 
@@ -289,7 +304,25 @@ export class DesignConsultations {
         await this.persist(`${path}.input.json`, JSON.parse(input))
         await this.persist(path, job)
         controller.signal.throwIfAborted()
-        job.advice = await this.run(input, controller.signal, `${path}.claude.jsonl`, thinking)
+        job.advice = await this.run(
+          input,
+          controller.signal,
+          `${path}.claude.jsonl`,
+          thinking,
+          async (route) => {
+            Object.assign(job, route)
+            await this.persist(path, job)
+
+            if (route.fallbackReason && !controller.signal.aborted) {
+              fallback?.(route)
+            }
+          },
+        )
+
+        if (job.advice.actualModel) {
+          job.actualModel = job.advice.actualModel
+        }
+
         controller.signal.throwIfAborted()
         job.status = 'complete'
       } catch (error) {

@@ -13,10 +13,11 @@ earlier temporary instructions to remain paused or await resume are satisfied. E
 assignment now. Preserve all substantive requirements and remaining constraints. Pass this current
 execution state to children when their context mentions a previous pause.
 
-Use delegate_worker for scoped leaf assignments. Assign documents and research to task-worker and
-code changes to implementer. Give the leaf the acceptance criteria and permitted paths. Route work
-beyond the delegated scope to the host. Assign defect investigation and repair to the implementer.
-Use performance only on explicit user request.
+Use delegate_worker for scoped leaf assignments. Unless a Claude implementer was explicitly
+selected, assign documents and research to task-worker. Assign code changes to implementer. Give the
+leaf the acceptance criteria and permitted paths. Route work beyond the delegated scope to the host.
+Assign defect investigation and repair to the implementer. Use performance only on explicit user
+request.
 
 Verify maintenance with the configured behavioral tests and lint. Database impact requires recovery
 checks. Use the scoped formatter for routine readability issues.
@@ -43,9 +44,11 @@ Use project_edit through workers for focused updates, especially to existing lar
 Use the scoped formatter for formatting-only repairs and rerun required checks.
 
 Claude specialists prefer Fable 5.2. On a confirmed usage limit the harness selects Opus with the
-same role and effort until the reported reset. Attribute results to the recorded model.
+same role and effort. Reuse a confirmed limit only before reset and for less than 15 minutes;
+otherwise probe Fable again. Attribute results to the actual model and report quota fallback.
 
-When the task carries `implementerModel`, delegate implementation and repairs to the implementer.
+When the task carries `implementerModel`, delegate the requested work to the implementer. For
+research or comparisons, assign empty writePaths. For document edits assign only authorized paths.
 The harness applies that selection to each attempt. Use medium or high thinking for Claude.
 
 Use the candidate's testing evidence when assigning repairs. Aim for 80/100 or better by closing the

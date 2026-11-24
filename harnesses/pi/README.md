@@ -25,7 +25,8 @@ optional performance measurement.
 | Performance investigator | Fable 5.2 / medium     |
 
 Claude specialists prefer Fable 5.2. On a confirmed usage limit the harness selects Opus with the
-same role and effort until the reported reset. Attribute results to the recorded model.
+same role and effort. Reuse a confirmed limit only before reset and for less than 15 minutes;
+otherwise probe Fable again. Attribute results to the actual model and report quota fallback.
 
 The default orchestrator is `openai-codex/gpt-6.1-sol` at medium effort. Pi's current model and
 thinking selection take precedence for the orchestrator; the harness never silently changes them.
@@ -36,10 +37,11 @@ delegated execution. Use `/thinking medium` in a running Pi session for ordinary
 current session selection is independent of worker effort.
 
 Astra implements by default. When the user explicitly requests Opus or Fable to implement a design,
-set `implementerModel` to `opus` or `fable` on the workflow, maintenance task, or individual branch
-task. Route implementation and repair through its tracked implementer. Claude implementers use
-medium or high effort. When Fable reaches its usage limit, Opus continues the same task at the
-selected effort.
+set `implementerModel` to `opus` or `fable` on the workflow, delegated task or individual branch
+task. For explicit Claude comparisons use research with no writes. For document edits authorize only
+the necessary document paths. Route implementation and repair through its tracked implementer.
+Claude implementers use medium or high effort. When Fable reaches its usage limit, Opus continues
+the same task at the selected effort.
 
 The orchestrator can select `thinking` for each background job. On `workflow` and implementation
 jobs it selects Astra's effort. The optional `specialistThinking` object selects each applicable

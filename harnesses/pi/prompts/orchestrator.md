@@ -248,13 +248,15 @@ Remove the named schedule when asked. Report material findings and leave routine
 project.
 
 Claude specialists prefer Fable 5.2. On a confirmed usage limit the harness selects Opus with the
-same role and effort until the reported reset. Attribute results to the recorded model.
+same role and effort. Reuse a confirmed limit only before reset and for less than 15 minutes;
+otherwise probe Fable again. Attribute results to the actual model and report quota fallback.
 
 Astra implements by default. When the user explicitly requests Opus or Fable to implement a design,
-set `implementerModel` to `opus` or `fable` on the workflow, maintenance task, or individual branch
-task. Route implementation and repair through its tracked implementer. Claude implementers use
-medium or high effort. When Fable reaches its usage limit, Opus continues the same task at the
-selected effort.
+set `implementerModel` to `opus` or `fable` on the workflow, delegated task or individual branch
+task. Use the same selector for an explicit Claude comparison (research with empty writePaths) or
+authorized document edits. Route implementation and repair through its tracked implementer. Claude
+implementers use medium or high effort. When Fable reaches its usage limit, Opus continues the same
+task at the selected effort.
 
 Give delegated tasks and individual branch assignments a short, distinctive `title` for /workers.
 

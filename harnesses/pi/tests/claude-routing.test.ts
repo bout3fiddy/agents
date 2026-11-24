@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict'
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
-import { routeClaude } from '../src/claude-routing.ts'
+import { quotaMaxAgeMs, routeClaude } from '../src/claude-routing.ts'
 import { ProviderQuotaError } from '../src/contracts.ts'
 import { loadRole } from '../src/roles.ts'
 import { atomicJson } from '../src/state.ts'
@@ -56,6 +56,87 @@ test('Fable quota shares cooldown and restores preference after reset', async (t
     ),
     (error) => error === fault,
   )
+})
+
+test('only a recent versioned confirmation authorizes a cached fallback', async (t) => {
+  const directory = await mkdtemp(join(tmpdir(), 'pi-quota-reprobe-'))
+  t.after(() => rm(directory, { recursive: true, force: true }))
+  const role = await loadRole('design-advisor')
+  const path = join(directory, 'quota', role.model + '.json')
+  const now = Date.UTC(2026, 10, 23)
+  const retryAt = now + 86400000
+  const receipt = { version: 1, confirmedAt: now, retryAt }
+  const probe = () =>
+    routeClaude(
+      role,
+      async (_, __, route) => route,
+      directory,
+      () => now,
+    )
+
+  for (const invalid of [
+    { retryAt },
+    { ...receipt, version: 2 },
+    { ...receipt, confirmedAt: now - quotaMaxAgeMs },
+    { ...receipt, confirmedAt: now + 1 },
+    { ...receipt, retryAt: now },
+    { ...receipt, retryAt: String(retryAt) },
+    { ...receipt, retryAt: Number.MAX_SAFE_INTEGER },
+    { ...receipt, confirmedAt: now - 0.5 },
+    null,
+  ]) {
+    await atomicJson(path, invalid)
+    assert.deepEqual(await probe(), { requestedModel: role.model, actualModel: role.model })
+    await assert.rejects(readFile(path), { code: 'ENOENT' })
+  }
+
+  await writeFile(path, '{')
+  assert.equal((await probe()).actualModel, role.model)
+  const limit = new ProviderQuotaError('quota', retryAt)
+  const confirmed = await routeClaude(
+    role,
+    async (selected, _, route) => {
+      if (selected.model === role.model) {
+        throw limit
+      }
+
+      return route
+    },
+    directory,
+    () => now,
+  )
+  assert.deepEqual(confirmed, {
+    requestedModel: role.model,
+    actualModel: 'opus',
+    fallbackReason: 'quota-confirmed',
+    confirmedAt: now,
+    retryAt,
+  })
+  assert.deepEqual(await probe(), { ...confirmed, fallbackReason: 'quota-cached' })
+  const restored = await routeClaude(
+    role,
+    async (selected) => selected.model,
+    directory,
+    () => now + quotaMaxAgeMs,
+  )
+  assert.equal(restored, role.model)
+  await assert.rejects(readFile(path), { code: 'ENOENT' })
+
+  for (const invalidReset of [Infinity, NaN, retryAt + 0.25, now - 1]) {
+    const invalid = new ProviderQuotaError('invalid reset', invalidReset)
+    await assert.rejects(
+      routeClaude(
+        role,
+        async (selected) => {
+          assert.equal(selected.model, role.model)
+          throw invalid
+        },
+        directory,
+        () => now,
+      ),
+      (error) => error === invalid,
+    )
+  }
 })
 
 test('Fable writers retain effort and scope on quota fallback', async (t) => {

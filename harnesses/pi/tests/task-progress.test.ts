@@ -251,13 +251,25 @@ test('milestones batch, survive reload and yield to final outcomes', async (t) =
       )
   const first = await start('Recovery')
   const second = await start('Independent integration')
-  await first.progress.update({ milestone: 'Restart test recovered every committed row.' })
+  await first.progress.update({
+    milestone: 'Restart test recovered every committed row.',
+    child: {
+      stage: 'model',
+      updatedAt: new Date().toISOString(),
+      requestedModel: 'claude-fable-5-2',
+      actualModel: 'opus',
+      fallbackReason: 'quota-cached',
+      confirmedAt: Date.now(),
+      retryAt: Date.now() + 60000,
+    },
+  })
   await second.setState({ status: 'merge_queued', commit: 'dc5b1af', branch: 'pi/integration' })
   await waitForCalls(1)
   assert.equal(notices().length, 1)
   const notice = notices()[0]
   assert.ok(notice?.type === 'custom_message' && !notice.display)
-  assert.equal((notice.details as { taskIds: string[] }).taskIds.length, 2)
+  assert.equal((notice.details as { taskIds: string[] }).taskIds.length, 3)
+  assert.match(String(notice.content), /claude-fable-5-2 → opus \(quota-cached\)/)
   assert.match(calls[0]!, /Restart test recovered every committed row/)
   assert.match(calls[0]!, /Published pi\/integration at dc5b1af/)
 
@@ -278,7 +290,7 @@ test('milestones batch, survive reload and yield to final outcomes', async (t) =
   assert.doesNotMatch(calls[1]!, /Obsolete integration update/)
   const latest = notices().at(-1)
   assert.ok(latest?.type === 'custom_message')
-  assert.doesNotMatch(String(latest.content), /Obsolete integration update/)
+  assert.doesNotMatch(String(latest.content), /Obsolete integration update|quota-cached/)
   await session.reload()
   await delay(1200)
   assert.equal(calls.length, 2)

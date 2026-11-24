@@ -249,6 +249,13 @@ export class WorkersCatalog {
     const direct =
       job.request.local &&
       (await loadRole('implementer', job.request.thinking, job.request.implementerModel))
+    const route =
+      direct &&
+      (activity?.actualModel
+        ? activity
+        : activeTask(job.state)
+          ? undefined
+          : job.state.children?.at(-1))
     return {
       id: `task:${job.request.id}`,
       legacy: true,
@@ -267,7 +274,14 @@ export class WorkersCatalog {
           : job.request.kind === 'branch'
             ? 'branch-orchestrator'
             : 'task-coordinator',
-        model: direct?.model ?? job.request.model,
+        ...(route && {
+          requestedModel: route.requestedModel,
+          actualModel: route.actualModel,
+          fallbackReason: route.fallbackReason,
+          confirmedAt: route.confirmedAt,
+          retryAt: route.retryAt,
+        }),
+        model: route?.actualModel ?? direct?.model ?? job.request.model,
         thinking: direct?.thinking,
         task: job.request.task,
         scope: job.request.writePaths,

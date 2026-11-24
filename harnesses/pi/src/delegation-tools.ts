@@ -283,6 +283,21 @@ class TaskFeed {
     )
 
     for (const job of active) {
+      const progress = job.state.progress
+      const route = progress?.child ?? progress
+
+      if (route?.fallbackReason) {
+        const id = `${job.request.id}:quota:${route.requestedModel}:${route.confirmedAt}`
+
+        if (!this.seen(view, id)) {
+          milestones.push({
+            id,
+            task: job.request.task.slice(0, 160),
+            summary: `${route.requestedModel} → ${route.actualModel} (${route.fallbackReason})`,
+          })
+        }
+      }
+
       const milestone = taskMilestone(job)
       const milestoneId = milestone && `${job.request.id}:milestone:${milestone.key}`
 
@@ -294,7 +309,6 @@ class TaskFeed {
         })
       }
 
-      const progress = job.state.progress
       const activity = progress?.child?.updatedAt ?? progress?.updatedAt ?? job.state.updatedAt
       const attention = job.state.health === 'quiet'
       const id = `${job.request.id}:${attention ? 'attention' : 'progress'}:${activity}`
@@ -630,6 +644,8 @@ function registerDelegateTask(
       'current discussion. Routine setup and related small work may stay on the host. Workers ' +
       'cannot install dependencies, use the network or publish Git; declare host requirements. ' +
       'Return immediately and continue discussion. Supply context and scoped writePaths. ' +
+      'For explicit Claude comparisons set implementerModel with research and empty writePaths. ' +
+      'For document edits use documents and authorized paths with the same selector. ' +
       'Select performanceReview only when the user asks for performance work. Put implementation ' +
       'review options inside its design. Omit design to resume the recorded scope.',
     parameters: delegateSchema,

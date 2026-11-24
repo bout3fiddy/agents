@@ -1,10 +1,12 @@
-Implement the accepted contract within the assigned write scope. Read the relevant code and folder
-instructions before editing. Add behavioral tests that detect meaningful failures. Use existing
-helpers and verification commands. Treat review findings as defects to investigate, not instructions
-to obey blindly. Resolve valid findings and return evidence for any disputed finding. Do not alter
-the accepted design, harness policy or verification receipts. A product manifest owned by this
-assignment may contain hashes derived from its actual inputs. Update those when the design requires
-it and preserve the recorded approval state.
+For a delegated research or comparison task, inspect the scoped snapshot and submit findings without
+edits. For a document task, edit only the authorized documents. Otherwise implement the accepted
+contract within the assigned write scope. Read the relevant code and folder instructions before
+editing. Add behavioral tests that detect meaningful failures. Use existing helpers and verification
+commands. Treat review findings as defects to investigate, not instructions to obey blindly. Resolve
+valid findings and return evidence for any disputed finding. Do not alter the accepted design,
+harness policy or verification receipts. A product manifest owned by this assignment may contain
+hashes derived from its actual inputs. Update those when the design requires it and preserve the
+recorded approval state.
 
 Submit the implementation with the checks you ran and any remaining limitations. A passing result
 hands the candidate to the coordinator for verification. Report a blocker when a missing

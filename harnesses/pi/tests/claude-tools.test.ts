@@ -5,6 +5,10 @@ import { join } from 'node:path'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { fixture } from './support.ts'
+import { runDesignAdvice } from '../src/design-advice.ts'
+import type { ModelRoute } from '../src/contracts.ts'
+import { workerDirectory, type LiveWorkerInfo } from '../src/worker-live.ts'
+import { readProgress } from '../src/progress.ts'
 import { atomicJson } from '../src/state.ts'
 import { harnessRoot, loadProject } from '../src/project.ts'
 import { claudeArguments, parseClaudeTrace, runClaudeWorker } from '../src/claude-worker.ts'
@@ -255,6 +259,105 @@ test('a Claude run that ends without submitting gets one follow-up run to submit
 
     await rm(item.base, { recursive: true, force: true })
   }
+})
+
+test('consultation confirms quota and worker attributes the shared fallback', async (t) => {
+  const item = await fixture()
+  const previous = {
+    bin: process.env.PI_HARNESS_CLAUDE_BIN,
+    agent: process.env.PI_CODING_AGENT_DIR,
+  }
+  t.after(async () => {
+    if (previous.bin === undefined) {
+      delete process.env.PI_HARNESS_CLAUDE_BIN
+    } else {
+      process.env.PI_HARNESS_CLAUDE_BIN = previous.bin
+    }
+
+    if (previous.agent === undefined) {
+      delete process.env.PI_CODING_AGENT_DIR
+    } else {
+      process.env.PI_CODING_AGENT_DIR = previous.agent
+    }
+
+    await rm(item.base, { recursive: true, force: true })
+  })
+  const executable = join(item.base, 'quota-claude')
+  const resetSeconds = Math.floor(Date.now() / 1000) + 3600
+  const retryAt = resetSeconds * 1000
+  await writeFile(
+    executable,
+    [
+      '#!/usr/bin/env node',
+      "const fs = require('fs')",
+      'const option = (key) => process.argv[process.argv.indexOf(key) + 1]',
+      'const log = (row) => console.log(JSON.stringify(row))',
+      "if (option('--model') === 'claude-fable-5-2') {",
+      `  const limit = {status:'rejected', resetsAt:${resetSeconds}}`,
+      "  log({type:'rate_limit_event', rate_limit_info:limit})",
+      "  log({type:'assistant', error:'rate_limit'})",
+      "  log({type:'result', is_error:true})",
+      "} else if (option('--model') === 'opus') {",
+      "  const config = JSON.parse(fs.readFileSync(option('--mcp-config')))",
+      '  const attempt = config.mcpServers.piworker?.args.at(-1)',
+      "  const result = {verdict:'pass', summary:'done', findings:[], databaseImpact:false,",
+      "    evidence:['fixture']}",
+      '  const submission = JSON.stringify({result, commands:[]})',
+      "  if (attempt) fs.writeFileSync(attempt + '.tools.json', submission)",
+      "  log({type:'result', result:'advice', num_turns:1, modelUsage:{'claude-opus-5-5':{}}})",
+      '}',
+    ].join('\n'),
+    { mode: 0o755 },
+  )
+  process.env.PI_HARNESS_CLAUDE_BIN = executable
+  process.env.PI_CODING_AGENT_DIR = item.base
+  const routes: ModelRoute[] = []
+  const advice = await runDesignAdvice(
+    '{}',
+    new AbortController().signal,
+    undefined,
+    'high',
+    async (route) => {
+      routes.push(route)
+    },
+  )
+  assert.deepEqual(
+    routes.map((route) => route.actualModel),
+    ['claude-fable-5-2', 'opus'],
+  )
+  assert.equal(advice.actualModel, 'claude-opus-5-5')
+  assert.equal(advice.fallbackReason, 'quota-confirmed')
+  assert.equal(advice.retryAt, retryAt)
+  const outputPath = join(item.base, 'cached.json')
+  const evidence = await runClaudeWorker(
+    {
+      role: 'implementer',
+      implementerModel: 'fable',
+      thinking: 'high',
+      task: 'Compare',
+      workspace: item.root,
+      project: await loadProject(item.root),
+      checkpoint: { ...(await item.store.checkpoint())!, writePaths: [] },
+      baseline: {},
+      model: 'unused',
+      outputPath,
+    },
+    await loadRole('implementer', 'high', 'fable'),
+  )
+  const directory = workerDirectory(item.root, evidence.liveWorkerId!)
+  const info: LiveWorkerInfo = JSON.parse(await readFile(join(directory, 'info.json'), 'utf8'))
+
+  for (const record of [info, evidence, await readProgress(outputPath)]) {
+    assert.ok(record)
+    assert.equal(record.requestedModel, 'claude-fable-5-2')
+    assert.equal(record.actualModel, 'claude-opus-5-5')
+    assert.equal(record.fallbackReason, 'quota-cached')
+    assert.equal(record.confirmedAt, advice.confirmedAt)
+    assert.equal(record.retryAt, retryAt)
+  }
+
+  assert.deepEqual(info.scope, [])
+  assert.equal(info.thinking, 'high')
 })
 
 test('Claude traces retain live output and enforce a byte budget for Unicode', async () => {
