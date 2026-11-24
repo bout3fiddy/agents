@@ -119,20 +119,22 @@ test('update rejects unexpected arguments with usage', async (t) => {
   assert.ok(lines.every((line) => line.includes(usage)))
 })
 
-test('harness process detection skips this process and its ancestors', () => {
+test('harness process detection skips this process, its ancestors and descendants', () => {
   const ps = [
     '  1     0 /sbin/launchd',
     ' 10     1 -zsh',
     ' 20    10 node /h/node_modules/.bin/tsx scripts/update-pi.ts',
     ' 21    20 node --import file:///h/node_modules/tsx/dist/loader.mjs scripts/update-pi.ts',
+    ' 22    21 /h/node_modules/@esbuild/darwin-arm64/bin/esbuild --service=0.25.12 --ping',
     ' 30     1 node /h/node_modules/@earendil-works/pi-coding-agent/dist/cli.js --extension x',
     ' 31     1 node --import /h/node_modules/tsx/dist/loader.mjs /h/src/worker.ts --worker j',
+    ' 33    31 /h/node_modules/@esbuild/darwin-arm64/bin/esbuild --service=0.25.12 --ping',
     ' 32     1 node /hother/src/worker.ts',
   ].join('\n')
 
   assert.deepEqual(
     harnessCommands(ps, '/h/', 21).map((line) => line.split(' ')[0]),
-    ['30', '31'],
+    ['30', '31', '33'],
   )
 })
 

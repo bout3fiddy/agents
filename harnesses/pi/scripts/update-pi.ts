@@ -73,14 +73,21 @@ export function harnessCommands(psOutput: string, root: string, selfPid: number)
     return match ? [{ pid: Number(match[1]), ppid: Number(match[2]), command: match[3]! }] : []
   })
   const parents = new Map(rows.map((row) => [row.pid, row.ppid]))
-  const lineage = new Set<number>()
+  const ancestors = (start: number) => {
+    const seen = new Set<number>()
 
-  for (let pid: number | undefined = selfPid; pid && !lineage.has(pid); pid = parents.get(pid)) {
-    lineage.add(pid)
+    for (let pid: number | undefined = start; pid && !seen.has(pid); pid = parents.get(pid)) {
+      seen.add(pid)
+    }
+
+    return seen
   }
+  const lineage = ancestors(selfPid)
 
+  // Descendants too: tsx starts an esbuild service child that runs from root's node_modules.
   return rows
-    .filter((row) => !lineage.has(row.pid) && row.command.includes(prefix))
+    .filter((row) => !lineage.has(row.pid) && !ancestors(row.pid).has(selfPid))
+    .filter((row) => row.command.includes(prefix))
     .map((row) => `${row.pid} ${row.command}`)
 }
 
