@@ -107,10 +107,21 @@ export async function install(agentDir = join(homedir(), '.pi', 'agent'), binDir
     '"$PWD/.pi/traces/sessions"',
     '"$@"',
   ].join(' ')
+
+  // `pi update` manages a global install; the harness's own Pi updates through this subcommand.
+  const update = [
+    shellQuote(process.execPath),
+    '--import',
+    shellQuote(join(harnessRoot, 'node_modules', 'tsx', 'dist', 'loader.mjs')),
+    shellQuote(join(harnessRoot, 'scripts', 'update-pi.ts')),
+    '"$@"',
+  ].join(' ')
   await writeFile(
     wrapper,
     `#!/bin/sh\nexport PI_CODING_AGENT_DIR=${shellQuote(destination)}\n` +
-      `export PI_HARNESS_AGENT_DIR=${shellQuote(destination)}\nexec ${command}\n`,
+      `export PI_HARNESS_AGENT_DIR=${shellQuote(destination)}\n` +
+      `if [ "$1" = update ]; then\n  shift\n  exec ${update}\nfi\n` +
+      `exec ${command}\n`,
   )
   await chmod(wrapper, 0o755)
   const build = captureBuild(harnessRoot)

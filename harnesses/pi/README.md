@@ -80,10 +80,27 @@ From a project directory:
 ~/.pi/agent/bin/pi-harness
 ```
 
-The launcher uses the pinned Pi dependency and disables ambient extensions, skills, prompt
+The launcher uses the harness's own Pi dependency and disables ambient extensions, skills, prompt
 templates, context discovery and MCP. Ordinary `pi` also loads the installed role extension; the
 dedicated launcher supplies the full isolation flags even if other global Pi packages are installed
 later.
+
+### Update Pi
+
+Pi's update notice names `pi update`, which only manages a separately installed global `pi`. Update
+the harness's own Pi with:
+
+```sh
+~/.pi/agent/bin/pi-harness update          # latest release
+~/.pi/agent/bin/pi-harness update 1.5.2    # a specific version, or a rollback
+```
+
+The launcher and its workers share this Pi. The update installs the release into the harness's
+`node_modules` with `--no-save`: `package.json` and `package-lock.json` keep the committed pin and
+need no commit. The typecheck and tests then run against the new Pi; a failure restores the previous
+one. The update refuses while harness sessions or background workers run, because replacing modules
+under a live process can break it mid-task; `--force` skips that check. Restart open sessions to
+load the new Pi. `npm ci` returns to the committed pin. `npm run update:pi` is equivalent.
 
 Authenticate independently when needed:
 

@@ -19,6 +19,7 @@
     "verify": "node scripts/verify.mjs",
     "doctor": "tsx src/cli.ts doctor",
     "install:local": "tsx scripts/install.ts",
+    "update:pi": "tsx scripts/update-pi.ts",
     "test:live:recurring": "tsx scripts/live-recurring.ts",
     "test:live:delegation": "tsx scripts/live-delegation.ts",
     "test:live:local": "tsx scripts/live-local.ts",
