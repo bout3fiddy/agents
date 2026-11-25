@@ -49,7 +49,7 @@ export async function install(agentDir = join(homedir(), '.pi', 'agent'), binDir
   await atomicJson(join(destination, 'settings.json'), {
     ...settings,
     defaultProvider: settings.defaultProvider ?? 'openai-codex',
-    defaultModel: settings.defaultModel ?? 'gpt-6.1-sol',
+    defaultModel: settings.defaultModel ?? 'gpt-6.2-astra',
     defaultThinkingLevel: settings.defaultThinkingLevel ?? 'medium',
     defaultProjectTrust: 'never',
     enableSkillCommands: false,

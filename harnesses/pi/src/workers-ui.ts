@@ -549,7 +549,7 @@ export class WorkersView implements Focusable {
   private plainText(row: WorkerRow): string {
     if (this.mode === 'details') {
       return [
-        `Worker: ${row.id}`,
+        `Worker: ${row.info.id}`,
         row.legacy && !row.info.actualModel
           ? 'Worker model and effort unrecorded'
           : `Model: ${row.info.model} · ${row.info.thinking ?? 'effort unrecorded'}`,

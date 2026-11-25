@@ -106,6 +106,7 @@ export async function startBranchBatch(
   const jobs = await new Delegations(store).startBranches(
     tasks,
     {
+      originRoot: ctx.sessionManager.getHeader?.()?.cwd ?? ctx.cwd,
       session: ctx.sessionManager.getSessionId(),
       originEntry: ctx.sessionManager
         .getBranch()

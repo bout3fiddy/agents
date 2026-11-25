@@ -23,12 +23,14 @@ test('installed Pi reloads new tools under the active role policy', async (t) =>
       ? "pi.registerTool({name:'future_probe',description:'test',label:'test'," +
         "parameters:{type:'object',properties:{}},execute:async()=>({content:[]})})\n"
       : '') +
-    'pi.on("session_start", e=>writeFileSync(' +
+    'pi.on("session_start", (e,ctx)=>writeFileSync(' +
     JSON.stringify(receipt) +
     ',JSON.stringify({reason:e.reason, registered:pi.getAllTools().map(x=>x.name),' +
-    'active:pi.getActiveTools()})))}'
+    'model:ctx.model?.id,thinking:pi.getThinkingLevel(),active:pi.getActiveTools()})))}'
   await writeFile(probe, source(1))
-  const child = spawn(wrapper, ['--mode', 'rpc', '--extension', probe], {
+  const chosen = 'openai-codex/gpt-6.1-sol'
+  const args = ['--mode', 'rpc', '--extension', probe, '--model', chosen, '--thinking', 'high']
+  const child = spawn(wrapper, args, {
     cwd: root,
     stdio: ['pipe', 'ignore', 'pipe'],
   })
@@ -61,11 +63,13 @@ test('installed Pi reloads new tools under the active role policy', async (t) =>
     throw new Error('Missing ' + reason + ' receipt: ' + diagnostics)
   }
   const first = await load('startup')
+  assert.deepEqual([`openai-codex/${first.model}`, first.thinking], [chosen, 'high'])
   assert.ok(first.active.includes('recurring_task'))
   assert.ok(!first.registered.includes('future_probe'))
   await writeFile(probe, source(2))
   child.stdin.write(JSON.stringify({ type: 'prompt', message: '/reload-fixture' }) + '\n')
   const next = await load('reload')
+  assert.deepEqual([next.model, next.thinking], [first.model, first.thinking])
   assert.ok(next.registered.includes('future_probe'))
   assert.ok(next.active.includes('recurring_task'))
   assert.ok(!next.active.includes('future_probe'))

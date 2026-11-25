@@ -24,6 +24,8 @@ import type { BranchPlan, BranchTaskInput } from './branch-contracts.ts'
 import { readProgress, type TaskProgress } from './progress.ts'
 import { hostCapability } from './capabilities.ts'
 import type { WorkerResult } from './contracts.ts'
+import { WorkerRoots } from './worker-roots.ts'
+import { realpath } from 'node:fs/promises'
 import { recoverTaskRevision } from './task-recovery.ts'
 
 export const delegateSchema = Type.Object(
@@ -54,6 +56,8 @@ export type DelegationRequest = Omit<DelegateInput, 'kind'> & {
   branch?: BranchPlan
   id: string
   root: string
+  originSession?: string
+  originRoot?: string
   session: string
   originEntry?: string
   model: string
@@ -162,7 +166,12 @@ const activeStates = new Set([
   'merge_queued',
   'merging',
 ])
-export type DelegationOrigin = { session: string; originEntry?: string; model: string }
+export type DelegationOrigin = {
+  originRoot?: string
+  session: string
+  originEntry?: string
+  model: string
+}
 
 export function activeTask(state: DelegationStatus): boolean {
   return activeStates.has(state.status)
@@ -344,6 +353,13 @@ export function validateDelegation(input: DelegateInput): void {
   }
 }
 
+async function registerOrigin(request: DelegationRequest) {
+  if (request.originRoot && request.originRoot !== request.root) {
+    const index = new WorkerRoots(new StateStore(request.originRoot))
+    await index.register({ root: request.root, taskId: request.id, session: request.session })
+  }
+}
+
 export class Delegations {
   constructor(readonly store: StateStore) {}
 
@@ -445,6 +461,7 @@ export class Delegations {
     recurring?: DelegationRequest['recurring'],
   ): Promise<Delegation> {
     validateDelegation(input)
+    const originRoot = await realpath(origin.originRoot ?? this.store.projectRoot)
 
     if (input.kind === 'implementation' || input.kind === 'maintenance') {
       await requireDependencies(this.store.projectRoot)
@@ -461,6 +478,8 @@ export class Delegations {
       const request: DelegationRequest = {
         ...input,
         ...origin,
+        originRoot,
+        originSession: origin.session,
         ...(recurring && { recurring }),
         writePaths: design?.writePaths ?? input.writePaths,
         id: randomUUID(),
@@ -508,6 +527,7 @@ export class Delegations {
       ])
 
       try {
+        await registerOrigin(request)
         await launch(request)
       } catch (error) {
         await atomicJson(join(directory, 'status.json'), {
@@ -593,6 +613,8 @@ export class Delegations {
         const request: DelegationRequest = {
           ...input,
           ...origin,
+          originRoot: await realpath(origin.originRoot ?? this.store.projectRoot),
+          originSession: origin.session,
           kind: 'branch',
           id: randomUUID(),
           root: this.store.projectRoot,
@@ -631,6 +653,7 @@ export class Delegations {
       // Persist the whole batch before launching any worker. Failed starts remain inspectable.
       for (const job of jobs) {
         try {
+          await registerOrigin(job.request)
           await launch(job.request)
         } catch (error) {
           job.state = { ...job.state, status: 'failed', error: String(error) }
@@ -705,7 +728,7 @@ export class Delegations {
           mergeRequested: true,
           mergeRequestId: control.mergeRequestId ?? randomUUID(),
         })
-        job.request = { ...job.request, ...origin }
+        job.request = { ...job.request, ...origin, originRoot: job.request.originRoot }
         await atomicJson(join(directory, 'request.json'), job.request)
 
         if (activeTask(job.state)) {
@@ -781,7 +804,7 @@ export class Delegations {
       }
 
       const previousHostHandoff = handoffForResume(job, controls)
-      job.request = { ...job.request, ...origin }
+      job.request = { ...job.request, ...origin, originRoot: job.request.originRoot }
       job.state = {
         ...job.state,
         status: 'queued',

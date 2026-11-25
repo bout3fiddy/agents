@@ -1,6 +1,9 @@
 import { loadRole } from './roles.ts'
-import { lstat, open, readdir } from 'node:fs/promises'
-import { join, relative, resolve, sep } from 'node:path'
+import { open, readdir } from 'node:fs/promises'
+import { join, relative, sep } from 'node:path'
+import { digest } from './paths.ts'
+import { safeTrace, WorkerRoots, type WorkerOrigin } from './worker-roots.ts'
+export { safeTrace } from './worker-roots.ts'
 import { StateStore, readJson } from './state.ts'
 import { Delegations, activeTask, delegationDirectory } from './delegation-state.ts'
 import type { Delegation } from './delegation-state.ts'
@@ -88,44 +91,15 @@ async function entries(path: string): Promise<string[]> {
   }
 }
 
-export async function safeTrace(store: StateStore, path: string): Promise<string> {
-  const local = relative(store.directory, resolve(path))
-
-  if (!local || local.startsWith('..') || local.startsWith(sep)) {
-    throw new Error('Worker trace must stay in the project trace directory')
-  }
-
-  let cursor = store.directory
-
-  for (const part of local.split(sep)) {
-    cursor = join(cursor, part)
-
-    try {
-      if ((await lstat(cursor)).isSymbolicLink()) {
-        throw new Error('Linked worker traces are unavailable')
-      }
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
-        throw error
-      }
-    }
-  }
-
-  return cursor
-}
-
-export class WorkersCatalog {
-  readonly store: StateStore
+class OwnerCatalog {
   readonly jobs: Delegations
-  private info = new Map<string, LiveWorkerInfo>()
   warnings: string[] = []
 
   constructor(
-    root: string,
+    readonly store: StateStore,
     private readonly onGuidance?: (row: WorkerRow, text: string) => void | Promise<void>,
   ) {
-    this.store = new StateStore(root)
-    this.jobs = new Delegations(this.store)
+    this.jobs = new Delegations(store)
   }
 
   async list(taskId?: string): Promise<WorkerRow[]> {
@@ -139,16 +113,16 @@ export class WorkersCatalog {
     const rows: WorkerRow[] = []
     const directory = join(this.store.directory, 'workers')
 
-    for (const id of await entries(directory)) {
+    for (const id of await entries(await safeTrace(this.store, directory))) {
       if (!/^[a-f0-9]{8}-[a-f0-9-]{27}$/.test(id)) {
         continue
       }
 
       try {
         const path = await safeTrace(this.store, join(directory, id))
-        const info =
-          this.info.get(id) ??
-          (await readJson<LiveWorkerInfo>(await safeTrace(this.store, join(path, 'info.json'))))
+        const info = await readJson<LiveWorkerInfo>(
+          await safeTrace(this.store, join(path, 'info.json')),
+        )
 
         if (taskId && info?.taskId !== taskId) {
           continue
@@ -162,7 +136,18 @@ export class WorkersCatalog {
           continue
         }
 
-        this.info.set(id, info)
+        if (info.projectRoot !== this.store.projectRoot) {
+          continue
+        }
+
+        if (
+          taskId &&
+          relative(delegationDirectory(this.store, taskId), info.output).split(sep)[0] === '..'
+        ) {
+          throw new Error('Worker output does not belong to the registered task')
+        }
+
+        await safeTrace(this.store, join(path, 'mailbox.lock'))
 
         if (state.status === 'running' && !processExists(info.pid)) {
           state = {
@@ -335,9 +320,7 @@ export class WorkersCatalog {
     return { taskId, workerId: worker.id, messageId: message.id, status: message.status }
   }
 
-  async send(id: string, text: string): Promise<string> {
-    const row = (await this.list()).find((item) => item.id === id)
-
+  async send(row: WorkerRow, text: string): Promise<string> {
     if (!row?.active || !row.accepting) {
       throw new Error('Worker is no longer accepting guidance. Return to its coordinator.')
     }
@@ -420,5 +403,134 @@ export class WorkersCatalog {
     } finally {
       await file.close()
     }
+  }
+}
+
+type Route = { owner: OwnerCatalog; row: WorkerRow; display: WorkerRow; entry?: WorkerOrigin }
+
+function qualified(row: WorkerRow, key: string): WorkerRow {
+  return {
+    ...row,
+    id: key + row.id,
+    info: {
+      ...row.info,
+      parentId: row.info.parentId && key + row.info.parentId,
+      reviewOf: row.info.reviewOf && key + row.info.reviewOf,
+    },
+  }
+}
+
+/** IDs select a current catalog route, never a caller-supplied directory. */
+export class WorkersCatalog {
+  private readonly local: OwnerCatalog
+  private readonly roots: WorkerRoots
+  warnings: string[] = []
+
+  constructor(
+    root: string,
+    private readonly onGuidance?: (row: WorkerRow, text: string) => void | Promise<void>,
+    roots?: WorkerRoots,
+    private readonly session?: string,
+  ) {
+    this.local = new OwnerCatalog(new StateStore(root), onGuidance)
+    this.roots = roots ?? new WorkerRoots(this.local.store)
+  }
+
+  private async routes(): Promise<Route[]> {
+    const local = await this.local.list()
+    this.warnings = this.local.warnings.slice(0, 32)
+    const routes: Route[] = local.map((row) => ({ owner: this.local, row, display: row }))
+    const warn = (error: unknown) => {
+      if (this.warnings.length < 32) {
+        this.warnings.push(String(error).slice(0, 300))
+      }
+    }
+
+    try {
+      const seen = new Set<string>()
+
+      for (const entry of await this.roots.entries()) {
+        try {
+          if (this.session && this.session !== entry?.session) {
+            continue
+          }
+
+          const { store } = await this.roots.owner(entry)
+          const key = digest(JSON.stringify([entry.root, entry.taskId])) + ':'
+
+          if (seen.has(key) || store.projectRoot === this.local.store.projectRoot) {
+            continue
+          }
+
+          seen.add(key)
+          const owner = new OwnerCatalog(store, this.onGuidance)
+
+          for (const row of await owner.list(entry.taskId)) {
+            routes.push({ owner, row, entry, display: qualified(row, key) })
+          }
+
+          owner.warnings.forEach(warn)
+        } catch (error) {
+          warn(error)
+        }
+      }
+    } catch (error) {
+      warn(error)
+    }
+
+    if (routes.length > local.length) {
+      for (const route of routes.slice(0, local.length)) {
+        route.display = qualified(route.row, 'local:')
+      }
+    }
+
+    return routes
+  }
+
+  async list(taskId?: string): Promise<WorkerRow[]> {
+    return (await this.routes())
+      .map((route) => route.display)
+      .filter((row) => !taskId || row.info.taskId === taskId)
+  }
+
+  private async route(id: string) {
+    const route = (await this.routes()).find((item) => item.display.id === id)
+
+    if (!route) {
+      throw new Error('Worker is no longer available')
+    }
+
+    if (route.entry) {
+      await this.roots.owner(route.entry)
+    }
+
+    return route
+  }
+
+  async conversation(selected: WorkerRow, bytes?: number) {
+    const { owner, row } = await this.route(selected.id)
+    return owner.conversation(row, bytes)
+  }
+
+  async send(id: string, text: string) {
+    const { owner, row } = await this.route(id)
+    return owner.send(row, text)
+  }
+
+  async sendEvidence(taskId: string, text: string) {
+    const routes = (await this.routes()).filter((route) => route.row.info.taskId === taskId)
+    const owners = new Set(routes.map((route) => route.owner))
+
+    if (owners.size !== 1) {
+      throw new Error('Evidence needs exactly one accepting implementer on the specified task')
+    }
+
+    const route = routes[0]!
+
+    if (route.entry) {
+      await this.roots.owner(route.entry)
+    }
+
+    return route.owner.sendEvidence(taskId, text)
   }
 }

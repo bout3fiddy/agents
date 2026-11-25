@@ -1,7 +1,7 @@
 {
   "name": "task-worker",
   "prompt": "task-worker.md",
-  "model": "openai-codex/gpt-6.1-sol",
+  "model": "openai-codex/gpt-6.2-astra",
   "thinking": "medium",
   "skills": [],
   "tools": [

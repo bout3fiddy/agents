@@ -274,10 +274,20 @@ test('picker handles guidance, completion, Unicode, resizing and exit', async (t
   assert.equal(terminalText('\x1b]52;c;malicious\x07safe\x1b[2J'), 'safe')
 })
 
-test('/workers opens during a real SDK request without stopping host or worker', async (t) => {
+test('SDK picker observes foreign work during an uninterrupted request', async (t) => {
   const item = await fixture()
+  const owner = await fixture()
   t.after(() => rm(item.base, { recursive: true, force: true }))
-  const worker = await live(item.root)
+  t.after(() => rm(owner.base, { recursive: true, force: true }))
+  const previous = process.env.PI_HARNESS_AGENT_DIR
+  process.env.PI_HARNESS_AGENT_DIR = new StateStore(item.root).projectRoot
+  t.after(() => {
+    if (previous === undefined) {
+      delete process.env.PI_HARNESS_AGENT_DIR
+    } else {
+      process.env.PI_HARNESS_AGENT_DIR = previous
+    }
+  })
   let release!: () => void
   const gate = new Promise<void>((resolve) => {
     release = resolve
@@ -318,6 +328,21 @@ test('/workers opens during a real SDK request without stopping host or worker',
     await runtime.settleCredentialWrites()
   })
   const id = session.sessionManager.getSessionId()
+  const jobs = new Delegations(new StateStore(owner.root))
+  const job = await jobs.start(
+    { task: 'Inspect the queue', kind: 'research', context: '', writePaths: [] },
+    { originRoot: item.root, session: id, model: 'test/model' },
+    async () => {},
+  )
+  const worker = await LiveWorker.start(owner.root, {
+    role: 'task-coordinator',
+    model: 'test/model',
+    task: job.request.task,
+    scope: [],
+    output: join(delegationDirectory(jobs.store, job.request.id), 'coordinator.json'),
+    workspace: owner.root,
+    backend: 'pi',
+  })
   const running = session.prompt('Continue the design discussion.')
   await started
   const picker = session.prompt('/workers')

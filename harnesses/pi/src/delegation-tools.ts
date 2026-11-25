@@ -614,6 +614,7 @@ function taskOrigin(ctx: ExtensionContext) {
   }
 
   return {
+    originRoot: ctx.sessionManager.getHeader?.()?.cwd ?? ctx.cwd,
     session: ctx.sessionManager.getSessionId(),
     originEntry: ctx.sessionManager
       .getBranch()
@@ -694,10 +695,12 @@ function registerTaskControl(pi: ExtensionAPI) {
     async execute(_id, args, _signal, _update, ctx) {
       if (args.action === 'evidence') {
         return textResult(
-          await new WorkersCatalog(await realpath(ctx.cwd)).sendEvidence(
-            args.id,
-            args.message ?? '',
-          ),
+          await new WorkersCatalog(
+            await realpath(ctx.cwd),
+            undefined,
+            undefined,
+            ctx.sessionManager.getSessionId(),
+          ).sendEvidence(args.id, args.message ?? ''),
         )
       }
 

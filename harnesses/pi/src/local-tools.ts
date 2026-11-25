@@ -139,6 +139,7 @@ export async function startLocalBatch(
     tasks,
     {
       model: ctx.model.provider + '/' + ctx.model.id,
+      originRoot: ctx.sessionManager.getHeader?.()?.cwd ?? ctx.cwd,
       session: ctx.sessionManager.getSessionId(),
       originEntry: ctx.sessionManager
         .getBranch()

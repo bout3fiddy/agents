@@ -37,7 +37,7 @@ Claude specialists prefer Fable 5.2. On a confirmed usage limit the harness sele
 same role and effort. Reuse a confirmed limit only before reset and for less than 15 minutes;
 otherwise probe Fable again. Attribute results to the actual model and report quota fallback.
 
-The default orchestrator is `openai-codex/gpt-6.1-sol` at medium effort. Pi's current model and
+Fresh installs default to `openai-codex/gpt-6.2-astra` at medium effort. Pi's current model and
 thinking selection take precedence for the orchestrator; the harness never silently changes them.
 Timing traces record the actual selection. Implementation defaults to `openai-codex/gpt-6.2-astra`
 with medium as its default. Change `roles/*.json` to select models, effort, tools, skills and write

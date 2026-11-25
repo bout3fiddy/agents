@@ -3,6 +3,7 @@ import { access, realpath, mkdtemp, rm } from 'node:fs/promises'
 import { homedir, tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { ModelRuntime } from '@earendil-works/pi-coding-agent'
+import { WorkerRoots } from './worker-roots.ts'
 import { StateStore } from './state.ts'
 import { roleNames } from './contracts.ts'
 import { loadRole, rolePrompt } from './roles.ts'
@@ -64,6 +65,17 @@ if (process.argv[1] && resolve(process.argv[1]) === new URL(import.meta.url).pat
   const store = new StateStore(await realpath(process.cwd()))
 
   switch (command) {
+    case 'register-worker-origin': {
+      const [taskId, session] = process.argv.slice(4)
+
+      if (!argument || !taskId || !session || process.argv.length !== 6) {
+        throw new Error('From origin project: register-worker-origin OWNER_ROOT TASK_UUID SESSION')
+      }
+
+      await new WorkerRoots(store).register({ root: argument, taskId, session })
+      console.log(`Registered Workers origin for ${taskId}`)
+      break
+    }
     case 'doctor':
       console.log(JSON.stringify(await doctor(argument), null, 2))
       break
@@ -73,7 +85,7 @@ if (process.argv[1] && resolve(process.argv[1]) === new URL(import.meta.url).pat
       process.once('SIGTERM', () => controller.abort())
       const task = await runWorkflow(
         store,
-        argument ?? 'openai-codex/gpt-6.1-sol',
+        argument ?? 'openai-codex/gpt-6.2-astra',
         controller.signal,
       )
       console.log(JSON.stringify(task, null, 2))

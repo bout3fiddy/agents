@@ -3,20 +3,25 @@ import { WorkersCatalog } from './workers-data.ts'
 import { WorkersView } from './workers-ui.ts'
 
 export function registerWorkers(pi: ExtensionAPI, window = { open: false }): void {
-  const catalog = (cwd: string) =>
-    new WorkersCatalog(cwd, (row, text) => {
-      pi.sendMessage(
-        {
-          customType: 'pi-worker-guidance',
-          display: false,
-          content:
-            `The user sent guidance directly to ${row.info.role} ${row.id}:\n${text}\n` +
-            'Preserve this update in discussion. The selected worker receives it directly; ' +
-            'do not restart or duplicate its work merely because this notice arrived.',
-        },
-        { deliverAs: 'nextTurn', triggerTurn: false },
-      )
-    })
+  const catalog = (ctx: ExtensionContext) =>
+    new WorkersCatalog(
+      ctx.cwd,
+      (row, text) => {
+        pi.sendMessage(
+          {
+            customType: 'pi-worker-guidance',
+            display: false,
+            content:
+              `The user sent guidance directly to ${row.info.role} ${row.id}:\n${text}\n` +
+              'Preserve this update in discussion. The selected worker receives it directly; ' +
+              'do not restart or duplicate its work merely because this notice arrived.',
+          },
+          { deliverAs: 'nextTurn', triggerTurn: false },
+        )
+      },
+      undefined,
+      ctx.sessionManager.getSessionId(),
+    )
   let closePanel: (() => void) | undefined
   const panel = (ctx: ExtensionContext) => {
     if (closePanel) {
@@ -25,7 +30,7 @@ export function registerWorkers(pi: ExtensionAPI, window = { open: false }): voi
       return
     }
 
-    const source = catalog(ctx.cwd)
+    const source = catalog(ctx)
     void ctx.ui
       .custom<void>(
         (tui, theme, _keys, done) => {
@@ -85,7 +90,7 @@ export function registerWorkers(pi: ExtensionAPI, window = { open: false }): voi
         await ctx.ui.custom<void>(
           (tui, theme, _keys, done) =>
             new WorkersView(
-              catalog(ctx.cwd),
+              catalog(ctx),
               theme,
               () =>
                 Math.max(6, Math.min(tui.terminal.rows - 4, Math.floor(tui.terminal.rows * 0.94))),

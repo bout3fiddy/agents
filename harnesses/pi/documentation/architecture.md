@@ -188,6 +188,9 @@ keep their worktree and fixed scope; changing branch ownership requires replacem
 
 ## Live worker observation and guidance
 
+The host binds cross-checkout tasks through the [Workers origin registry](workers.md). The index
+selects owner catalogs; it does not move state or expand file and tool permissions.
+
 Each new coordinator and execution worker owns a UUID directory under `harness/workers/`. Immutable
 metadata records role, assigned model, task, scope, candidate path, process and parent. Review links
 point to the latest author whose candidate is being reviewed. Mutable state and normalized visible
