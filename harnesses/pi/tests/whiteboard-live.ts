@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { access } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { openBoardEndpoint } from '../src/whiteboard-cli.ts'
-import { parseLink, parsePoll, sameBoard, validRevision } from '../src/whiteboard-protocol.ts'
+import { canvasSnapshot, parseLink, parsePoll } from '../src/whiteboard-protocol.ts'
 
 const [project, owner] = process.argv.slice(2)
 
@@ -19,15 +19,13 @@ const reopened = await link()
 assert.deepEqual(first.link, reopened.link)
 const status = parsePoll(await endpoint.run('poll', [], signal), first.link)
 
-for (const layer of ['interpretation', 'ideas']) {
-  const snapshot = await endpoint.run('snapshot', ['--layer', layer], signal)
-  sameBoard(snapshot, first.link)
-  assert.ok(typeof snapshot.path === 'string' && typeof snapshot.records_path === 'string')
-  assert.ok(snapshot.snapshot && validRevision(snapshot.base_revision))
-  await Promise.all([access(snapshot.path), access(snapshot.records_path)])
-}
+const snapshot = await endpoint.run('snapshot', ['--layer', 'canvas'], signal)
+canvasSnapshot(snapshot, first.link)
+assert.ok(typeof snapshot.path === 'string' && typeof snapshot.records_path === 'string')
+assert.equal(snapshot.base_revision, status.agent_revision, 'Expected an idle disposable canvas')
+await Promise.all([access(snapshot.path), access(snapshot.records_path)])
 
 console.log(
-  `Reopened ${first.link.session}; verified both snapshot layers. ` +
+  `Reopened ${first.link.session}; verified protocol 2 and the canvas snapshot. ` +
     `Outstanding events: ${status.events.length}.`,
 )

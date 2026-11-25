@@ -13,6 +13,14 @@ const [command, ...args] = process.argv.slice(2)
 const field = (name) => args[args.indexOf(name) + 1]
 const file = field('--out')
 const reply = { status: 'success', session: 'board', owner: 'host' }
+if (['whiteboard-link', 'whiteboard-poll'].includes(command)) {
+  if (field('--protocol') !== '2') process.exit(2)
+  if (fs.existsSync('old-daemon')) {
+    console.log(JSON.stringify({ status: 'failure', code: 'upgrade_required' }))
+    process.exit(2)
+  }
+  if (!fs.existsSync('old-cli')) reply.protocol = 2
+}
 if (command === 'whiteboard-link') {
   fs.writeFileSync(file, 'private-binding-marker', { mode: 0o600 })
   Object.assign(reply, { binding_file: file,
@@ -23,7 +31,9 @@ if (command === 'whiteboard-link') {
   if (fs.existsSync('slow-poll')) {
     Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 2500)
   }
-  Object.assign(reply, {sketch_hash:'hash', agent_revision:0, events:[], token:'private-marker'})
+  if (fs.existsSync('padded')) reply.padding = ' '.repeat(Number(fs.readFileSync('padded', 'utf8')))
+  const events = fs.existsSync('events.json') ? JSON.parse(fs.readFileSync('events.json')) : []
+  Object.assign(reply, {sketch_hash:'hash', agent_revision:0, events, token:'private-marker'})
 } else if (command === 'whiteboard-snapshot') {
   reply.details = { scoped_token: 'private-marker' }
 } else if (field('--file') === 'large') {
@@ -58,17 +68,47 @@ test('CLI argv, binding privacy, flat envelopes and output cap', async (t) => {
   const endpoint = await openBoardEndpoint(subdir, 'host')
   const signal = new AbortController().signal
   assert.equal(endpoint.binding, join(root, '.pi/traces/harness/whiteboards/host.json'))
+  const oldDaemon = join(subdir, 'old-daemon')
+  await writeFile(oldDaemon, '')
+  await assert.rejects(endpoint.run('link', [], signal), /Upgrade.*protocol 2/)
+  await rm(oldDaemon)
+  const oldCli = join(subdir, 'old-cli')
+  await writeFile(oldCli, '')
+  await assert.rejects(endpoint.run('link', [], signal), /Upgrade.*protocol 2/)
+  await rm(oldCli)
   const linked = parseLink(await endpoint.run('link', [], signal), 'host', endpoint.binding)
   assert.equal(linked.draw, 'http://lan/draw')
   execFileSync('git', ['check-ignore', '--', endpoint.binding], { cwd: root })
   const status = await endpoint.run('poll', [], signal)
   assert.doesNotMatch(JSON.stringify(parsePoll(status, linked.link)), /private-marker/)
 
+  const text = ' \t{"credential": "🦦"}\r\n感想: \n '
+  const event = {
+    id: 'event',
+    request_id: '00000000-0000-4000-8000-000000000001',
+    text,
+    kind: 'sketch_notify',
+    sketch_hash: 'hash',
+    created_at_ms: 123,
+    state: 'queued',
+  }
+  const eventsPath = join(subdir, 'events.json')
+  await writeFile(eventsPath, JSON.stringify([{ ...event, token: 'private-marker' }]))
+  const polled = parsePoll(await endpoint.run('poll', [], signal), linked.link)
+  assert.deepEqual(polled.events, [event])
+  await rm(eventsPath)
+
   for (const identity of [{ owner: 'other' }, { session: 'other' }]) {
     assert.throws(() => parsePoll({ ...status, ...identity }, linked.link), /mismatched/)
   }
 
-  const args = ['--layer', 'ideas', '--file', 'with space; echo not-a-shell']
+  const padding = join(subdir, 'padded')
+  await writeFile(padding, String(1024 * 1024))
+  assert.deepEqual(parsePoll(await endpoint.run('poll', [], signal), linked.link).events, [])
+  await writeFile(padding, String(2 * 1024 * 1024))
+  await assert.rejects(endpoint.run('poll', [], signal), /poll failed/)
+  await rm(padding)
+  const args = ['--layer', 'canvas', '--file', 'with space; echo not-a-shell']
   const published = await endpoint.run('publish', args, signal)
   assert.deepEqual(published.args, ['--binding', endpoint.binding, ...args, '--json'])
 
@@ -85,7 +125,7 @@ test('CLI argv, binding privacy, flat envelopes and output cap', async (t) => {
     })
   }
 
-  await assert.rejects(endpoint.run('snapshot', ['--layer', 'ideas'], signal), /snapshot failed/)
+  await assert.rejects(endpoint.run('snapshot', ['--layer', 'canvas'], signal), /snapshot failed/)
   await writeFile(join(subdir, 'slow-poll'), '')
   const deadline = AbortSignal.timeout(6000)
   await assert.rejects(endpoint.run('poll', [], deadline), /poll failed/)
