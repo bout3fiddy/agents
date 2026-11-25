@@ -34,6 +34,10 @@ function latest(ctx: ExtensionContext) {
   return entry?.type === 'custom' && Check(record, entry.data) ? entry.data : undefined
 }
 
+export function hostWorkPaused(ctx: ExtensionContext) {
+  return latest(ctx)?.state === 'paused'
+}
+
 export function registerHostWork(pi: ExtensionAPI) {
   pi.registerTool({
     name: 'host_work',

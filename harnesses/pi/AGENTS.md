@@ -29,6 +29,8 @@
   supplies independent design advice and explicitly requested performance measurements.
 - Keep shell activity folding in the TUI renderer. Preserve observed failures, raw drill-down and
   transcript ordering. Exercise live and resumed sessions with `scripts/check-shell-terminal.py`.
+- Keep whiteboard binding credentials opaque and host-only. A current-branch message receipt, not an
+  offered wake, authorizes received ACK. Test the listener at real SDK boundaries on reload.
 - For a multi-step operation owned by the host, use session-local host_work. Preserve explicit
   pauses, external waits and newer user input. Test actual settlement with tests/host-work.test.ts.
 - When an external Actions run gates host work, persist the run watch in its originating session.

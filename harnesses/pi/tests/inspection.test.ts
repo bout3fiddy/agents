@@ -48,6 +48,7 @@ test('every role tool has an explicit inspection or direct-call policy', async (
     'submit_result',
     'task_control',
     'watch_github_run',
+    'whiteboard',
     'host_work',
     'workflow',
     'write',
@@ -62,6 +63,7 @@ test('every role tool has an explicit inspection or direct-call policy', async (
 
   for (const role of roles) {
     assert.equal(role.tools.includes('codemode'), role.backend === 'pi', role.name)
+    assert.equal(role.tools.includes('whiteboard'), role.name === 'orchestrator', role.name)
   }
 })
 

@@ -46,6 +46,7 @@ raw script and output** in that view for the original script, call arguments and
   script projection.
 
 - `host_work`. Direct host tool for the state of an authorized, host-owned operation.
+- `whiteboard`. Direct, session-bound host inspection, publication and event acknowledgement.
 - `watch_github_run`. Direct host tool. Registers or cancels a local CI follow-up.
 
 - `codemode`. Top-level script runner. Model helpers are disabled.

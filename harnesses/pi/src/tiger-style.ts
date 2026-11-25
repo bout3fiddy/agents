@@ -8,7 +8,7 @@ const limit = 256 * 1024
 const reference = 'Follow [Tiger Style](TIGER_STYLE.md).'
 const flags = constants.O_NOFOLLOW | constants.O_NONBLOCK
 
-async function projectRoot(cwd: string): Promise<string> {
+export async function projectRoot(cwd: string): Promise<string> {
   try {
     return execFileSync('git', ['rev-parse', '--show-toplevel'], {
       cwd,

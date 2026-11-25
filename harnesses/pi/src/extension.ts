@@ -34,6 +34,7 @@ import { registerRecurring } from './recurring-tools.ts'
 import { registerHostWork } from './host-work.ts'
 import { registerShellActivity } from './shell-render.ts'
 import { registerGitHubRunWatch } from './github-run-watch.ts'
+import { registerWhiteboard } from './whiteboard.ts'
 import { registerWorkers } from './workers-command.ts'
 
 // A running generation keeps matching code, prompts and tool policy until a real reload.
@@ -46,6 +47,7 @@ export default function harness(pi: ExtensionAPI): void {
   registerWorkers(pi, workerWindow)
   registerRecurring(pi)
   registerGitHubRunWatch(pi)
+  registerWhiteboard(pi)
   const { consultations } = registerWorkshop(pi)
   registerWorkshopContext(pi)
   registerDocumentTools(pi)

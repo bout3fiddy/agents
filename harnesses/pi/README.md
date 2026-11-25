@@ -14,6 +14,15 @@ investigation, setup and small quick edits. Background task coordinators handle 
 discussion continues. Substantial implementation uses isolated Astra workers, executable checks and
 optional performance measurement.
 
+`/start_whiteboard` opens this conversation’s tldraw-sync board. Use the iPad URL or scan the QR on
+its Mac stage; keep the stage open for PNG snapshots. Notify agent and Interpret sketchboard queue
+requests even while Pi is busy. The host can inspect outstanding work with `whiteboard status` and
+publish only to Interpretation or Ideas. Replace sketchboard is a human action. The listener resumes
+on reload; `/stop_whiteboard` detaches without deleting the board or stopping the shared daemon.
+Start explicitly in a new or forked session. Use a trusted LAN. Install `tldraw-sync` on PATH, set
+`PI_WHITEBOARD_BIN`, or install Bun with a sibling `tldraw-sync` checkout next to the project root.
+See the [whiteboard integration check](documentation/whiteboard.md) for the paired Mac/iPad journey.
+
 | Role                     | Model / default effort |
 | ------------------------ | ---------------------- |
 | Orchestrator             | Codex / medium         |
