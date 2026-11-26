@@ -51,6 +51,8 @@ export async function install(agentDir = join(homedir(), '.pi', 'agent'), binDir
     defaultProvider: settings.defaultProvider ?? 'openai-codex',
     defaultModel: settings.defaultModel ?? 'gpt-6.2-astra',
     defaultThinkingLevel: settings.defaultThinkingLevel ?? 'medium',
+    hideThinkingBlock: true,
+    steeringMode: settings.steeringMode ?? 'all',
     defaultProjectTrust: 'never',
     enableSkillCommands: false,
     extensions: [

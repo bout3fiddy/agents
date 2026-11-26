@@ -32,6 +32,8 @@ import { registerBranchTools } from './branch-tools.ts'
 import { capabilities } from './capabilities.ts'
 import { registerRecurring } from './recurring-tools.ts'
 import { registerHostWork } from './host-work.ts'
+import { registerActivityCaption } from './activity-caption.ts'
+import registerSteering from './steering.ts'
 import { registerShellActivity } from './shell-render.ts'
 import { registerGitHubRunWatch } from './github-run-watch.ts'
 import { registerWhiteboard } from './whiteboard.ts'
@@ -58,6 +60,8 @@ export default function harness(pi: ExtensionAPI): void {
   const delegation = registerDelegation(pi, undefined, afterMerge)
   registerHostWork(pi)
   registerShellActivity(pi)
+  registerActivityCaption(pi)
+  registerSteering(pi)
   registerBranchTools(pi)
   registerLocalTools(pi)
   const storeFor = async (cwd: string) => new StateStore(await realpath(cwd))
