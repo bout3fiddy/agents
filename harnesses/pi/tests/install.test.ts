@@ -12,6 +12,8 @@ test('fresh installer and default Codex delegates select Astra medium', async (t
   t.after(() => rm(base, { recursive: true, force: true }))
   const { destination } = await install(join(base, 'agent'))
   const settings = JSON.parse(await readFile(join(destination, 'settings.json'), 'utf8'))
+  assert.equal(settings.hideThinkingBlock, true)
+  assert.equal(settings.steeringMode, 'all')
   const model = `${settings.defaultProvider}/${settings.defaultModel}`
   assert.deepEqual([model, settings.defaultThinkingLevel], ['openai-codex/gpt-6.2-astra', 'medium'])
 
@@ -42,6 +44,8 @@ test('installer backs up only Pi assets and preserves auth and provider choice',
       defaultModel: 'chosen',
       defaultThinkingLevel: 'high',
       theme: 'dark',
+      hideThinkingBlock: false,
+      steeringMode: 'one-at-a-time',
     }),
   )
 
@@ -53,6 +57,8 @@ test('installer backs up only Pi assets and preserves auth and provider choice',
     assert.equal(settings.defaultModel, 'chosen')
     assert.equal(settings.defaultThinkingLevel, 'high')
     assert.equal(settings.theme, 'dark')
+    assert.equal(settings.hideThinkingBlock, true)
+    assert.equal(settings.steeringMode, 'one-at-a-time')
     assert.ok(settings.defaultTools.includes('bash'))
     assert.ok(settings.defaultTools.includes('write'))
     assert.ok(settings.defaultTools.includes('consult_design'))

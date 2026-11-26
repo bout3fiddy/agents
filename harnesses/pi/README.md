@@ -14,14 +14,28 @@ investigation, setup and acceptance. Tracked workers make project changes while 
 continues. Implementation uses isolated Astra workers by default, executable checks and optional
 performance measurement.
 
+In the host editor, **Enter** sends when idle and **steers** while working. A steer reaches the
+model after the in-flight response and its tool batch, before the next model request. It does not
+cancel a tool or undo its effects. `/steer TEXT` explicitly uses the same delivery priority.
+**Alt+Enter** with text requests a follow-up after the current run has no more work. In `pih`, press
+**Alt+Enter with an empty editor** to push one waiting human follow-up into steering. The other
+messages keep their delivery modes. Pending steers arrive together by default; an explicit
+one-at-a-time steering preference still applies. If you remapped Pi’s follow-up key, use that key.
+
+The editor’s working indicator shows the latest streamed reasoning caption on one line and clears
+when idle. The installer sets transcript thinking to collapsed. Use Pi’s thinking display toggle if
+you want the full reasoning blocks; neither display mode changes the saved session.
+
 `/start_whiteboard` opens this conversation’s tldraw-sync board. Use the iPad URL or scan the QR on
-its Mac stage; keep the stage open for PNG snapshots. Notify agent and Interpret sketchboard queue
-requests even while Pi is busy. The host can inspect outstanding work with `whiteboard status` and
-publish only to Interpretation or Ideas. Replace sketchboard is a human action. The listener resumes
-on reload; `/stop_whiteboard` detaches without deleting the board or stopping the shared daemon.
-Start explicitly in a new or forked session. Use a trusted LAN. Install `tldraw-sync` on PATH, set
-`PI_WHITEBOARD_BIN`, or install Bun with a sibling `tldraw-sync` checkout next to the project root.
-See the [whiteboard integration check](documentation/whiteboard.md) for the paired Mac/iPad journey.
+its Mac stage; keep the stage open for PNG snapshots. On iPad, optionally type a note, turn on
+Interpret for faithful cleanup, then tap **Notify agent**. Leave Interpret off to discuss the sketch
+without requesting cleanup. Only the owning host receives the request. It can inspect outstanding
+work with `whiteboard status` and publish to one Agent canvas. Only the human can replace Sketch.
+The listener resumes on reload; `/stop_whiteboard` detaches without stopping the shared daemon. Use
+matching protocol 2 versions of pih, the tldraw-sync CLI and daemon. Start explicitly in a new or
+forked session. Use a trusted LAN. Install `tldraw-sync` on PATH, set `PI_WHITEBOARD_BIN`, or
+install Bun with a sibling `tldraw-sync` checkout next to the project root. See the
+[whiteboard integration check](documentation/whiteboard.md) for the paired Mac/iPad journey.
 
 | Role                     | Model / default effort |
 | ------------------------ | ---------------------- |

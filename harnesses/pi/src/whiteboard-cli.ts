@@ -12,6 +12,13 @@ export class MissingBoardCLI extends Error {
     super('Install tldraw-sync on PATH or set PI_WHITEBOARD_BIN, then run /start_whiteboard.')
   }
 }
+export class BoardUpgradeRequired extends Error {
+  constructor() {
+    super(
+      'Upgrade tldraw-sync to protocol 2, safely restart its daemon, then run /start_whiteboard.',
+    )
+  }
+}
 export type BoardCommand = 'link' | 'poll' | 'ack' | 'snapshot' | 'publish'
 export type BoardReply = Record<string, unknown>
 export interface BoardEndpoint {
@@ -102,21 +109,22 @@ function publicField(key: string, value: unknown) {
   return value
 }
 
-function commandFailure(command: BoardCommand, stdout?: unknown) {
-  let hint = 'Check the daemon, open Mac stage and current revision.'
+function commandFailure(command: BoardCommand, failure: unknown) {
+  let hint =
+    command === 'link' || command === 'poll'
+      ? 'Check the daemon and upgrade the CLI and daemon if they lack protocol 2.'
+      : 'Check the daemon, open Mac stage and current revision.'
 
-  try {
-    const failure: unknown = typeof stdout === 'string' ? JSON.parse(stdout) : null
-
-    if (object(failure) && failure.status === 'failure') {
-      if (failure.code === 'stage_closed') {
-        hint = 'Reopen the Mac stage with /start_whiteboard.'
-      } else if (failure.code === 'revision_conflict' || failure.code === 'stale_snapshot') {
-        hint = 'Take a fresh snapshot before publishing.'
-      }
+  if (object(failure) && failure.status === 'failure') {
+    if (failure.code === 'upgrade_required') {
+      return new BoardUpgradeRequired()
     }
-  } catch {
-    // A broken or oversized response is not safe diagnostic text.
+
+    if (failure.code === 'stage_closed') {
+      hint = 'Reopen the Mac stage with /start_whiteboard.'
+    } else if (failure.code === 'revision_conflict' || failure.code === 'stale_snapshot') {
+      hint = 'Take a fresh snapshot before publishing.'
+    }
   }
 
   return new Error(`Whiteboard ${command} failed. ${hint}`)
@@ -133,11 +141,16 @@ export async function openBoardEndpoint(cwd: string, owner: string): Promise<Boa
       await checkBinding(binding, command === 'link')
       const link = command === 'link'
       const argv = link ? ['--owner', owner, '--out', binding] : ['--binding', binding]
+
+      if (link || command === 'poll') {
+        argv.push('--protocol', '2')
+      }
+
       const options = {
         cwd,
         signal,
         timeout: command === 'poll' ? 1500 : 15000,
-        maxBuffer: 1024 * 1024,
+        maxBuffer: (command === 'poll' ? 2 : 1) * 1024 * 1024,
         killSignal: 'SIGKILL' as const,
         encoding: 'utf8' as const,
       }
@@ -157,11 +170,23 @@ export async function openBoardEndpoint(cwd: string, owner: string): Promise<Boa
           throw new MissingBoardCLI()
         }
 
-        throw commandFailure(command, object(error) ? error.stdout : undefined)
+        if (object(error) && typeof error.stdout === 'string') {
+          try {
+            response = JSON.parse(error.stdout)
+          } catch {
+            // Never expose malformed stdout (it may contain private credentials).
+          }
+        }
+
+        throw commandFailure(command, response)
       }
 
       if (!object(response) || response.status !== 'success') {
-        throw commandFailure(command)
+        throw commandFailure(command, response)
+      }
+
+      if ((link || command === 'poll') && response.protocol !== 2) {
+        throw new BoardUpgradeRequired()
       }
 
       if (link) {
