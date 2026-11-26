@@ -15,24 +15,35 @@ import {
   type UpdateDeps,
 } from '../scripts/update-pi.ts'
 
+// Register the standalone offline npm tests in the harness's tests/*.test.ts lane.
+await import('../scripts/tests/update-pi-parity.test.ts')
+
 const core = '@earendil-works/pi-coding-agent'
 const tui = '@earendil-works/pi-tui'
 
-function setInstalled(root: string, name: string, version: string) {
-  mkdirSync(join(root, 'node_modules', name), { recursive: true })
-  writeFileSync(join(root, 'node_modules', name, 'package.json'), JSON.stringify({ version }))
+function installFixture(root: string, specs: string[]) {
+  const dependencies: Record<string, string> = { typebox: '1.3.27' }
+  const packages: Record<string, unknown> = { '': { dependencies } }
+
+  for (const spec of [...specs, 'typebox@1.3.27']) {
+    const at = spec.lastIndexOf('@')
+    const name = spec.slice(0, at)
+    const version = spec.slice(at + 1)
+    const directory = `node_modules/${name}`
+    dependencies[name] = version
+    packages[directory] = { version }
+    mkdirSync(join(root, directory), { recursive: true })
+    writeFileSync(join(root, directory, 'package.json'), JSON.stringify({ name, version }))
+  }
+
+  writeFileSync(join(root, 'package.json'), JSON.stringify({ dependencies }))
+  writeFileSync(join(root, 'package-lock.json'), JSON.stringify({ lockfileVersion: 3, packages }))
 }
 
-/** A harness root whose fake npm installs by rewriting node_modules manifests. */
 async function harness(t: TestContext, options: { failCheck?: boolean; busy?: string[] }) {
   const root = await mkdtemp(join(tmpdir(), 'pi-update-'))
   t.after(() => rm(root, { recursive: true, force: true }))
-  const manifest = JSON.stringify({
-    dependencies: { [core]: '1.5.2', [tui]: '1.5.2', typebox: '1.3.27' },
-  })
-  await writeFile(join(root, 'package.json'), manifest)
-  setInstalled(root, core, '1.5.2')
-  setInstalled(root, tui, '1.5.2')
+  installFixture(root, [`${core}@1.5.2`, `${tui}@1.5.2`])
   const calls = { installs: [] as string[][], checks: 0, specs: [] as string[] }
   const lines: string[] = []
   const deps: UpdateDeps = {
@@ -44,11 +55,7 @@ async function harness(t: TestContext, options: { failCheck?: boolean; busy?: st
     },
     install: (specs) => {
       calls.installs.push(specs)
-
-      for (const spec of specs) {
-        const at = spec.lastIndexOf('@')
-        setInstalled(root, spec.slice(0, at), spec.slice(at + 1))
-      }
+      installFixture(root, specs)
     },
     check: () => {
       calls.checks += 1
@@ -63,7 +70,6 @@ async function harness(t: TestContext, options: { failCheck?: boolean; busy?: st
 
 test('update installs the latest Pi packages together and keeps them on success', async (t) => {
   const { root, calls, lines, run } = await harness(t, {})
-  const manifest = await readFile(join(root, 'package.json'), 'utf8')
 
   assert.equal(await run([]), 0)
   assert.deepEqual(calls.specs, ['latest'])
@@ -71,21 +77,37 @@ test('update installs the latest Pi packages together and keeps them on success'
   assert.equal(calls.checks, 1)
   assert.equal(await installedVersion(root, core), '1.6.0')
   assert.equal(await installedVersion(root, tui), '1.6.0')
-  assert.equal(await readFile(join(root, 'package.json'), 'utf8'), manifest)
+  const pins = { [core]: '1.6.0', [tui]: '1.6.0', typebox: '1.3.27' }
+  const manifest = JSON.parse(await readFile(join(root, 'package.json'), 'utf8'))
+  const lock = JSON.parse(await readFile(join(root, 'package-lock.json'), 'utf8'))
+  assert.deepEqual(manifest.dependencies, pins)
+  assert.deepEqual(lock.packages[''].dependencies, pins)
+
+  for (const [name, version] of Object.entries(pins)) {
+    assert.equal(lock.packages[`node_modules/${name}`].version, version)
+  }
+
   assert.match(lines.at(-1)!, /now runs Pi 1\.6\.0/)
 })
 
 test('update restores the previous Pi when harness checks fail', async (t) => {
   const { root, calls, lines, run } = await harness(t, { failCheck: true })
 
+  const snapshot = () =>
+    Promise.all(['package.json', 'package-lock.json'].map((file) => readFile(join(root, file))))
+  const before = await snapshot()
+  const marker = join(root, 'node_modules', 'original-tree')
+  await writeFile(marker, 'original')
   assert.equal(await run([]), 1)
-  assert.deepEqual(calls.installs, [
-    [`${core}@1.6.0`, `${tui}@1.6.0`],
-    [`${core}@1.5.2`, `${tui}@1.5.2`],
-  ])
+  assert.deepEqual(calls.installs, [[`${core}@1.6.0`, `${tui}@1.6.0`]])
+  assert.deepEqual(await snapshot(), before)
+  assert.equal(await readFile(marker, 'utf8'), 'original')
   assert.equal(await installedVersion(root, core), '1.5.2')
   assert.equal(await installedVersion(root, tui), '1.5.2')
-  assert.match(lines.join('\n'), /checks failed on Pi 1\.6\.0[\s\S]*Restored Pi 1\.5\.2/)
+  assert.match(
+    lines.join('\n'),
+    /checks failed on Pi 1\.6\.0[\s\S]*Restored previous pins and installed tree/,
+  )
 })
 
 test('update is a no-op when the requested Pi is already installed', async (t) => {
