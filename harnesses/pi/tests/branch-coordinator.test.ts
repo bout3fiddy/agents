@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { rm, writeFile } from 'node:fs/promises'
+import { readFile, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import test, { type TestContext } from 'node:test'
 import type { ToolDefinition } from '@earendil-works/pi-coding-agent'
@@ -261,6 +261,76 @@ test('coordinator-reported database impact also requires fresh recovery evidence
   )
   await assert.rejects(invoke(worker.tools, 'submit_result', pass), /run_checks/)
   await invoke(worker.tools, 'run_checks')
+  await invoke(worker.tools, 'submit_result', pass)
+})
+
+test('a branch research swarm overlaps while the writer and checks wait', async (t) => {
+  const { request, signal } = await setup(t)
+  const ids = ['callers', 'tests', 'history']
+  let openBarrier!: () => void
+  let release!: () => void
+  const barrier = new Promise<void>((resolve) => {
+    openBarrier = resolve
+  })
+  const released = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  const order: string[] = []
+  let active = 0
+  const worker = await createTaskCoordinatorTools(request, signal, async (child) => {
+    const id: string | undefined = JSON.parse(child.task).research?.researcher
+
+    if (id === undefined) {
+      order.push(`writer with ${active} researchers running`)
+      await writeFile(join(request.workspace, 'src/value.js'), 'export const value = 7\n')
+      return receipt(child)
+    }
+
+    assert.equal(child.role, 'task-worker')
+    assert.equal(child.documentsOnly, true)
+    assert.deepEqual(child.checkpoint.writePaths, [])
+
+    if (++active === ids.length) {
+      openBarrier()
+    }
+
+    await released
+    const result = await receipt(child)
+    active--
+    order.push(`${id} settled`)
+    return result
+  })
+  const research = invoke(worker.tools, 'delegate_worker', {
+    ...assignment('task-worker'),
+    researchers: ids.map((id) => ({ id, task: `Trace ${id} of the value` })),
+  })
+  await barrier
+  assert.equal(active, ids.length)
+  const writer = invoke(worker.tools, 'delegate_worker', assignment('implementer', ['src/**']))
+  const checks = invoke(worker.tools, 'run_checks').then((result) => {
+    order.push('checks finished')
+    return result
+  })
+  await assert.rejects(invoke(worker.tools, 'submit_result', pass), /Wait for all/)
+
+  for (let trip = 0; trip < 200; trip++) {
+    await readFile(join(request.workspace, 'src/value.js'))
+  }
+
+  // The swarm still holds the candidate: no writer has started and no check has run.
+  assert.deepEqual(order, [])
+  assert.deepEqual(worker.checks(), [])
+  release()
+  await research
+  await writer
+  await checks
+  assert.deepEqual(order.slice(0, ids.length).sort(), ids.map((id) => `${id} settled`).sort())
+  assert.deepEqual(order.slice(ids.length), [
+    'writer with 0 researchers running',
+    'checks finished',
+  ])
+  assert.equal(worker.checks().find((check) => check.check === 'contract')?.status, 'passed')
+  assert.equal(worker.children().length, ids.length + 1)
   await invoke(worker.tools, 'submit_result', pass)
 })
 

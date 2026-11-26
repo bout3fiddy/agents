@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import test, { type TestContext } from 'node:test'
 import type { ToolDefinition } from '@earendil-works/pi-coding-agent'
@@ -17,7 +17,7 @@ import {
   type TaskCoordinatorRequest,
 } from '../src/task-coordinator.ts'
 import { validateDelegation } from '../src/delegation-state.ts'
-import { readProgress } from '../src/progress.ts'
+import { readProgress, trackDispatch } from '../src/progress.ts'
 import { evidence, fixture, hashes } from './support.ts'
 
 const pass: WorkerResult = {
@@ -65,6 +65,41 @@ function invoke(tools: ToolDefinition[], name: string, args: unknown) {
     undefined,
     {} as Parameters<ToolDefinition['execute']>[4],
   )
+}
+
+function gate() {
+  let open!: () => void
+  const opened = new Promise<void>((resolve) => {
+    open = resolve
+  })
+  return { open, opened }
+}
+
+function swarm(ids: string[], role = 'task-worker') {
+  return {
+    role,
+    task: 'Survey the fixture; every researcher works independently',
+    writePaths: [],
+    researchers: ids.map((id) => ({ id, task: `Investigate ${id}` })),
+  }
+}
+
+function researcherOf(child: Parameters<Dispatcher>[0]): string | undefined {
+  return JSON.parse(child.task).research?.researcher
+}
+
+function report(result: Awaited<ReturnType<typeof invoke>>) {
+  const [text] = result.content
+  assert.ok(text?.type === 'text')
+  return JSON.parse(text.text)
+}
+
+/** Give queued tool calls real file-system round trips to advance, without wall-clock waits.
+ * A call that could reach its dispatcher needs far fewer than these. */
+async function advance(path: string) {
+  for (let trip = 0; trip < 200; trip++) {
+    await stat(path)
+  }
 }
 
 test('scope containment handles exact paths, subtrees and invalid traversal', () => {
@@ -749,4 +784,410 @@ test('branch accepts a Fable writer fallback with matching provenance and effort
       await assert.rejects(attempt, /model does not match/)
     }
   }
+})
+
+test('a research swarm starts every researcher together and keeps the writer out', async (t) => {
+  const { request, controller } = await setup(t)
+  const ids = ['auth', 'storage', 'network', 'cache', 'queue', 'retry', 'audit']
+  const barrier = gate()
+  const release = gate()
+  const started: string[] = []
+  let active = 0
+  let activeAtWriterStart = -1
+  const worker = await createTaskCoordinatorTools(request, controller.signal, async (child) => {
+    const id = researcherOf(child)
+
+    if (id === undefined) {
+      activeAtWriterStart = active
+      await writeFile(join(request.workspace, 'src/value.js'), 'written after research\n')
+      return receipt(child)
+    }
+
+    assert.deepEqual(child.checkpoint.writePaths, [])
+    assert.equal(child.role, 'task-worker')
+    started.push(id)
+    active++
+
+    if (started.length === ids.length) {
+      barrier.open()
+    }
+
+    await release.opened
+    const result = await receipt(child, { summary: `${id} findings` })
+    active--
+    return result
+  })
+  const research = invoke(worker.tools, 'delegate_worker', swarm(ids))
+
+  // The barrier opens only once the last researcher started while every other one still runs.
+  await barrier.opened
+  assert.equal(active, ids.length)
+  assert.deepEqual(started, ids)
+  const writer = invoke(worker.tools, 'delegate_worker', leaf)
+  await assert.rejects(invoke(worker.tools, 'submit_result', pass), /Wait for all/)
+  await advance(request.workspace)
+  assert.equal(activeAtWriterStart, -1, 'the writer waits for the whole swarm')
+  assert.equal(worker.children().length, 0)
+  release.open()
+  const result = report(await research)
+  assert.deepEqual(result.swarm, {
+    size: ids.length,
+    completed: ids.length,
+    failed: 0,
+    capacityFailures: 0,
+  })
+  assert.deepEqual(result.unfinished, [])
+  assert.deepEqual(
+    result.researchers.map(
+      (entry: { id: string; status: string; evidence: { result: WorkerResult } }) => [
+        entry.id,
+        entry.status,
+        entry.evidence.result.summary,
+      ],
+    ),
+    ids.map((id) => [id, 'completed', `${id} findings`]),
+  )
+  await writer
+  assert.equal(activeAtWriterStart, 0, 'the writer ran alone')
+  const persisted: { assignment: { researcher?: { id: string } } }[] = JSON.parse(
+    await readFile(`${request.outputPath}.children.json`, 'utf8'),
+  )
+  assert.deepEqual(
+    persisted.map((entry) => entry.assignment.researcher?.id),
+    [...ids, undefined],
+  )
+  assert.equal(worker.children().length, ids.length + 1)
+  await invoke(worker.tools, 'submit_result', pass)
+})
+
+test('a failed researcher is reported by id and blocks a pass until it completes', async (t) => {
+  const { request, controller } = await setup(t)
+  const dispatched: string[] = []
+  const worker = await createTaskCoordinatorTools(request, controller.signal, async (child) => {
+    const id = researcherOf(child) ?? 'leaf'
+    const earlier = dispatched.filter((entry) => entry === id).length
+    dispatched.push(id)
+
+    if (id === 'spawn' && earlier === 0) {
+      throw Object.assign(new Error('spawn EAGAIN'), { code: 'EAGAIN' })
+    }
+
+    if (id === 'crash' && earlier === 0) {
+      throw new Error('Worker exited without a result')
+    }
+
+    return receipt(child, { summary: `${id} findings` })
+  })
+  const first = report(
+    await invoke(worker.tools, 'delegate_worker', swarm(['ok', 'spawn', 'crash'])),
+  )
+  assert.deepEqual(first.swarm, { size: 3, completed: 1, failed: 2, capacityFailures: 1 })
+  assert.deepEqual(
+    first.researchers.map((entry: { id: string; status: string; capacity?: boolean }) => [
+      entry.id,
+      entry.status,
+      entry.capacity,
+    ]),
+    [
+      ['ok', 'completed', undefined],
+      ['spawn', 'failed', true],
+      ['crash', 'failed', false],
+    ],
+  )
+  assert.match(first.researchers[1].error, /EAGAIN/)
+  assert.deepEqual(first.unfinished, ['spawn', 'crash'])
+  assert.match(first.instruction, /Nothing is queued/)
+  assert.equal(worker.children().length, 1)
+  const outstanding = /failed child execution.*Unfinished researchers: spawn, crash/
+  await assert.rejects(invoke(worker.tools, 'submit_result', pass), outstanding)
+
+  // Neither a sibling nor a same-role, same-scope leaf can stand in for a failed researcher.
+  await invoke(worker.tools, 'delegate_worker', swarm(['other']))
+  await invoke(worker.tools, 'delegate_worker', { ...leaf, writePaths: [] })
+  await assert.rejects(invoke(worker.tools, 'submit_result', pass), outstanding)
+  const retry = report(await invoke(worker.tools, 'delegate_worker', swarm(['spawn', 'crash'])))
+  assert.deepEqual(retry.unfinished, [])
+  assert.equal(retry.instruction, undefined)
+  assert.deepEqual(dispatched, ['ok', 'spawn', 'crash', 'other', 'leaf', 'spawn', 'crash'])
+  assert.equal(worker.children().length, 5)
+  await invoke(worker.tools, 'submit_result', pass)
+})
+
+test('a sibling pass never clears another researcher finding', async (t) => {
+  const { request, controller } = await setup(t)
+  const runs = new Map<string, number>()
+  const previous: Record<string, string[]> = {}
+  const worker = await createTaskCoordinatorTools(request, controller.signal, async (child) => {
+    const id = researcherOf(child) ?? 'leaf'
+    const run = (runs.get(id) ?? 0) + 1
+    runs.set(id, run)
+    const findings: WorkerResult[] = JSON.parse(child.task).previousFindings
+    previous[`${id}#${run}`] = findings.map((finding) => finding.summary)
+
+    if (id === 'a' && run === 1) {
+      return receipt(child, {
+        verdict: 'changes',
+        summary: 'a is unresolved',
+        findings: [
+          {
+            severity: 'required',
+            location: 'src/value.js',
+            problem: 'Missing evidence',
+            evidence: 'No source was cited',
+          },
+        ],
+      })
+    }
+
+    return receipt(child, { summary: `${id} run ${run}` })
+  })
+  await invoke(worker.tools, 'delegate_worker', swarm(['a', 'b']))
+  const unresolved = /Resolve child findings.*"researcher":"a".*Dispatch this researcher id again/
+  await assert.rejects(invoke(worker.tools, 'submit_result', pass), unresolved)
+  await invoke(worker.tools, 'delegate_worker', swarm(['b', 'c']))
+  await invoke(worker.tools, 'delegate_worker', { ...leaf, writePaths: [] })
+  await assert.rejects(invoke(worker.tools, 'submit_result', pass), unresolved)
+  await invoke(worker.tools, 'delegate_worker', swarm(['a']))
+  await invoke(worker.tools, 'submit_result', pass)
+
+  // Each researcher sees only its own earlier findings, never a sibling's.
+  assert.deepEqual(previous, {
+    'a#1': [],
+    'b#1': [],
+    'b#2': ['b run 1'],
+    'c#1': [],
+    'leaf#1': [],
+    'a#2': ['a is unresolved'],
+  })
+})
+
+test('cancelling a swarm stops every researcher and records no receipt', async (t) => {
+  const { request, controller } = await setup(t)
+  const ids = ['one', 'two', 'three']
+  const barrier = gate()
+  const stopped: string[] = []
+  let started = 0
+  const worker = await createTaskCoordinatorTools(
+    request,
+    controller.signal,
+    async (child, signal) => {
+      const id = researcherOf(child)!
+      assert.equal(signal, controller.signal)
+
+      if (++started === ids.length) {
+        barrier.open()
+      }
+
+      if (id === 'one') {
+        return receipt(child)
+      }
+
+      return new Promise<never>((_resolve, reject) => {
+        signal!.addEventListener('abort', () => {
+          stopped.push(id)
+          reject(signal!.reason)
+        })
+      })
+    },
+  )
+  const research = invoke(worker.tools, 'delegate_worker', swarm(ids))
+  await barrier.opened
+
+  // Researcher one finishes on its own; a cancelled swarm still records nothing for it.
+  await advance(request.workspace)
+  controller.abort(new Error('fixture cancellation'))
+  await assert.rejects(research, /fixture cancellation/)
+  assert.deepEqual(stopped, ['two', 'three'])
+  assert.equal(worker.children().length, 0)
+  await assert.rejects(readFile(`${request.outputPath}.children.json`), { code: 'ENOENT' })
+  await assert.rejects(invoke(worker.tools, 'submit_result', pass), /fixture cancellation/)
+  await assert.rejects(
+    invoke(worker.tools, 'delegate_worker', swarm(['late'])),
+    /fixture cancellation/,
+  )
+  assert.equal(started, ids.length)
+})
+
+test('a swarm rejects writers, measurements and duplicate ids before dispatch', async (t) => {
+  const { request, controller } = await setup(t)
+  const sent: unknown[] = []
+  const worker = await createTaskCoordinatorTools(request, controller.signal, async (child) => {
+    sent.push([researcherOf(child), child.thinking])
+    return receipt(child)
+  })
+  const one = (researcher: object) => ({ ...swarm([]), researchers: [researcher] })
+  const rejected: [unknown, RegExp][] = [
+    [{ ...swarm(['a', 'b']), writePaths: ['src/**'] }, /read-only/],
+    [swarm(['a', 'b'], 'performance'), /measurement runs alone/],
+    [swarm(['a', 'b', 'a']), /unique within a swarm: a/],
+    [swarm(['Not An Id']), /Invalid leaf/],
+    [swarm([]), /Invalid leaf/],
+    [one({ id: 'a', task: 'Read', writePaths: ['src/**'] }), /Invalid leaf/],
+    [one({ id: 'a', task: 'Read', thinking: 'xhigh' }), /Invalid leaf/],
+    [one({ id: 'a' }), /Invalid leaf/],
+  ]
+
+  for (const [args, expected] of rejected) {
+    await assert.rejects(invoke(worker.tools, 'delegate_worker', args), expected)
+  }
+
+  assert.deepEqual(sent, [])
+
+  // A rejected request starts nothing and leaves the candidate valid.
+  await invoke(worker.tools, 'delegate_worker', {
+    ...swarm([]),
+    thinking: 'high',
+    researchers: [
+      { id: 'a', task: 'Read the entry point', thinking: 'low' },
+      { id: 'b', task: 'Read the tests' },
+    ],
+  })
+  assert.deepEqual(sent, [
+    ['a', 'low'],
+    ['b', 'high'],
+  ])
+  await invoke(worker.tools, 'submit_result', pass)
+})
+
+test('an edit during a read-only swarm invalidates the candidate', async (t) => {
+  const { request, controller } = await setup(t)
+  const worker = await createTaskCoordinatorTools(request, controller.signal, async (child) => {
+    if (researcherOf(child) === 'editor') {
+      await writeFile(join(request.workspace, 'src/value.js'), 'unauthorized\n')
+    }
+
+    return receipt(child)
+  })
+  await assert.rejects(
+    invoke(worker.tools, 'delegate_worker', swarm(['reader', 'editor'])),
+    /Read-only research swarm changed the candidate: src\/value\.js/,
+  )
+  assert.equal(worker.children().length, 0)
+  await assert.rejects(invoke(worker.tools, 'submit_result', pass), /failed child execution/)
+  await invoke(worker.tools, 'submit_result', { ...pass, verdict: 'blocked' })
+  assert.equal(worker.result()?.verdict, 'blocked')
+})
+
+test('a quota rejection is a capacity failure that later swarms do not relaunch', async (t) => {
+  const { request, controller } = await setup(t)
+  const retryAt = Date.now() + 86400000
+  let dispatched = 0
+  const worker = await createTaskCoordinatorTools(request, controller.signal, async (child) => {
+    dispatched++
+
+    if (researcherOf(child) === 'limited' && dispatched <= 2) {
+      throw new ProviderQuotaError('Research quota exhausted', retryAt)
+    }
+
+    return receipt(child)
+  })
+  const first = report(await invoke(worker.tools, 'delegate_worker', swarm(['free', 'limited'])))
+  assert.deepEqual(first.researchers[1], {
+    id: 'limited',
+    status: 'failed',
+    capacity: true,
+    error: 'Error: Research quota exhausted',
+    retryAt,
+  })
+  assert.equal(dispatched, 2)
+  const second = report(await invoke(worker.tools, 'delegate_worker', swarm(['limited'])))
+  assert.equal(second.swarm.capacityFailures, 1)
+  assert.equal(dispatched, 2)
+  worker.invalidateResult()
+  const third = report(await invoke(worker.tools, 'delegate_worker', swarm(['limited'])))
+  assert.deepEqual(third.unfinished, [])
+  assert.equal(dispatched, 3)
+})
+
+test('swarm progress follows a researcher that is still running', async (t) => {
+  const { request, controller } = await setup(t)
+  const gates = { fast: gate(), slow: gate() }
+  const reported = gate()
+  let reports = 0
+  const worker = await createTaskCoordinatorTools(
+    request,
+    controller.signal,
+    async (child, _signal, progress) => {
+      const id = researcherOf(child) as keyof typeof gates
+      await progress?.({
+        stage: 'tool',
+        role: child.role,
+        tool: `${id}-tool`,
+        updatedAt: new Date().toISOString(),
+      })
+
+      if (++reports === 2) {
+        reported.open()
+      }
+
+      await gates[id].opened
+      return receipt(child)
+    },
+  )
+  const research = invoke(worker.tools, 'delegate_worker', swarm(['slow', 'fast']))
+  await reported.opened
+  gates.fast.open()
+  let running = await readProgress(request.outputPath)
+
+  for (let trip = 0; trip < 5000 && !running?.message?.includes('1 of 2 settled'); trip++) {
+    running = await readProgress(request.outputPath)
+  }
+
+  // Both share a role. The parent points at the one still running, not the one that finished.
+  assert.equal(running?.message, 'Research swarm: 1 of 2 settled')
+  assert.equal(running?.stage, 'child')
+  assert.equal(running?.child?.tool, 'slow-tool')
+  gates.slow.open()
+  await research
+  await worker.progress.settle()
+  const done = await readProgress(request.outputPath)
+  assert.equal(done?.stage, 'coordinating')
+  assert.equal(done?.message, 'Research swarm: 2 of 2 completed')
+  assert.equal(done?.child, undefined)
+})
+
+test('workflow progress keeps same-role siblings distinct', async (t) => {
+  const { request } = await setup(t)
+  const gates = [gate(), gate()]
+  const reported = gate()
+  let calls = 0
+  let reports = 0
+  const dispatch = trackDispatch(async (child, _signal, progress) => {
+    const index = calls++
+    await progress?.({
+      stage: 'tool',
+      role: child.role,
+      tool: `tool-${index}`,
+      updatedAt: new Date().toISOString(),
+    })
+
+    if (++reports === 2) {
+      reported.open()
+    }
+
+    await gates[index]!.opened
+    return receipt(child)
+  }, request.outputPath)
+  const child = {
+    role: 'task-worker' as const,
+    task: 'Read one area',
+    workspace: request.workspace,
+    project: request.project,
+    checkpoint: request.checkpoint,
+    model: request.model,
+    baseline: request.baseline,
+  }
+  const first = dispatch(child)
+  const second = dispatch(child)
+  await reported.opened
+  gates[1]!.open()
+  await second
+
+  // Keyed by role, the finished sibling erased the running one and the parent looked idle.
+  const running = await readProgress(request.outputPath)
+  assert.equal(running?.stage, 'child')
+  assert.equal(running?.child?.tool, 'tool-0')
+  gates[0]!.open()
+  await first
+  assert.equal((await readProgress(request.outputPath))?.stage, 'checking')
 })

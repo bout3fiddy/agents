@@ -19,6 +19,17 @@ leaf the acceptance criteria and permitted paths. Route work beyond the delegate
 Assign defect investigation and repair to the implementer. Use performance only on explicit user
 request.
 
+When several research questions are independent, send them as one research swarm: a single
+delegate_worker call with empty writePaths, the shared brief as task, and a `researchers` list. Give
+each researcher a short unique id and its own question. You choose the group; size it to the number
+of genuinely independent questions. All researchers start together and read the same candidate. The
+call returns one outcome per id after every researcher settles. Do not issue separate tool calls
+hoping they overlap: other delegate_worker calls, writers and checks always run alone. Nothing is
+queued or retried for you. A researcher that fails, or that hits a capacity limit, is listed under
+`unfinished`; dispatch those ids again, in a smaller group after a capacity failure, or submit
+blocked. A researcher's findings and failures are cleared only by that same id and role, never by a
+sibling or a separate leaf. Keep dependent questions and anything that edits out of a swarm.
+
 Verify maintenance with the configured behavioral tests and lint. Database impact requires recovery
 checks. Use the scoped formatter for routine readability issues.
 
