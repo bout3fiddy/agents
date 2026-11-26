@@ -13,6 +13,7 @@ import type { ConversationEntry } from './worker-live.ts'
 import {
   transcriptTurns,
   type Action,
+  type ActionRow,
   type Block,
   type Outcome,
   type Tone,
@@ -312,6 +313,11 @@ export class ConversationRenderer {
       }
     }
 
+    for (const child of action.children ?? []) {
+      const rows = this.outcomeRow(child.verb, child.target, child.outcome, width - 2)
+      lines.push(...rows.map((row) => '  ' + row))
+    }
+
     return lines
   }
 
@@ -396,6 +402,11 @@ function cleanTurn(turn: Turn): Turn {
     summary: terminalText(value.summary).replaceAll('\n', ' '),
     detail: value.detail.map((line) => terminalText(line).replaceAll('\n', ' ')),
   })
+  const cleanRow = (row: ActionRow): ActionRow => ({
+    verb: terminalText(row.verb).replaceAll('\n', ' '),
+    target: terminalText(row.target).replaceAll('\n', ' '),
+    outcome: row.outcome && outcome(row.outcome),
+  })
   return {
     ...turn,
     label: turn.label && terminalText(turn.label),
@@ -413,9 +424,8 @@ function cleanTurn(turn: Turn): Turn {
         kind: 'action',
         action: {
           ...action,
-          verb: terminalText(action.verb).replaceAll('\n', ' '),
-          target: terminalText(action.target).replaceAll('\n', ' '),
-          outcome: action.outcome && outcome(action.outcome),
+          ...cleanRow(action),
+          children: action.children?.map(cleanRow),
           note: action.note && {
             ...action.note,
             lines: action.note.lines.map((line) => terminalText(line).replaceAll('\n', ' ')),

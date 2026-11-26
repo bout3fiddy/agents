@@ -1,5 +1,5 @@
 import type { AgentSession } from '@earendil-works/pi-coding-agent'
-import { LiveWorker, messageText } from './worker-live.ts'
+import { callIdentity, LiveWorker, messageEntries, messageText } from './worker-live.ts'
 import { guidanceText } from './worker-mailbox.ts'
 
 /** Observe and steer the existing SDK session; never fork, resume or abort it for navigation. */
@@ -40,16 +40,30 @@ export function attachLiveSession(
     }
 
     if (event.type === 'message_end') {
-      track(live.append(event.message.role, messageText(event.message)))
+      for (const { role, text, ...metadata } of messageEntries(event.message)) {
+        track(live.append(role, text, metadata))
+      }
+
       track(live.update({ partial: undefined }))
     }
 
     if (event.type === 'tool_execution_start') {
       track(live.update({ stage: 'tool', tool: event.toolName, partial: undefined }))
-      track(live.append('tool', `${event.toolName} ${JSON.stringify(event.args)}`))
+      track(
+        live.append('tool', `${event.toolName} ${JSON.stringify(event.args)}`, callIdentity(event)),
+      )
     }
 
     if (event.type === 'tool_execution_end') {
+      const identity = callIdentity(event)
+
+      if (identity.parentToolCallId && event.isError) {
+
+        // Nested tools need not emit a model-facing toolResult. Never copy their successful output.
+        const reason = messageText(event.result).slice(0, 200) || 'Nested tool failed'
+        track(live.append('toolResult', reason, { ...identity, isError: true }))
+      }
+
       track(live.update({ stage: 'model', tool: undefined }))
     }
   })

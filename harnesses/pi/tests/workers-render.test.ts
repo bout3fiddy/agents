@@ -10,7 +10,7 @@ import type { Theme } from '@earendil-works/pi-coding-agent'
 import { ConversationRenderer, visibleLinks } from '../src/workers-render.ts'
 import { WorkersView } from '../src/workers-ui.ts'
 import type { WorkerRow } from '../src/workers-data.ts'
-import type { ConversationEntry } from '../src/worker-live.ts'
+import { messageEntries, type ConversationEntry } from '../src/worker-live.ts'
 
 const plainTheme = {
   fg: (_color: string, text: string) => text,
@@ -80,6 +80,99 @@ test('tool actions pair with meaningful outcomes instead of JSON', () => {
   for (const fragment of ['"argv"', '"content"', 'fileSha256', '{', 'Tool result']) {
     assert.ok(!text.includes(fragment), `${fragment} leaked into ${text}`)
   }
+})
+
+test('interleaved batches indent each child once and leave direct reads outside', () => {
+  const batchTime = '2026-11-20T10:00:00Z'
+  const action = (toolCallId: string, text: string, parentToolCallId?: string) => ({
+    at: batchTime,
+    role: 'tool',
+    text,
+    toolCallId,
+    parentToolCallId,
+  })
+  const result = (toolCallId: string, text: string) => ({
+    at: batchTime,
+    role: 'toolResult',
+    text,
+    toolCallId,
+  })
+  const read = 'project_read {"path":"same.md"}'
+  const script = 'codemode {"code":"inspect"}'
+  const entries = [
+    action('batch-a', script),
+    action('child-a1', read, 'batch-a'),
+    action('direct', read),
+    action('batch-b', call('codemode', { code: 'inspect' })),
+    action('child-b', 'original_read {"path":"same.md","startLine":8,"startColumn":3}', 'batch-b'),
+    action('child-a2', 'project_search {"pathPrefix":"src","afterPath":"src/a"}', 'batch-a'),
+    { ...result('child-a2', 'lookup rejected'), isError: true },
+    result('batch-b', 'Script completed'),
+    result('batch-a', 'Script completed'),
+    result('direct', '{"content":"1: direct"}'),
+  ]
+  const rows = render(entries).filter((row) => row.includes('› '))
+  assert.deepEqual(
+    rows.map((row) => row.replace(/(?<=\S) +/g, ' ').trimEnd()),
+    [
+      '  › Codemode 2 nested calls ✗ 1 failed',
+      '    › Read same.md',
+      '    › Search files in src after src/a ✗ lookup rejected',
+      '  › Read same.md ✓ 1 line',
+      '  › Codemode 1 file ✓ done',
+      '    › Original same.md:8:3',
+    ],
+  )
+
+  // Without a visible parent (tail window) or identities (older transcript), keep the evidence.
+  assert.match(render(entries.slice(1, 3)).join('\n'), /Read +same.md[\s\S]*Read +same.md/)
+  const legacy = entries.map(({ at: time, role, text }) => ({ at: time, role, text }))
+  assert.equal(render(legacy).filter((row) => row.startsWith('  › Read')).length, 2)
+  assert.ok(!render(legacy).some((row) => row.startsWith('    › ')))
+})
+
+test('a codemode receipt links child IDs and retains both cancellation and script failure', () => {
+  const script = { ...entry('19:28', 'tool', 'codemode {"code":"inspect"}'), toolCallId: 'batch' }
+  const read = entry('19:28', 'tool', 'project_read {"path":"same.md"}')
+  const receipt = {
+    role: 'toolResult',
+    toolName: 'codemode',
+    toolCallId: 'batch',
+    content: 'Script failed\nScript error:\nStop requested',
+    isError: true,
+    details: {
+      calls: [
+        { id: 'page', name: 'read', args: '{"path":"other.md","offset":12}' },
+        { id: 'reference', name: 'read_reference', args: '{"name":"compiler"}' },
+        { id: 'nested', name: 'project_read', args: '{}', status: 'cancelled' },
+      ],
+    },
+  }
+  const entries = [
+    script,
+    { ...read, toolCallId: 'nested' },
+    { ...read, toolCallId: 'direct' },
+    {
+      ...entry('19:28', 'tool', 'read_reference {}'),
+      toolCallId: 'reference',
+    },
+    ...messageEntries(receipt).map((message) => ({ ...message, at: at('19:29') })),
+  ]
+  const text = render(entries).join('\n')
+  assert.match(text, /Codemode +3 nested calls +✗ 1 cancelled/)
+  assert.match(text, /Stop requested/)
+
+  // The page exists only in the receipt; the other two starts arrived in reverse order.
+  const rows = text.split('\n').filter((line) => /› (Read|Reference) /.test(line))
+  assert.deepEqual(
+    rows.map((line) => line.replace(/(?<=\S) +/g, ' ').trimEnd()),
+    [
+      '    › Read other.md:12',
+      '    › Reference compiler',
+      '    › Read same.md ▲ cancelled',
+      '  › Read same.md',
+    ],
+  )
 })
 
 test('loop failures show the first replay seed in the worker conversation', () => {

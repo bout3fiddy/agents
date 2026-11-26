@@ -8,7 +8,7 @@ import { StateStore, readJson } from './state.ts'
 import { Delegations, activeTask, delegationDirectory } from './delegation-state.ts'
 import type { Delegation } from './delegation-state.ts'
 import {
-  messageText,
+  messageEntries,
   type ConversationEntry,
   type LiveWorkerInfo,
   type LiveWorkerState,
@@ -386,11 +386,9 @@ class OwnerCatalog {
           const value = JSON.parse(line)
 
           if (row.legacy && value.message) {
-            parsed.push({
-              at: value.timestamp,
-              role: value.message.role,
-              text: messageText(value.message),
-            })
+            for (const entry of messageEntries(value.message)) {
+              parsed.push({ at: value.timestamp, ...entry })
+            }
           } else if (!row.legacy && typeof value.text === 'string') {
             parsed.push(value)
           }

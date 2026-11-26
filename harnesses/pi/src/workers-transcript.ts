@@ -1,4 +1,4 @@
-import type { ConversationEntry } from './worker-live.ts'
+import type { ConversationEntry, InspectionCall } from './worker-live.ts'
 
 /**
  * Reading model for worker conversations. Raw trace entries become speaker turns whose tool
@@ -7,12 +7,12 @@ import type { ConversationEntry } from './worker-live.ts'
 
 export type Tone = 'ok' | 'fail' | 'blocked' | 'info'
 export type Outcome = { tone: Tone; summary: string; detail: string[]; hidden: number }
-export type Action = {
-  verb: string
-  target: string
+export type ActionRow = { verb: string; target: string; outcome?: Outcome }
+export type Action = ActionRow & {
+  toolCallId?: string
+  children?: ActionRow[]
   signature: string
   executed: boolean
-  outcome?: Outcome
   note?: { tone: Tone; lines: string[] }
 }
 export type Block =
@@ -103,22 +103,32 @@ function parseObject(text: string): Record<string, unknown> | undefined {
   }
 }
 
+const callHeader = /^(?:mcp__[\w-]+?__)?([\w.-]+) (?=\{)/
+
 function callLine(line: string): { name: string; args?: Record<string, unknown> } | undefined {
-  const call = /^([\w.-]+) (\{.*)$/.exec(line)
+  const call = callHeader.exec(line)
 
   if (!call) {
     return undefined
   }
 
-  const name = call[1]!.replace(/^mcp__[\w-]+?__/, '')
-  const args = parseObject(call[2]!)
+  const name = call[1]!
+  const args = parseObject(line.slice(call[0].length))
 
   // Prose such as "Note {x}" is not a call; partial streamed input still names a known tool.
-  if (!args && !verbs[name] && !/^mcp__|_/.test(call[1]!)) {
+  if (!args && !verbs[name] && !call[0].includes('_')) {
     return undefined
   }
 
   return { name, args }
+}
+
+function pageRange(line: unknown, column: unknown): string {
+  if (typeof column === 'number') {
+    return `:${typeof line === 'number' ? line : 1}:${column}`
+  }
+
+  return typeof line === 'number' ? `:${line}` : ''
 }
 
 function targetOf(name: string, args: Record<string, unknown> | undefined): string {
@@ -144,12 +154,17 @@ function targetOf(name: string, args: Record<string, unknown> | undefined): stri
 
   if (name === 'project_search') {
     const scope = text(args.pathPrefix)
-    return (args.query ? `"${text(args.query)}"` : 'files') + (scope ? ` in ${scope}` : '')
+    const after = text(args.afterPath)
+    return (
+      (args.query ? `"${text(args.query)}"` : 'files') +
+      (scope ? ` in ${scope}` : '') +
+      (after ? ` after ${after}` : '')
+    )
   }
 
   const path = text(args.path ?? args.file_path) || list(args.paths)
   const extra = Array.isArray(args.additionalEdits) ? `  +${args.additionalEdits.length} edits` : ''
-  const range = typeof args.startLine === 'number' && path ? `:${args.startLine}` : ''
+  const range = path ? pageRange(args.startLine ?? args.offset, args.startColumn) : ''
 
   return (
     path + range + extra ||
@@ -158,6 +173,18 @@ function targetOf(name: string, args: Record<string, unknown> | undefined): stri
     text(args.name) ||
     text(args.summary)
   )
+}
+
+export function inspectionTarget(name: string, args?: Record<string, unknown>): InspectionCall {
+  const line = args?.startLine ?? args?.offset
+  const path = typeof args?.path === 'string' ? args.path : undefined
+  return {
+    name,
+    path,
+    line: typeof line === 'number' ? line : undefined,
+    column: typeof args?.startColumn === 'number' ? args.startColumn : undefined,
+    target: !path && args ? targetOf(name, args) : undefined,
+  }
 }
 
 function humanize(name: string): string {
@@ -374,6 +401,238 @@ export function outcomeOf(text: string, verb = ''): Outcome {
   return { tone: 'ok', summary: firstLine(body), detail: lines.slice(1, 4), hidden: 0 }
 }
 
+type InspectionBatch = {
+  calls: Map<string, InspectionCall>
+  receipt?: InspectionCall[]
+}
+
+function inspectionIndex(entries: ConversationEntry[]) {
+  const batches = new Map<string, InspectionBatch>()
+  const parents = new Map<string, string>()
+
+  for (const entry of entries) {
+    const id = entry.toolCallId
+
+    if (!id) {
+      continue
+    }
+
+    if (
+      (entry.role === 'assistant' || entry.role === 'tool') &&
+      callHeader.exec(entry.text)?.[1] === 'codemode'
+    ) {
+      if (!batches.has(id)) {
+        batches.set(id, { calls: new Map() })
+      }
+    }
+
+    if (entry.parentToolCallId) {
+      parents.set(id, entry.parentToolCallId)
+    }
+
+    const batch = batches.get(id)
+
+    if (
+      entry.role === 'toolResult' &&
+      batch &&
+      Array.isArray(entry.inspectionCalls) &&
+      entry.inspectionCalls.every((call) => typeof call?.name === 'string')
+    ) {
+      batch.receipt = entry.inspectionCalls
+
+      for (const call of batch.receipt) {
+        if (call?.id && !parents.has(call.id)) {
+          parents.set(call.id, id)
+        }
+      }
+    }
+  }
+
+  const nested = new Set<ConversationEntry>()
+
+  for (const entry of entries) {
+    const id = entry.toolCallId
+    const parent = entry.parentToolCallId ?? (id && parents.get(id))
+    const batch = parent && batches.get(parent)
+
+    if (!id || !batch) {
+      continue
+    }
+
+    if (entry.role === 'tool' || entry.role === 'assistant') {
+      const call = callLine(entry.text)
+
+      if (!call) {
+        continue
+      }
+
+      batch.calls.set(id, { ...batch.calls.get(id), ...inspectionTarget(call.name, call.args), id })
+    } else if (entry.role === 'toolResult') {
+      if (entry.isError) {
+        const call = batch.calls.get(id) ?? { id, name: '' }
+        batch.calls.set(id, { ...call, status: 'error', error: firstLine(entry.text) })
+      }
+    } else {
+      continue
+    }
+
+    nested.add(entry)
+  }
+
+  return { batches, nested }
+}
+
+function quantity(count: number, noun: string) {
+  return `${count} ${noun}${count === 1 ? '' : 's'}`
+}
+
+function batchActivity(calls: InspectionCall[]) {
+  const paths = new Set<string>()
+  const lastPage = new Map<string, [number, number]>()
+  let continuations = 0
+
+  for (const call of calls) {
+    if (!call.path || !['project_read', 'original_read', 'read'].includes(call.name)) {
+      return quantity(calls.length, 'nested call')
+    }
+
+    const line = call.line ?? 1
+    const column = call.column ?? 1
+    const source = call.name + ':' + call.path
+    const previous = lastPage.get(source)
+
+    if (!previous || line > previous[0] || (line === previous[0] && column > previous[1])) {
+      if (previous) {
+        continuations++
+      }
+
+      lastPage.set(source, [line, column])
+    }
+
+    paths.add(call.path)
+  }
+
+  if (!paths.size) {
+    return '0 nested calls'
+  }
+
+  const reads = calls.length !== paths.size + continuations ? quantity(calls.length, 'read') : ''
+  return [
+    quantity(paths.size, 'file'),
+    continuations && quantity(continuations, 'continuation'),
+    reads,
+  ]
+    .filter(Boolean)
+    .join(' · ')
+}
+
+function batchCalls(batch: InspectionBatch): InspectionCall[] {
+
+  // The receipt records invocation order, including calls rejected before execution started.
+  const ordered = new Map<string | number, InspectionCall>()
+
+  for (const [index, call] of (batch.receipt ?? []).entries()) {
+    ordered.set(call.id ?? index, call)
+  }
+
+  for (const [id, start] of batch.calls) {
+    const receipt = ordered.get(id)
+    ordered.set(id, {
+      ...start,
+      name: start.name || receipt?.name || 'tool',
+      path: start.path ?? receipt?.path,
+      line: start.line ?? receipt?.line,
+      column: start.column ?? receipt?.column,
+      target: start.target || receipt?.target,
+      status: receipt?.status ?? start.status,
+      error: receipt?.error ?? start.error,
+    })
+  }
+
+  return [...ordered.values()]
+}
+
+function inspectionRow(call: InspectionCall): ActionRow {
+  const verb = verbs[call.name] ?? humanize(call.name)
+  const target = call.path ? call.path + pageRange(call.line, call.column) : (call.target ?? '')
+  const cancelled = call.status === 'cancelled'
+  const outcome: Outcome | undefined =
+    cancelled || call.status === 'error'
+      ? {
+          tone: cancelled ? 'blocked' : 'fail',
+          summary: call.error || (cancelled ? 'cancelled' : 'failed'),
+          detail: [],
+          hidden: 0,
+        }
+      : undefined
+  return { verb, target, outcome }
+}
+
+function batchView(batch: InspectionBatch) {
+  const activity = batchCalls(batch)
+  const failed = activity.filter((call) => call.status === 'error' || call.status === 'cancelled')
+  const cancelled = failed.filter((call) => call.status === 'cancelled').length
+  const problems = [
+    failed.length - cancelled && `${failed.length - cancelled} failed`,
+    cancelled && `${cancelled} cancelled`,
+  ]
+    .filter(Boolean)
+    .join(' · ')
+  const outcome: Outcome | undefined = problems
+    ? {
+        tone: failed.length === cancelled ? 'blocked' : 'fail',
+        summary: problems,
+        detail: failed
+          .filter((call) => !call.id)
+          .slice(0, 3)
+          .map((call) => [call.path ?? call.name, call.error ?? call.status].join(': ')),
+        hidden: 0,
+      }
+    : undefined
+  const target = activity.length || batch.receipt ? batchActivity(activity) : ''
+  const children = activity.filter((call) => call.id).map(inspectionRow)
+  return { target, outcome, children }
+}
+
+function resultOutcome(entry: ConversationEntry, text: string, action?: Action): Outcome {
+  const script = action?.verb === 'Codemode'
+
+  // Script output can contain arbitrary file excerpts, including other tools' failure messages.
+  const outcome: Outcome =
+    script && Array.isArray(entry.inspectionCalls)
+      ? { tone: 'ok', summary: 'done', detail: [], hidden: 0 }
+      : outcomeOf(text, action?.verb)
+
+  if (entry.isError || (script && /^Script failed\b/.test(text))) {
+    if (outcome.tone !== 'fail' || script) {
+      outcome.summary =
+        firstLine(/(?:^|\n)Script error:\n([^\n]+)/.exec(text)?.[1] ?? text) || 'failed'
+    }
+
+    outcome.tone = 'fail'
+  } else if (script && !entry.inspectionCalls && !action.outcome) {
+
+    // Older results may carry the inspection extension's failure footer but no SDK receipt.
+    const footer = /(?:^|\n)Failed or cancelled nested calls \((\d+) total, showing \d+\):\n/.exec(
+      text,
+    )
+
+    if (footer) {
+      return {
+        tone: 'fail',
+        summary: `${footer[1]} failed or cancelled`,
+        detail: text
+          .slice(footer.index + footer[0].length)
+          .split('\n', 3)
+          .map((line) => firstLine(line)),
+        hidden: 0,
+      }
+    }
+  }
+
+  return outcome
+}
+
 type Guidance = { text: string; label?: string }
 
 function guidanceOf(text: string): Guidance | undefined {
@@ -403,29 +662,49 @@ export function transcriptTurns(entries: ConversationEntry[]): Turn[] {
 
     return worker!
   }
+  const inspections = inspectionIndex(entries)
+  const identified = new Map<string, Action>()
   const pending: Action[] = []
   let ambiguous = false
-  const attach = (at: string, text: string) => {
+  const attach = (entry: ConversationEntry, text: string) => {
 
     // Older conversation entries have no call IDs. Concurrent results can arrive out of order.
-    ambiguous ||= pending.length > 1
-    const next = pending.shift()
-    const action = ambiguous ? undefined : next
+    let action: Action | undefined
+
+    if (entry.toolCallId) {
+      action = identified.get(entry.toolCallId)
+    } else {
+      ambiguous ||= pending.length > 1
+      const next = pending.shift()
+      action = ambiguous ? undefined : next
+    }
 
     if (!pending.length) {
       ambiguous = false
     }
 
-    const outcome = outcomeOf(text, action?.verb)
+    const outcome = resultOutcome(entry, text, action)
 
     if (action) {
-      action.outcome = outcome
+      if (action.outcome && outcome.tone === 'fail') {
+        action.outcome.detail.unshift(outcome.summary)
+        action.outcome.tone = 'fail'
+      } else {
+        action.outcome ??=
+          action.verb === 'Codemode' && action.target && outcome.tone === 'ok'
+            ? { tone: 'ok', summary: 'done', detail: [], hidden: 0 }
+            : outcome
+      }
     } else {
-      workerTurn(at, false).blocks.push({ kind: 'result', outcome })
+      workerTurn(entry.at, false).blocks.push({ kind: 'result', outcome })
     }
   }
 
   for (const entry of entries) {
+    if (inspections.nested.has(entry)) {
+      continue
+    }
+
     const text = entry.text
 
     if (entry.role === 'assistant' || entry.role === 'tool') {
@@ -450,10 +729,18 @@ export function transcriptTurns(entries: ConversationEntry[]): Turn[] {
         const signature = call.name + ' ' + JSON.stringify(call.args ?? null)
 
         // Pi records both the model's call and its execution start; show the call once.
-        if (entry.role === 'tool') {
+        if (entry.toolCallId) {
+          const announced = identified.get(entry.toolCallId)
+
+          if (announced) {
+            announced.executed ||= entry.role === 'tool'
+            continue
+          }
+        } else if (entry.role === 'tool') {
           const announced = worker?.blocks.find(
             (block) =>
               block.kind === 'action' &&
+              !block.action.toolCallId &&
               !block.action.executed &&
               block.action.signature === signature,
           )
@@ -467,12 +754,27 @@ export function transcriptTurns(entries: ConversationEntry[]): Turn[] {
         const verb = verbs[call.name] ?? humanize(call.name)
         const action: Action = {
           verb,
+          toolCallId: entry.toolCallId,
           target: targetOf(call.name, call.args),
           signature,
           executed: entry.role === 'tool',
           note: call.name === 'submit_result' ? submitNote(call.args) : undefined,
         }
-        pending.push(action)
+
+        if (entry.toolCallId) {
+          identified.set(entry.toolCallId, action)
+          const batch = inspections.batches.get(entry.toolCallId)
+
+          if (batch) {
+            const view = batchView(batch)
+            action.children = view.children
+            action.target = view.target
+            action.outcome = view.outcome
+          }
+        } else {
+          pending.push(action)
+        }
+
         workerTurn(entry.at, false).blocks.push({ kind: 'action', action })
       }
 
@@ -534,7 +836,7 @@ export function transcriptTurns(entries: ConversationEntry[]): Turn[] {
       const lines = text.split('\n')
       const guidance = lines.map(guidanceOf)
       const remainder = lines.filter((_line, index) => !guidance[index]).join('\n')
-      attach(entry.at, remainder)
+      attach(entry, remainder)
 
       for (const item of guidance) {
         if (item) {

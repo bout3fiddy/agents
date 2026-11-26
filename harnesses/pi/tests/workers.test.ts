@@ -1,4 +1,4 @@
-import { transcriptTurns } from '../src/workers-transcript.ts'
+import { rawEntry, transcriptTurns } from '../src/workers-transcript.ts'
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { join } from 'node:path'
@@ -10,6 +10,9 @@ import { registerDelegation } from '../src/delegation-tools.ts'
 import { guidanceText } from '../src/worker-mailbox.ts'
 import { design, fixture } from './support.ts'
 import { captureSession } from './session-support.ts'
+import { fileTools } from '../src/file-tools.ts'
+import { explicitResources } from '../src/worker.ts'
+import { ConversationRenderer } from '../src/workers-render.ts'
 import { LiveWorker } from '../src/worker-live.ts'
 import { attachLiveSession } from '../src/worker-live-session.ts'
 import { WorkersCatalog } from '../src/workers-data.ts'
@@ -172,6 +175,85 @@ test('the real Pi SDK consumes live guidance without changing sessions or aborti
   assert.equal(session.sessionManager.getSessionId(), id)
   assert.equal(await worker.mailbox.seal(), true)
   await worker.finish('complete', 'Capacity updated')
+})
+
+test('SDK capture nests paginated reads and keeps cache-only calls', async (t) => {
+  const item = await fixture()
+  t.after(() => rm(item.base, { recursive: true, force: true }))
+  const paths = Array.from({ length: 7 }, (_, i) => `file-${i}.md`)
+
+  for (const path of paths.slice(0, 6)) {
+    await writeFile(join(item.root, path), 'private child payload\nsecond\n')
+  }
+
+  const scripts = [
+    `const paths = ${JSON.stringify(paths)};` +
+      'await Promise.allSettled(paths.map(path => tools.project_read({path,lines:1})));' +
+      'await Promise.all(paths.slice(0,2).map(path => tools.project_read({path,startLine:2})));' +
+      'store("cached", "cache marker: exited with code 99"); text("first batch");',
+    'text(load("cached"))',
+  ]
+  let step = 0
+  const { session, runtime } = await captureSession(
+    item.root,
+    item.base,
+    [],
+    async () => {
+      const code = scripts[step++]
+      return code
+        ? [{ type: 'toolCall', name: 'codemode', id: 'batch-' + step, arguments: { code } }]
+        : [{ type: 'text', text: 'Done.' }]
+    },
+    {
+      tools: ['project_read', 'codemode'],
+      customTools: fileTools(item.root, ['**'], ['**']),
+      resourceLoader: await explicitResources('Inspect only.'),
+    },
+  )
+  const worker = await live(item.root)
+  const observer = attachLiveSession(session, worker, () => {})
+
+  try {
+    await session.prompt('Inspect the files.')
+    await session.waitForIdle()
+    await observer.settleGuidance()
+    const catalog = new WorkersCatalog(item.root)
+    const { entries } = await catalog.conversation((await catalog.list())[0]!)
+    const rows = new ConversationRenderer(plainTheme).render(
+      entries,
+      { name: 'Worker', active: false },
+      100,
+    )
+    const text = rows.join('\n')
+    assert.match(text, /› Codemode +7 files · 2 continuations +✗ 1 failed/)
+    assert.match(text, /file-6\.md/)
+    assert.match(text, /› Codemode +0 nested calls +✓ done/)
+    assert.equal(rows.filter((row) => row.includes('› Codemode')).length, 2)
+    const reads = rows.filter((row) => row.includes('› Read'))
+    assert.deepEqual(
+      reads.map((row) => /^    › Read +(\S+)/.exec(row)?.[1]),
+      [...paths, ...paths.slice(0, 2).map((path) => `${path}:2`)],
+    )
+    assert.doesNotMatch(text, /› Result|Promise\.all|cache marker|private child payload/)
+    const raw = entries.map(rawEntry).join('\n')
+    assert.match(raw, /Promise\.allSettled/)
+    assert.match(raw, /"startLine":2/)
+    const cache = entries.find(
+      (entry) => entry.role === 'toolResult' && entry.toolCallId === 'batch-2',
+    )
+    assert.match(cache?.text ?? '', /cache marker/)
+    const receipts = entries.map((entry) => entry.inspectionCalls)
+    assert.doesNotMatch(JSON.stringify(receipts), /private child payload/)
+    assert.equal(
+      entries.filter((entry) => entry.role === 'tool' && entry.text.startsWith('project_read '))
+        .length,
+      9,
+    )
+  } finally {
+    await observer.dispose()
+    await session.dispose()
+    await runtime.settleCredentialWrites()
+  }
 })
 
 test('worker hierarchy keeps completed authors beside their active reviewers', async (t) => {
