@@ -11,7 +11,7 @@ import { atomicJson } from './state.ts'
 import {
   effectiveExecution,
   isolationUnavailable,
-  linkLockedDependencies,
+  prepareDependencies,
   runWorkerCommand,
   type ExecutionPolicy,
 } from './worker-execution.ts'
@@ -87,7 +87,7 @@ async function runSample(snapshot: Snapshot, argv: string[], samples: Samples) {
   const workspace = await createWorkspace(snapshot.root, snapshot.files, modules)
 
   try {
-    const readable = await linkLockedDependencies(
+    const readable = await prepareDependencies(
       workspace,
       trustedRoot,
       snapshot.files.keys(),

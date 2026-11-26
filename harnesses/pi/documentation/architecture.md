@@ -24,8 +24,16 @@ snapshots, dispatches workers and writes private receipts. Provider clients need
 and network access. They are trusted host processes; they are not presented as fully containerized
 programs.
 
-Worker-issued shell commands run through macOS `sandbox-exec` in disposable project copies with a
-clean environment. The profile permits platform executables, runtime dependencies, the disposable
+How worker-issued commands run is the user's decision per project, recorded by the host outside
+every project; [worker-execution.md](worker-execution.md) is the authority for it. A project the
+user enrolled as `trusted-local` runs them as normal local commands in disposable copies. That is a
+statement of trust and no containment: such a command has the user's file, network and process
+authority. Every other project, and every task the host marks `isolation: 'required'`, runs them in
+the sandbox described next. Nothing a worker, project file or tool argument supplies moves a command
+out of it, and a sandbox that cannot start fails the command instead of falling back.
+
+Sandboxed worker commands run through macOS `sandbox-exec` in disposable project copies with a clean
+environment. The profile permits platform executables, runtime dependencies, the disposable
 workspace and scratch directory. Home files, host project writes and network access are denied.
 Sandboxed npm and npx run offline. Installed binaries run normally and a cache miss returns
 immediately. The host can provision a missing dependency. When grouping verification commands,
@@ -40,7 +48,8 @@ Host `.venv` links are readable together with the interpreter prefix they resolv
 A project can mark a check `runner: host`. Such checks run in a disposable copy of the verified
 snapshot outside sandbox-exec, with the user's permissions and a minimal environment. They run only
 after every sandbox check and harness lint pass, so they never execute for a candidate that already
-failed. This is an explicit project decision, never a fallback for a failed sandbox run.
+failed. This is an explicit project decision, never a fallback for a failed sandbox run. Required
+isolation refuses such a check and reports it unavailable.
 
 Disposable directories are named `$TMPDIR/pi-<pid><kind>-*` and are removed after the creating
 process exits. Retained candidates are `$TMPDIR/pi-task-*` with an owner record naming the project,
@@ -60,10 +69,10 @@ unsupported: this is not a process container, and an escaped process can outlive
 Ordinary cancellation terminates the command group. Abrupt host termination cannot guarantee cleanup
 of every detached descendant; use a VM adapter for workloads requiring that containment.
 
-This protects against ordinary model tool misuse and project commands. It does not defend against a
-malicious provider client, OS/kernel exploits, compromised installed dependencies or every possible
-side channel. macOS sandbox-exec is a platform dependency; other platforms fail closed until a
-tested adapter exists.
+The sandbox protects against ordinary model tool misuse and project commands. It does not apply to a
+trusted-local project, and it does not defend against a malicious provider client, OS/kernel
+exploits, compromised installed dependencies or every possible side channel. macOS sandbox-exec is a
+platform dependency; other platforms fail closed until a tested adapter exists.
 
 Claude invocation uses the `clod` flag, empty cwd, empty settings sources, disabled hooks/automatic
 memory/skills, explicit system prompt, web-only native tools and exclusive MCP configuration.
@@ -306,10 +315,10 @@ and stops on unexpected values. No Git reset, clean, commit or stash is used. Di
 authored files are part of the original snapshot. Git-ignored files and standard dependency/private
 paths are excluded. Large repositories require a narrower project boundary.
 
-Repository checks are trusted acceptance definitions, and their code executes inside the command
-sandbox. Review still needs to detect meaningless tests, weakened assertions or benchmarks that
-measure the wrong boundary. Passing commands alone does not establish durability, security or useful
-coverage.
+Repository checks are trusted acceptance definitions. Their code executes inside the command
+sandbox, or as local commands in a project the user enrolled as trusted-local. Review still needs to
+detect meaningless tests, weakened assertions or benchmarks that measure the wrong boundary. Passing
+commands alone does not establish durability, security or useful coverage.
 
 ## Database and performance scope
 

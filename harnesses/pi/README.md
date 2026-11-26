@@ -11,8 +11,8 @@ Resolve conflicts, unsafe paths or filesystem errors before continuing. If an in
 
 Codex workshops designs with the user and parallel Fable advice. It has shell and file tools for
 investigation, setup and acceptance. Tracked workers make project changes while discussion
-continues. Implementation uses isolated Astra workers by default, executable checks and optional
-performance measurement.
+continues. Implementation uses Astra workers on disposable candidates by default, executable checks
+and optional performance measurement.
 
 In the host editor, **Enter** sends when idle and **steers** while working. A steer reaches the
 model after the in-flight response and its tool batch, before the next model request. It does not
@@ -65,9 +65,10 @@ Fresh installs default to `openai-codex/gpt-6.2-astra` at medium effort. Pi's cu
 thinking selection take precedence for the orchestrator; the harness never silently changes them.
 Timing traces record the actual selection. Implementation defaults to `openai-codex/gpt-6.2-astra`
 with medium as its default. Change `roles/*.json` to select models, effort, tools, skills and write
-scopes. The orchestrator has normal host shell/file access; the isolated worker boundaries apply to
-delegated execution. Use `/thinking medium` in a running Pi session for ordinary coordination. The
-current session selection is independent of worker effort.
+scopes. The orchestrator has normal host shell/file access; the worker boundaries apply to delegated
+execution, whose commands are sandboxed unless you enrolled the project as trusted-local. Use
+`/thinking medium` in a running Pi session for ordinary coordination. The current session selection
+is independent of worker effort.
 
 Astra implements by default. When the user explicitly requests Opus or Fable to implement a design,
 set `implementerModel` to `opus` or `fable` on the workflow, delegated task or individual branch
@@ -199,12 +200,16 @@ with the failing check. Host shell is unrestricted; never use it to bypass file 
 commit requires user authorization.
 
 `harness_capabilities` reports the boundary. Host tools have ordinary filesystem, network and CLI
-access. Worker commands have no network/home access, Git publication or retained shell writes;
-workers edit through scoped file tools. Perform authorized installs, lockfile generation, Git setup
-and publication on the host. `delegate_task.requires` names host capabilities and rejects
-incompatible assignments before launch. Workers return structured `hostActions` when a missing
-capability is encountered. The host inspects retained work and completes authorized missing steps
-instead of repeating the same blocked worker.
+access. Worker commands never retain shell writes or publish Git; workers edit through scoped file
+tools. By default those commands are sandboxed with no network or home access. In a project you
+enroll as trusted-local they run as normal local commands with your authority, which is a statement
+of trust and not containment. The host marks a task whose input is external or untrusted with
+`isolation: 'required'`, which keeps it sandboxed in every project. See
+[documentation/worker-execution.md](documentation/worker-execution.md). Perform authorized installs,
+lockfile generation, Git setup and publication on the host. `delegate_task.requires` names host
+capabilities and rejects incompatible assignments before launch. Workers return structured
+`hostActions` when a missing capability is encountered. The host inspects retained work and
+completes authorized missing steps instead of repeating the same blocked worker.
 
 Active workers persist phase/tool/child progress. At most once per minute, fresh progress is added
 privately to orchestrator context without a model turn or visible progress block. Workers use
@@ -531,18 +536,21 @@ command names or custom timeouts. Example:
 
 Allowed check kinds: `test`, `static`, `database`, `benchmark`. Commands are argv arrays; shell
 expansion requires an explicit shell. By default they run in the worker sandbox with no network,
-private home access or credential environment. Install dependencies beforehand. Host `node_modules`
-and `.venv` are linked read-only; a virtual environment's interpreter prefix is also readable. Each
-command copy has a Git index of its files and, for a checkout, its pinned HEAD, so read-only
-`git ls-files`, `git diff` and `git rev-parse` work.
+private home access or credential environment. In a project enrolled as trusted-local every check
+and benchmark runs as a local command in a disposable copy instead. Install dependencies beforehand.
+Host `node_modules` and `.venv` are linked read-only; a virtual environment's interpreter prefix is
+also readable. Each command copy has a Git index of its files and, for a checkout, its pinned HEAD,
+so read-only `git ls-files`, `git diff` and `git rev-parse` work.
 
 Set `"runner": "host"` on a check that needs a database server, browser, loopback listener, Docker
 or process control. Host checks run outside the sandbox in a disposable copy of the exact snapshot,
 with the user's normal permissions and a minimal environment (`PATH`, `HOME`, `USER`, Docker
 variables). They form the final gate with harness lint: both run once, after every sandbox check
-passes. Earlier repair rounds therefore see only behavioral failures. Harness lint compares its
-findings with the base commit's findings by file, message and line text. Existing findings are
-listed in `inheritedLintPaths` and never block; only findings the task adds do.
+passes. Earlier repair rounds therefore see only behavioral failures. Under required isolation a
+`runner: host` check is reported unavailable and is not run. A benchmark's `runner` never selects
+the host; only trusted-local enrollment does. Harness lint compares its findings with the base
+commit's findings by file, message and line text. Existing findings are listed in
+`inheritedLintPaths` and never block; only findings the task adds do.
 
 Local tasks verify against the check policy committed at the checkout's current HEAD, including
 tasks pinned to unmerged commits, so a policy fix reaches retained and resumed tasks instead of

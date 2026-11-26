@@ -1,10 +1,12 @@
 import { Type, type Static } from 'typebox'
 import {
   implementerModelSchema,
+  taskIsolationSchema,
   taskTitleSchema,
   thinkingSchema,
   writePathSchema,
   type ProjectCheck,
+  type TaskIsolation,
 } from './contracts.ts'
 
 const paths = Type.Array(writePathSchema, { minItems: 1, maxItems: 30 })
@@ -44,6 +46,7 @@ export const localBatchSchema = Type.Object(
     ),
     objective: Type.String({ minLength: 1, maxLength: 2000 }),
     acceptance: Type.Optional(acceptance),
+    isolation: taskIsolationSchema,
     tasks: Type.Array(
       Type.Object(
         {
@@ -78,6 +81,9 @@ export type LocalTaskInput = Omit<LocalBatch['tasks'][number], 'acceptance'> & {
   context: string
   local: LocalPlan
   branch?: never
+
+  /** The batch requirement, stored on every candidate of the batch. */
+  isolation?: TaskIsolation
 }
 
 export function competingSiblings(left?: LocalPlan, right?: LocalPlan): boolean {

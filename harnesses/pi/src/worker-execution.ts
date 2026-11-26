@@ -1,5 +1,15 @@
 import { randomUUID } from 'node:crypto'
-import { lstat, mkdir, open, readFile, realpath, rename, rm, symlink } from 'node:fs/promises'
+import {
+  lstat,
+  mkdir,
+  open,
+  readFile,
+  realpath,
+  rename,
+  rm,
+  symlink,
+  writeFile,
+} from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { dirname, isAbsolute, join, sep } from 'node:path'
 import type { CommandResult } from './contracts.ts'
@@ -37,6 +47,8 @@ const reasonModes: Record<ExecutionReason, ExecutionMode> = {
 const registryProjectLimit = 256
 const registryByteLimit = 262_144
 const linkedTreeLimit = 64
+const guardedPinLimit = 256
+const guardedBinLimit = 16
 const lockfileSuffix = '/package-lock.json'
 
 function missing(error: unknown): boolean {
@@ -380,6 +392,13 @@ export function checkRunner(
   return execution.mode === 'isolated' ? 'host' : 'refused'
 }
 
+/** Where a benchmark check runs. A benchmark's declared runner has never selected the host, so
+ * only the user's enrollment does: every other project measures in the sandbox, and a sandbox
+ * that cannot start fails the benchmark instead of moving it. */
+export function benchmarkRunner(execution: ExecutionPolicy): 'sandbox' | 'host' {
+  return execution.mode === 'trusted-local' ? 'host' : 'sandbox'
+}
+
 type LockEntry = {
   version?: string
   link?: boolean
@@ -401,39 +420,255 @@ async function installedVersion(modules: string, name: string): Promise<string |
   }
 }
 
-/** Compare the direct dependencies a lockfile pins with one installed node_modules tree. */
-export async function lockedDependencyDrift(lockText: string, modules: string): Promise<string[]> {
-  let lock: Lockfile
+const invalidLockfile = 'package-lock.json is not valid JSON'
+
+/** The direct dependencies a lockfile pins to a version, by name in sorted order. Workspace
+ * links carry no version of their own and are left out. Undefined when the text is not JSON. */
+function pinnedDependencies(lockText: string): Map<string, string> | undefined {
+  let lock: Lockfile | null
 
   try {
-    lock = JSON.parse(lockText) as Lockfile
+    lock = JSON.parse(lockText) as Lockfile | null
   } catch {
 
     // Only validity matters; the parser message adds nothing a reader can act on.
-    return ['package-lock.json is not valid JSON']
+    return undefined
   }
 
-  const manifest = lock.packages?.['']
+  const packages = typeof lock === 'object' && lock !== null ? lock.packages : undefined
+  const manifest = packages?.['']
   const names = Object.keys({ ...manifest?.dependencies, ...manifest?.devDependencies }).sort()
-  const problems: string[] = []
+  const pinned = new Map<string, string>()
 
   for (const name of names) {
-    const entry = lock.packages?.[`node_modules/${name}`]
+    const entry = packages?.[`node_modules/${name}`]
 
-    if (!entry?.version || entry.link) {
-      continue
+    if (entry?.version && !entry.link) {
+      pinned.set(name, entry.version)
     }
+  }
 
+  return pinned
+}
+
+/** Compare the direct dependencies a lockfile pins with one installed node_modules tree. */
+export async function lockedDependencyDrift(lockText: string, modules: string): Promise<string[]> {
+  const pinned = pinnedDependencies(lockText)
+
+  if (!pinned) {
+    return [invalidLockfile]
+  }
+
+  const problems: string[] = []
+
+  for (const [name, pin] of pinned) {
     const version = await installedVersion(modules, name)
 
     if (!version) {
-      problems.push(`${name}@${entry.version} is missing`)
-    } else if (version !== entry.version) {
-      problems.push(`${name} is ${version}; the lockfile pins ${entry.version}`)
+      problems.push(`${name}@${pin} is missing`)
+    } else if (version !== pin) {
+      problems.push(`${name} is ${version}; the lockfile pins ${pin}`)
     }
   }
 
   return problems
+}
+
+async function present(path: string): Promise<boolean> {
+  try {
+    await lstat(path)
+    return true
+  } catch (error) {
+    if (missing(error)) {
+      return false
+    }
+
+    throw error
+  }
+}
+
+type DependencyTree = { label: string; path: string }
+
+/** A pinned dependency that the nearest tree above an uninstalled package holds differently. */
+type ShadowedPin = { name: string; pin: string; found: string | undefined; tree: DependencyTree }
+
+// Names come from a candidate lockfile and become paths in the copy, so only plain npm names,
+// optionally scoped, are guarded. Bin names come from an installed manifest and get the same care.
+const packageName = /^(?:@[A-Za-z0-9][A-Za-z0-9._~-]*\/)?[A-Za-z0-9][A-Za-z0-9._~-]*$/
+const binName = /^[A-Za-z0-9][A-Za-z0-9._-]*$/
+const guardFile = 'not-installed.cjs'
+
+/** The dependency trees a package at `directory` resolves through after its own, nearest first,
+ * as they exist in the command copy. Resolution above the copy is not the project's. */
+async function treesAbove(probe: string, directory: string): Promise<DependencyTree[]> {
+  const parts = directory.split('/')
+  const trees: DependencyTree[] = []
+
+  for (let depth = parts.length - 1; depth >= 0; depth--) {
+    const label = [...parts.slice(0, depth), 'node_modules'].join('/')
+    const path = await installedTree(join(probe, label))
+
+    if (path) {
+      trees.push({ label, path })
+    }
+  }
+
+  return trees
+}
+
+/** A package whose own tree is not installed resolves its imports through the trees above it.
+ * List each dependency its lockfile pins that the nearest such tree holds at another version:
+ * importing it there would load that version without any error. A dependency no tree above
+ * supplies fails to import by itself, and one supplied at the pinned version is the pinned
+ * version. A lockfile that is not JSON states no pin to compare. */
+async function shadowedPins(probe: string, directory: string): Promise<ShadowedPin[]> {
+  const trees = await treesAbove(probe, directory)
+
+  if (!trees.length) {
+    return []
+  }
+
+  const lockText = await readFile(join(probe, directory + lockfileSuffix), 'utf8')
+  const shadowed: ShadowedPin[] = []
+
+  for (const [name, pin] of pinnedDependencies(lockText) ?? []) {
+    if (!packageName.test(name)) {
+      continue
+    }
+
+    for (const tree of trees) {
+      if (!(await present(join(tree.path, name)))) {
+        continue
+      }
+
+      const found = await installedVersion(tree.path, name)
+
+      if (found !== pin) {
+        shadowed.push({ name, pin, found, tree })
+      }
+
+      // Resolution stops at the nearest tree that holds the name, matching or not.
+      break
+    }
+  }
+
+  return shadowed
+}
+
+/** The commands the package above would put on PATH for an npm script or npx in this package. */
+async function installedBins(tree: string, name: string): Promise<string[]> {
+  let bin: unknown
+
+  try {
+    const manifest = await readFile(join(tree, name, 'package.json'), 'utf8')
+    bin = (JSON.parse(manifest) as { bin?: unknown } | null)?.bin
+  } catch (error) {
+    if (missing(error) || error instanceof SyntaxError) {
+      return []
+    }
+
+    throw error
+  }
+
+  const names =
+    typeof bin === 'string'
+      ? [name.slice(name.indexOf('/') + 1)]
+      : typeof bin === 'object' && bin !== null
+        ? Object.keys(bin)
+        : []
+  return names.filter((item) => binName.test(item)).slice(0, guardedBinLimit)
+}
+
+/** Put a package of the same name in front of the shadowing one. Its manifest maps the package
+ * and every subpath to one module that throws, so require and import fail with the host action
+ * instead of climbing to the other version. Its bins fail the same way. */
+async function writeGuard(modules: string, directory: string, shadowed: ShadowedPin) {
+  const { name, pin, found, tree } = shadowed
+  const text = (value: string) => value.slice(0, 80)
+  const message =
+    `${name}@${text(pin)} is pinned by ${directory}${lockfileSuffix}, but ${directory} has no ` +
+    `installed dependencies and ${tree.label} holds ` +
+    `${found === undefined ? 'an unreadable package' : text(found)}. Loading that version was ` +
+    `refused. Run npm ci in ${directory} on the host.`
+  const target = join(modules, name)
+  await mkdir(target, { recursive: true })
+  await writeFile(
+    join(target, 'package.json'),
+    JSON.stringify({
+      name,
+      version: '0.0.0-not-installed',
+      main: `./${guardFile}`,
+      exports: { '.': `./${guardFile}`, './*': `./${guardFile}` },
+    }),
+  )
+  await writeFile(join(target, guardFile), `throw new Error(${JSON.stringify(message)})\n`)
+  const bins = await installedBins(tree.path, name)
+
+  if (bins.length) {
+    await mkdir(join(modules, '.bin'), { recursive: true })
+  }
+
+  for (const bin of bins) {
+    const script = `#!/bin/sh\nexec node "$(dirname "$0")/../${name}/${guardFile}"\n`
+    await writeFile(join(modules, '.bin', bin), script, { mode: 0o755 })
+  }
+}
+
+/** Guard each package of a command copy that has a lockfile and no dependency tree against
+ * loading another version of what it pins from a tree above it. Only the conflicting names are
+ * guarded, inside the copy and inside that package: a command that never imports them there runs
+ * unchanged, and one that does fails naming the host action. A package that conflicts with
+ * nothing above it is left untouched. Returns the guarded package directories. */
+export async function guardUninstalledPackages(
+  probe: string,
+  names: Iterable<string>,
+): Promise<string[]> {
+  const guarded: string[] = []
+  let pins = 0
+
+  for (const directory of nestedLockfiles(names)) {
+    const modules = join(probe, directory, 'node_modules')
+
+    if (await present(modules)) {
+      continue
+    }
+
+    const shadowed = await shadowedPins(probe, directory)
+    pins += shadowed.length
+
+    // Skipping a guard would let its package load the other version, so the bound is an error.
+    if (pins > guardedPinLimit) {
+      throw new Error(
+        `More than ${guardedPinLimit} pinned dependencies of uninstalled packages resolve to ` +
+          `other versions, last in ${directory}. Run npm ci in those packages on the host.`,
+      )
+    }
+
+    for (const pin of shadowed) {
+      await writeGuard(modules, directory, pin)
+    }
+
+    if (shadowed.length) {
+      guarded.push(directory)
+    }
+  }
+
+  return guarded
+}
+
+/** Everything a command copy needs before a command runs in it: the installed nested trees are
+ * linked, then the packages that have none are guarded. Every command route calls this one
+ * function. Returns the linked host trees an isolated command may read. */
+export async function prepareDependencies(
+  probe: string,
+  trustedRoot: string,
+  names: Iterable<string>,
+  execution: ExecutionPolicy,
+): Promise<string[]> {
+  const lockfiles = [...names].filter((name) => name.endsWith(lockfileSuffix))
+  const linked = await linkLockedDependencies(probe, trustedRoot, lockfiles, execution)
+  await guardUninstalledPackages(probe, lockfiles)
+  return linked
 }
 
 async function installedTree(path: string): Promise<string | undefined> {
@@ -452,7 +687,8 @@ async function installedTree(path: string): Promise<string | undefined> {
 /** Link each nested dependency tree installed in the trusted checkout into a disposable command
  * copy, so a package below the root resolves the versions its own lockfile pins. The root tree is
  * linked when the copy is created. A tree that differs from the copy's lockfile stops the command:
- * skipping the link would let resolution climb to a parent tree and load another version.
+ * skipping the link would let resolution climb to a parent tree and load another version. A
+ * package with no installed tree is not linked; guardUninstalledPackages covers it.
  * Returns the linked trees, which an isolated command may read and can never write. */
 export async function linkLockedDependencies(
   probe: string,

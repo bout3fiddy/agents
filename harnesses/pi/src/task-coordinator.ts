@@ -46,7 +46,8 @@ import { StateStore, atomicJson } from './state.ts'
 import { checkModelOutcome, checkWorkerThinking, explicitResources } from './worker.ts'
 import { createWorkerTools } from './worker-tools.ts'
 import { progressReporter, type TaskProgress } from './progress.ts'
-import { capabilities } from './capabilities.ts'
+import { workerCapabilities } from './capabilities.ts'
+import { storedExecution } from './worker-execution.ts'
 import { invariant } from './invariant.ts'
 import {
   ActiveSiblings,
@@ -753,7 +754,7 @@ class Coordinator {
       parentTask: request.task,
       context: request.context,
       kind: request.kind,
-      capabilities: capabilities.workers,
+      capabilities: workerCapabilities(storedExecution(request.project.execution).mode),
       execution: { state: 'running', resumed: request.resumed ?? false },
       authority:
         request.kind === 'branch'
@@ -1325,7 +1326,8 @@ export async function runTaskCoordinator(
             pinnedDesign: designReference(request.designPath, request.baseline),
           }),
         folderInstructions: await instructions(request.workspace, request.checkpoint.writePaths),
-        capabilities: capabilities.workers,
+        capabilities: workerCapabilities(storedExecution(request.project.execution).mode),
+        commandExecution: storedExecution(request.project.execution),
         performanceReview: request.checkpoint.performanceReview === true,
         execution: {
           state: 'running',

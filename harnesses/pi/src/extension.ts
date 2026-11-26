@@ -8,6 +8,7 @@ import type { ExtensionAPI } from '@earendil-works/pi-coding-agent'
 import {
   designSchema,
   implementerModelSchema,
+  taskIsolationSchema,
   thinkingSchema,
   workflowSpecialistsSchema,
 } from './contracts.ts'
@@ -41,6 +42,43 @@ import { registerWorkers } from './workers-command.ts'
 
 // A running generation keeps matching code, prompts and tool policy until a real reload.
 const orchestratorPolicy = Promise.all([loadRole('orchestrator'), rolePrompt('orchestrator')])
+
+/** The local implementation route: pin the settled design and start it as a background task. */
+export function registerWorkflow(
+  pi: ExtensionAPI,
+  start: ReturnType<typeof registerDelegation>['start'],
+): void {
+  pi.registerTool({
+    name: 'workflow',
+    label: 'Run delegated workflow',
+    description:
+      'Start user-requested implementation and verification in the background. ' +
+      'Supply the settled design for new work; omit it only to resume the recorded scope. ' +
+      'Set isolation to required when the design or its inputs are external or untrusted; a ' +
+      'resumed scope keeps the isolation it was recorded with. ' +
+      'Returns immediately and preserves this conversation.',
+    parameters: Type.Object({
+      design: Type.Optional(designSchema),
+      thinking: Type.Optional(thinkingSchema),
+      implementerModel: Type.Optional(implementerModelSchema),
+      specialistThinking: Type.Optional(workflowSpecialistsSchema),
+      isolation: taskIsolationSchema,
+    }),
+    async execute(_id, args, _signal, _update, ctx) {
+      return start(ctx, {
+        kind: 'implementation',
+        task: 'Implement the settled design and verify it with the required checks.',
+        implementerModel: args.implementerModel,
+        ...(args.isolation ? { isolation: args.isolation } : {}),
+        ...(args.design ? { design: args.design } : {}),
+        ...(args.thinking ? { thinking: args.thinking } : {}),
+        ...(args.specialistThinking ? { specialistThinking: args.specialistThinking } : {}),
+        context: '',
+        writePaths: [],
+      })
+    },
+  })
+}
 
 export default function harness(pi: ExtensionAPI): void {
   registerInspectionMode(pi, nestedInspectionTools)
@@ -131,32 +169,7 @@ export default function harness(pi: ExtensionAPI): void {
     })
   }
 
-  pi.registerTool({
-    name: 'workflow',
-    label: 'Run delegated workflow',
-    description:
-      'Start user-requested implementation and verification in the background. ' +
-      'Supply the settled design for new work; omit it only to resume the recorded scope. ' +
-      'Returns immediately and preserves this conversation.',
-    parameters: Type.Object({
-      design: Type.Optional(designSchema),
-      thinking: Type.Optional(thinkingSchema),
-      implementerModel: Type.Optional(implementerModelSchema),
-      specialistThinking: Type.Optional(workflowSpecialistsSchema),
-    }),
-    async execute(_id, args, _signal, _update, ctx) {
-      return delegation.start(ctx, {
-        kind: 'implementation',
-        task: 'Implement the settled design and verify it with the required checks.',
-        implementerModel: args.implementerModel,
-        ...(args.design ? { design: args.design } : {}),
-        ...(args.thinking ? { thinking: args.thinking } : {}),
-        ...(args.specialistThinking ? { specialistThinking: args.specialistThinking } : {}),
-        context: '',
-        writePaths: [],
-      })
-    },
-  })
+  registerWorkflow(pi, delegation.start)
 
   pi.registerTool({
     name: 'harness_status',

@@ -151,24 +151,35 @@ behavioral tests and lint. Inspect documents against the agreed acceptance crite
 
 Know the capability boundary before dispatch. harness_capabilities describes it. The host has normal
 shell, network, authenticated CLIs and file access. Workers retain edits only through scoped file
-tools; their shell has no network or home access, and its generated files are discarded. They cannot
-install dependencies, retain generated lockfiles, configure host policy, initialize Git or publish.
-Perform those authorized operations yourself and delegate only the compatible portion. Declare host
-requirements with requires when using delegate_task; preflight will reject incompatible work. Branch
-publication is a separate host-managed capability of delegate_branches. Local workflow and
-delegate_task with kind implementation share one checkpoint and require exclusive local writes.
-Direct local candidates use isolated worktrees. They can run alongside the local workflow.
+tools, and files their commands generate are discarded. By default worker commands run in a sandbox
+with no network or home access. In a project the user enrolled as trusted-local they run as normal
+local commands with the user's own authority: that is the user's statement of trust in the checkout,
+not containment. Enrollment is the user's decision. Record or change it only on the user's explicit
+request, with the harness CLI `trust` command from the project root. Set `isolation: 'required'` on
+workflow, delegate_task, delegate_local, delegate_branches or a recurring_task definition whenever
+the design, its inputs or the material a task reads are external or untrusted. The requirement is
+stored with the task and follows it through children, checks, benchmarks, resume and revision; no
+argument removes it. When a sandbox cannot start, the command fails; hand that to the user and never
+rerun the work on the host as a substitute. Workers cannot install dependencies, retain generated
+lockfiles, configure host policy, initialize Git or publish. Perform those authorized operations
+yourself and delegate only the compatible portion. Declare host requirements with requires when
+using delegate_task; preflight will reject incompatible work. Branch publication is a separate
+host-managed capability of delegate_branches. Local workflow and delegate_task with kind
+implementation share one checkpoint and require exclusive local writes. Direct local candidates use
+isolated worktrees. They can run alongside the local workflow.
 
 Project checks in `.pi/harness.json` run in the worker sandbox unless a check sets
 `"runner": "host"`. Set it yourself when workers report a required check failing because the sandbox
 lacks a database server, browser, loopback listener, Docker or process control. Host checks and
 harness lint form the final gate: they run once, after every sandbox check passes, on a disposable
-copy of the exact snapshot. Lint findings already present on the base commit are reported as
-inheritedLintPaths and never block. Dispatch is rejected while host node_modules differs from the
-task's lockfile; run npm ci with the user's authorization, then dispatch again. Create temporary
-host worktrees under `.pi/traces/harness/host-worktrees/` and remove them when done. Pi removes
-finished or long-idle task worktrees, baselines and temporary copies automatically;
-`/harness-cleanup` runs that pass now.
+copy of the exact snapshot. In a trusted-local project every check and benchmark runs as a local
+command in that copy. Under required isolation a `runner: host` check is reported unavailable and is
+not run: lift the requirement only with the user, or make the check sandbox-compatible. Lint
+findings already present on the base commit are reported as inheritedLintPaths and never block.
+Dispatch is rejected while host node_modules differs from the task's lockfile; run npm ci with the
+user's authorization, then dispatch again. Create temporary host worktrees under
+`.pi/traces/harness/host-worktrees/` and remove them when done. Pi removes finished or long-idle
+task worktrees, baselines and temporary copies automatically; `/harness-cleanup` runs that pass now.
 
 Give the user a short summary when a meaningful checkpoint changes what they can use, decide, or
 expect. This applies to your own work and delegated work. Combine related outcomes across branches,

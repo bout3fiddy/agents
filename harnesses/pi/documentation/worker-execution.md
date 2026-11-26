@@ -3,7 +3,8 @@
 Worker-issued commands run one of two ways: as normal local commands, or inside the command sandbox.
 The user decides which, per project, and the host records that decision outside every project.
 Workers, project files, prompts and tool arguments can add isolation but can never remove it. The
-sandbox is configured software behind the existing tools; no tool selects it.
+sandbox is configured software behind the existing tools. No worker tool selects it, and a host
+dispatch tool can only require it.
 
 ## Modes
 
@@ -54,13 +55,30 @@ Any one of these is enough, and none can be overridden from below:
 - **Project:** `cli trust required-isolation` in that project.
 - **Host process:** start the host with `PI_HARNESS_ISOLATION=required`. Every project it dispatches
   is isolated, enrolled or not. Any other non-empty value is rejected rather than interpreted.
-- **Host task:** a stored task request carrying `isolation: 'required'`. The delegation, local
-  candidate and branch runners apply it to that task's workers and verification.
+- **Host task:** `isolation: 'required'` on the tool call that starts the work.
 
-The task field is read today but no host tool sets it yet: the delegation tool schemas sit outside
-the change that introduced this policy. Until one does, use the project or host-process form for
-external or untrusted work. The foreground `workflow` route reads the project and host-process
-decisions only.
+### Per-task isolation
+
+The host sets `isolation: 'required'` when a design, its inputs or the material a task reads are
+external or untrusted. The field exists only on host tools and accepts only that value; an omitted
+field adds nothing and no value lifts isolation the project or host process demands.
+
+- `workflow`, field `isolation`: the pinned scope, with its implementer, checks and benchmarks.
+- `delegate_task`, field `isolation`: the coordinator, its children and its checks.
+- `delegate_local`, field `isolation` for the whole batch: every candidate, its acceptance and the
+  checks run again at integration.
+- `delegate_branches`, field `isolation` for the whole batch: every branch task, its children,
+  checks and merge-time refresh.
+- `recurring_task`, field `definition.work.isolation`: every occurrence, audits included.
+
+The requirement is stored in the task's `request.json` and read by every runner, so it survives
+reload, `resume_task`, `revise_tasks` and `merge_branches`. `workflow` also records it on the pinned
+scope: calling `workflow` without a design resumes that scope with the same isolation, and the CLI
+`run` command honors it. A coordinator hands its children the narrowed decision, research swarm
+members included. `task_status` shows `isolation` on each task that carries it.
+
+A stored value other than `required` stops the task with an error. It is never read as "not
+isolated".
 
 ## How a decision is applied
 
@@ -69,6 +87,7 @@ Before every command the worker resolves the host's current decision again and u
 the two. Consequences:
 
 - A request that claims trust for a root the host never enrolled runs isolated.
+- A task the host marked `isolation: 'required'` stays isolated in an enrolled project.
 - Revoking trust, or setting the host requirement, takes effect on the next command of a running
   worker.
 - Granting trust never reaches a worker that was dispatched isolated; dispatch again.
@@ -105,14 +124,24 @@ candidate, with these properties:
   changes to paths outside the assignment, reporting them as `restoredCandidatePaths` with an error
   result. Host verification still checks scope and snapshot independently.
 
-The restore step attributes every change made during a command to that command. That holds because
-one worker at a time holds a candidate: the coordinator runs its children serially and each local or
-branch candidate has its own worktree. Concurrent workers on one candidate would need a different
-safeguard first.
+The restore step attributes every change outside the assignment that happens during a command to
+that command, and never touches an assigned path. It cannot undo a legitimate edit, because
+legitimate edits only land on the assigned paths of the one worker that may write a candidate:
 
-Harness lint always runs in the sandbox. Benchmark checks still run in the sandbox in every mode and
-do not receive nested dependency links; that route is outside the change that introduced this
-policy.
+- A writer holds its candidate alone. The coordinator serializes its children and its own tools, and
+  each local or branch candidate has its own worktree.
+- The only workers that share a candidate are research swarm siblings. They are dispatched with an
+  empty write scope, so their file tools retain nothing, and a swarm never overlaps a writer.
+- Siblings can undo each other's stray command writes in either order. The coordinator compares the
+  candidate before and after a swarm and rejects one that left it changed.
+
+Dispatching a writer beside another worker on one candidate would break this and needs a different
+safeguard first. `tests/execution-dispatch.test.ts` holds the invariant.
+
+Harness lint always runs in the sandbox. Benchmark checks follow the same decision as other checks:
+a trusted-local project measures as a local command, every other project measures in the sandbox,
+and both receive the nested dependency trees described below. A benchmark's `runner` field has never
+selected the host and still does not. A sandbox that cannot start fails the benchmark.
 
 ### What it does not protect
 
@@ -136,7 +165,14 @@ dispatched from, in both modes, so tests there resolve the versions that lockfil
 - A tree is linked only when the direct dependencies it holds match the lockfile in the copy.
 - A tree that differs stops the command with the mismatches and the `npm ci` location to hand to the
   host. Skipping the link would let resolution climb to a parent tree and load another version.
-- A lockfile without an installed tree is left alone; imports fail as they would in the checkout.
+- A lockfile without an installed tree is not linked. Imports of what it pins then resolve through
+  the trees above the package. Where the nearest such tree holds a pinned dependency at another
+  version, the copy gets a guard package of that name inside the uninstalled package: `require`,
+  `import` and the dependency's commands fail there with the `npm ci` location, instead of loading
+  the other version. The guard exists only in the command copy.
+- An uninstalled package whose pins nothing above it contradicts is left untouched, and commands
+  that never import a guarded dependency from that package run unchanged. More than 256 guarded
+  dependencies in one copy stop the command.
 - Under isolation a tree is readable and never writable, and one that resolves outside the project
   is refused. A trusted checkout may link its dependencies wherever it keeps them.
 - At most 64 nested trees are linked per copy.
@@ -152,6 +188,10 @@ isolated candidate copy without installed dependencies:
 ```sh
 node --experimental-strip-types --test harnesses/pi/tests/worker-execution.test.ts
 ```
+
+`tests/execution-dispatch.test.ts` drives the host tools through a real Pi session and each stored
+task through its runner: per-task isolation on every route, resume and revision, scheduled work,
+coordinator children, the restore invariant and the benchmark route.
 
 `tests/verification-loop.test.ts` and `tests/worker-lifecycle.test.ts` drive the real worker tools,
 the host check route and the Claude MCP bridge. Their loopback, host-runner refusal, cancellation

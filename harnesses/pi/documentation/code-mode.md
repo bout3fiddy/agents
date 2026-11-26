@@ -79,8 +79,9 @@ Differential mode compares matching text from original and candidate; benchmark 
 samples in alternating order and reports medians in the supplied metric and unit. Benchmark commands
 must print a single finite number. Both sides use the candidate’s installed dependencies and their
 own source snapshots. Raw samples live in the private receipt alongside the worker result. Each
-sample runs in a fresh sandbox copy. A call accepts up to 128 cases and five minutes; continue a
-longer campaign in ranges. Project acceptance checks still run on the final snapshot.
+sample runs in a fresh copy under the same execution decision as `run_command`. A call accepts up to
+128 cases and five minutes; continue a longer campaign in ranges. Project acceptance checks still
+run on the final snapshot.
 
 For one large read that only needs a count or a few matches, filter it in code mode. Use a direct
 call for one small read. Save expensive results before printing when a later slice is likely. Scope

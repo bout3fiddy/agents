@@ -98,6 +98,7 @@ export async function startLocalBatch(
 
     return {
       ...task,
+      ...(input.isolation && { isolation: input.isolation }),
       context: competition
         ? 'Implement only the assigned approach in this worktree. Submit pass when its gate ' +
           'passes. The host retains candidates, compares them and integrates the winner.'
@@ -165,6 +166,8 @@ export function registerLocalTools(pi: ExtensionAPI, launch = launchDelegation):
       'Default to one worker per scope. For a difficult tradeoff, competition requires a ' +
       'rationale, selection criterion, and one shared acceptance argv with ' +
       'workloadPaths for its drivers, inputs and fixtures. Each task describes its approach. ' +
+      'Set isolation to required when the objective or its inputs are external or untrusted; ' +
+      'it applies to every candidate, its acceptance and later integration checks. ' +
       'Returns immediately. Uncommitted edits are excluded.',
     parameters: localBatchSchema,
     async execute(_id, input, signal, _update, ctx) {

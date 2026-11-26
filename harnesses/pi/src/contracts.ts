@@ -58,6 +58,19 @@ export const performanceReviewSchema = Type.Optional(
   }),
 )
 
+export type TaskIsolation = 'required'
+
+/** Host only: a dispatch tool marks work whose input is external or untrusted. The value is
+ * stored on the task and applied by every runner; no value exists that lifts isolation. */
+export const taskIsolationSchema = Type.Optional(
+  Type.Literal('required', {
+    description:
+      'Set required when the task input is external or untrusted. Its workers and verification ' +
+      'then run in the sandbox even in a project the user enrolled as trusted-local, and ' +
+      'nothing runs on the host. Omit otherwise. No value lifts isolation.',
+  }),
+)
+
 export const designSchema = Type.Object(
   {
     objective: Type.String({ minLength: 1, maxLength: 2000 }),
@@ -83,7 +96,14 @@ export const designSchema = Type.Object(
 )
 
 export type Design = Static<typeof designSchema>
-export type Checkpoint = Design & { version: number; hash: string; acceptedAt: string }
+export type Checkpoint = Design & {
+  version: number
+  hash: string
+  acceptedAt: string
+
+  /** The host pinned this scope for isolated work. Resuming the recorded scope keeps it. */
+  isolation?: TaskIsolation
+}
 
 export const resultSchema = Type.Object(
   {

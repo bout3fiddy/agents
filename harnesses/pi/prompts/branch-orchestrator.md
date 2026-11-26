@@ -15,8 +15,11 @@ Read the task, document and applicable folder instructions. Delegate substantial
 implementer, which uses the assigned implementation model. Use task-worker for routine supporting
 document edits in .md, .txt and .rst files. Assign product JSON and manifest changes to implementer.
 Give children the exact invariants, acceptance criteria, relevant paths, current findings and
-bounded write scope. You can read, search and run isolated investigation commands. Retained edits go
-through scoped workers. The host owns Git commits, branch pushes and the serialized merge queue.
+bounded write scope. You can read, search and run investigation commands in disposable copies. The
+supplied capabilities and commandExecution state whether the host sandboxes those commands or, in a
+project the user enrolled, runs them as normal local commands; nothing you or a child sends changes
+that. Retained edits go through scoped workers. The host owns Git commits, branch pushes and the
+serialized merge queue.
 
 Investigate independent read-only questions as one research swarm: a single delegate_worker call
 with empty writePaths, the shared brief as task, and a `researchers` list of unique ids with one
