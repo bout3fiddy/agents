@@ -47,8 +47,8 @@ test('user input wins; mixed requests append once and recover a lost ACK', async
   assert.deepEqual(turns, [], 'Commands and empty polls do not invoke the model')
   const work = session.prompt('First user request')
   await first.wait
-  board.add('notify')
-  board.add('interpret', 'interpret_request')
+  board.add('notify', 'sketch_notify', 'Typed notify')
+  board.add('interpret', 'interpret_request', 'Typed cleanup')
   await clock.tick()
   assert.equal(receipts().length, 0)
   await session.followUp('Priority user follow-up')
@@ -59,6 +59,8 @@ test('user input wins; mixed requests append once and recover a lost ACK', async
   assert.match(turns[1]!, /Priority user follow-up/)
   assert.match(turns[2]!, /interpret_request/)
   assert.match(turns[2]!, /sketch_notify/)
+  assert.match(turns[2]!, /Typed notify/)
+  assert.match(turns[2]!, /Typed cleanup/)
   assert.equal(receipts().length, 1)
   let attempts = 0
   board.before = async (command) => {
@@ -133,7 +135,7 @@ test('dropped draft retries without ACK; paused work stays quiet', async (t) => 
   await session.prompt('/start_whiteboard')
   const work = session.prompt('Working')
   await first.wait
-  board.add('request')
+  board.add('request', 'sketch_notify', 'Park this request until resumed.')
   await clock.tick()
   release.release()
   await work

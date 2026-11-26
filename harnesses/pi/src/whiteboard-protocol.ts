@@ -1,11 +1,14 @@
-import { object, type BoardReply } from './whiteboard-cli.ts'
+import { BoardUpgradeRequired, object, type BoardReply } from './whiteboard-cli.ts'
 
 export const batchLimit = 16
-const eventLimit = 1024
+const eventLimit = 64
+const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i
 const states = ['queued', 'received', 'working'] as const
 const kinds = ['sketch_notify', 'interpret_request'] as const
 export interface BoardEvent {
   id: string
+  request_id?: string
+  text?: string
   kind: (typeof kinds)[number]
   sketch_hash: string
   created_at_ms: number
@@ -28,8 +31,7 @@ function counter(value: unknown): value is number {
   return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0
 }
 
-// CAS tokens belong to the individual layer, not to the poll change counter.
-export function validRevision(value: unknown) {
+export function validRevision(value: unknown): value is number | string {
   return counter(value) || identifier(value)
 }
 
@@ -53,6 +55,10 @@ function url(value: unknown) {
 }
 
 export function parseLink(data: BoardReply, owner: string, binding: string) {
+  if (data.protocol !== 2) {
+    throw new BoardUpgradeRequired()
+  }
+
   if (!identifier(data.session) || data.owner !== owner || data.binding_file !== binding) {
     return invalid()
   }
@@ -70,13 +76,79 @@ export function sameBoard(data: BoardReply, link: BoardLink) {
   }
 }
 
+function requestText(value: unknown) {
+  if (typeof value !== 'string' || !value.length || value.length > 8000) {
+    throw new Error('Whiteboard request text must contain 1 to 4000 Unicode code points')
+  }
+
+  let points = 0
+
+  for (const char of value) {
+    const code = char.codePointAt(0)!
+
+    if (
+      (code < 32 && code !== 9 && code !== 10 && code !== 13) ||
+      (code >= 0xd800 && code <= 0xdfff)
+    ) {
+      throw new Error('Whiteboard text must be Unicode without controls except tab, CR or LF')
+    }
+
+    if (++points > 4000) {
+      throw new Error('Whiteboard request text exceeds 4000 Unicode code points')
+    }
+  }
+
+  return value
+}
+
+function parseEvent(row: unknown): BoardEvent {
+  if (
+    !object(row) ||
+    !identifier(row.id) ||
+    row.id.startsWith('-') ||
+    !kinds.some((kind) => kind === row.kind) ||
+    !states.some((state) => state === row.state) ||
+    !identifier(row.sketch_hash) ||
+    !counter(row.created_at_ms)
+  ) {
+    return invalid()
+  }
+
+  const event: BoardEvent = {
+    id: row.id,
+    kind: row.kind as BoardEvent['kind'],
+    state: row.state as BoardEvent['state'],
+    created_at_ms: row.created_at_ms,
+    sketch_hash: row.sketch_hash,
+  }
+
+  // Pre-composer journal entries may lack a request ID, but can never carry text.
+  if ('request_id' in row || 'text' in row) {
+    if (typeof row.request_id !== 'string' || !uuid.test(row.request_id)) {
+      return invalid()
+    }
+
+    event.request_id = row.request_id
+  }
+
+  if ('text' in row) {
+    event.text = requestText(row.text)
+  }
+
+  return event
+}
+
 export function parsePoll(data: BoardReply, link: BoardLink) {
+  if (data.protocol !== 2) {
+    throw new BoardUpgradeRequired()
+  }
+
   sameBoard(data, link)
 
   if (
     data.owner !== link.owner ||
     !identifier(data.sketch_hash) ||
-    !counter(data.agent_revision) ||
+    !validRevision(data.agent_revision) ||
     !Array.isArray(data.events) ||
     data.events.length > eventLimit
   ) {
@@ -85,37 +157,36 @@ export function parsePoll(data: BoardReply, link: BoardLink) {
 
   const events: BoardEvent[] = []
   const seen = new Set<string>()
+  const requests = new Set<string>()
 
   for (const row of data.events) {
-    if (
-      !object(row) ||
-      !identifier(row.id) ||
-      row.id.startsWith('-') ||
-      seen.has(row.id) ||
-      !kinds.some((kind) => kind === row.kind) ||
-      !states.some((state) => state === row.state) ||
-      !identifier(row.sketch_hash) ||
-      !counter(row.created_at_ms)
-    ) {
+    const event = parseEvent(row)
+
+    if (seen.has(event.id) || (event.request_id && requests.has(event.request_id))) {
       return invalid()
     }
 
-    seen.add(row.id)
-    events.push({
-      id: row.id,
-      kind: row.kind as BoardEvent['kind'],
-      state: row.state as BoardEvent['state'],
-      created_at_ms: row.created_at_ms,
-      sketch_hash: row.sketch_hash,
-    })
+    seen.add(event.id)
+
+    if (event.request_id) {
+      requests.add(event.request_id)
+    }
+
+    events.push(event)
   }
 
-  return { ...link, sketch_hash: data.sketch_hash, agent_revision: data.agent_revision, events }
+  return {
+    ...link,
+    protocol: 2,
+    sketch_hash: data.sketch_hash,
+    agent_revision: data.agent_revision,
+    events,
+  }
 }
 
 export type BoardInput = {
   action: 'status' | 'snapshot' | 'publish' | 'ack'
-  layer?: 'interpretation' | 'ideas'
+  layer?: 'canvas' | 'interpretation' | 'ideas'
   file?: string
   event?: string
   state?: 'working' | 'updated' | 'failed'
@@ -153,11 +224,11 @@ export function boardArguments(input: BoardInput): string[] {
     ]
   }
 
-  if (input.layer !== 'interpretation' && input.layer !== 'ideas') {
-    throw new Error('Choose whiteboard layer interpretation or ideas')
+  if (input.layer !== undefined && input.layer !== 'canvas') {
+    throw new Error('Use a fresh canvas snapshot and preserve the entire unified Agent diagram.')
   }
 
-  const args = ['--layer', input.layer]
+  const args = ['--layer', 'canvas']
 
   if (input.action === 'publish') {
     if (
@@ -175,12 +246,50 @@ export function boardArguments(input: BoardInput): string[] {
   return args
 }
 
-export function publication(data: BoardReply, link: BoardLink, layer: BoardInput['layer']) {
+function artifact(value: unknown): value is string {
+  return (
+    typeof value === 'string' && value.length > 0 && value.length <= 4096 && !value.includes('\0')
+  )
+}
+
+export function canvasSnapshot(data: BoardReply, link: BoardLink) {
   sameBoard(data, link)
 
-  if (data.layer !== layer || !validRevision(data.revision)) {
+  if ('layer' in data && data.layer !== 'canvas') {
+    throw new Error('Whiteboard snapshot belongs to a different layer')
+  }
+
+  if (
+    !artifact(data.path) ||
+    !artifact(data.records_path) ||
+    !artifact(data.strokes_path) ||
+    !artifact(data.diagram_path) ||
+    (data.previous_diagram_path != null && !artifact(data.previous_diagram_path)) ||
+    !identifier(data.snapshot) ||
+    !validRevision(data.base_revision) ||
+    typeof data.prompt !== 'string' ||
+    !data.prompt ||
+    !(
+      (typeof data.publish_command === 'string' && data.publish_command.length > 0) ||
+      (Array.isArray(data.publish_command) &&
+        data.publish_command.length > 0 &&
+        data.publish_command.every((arg) => typeof arg === 'string'))
+    )
+  ) {
+    throw new Error(
+      'Whiteboard canvas snapshot missing artifacts, revision or publication guidance',
+    )
+  }
+
+  return data
+}
+
+export function publication(data: BoardReply, link: BoardLink) {
+  sameBoard(data, link)
+
+  if (data.layer !== 'canvas' || !validRevision(data.revision)) {
     return invalid()
   }
 
-  return { session: link.session, layer, revision: data.revision }
+  return { session: link.session, layer: data.layer, revision: data.revision }
 }

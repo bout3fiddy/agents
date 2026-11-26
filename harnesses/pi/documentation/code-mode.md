@@ -46,7 +46,8 @@ raw script and output** in that view for the original script, call arguments and
   script projection.
 
 - `host_work`. Direct host tool for the state of an authorized, host-owned operation.
-- `whiteboard`. Direct, session-bound host inspection, publication and event acknowledgement.
+- `whiteboard`. Direct, session-bound host tool: read paired requests, snapshot or publish the Agent
+  canvas and acknowledge events. Never expose the binding or this tool to workers.
 - `watch_github_run`. Direct host tool. Registers or cancels a local CI follow-up.
 
 - `codemode`. Top-level script runner. Model helpers are disabled.

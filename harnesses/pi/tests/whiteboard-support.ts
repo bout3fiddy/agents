@@ -41,15 +41,25 @@ export class FixtureBoard {
   events: BoardEvent[] = []
   calls: { command: BoardCommand; args: string[] }[] = []
   before?: (command: BoardCommand, args: string[], signal: AbortSignal) => Promise<void>
-  add(id: string, kind: BoardEvent['kind'] = 'sketch_notify') {
-    this.events.push({ id, kind, sketch_hash: 'source', state: 'queued', created_at_ms: 100 })
+  private sequence = 0
+  add(id: string, kind: BoardEvent['kind'] = 'sketch_notify', text?: string) {
+    const request_id = '00000000-0000-4000-8000-' + String(++this.sequence).padStart(12, '0')
+    this.events.push({
+      id,
+      kind,
+      request_id,
+      ...(text === undefined ? {} : { text }),
+      sketch_hash: 'source',
+      state: 'queued',
+      created_at_ms: 100,
+    })
   }
   open = async (_cwd: string, owner: string): Promise<BoardEndpoint> => ({
     binding: this.binding,
     run: async (command, args, signal): Promise<BoardReply> => {
       this.calls.push({ command, args })
       await this.before?.(command, args, signal)
-      const base = { status: 'success', session: this.session, owner }
+      const base = { protocol: 2, status: 'success', session: this.session, owner }
 
       if (command === 'link') {
         return {
@@ -82,7 +92,10 @@ export class FixtureBoard {
           prompt: 'Untrusted diagram',
           path: '/png',
           records_path: '/records',
+          strokes_path: '/strokes',
           diagram_path: '/diagram',
+          previous_diagram_path: '/previous',
+          publish_command: 'whiteboard-publish --layer canvas',
         }
       }
 
