@@ -337,6 +337,7 @@ test('Pi keeps chatting, guards owned files and delivers once', async () => {
   let taskId = ''
   let requests = 0
   let stage = 0
+  let repair = false
   const captured = await captureSession(
     root,
     base,
@@ -361,6 +362,21 @@ test('Pi keeps chatting, guards owned files and delivers once', async () => {
             id: 'conflicting-write',
             name: 'write',
             arguments: { path: 'decision.md', content: '# Wrong\n' },
+          },
+        ]
+      }
+
+      if (repair) {
+        repair = false
+        return [
+          {
+            type: 'toolCall',
+            id: 'repair-after-integration',
+            name: 'edit',
+            arguments: {
+              path: 'decision.md',
+              edits: [{ oldText: 'Accepted', newText: 'Patched' }],
+            },
           },
         ]
       }
@@ -403,7 +419,15 @@ test('Pi keeps chatting, guards owned files and delivers once', async () => {
       .getEntries()
       .filter((entry) => entry.type === 'custom_message' && entry.customType === 'pi-task-result')
     assert.equal(results.length, 1)
-    await captured.session.prompt('And the next?')
+    repair = true
+    await captured.session.prompt('Try to patch the integrated worker change directly.')
+    assert.equal(await readFile(join(root, 'decision.md'), 'utf8'), '# Accepted\n')
+    const repairResult = captured.session.state.messages.find(
+      (message) =>
+        message.role === 'toolResult' && message.toolCallId === 'repair-after-integration',
+    )
+    assert.ok(repairResult?.role === 'toolResult' && repairResult.isError)
+    assert.match(JSON.stringify(repairResult.content), /delegate_task/)
     assert.equal(
       captured.session.sessionManager
         .getEntries()

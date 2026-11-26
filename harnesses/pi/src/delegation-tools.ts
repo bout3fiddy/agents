@@ -14,6 +14,8 @@ import type {
 import { StateStore } from './state.ts'
 import { structuredResult, textResult } from './file-tools.ts'
 import { digest } from './paths.ts'
+import { freshBootstrapRoot, hostFileAllowed, workerHandoff } from './host-file-routing.ts'
+import { projectRoot } from './tiger-style.ts'
 import { launchDelegation } from './delegation-process.ts'
 import {
   Delegations,
@@ -128,13 +130,15 @@ export function registerDelegation(
   })
   pi.on('agent_settled', async (_event, ctx) => feed.idle(ctx))
   pi.on('session_start', (_event, ctx) => feed.open(ctx))
+  let bootstrapRoot: string | undefined
   pi.on('before_agent_start', async (_event, ctx) => {
+    bootstrapRoot = await freshBootstrapRoot(ctx.cwd)
     feed.current = ctx
     return activeTasksMessage(ctx)
   })
   feed.observe()
   pi.on('session_shutdown', () => feed.close())
-  pi.on('tool_call', ownershipBlock)
+  pi.on('tool_call', (event, ctx) => hostWriteBlock(event, ctx, bootstrapRoot))
   const start = (ctx: ExtensionContext, input: DelegateInput) => startTask(ctx, input, launch)
   registerDelegateTask(pi, start)
   registerTaskStatus(pi)
@@ -568,12 +572,16 @@ async function activeTasksMessage(ctx: ExtensionContext) {
   }
 }
 
-/** Host edits to files a task owns are blocked until the task releases them. */
-async function ownershipBlock(event: ToolCallEvent, ctx: ExtensionContext) {
+/** A released reservation does not transfer product work to the host. */
+async function hostWriteBlock(
+  event: ToolCallEvent,
+  ctx: ExtensionContext,
+  bootstrapRoot: string | undefined,
+) {
   const input = event.input as { path?: string; paths?: string[]; format?: boolean }
   const paths =
-    ['write', 'edit'].includes(event.toolName) && input.path
-      ? [input.path]
+    event.toolName === 'write' || event.toolName === 'edit'
+      ? [input.path ?? '']
       : event.toolName === 'document_check' && input.format
         ? (input.paths ?? [])
         : []
@@ -582,10 +590,18 @@ async function ownershipBlock(event: ToolCallEvent, ctx: ExtensionContext) {
     return undefined
   }
 
+  // SDK file tools expand shorthand. Require ordinary paths so both sides address the same file.
+  if (
+    paths.some(
+      (path) => !path || /^[@~]|^file:|[^\S ]/u.test(path) || path.split('/').includes('..'),
+    )
+  ) {
+    return { block: true, reason: 'Use a plain path without shorthand. ' + workerHandoff }
+  }
+
   const store = await storeFor(ctx.cwd)
-  const names = await Promise.all(
-    paths.map(async (path) => relative(store.projectRoot, await destination(ctx.cwd, path))),
-  )
+  const destinations = await Promise.all(paths.map((path) => destination(ctx.cwd, path)))
+  const names = destinations.map((path) => relative(store.projectRoot, path))
 
   for (const job of await new Delegations(store).list()) {
     if (
@@ -601,6 +617,14 @@ async function ownershipBlock(event: ToolCallEvent, ctx: ExtensionContext) {
             ? implementationRecovery
             : 'Use task_control to steer or pause, then revise_tasks to reassign ownership.'),
       }
+    }
+  }
+
+  const root = await projectRoot(store.projectRoot)
+
+  for (const path of destinations) {
+    if (!(await hostFileAllowed(root, store.projectRoot, path, event, bootstrapRoot))) {
+      return { block: true, reason: workerHandoff }
     }
   }
 
@@ -641,8 +665,8 @@ function registerDelegateTask(
     label: 'Delegate background task',
     description:
       'Start a background coordinator that can delegate scoped workers. ' +
-      'Use for substantial implementation, explicit delegation or work that would disrupt the ' +
-      'current discussion. Routine setup and related small work may stay on the host. Workers ' +
+      'Use for product changes, including routine maintenance, documents and repairs. ' +
+      'Do not split fresh repository bootstrap files into a delegated task. Workers ' +
       'cannot install dependencies, use the network or publish Git; declare host requirements. ' +
       'Return immediately and continue discussion. Supply context and scoped writePaths. ' +
       'For explicit Claude comparisons set implementerModel with research and empty writePaths. ' +

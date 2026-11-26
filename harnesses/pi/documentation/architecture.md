@@ -13,11 +13,11 @@ harness bridge. The bridge implements the same scoped tools used by Pi workers.
 
 ## Trusted host and untrusted execution
 
-The Codex orchestrator has normal Pi shell and file tools on the host. It can investigate, set up
-projects and make small quick edits directly. Explicit delegation and lengthy work go to background
-task coordinators. Substantial implementation is routed to workers by its prompt. Worker isolation
-is not a sandbox around the orchestrator; its shell can access everything available to the Pi
-process.
+The Codex orchestrator investigates, sets up projects and accepts verified candidates. Tracked
+workers implement and repair project changes, including test fixes and corrections after review. The
+host can integrate verified work and publish with authorization. Worker isolation is not a sandbox
+around the orchestrator: its shell can access everything available to Pi and must not be used to
+bypass file routing.
 
 The host loads role policy, freezes the project adapter and accepted design, creates candidate
 snapshots, dispatches workers and writes private receipts. Provider clients need their normal login
@@ -88,10 +88,11 @@ bounded input/output and explicit cancellation. Fable uses a fresh CLI process w
 WebSearch/WebFetch, no MCP servers and no ambient global customization. It offers sourced guidance
 and cannot accept or write a design.
 
-Document changes use a background task when delegated or lengthy, and ordinary tools for small quick
-edits. They require no accepted checkpoint and can retain open questions. Only substantial
-implementation uses the following scope snapshot mechanism; saving a document preserves the current
-session.
+Product document changes use a background document task. The host can record a small workshop
+decision in `design.md` or `design/design.md`. The 4 KiB workshop limit applies to replacement text
+(old plus new for targeted edits); a whole-file write or format also requires a small existing file.
+Neither path requires an implementation checkpoint; saving a document preserves the session and can
+leave open questions.
 
 The orchestrator's context uses append-only `context_edit` entries to excerpt bulky successful
 file/search tool results and historical write/edit/shell arguments after four newer model steps.
@@ -128,19 +129,23 @@ the host can recover without asking for acceptance again.
 
 ## Background task coordination
 
-The orchestrator chooses host work or delegation based on context, complexity and disruption.
-Routine setup and related edits may stay local, including in fresh sessions. There is no direct-edit
-size/call quota. Host tools provide network, dependency installation and Git operations under user
-authorization. Worker capabilities are explicit in every assignment and `harness_capabilities`;
-`delegate_task.requires` rejects host-only work before launching an incompatible worker. Scoped
-`project_edit` performs exact unique text replacement without regenerating a whole existing file.
+Route work by ownership, not complexity. Host tools provide network, dependency installation and Git
+operations under user authorization. Worker capabilities are explicit in every assignment and
+`harness_capabilities`; `delegate_task.requires` rejects host-only work before launching an
+incompatible worker. Scoped `project_edit` performs exact unique text replacement without
+regenerating a whole existing file.
 
 `delegate_task` and `workflow` return a durable task ID after spawning a detached supervisor. A
 project registry reserves write paths under a short OS lock. At most two tasks run; overlapping
 paths are rejected with case/Unicode folding. Accepted implementation excludes another writer. Reads
-and conversation remain available. Direct write/edit and document formatting check ownership; the
-orchestrator's unrestricted shell obeys the same rule through its prompt. Task controls persist
-separately from supervisor status, so foreground updates cannot overwrite worker progress.
+and conversation remain available. At `tool_call`, ordinary host writes, edits and in-place document
+formatting check reservations before allowing setup files, small workshop decisions or private
+scratch under `.pi/traces/scratch/`. The root README and package manifest are setup files only if
+the request began in a fresh root and it still contains only bootstrap artifacts. This lets the host
+finish a manifest created by install tooling without granting write access in a manifest-only
+product repository. Other destinations get a worker handoff even when no task is active. Integration
+operates on verified snapshots, not through ordinary model edits. Task controls persist separately
+from supervisor status, so foreground updates cannot overwrite worker progress.
 
 A fresh Codex coordinator gets a bounded explicit assignment, shared/role prompts and scoped folder
 instructions. It can inspect the candidate and delegate children without a call or turn ceiling. Pi

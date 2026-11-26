@@ -75,7 +75,7 @@ export default function harness(pi: ExtensionAPI): void {
     name: 'harness_capabilities',
     outputSchema: capabilitySchema,
     label: 'Inspect host and worker capabilities',
-    description: 'Choose host execution or delegation using actual capabilities and task context.',
+    description: 'Inspect host operations and tracked worker routes for project changes.',
     parameters: Type.Object({}),
     async execute() {
       return structuredResult(capabilities)

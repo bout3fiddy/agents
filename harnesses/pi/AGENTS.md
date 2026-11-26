@@ -23,10 +23,10 @@
   Keep viewing separate from session switching, cancellation and resumption. Group coordinator
   children and related reviews; retain completed ancestors as context when needed. Show delivery
   state honestly and preserve the exact guidance text and immutable worker scope.
-- The orchestrator has normal host shell and file tools. It workshops designs and makes small, quick
-  edits directly. Honor explicit delegation and send lengthy work to background task coordinators
-  while discussion continues. Delegate substantial implementation to Astra; Fable 5.2 medium or high
-  supplies independent design advice and explicitly requested performance measurements.
+- The conversational host workshops designs, handles setup and verifies and integrates candidates.
+  Send project changes, tests and repairs through tracked workers, including corrections to worker
+  output. Never use host shell to bypass routing. Fable 5.2 medium or high supplies independent
+  design advice and explicitly requested performance measurements.
 - Keep shell activity folding in the TUI renderer. Preserve observed failures, raw drill-down and
   transcript ordering. Exercise live and resumed sessions with `scripts/check-shell-terminal.py`.
 - Keep whiteboard binding credentials opaque and host-only. A current-branch message receipt, not an
@@ -40,7 +40,7 @@
   the task.
 - Keep trusted policy and receipts outside worker workspaces. Delegated product edits go through
   scoped workers and snapshot-bound verification. Never silently fall back from worker sandboxing.
-- Workshop document edits require no acceptance checkpoint, implementation worker or test adapter.
+- Small workshop decision captures need no acceptance checkpoint, implementation worker or adapter.
   Preserve workshop conversation and pending user input. `workflow` takes a settled design when the
   user requests implementation, records its scope and starts work without a separate acceptance
   command. Scope snapshots must not reset sessions or filter host/advisor conversation by date. Keep
@@ -50,7 +50,7 @@
 - Deliver consultation results once at the next safe model/tool boundary. Persist consumption for
   late waits, discard obsolete automatic delivery after newer user input, and preserve raw advice.
   Test delivery with actual Pi runtime events; boundary messages emit `entry_appended`.
-- Keep routine decisions within the orchestrator; delegate lengthy document work or explicit
+- Keep routine decisions within the orchestrator; delegate product documents and honor explicit
   delegation requests. Use `document_check` for Markdown formatting, bounded consultation excerpts,
   and concise independent advice. Preserve user constraints and exact raw traces when excerpting
   historical tool payloads from working context.
@@ -123,10 +123,9 @@
 - Apply document candidates only after scope, format, control revision and changed-file conflict
   checks. Maintenance code requires executable project checks. Never replace a pending integration
   journal. Keep subprocess cancellation bounded and propagated.
-- Choose direct work or delegation from context, complexity and disruption. Routine setup and
-  related edits may stay on the host; substantive implementation, explicit delegation and
-  distracting lengthy work go to workers. No direct-edit file/byte/call quota exists. Verify changed
-  behavior with executable tests and lint.
+- Guard ordinary host writes, edits and in-place formatting at the SDK boundary. Preserve task
+  reservations, host setup and small workshop decision capture. Verify product changes with
+  executable tests and lint; return failing evidence to the writer.
 - Inspect host/worker capabilities before dispatch. Workers cannot install dependencies, retain
   shell-generated lockfiles, configure host policy or publish Git. Handle authorized host operations
   directly, reject incompatible declared requirements, and use structured hostActions for handoff.

@@ -88,7 +88,7 @@ export function registerDocumentTools(pi: ExtensionAPI): void {
     description:
       'Check or format selected Markdown files with the pinned harness formatter. ' +
       'Respect root .prettierignore; check line width even when formatting is excluded. ' +
-      'Use once after a coherent edit, then fix reported failures. No generated checking scripts.',
+      'Host formatting follows file routing. Return product fixes to the worker.',
     parameters: Type.Object({
       paths: Type.Array(Type.String(), { minItems: 1, maxItems: 24 }),
       format: Type.Optional(Type.Boolean()),

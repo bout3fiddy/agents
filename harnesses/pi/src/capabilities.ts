@@ -11,11 +11,12 @@ export const capabilities = {
   host: {
     shell: 'Normal host shell, filesystem, network and existing authenticated CLIs.',
     tasks: [
-      'Repository setup',
+      'Fresh repository bootstrap, including starter README, ignore files and formatting manifest',
       'Dependency installation and lockfiles',
       'Git publication',
       'Project check configuration',
-      'Contextual document edits',
+      'Small workshop decision capture and private scratch',
+      'Tiger Style customization, verification and authorized integration',
       'Recovery of retained candidates',
       'Pause, inspect, revise and resume independent tasks',
     ],
@@ -36,7 +37,7 @@ export const capabilities = {
       'Report unavailable host capabilities immediately; repeating workers cannot supply them.',
   },
   routing:
-    'Use context, complexity and risk. Routine setup may stay on the host with executable ' +
-    'checks. Delegate substantial implementation, explicit requests, or work that disrupts the ' +
-    'current discussion. Use the performance specialist on explicit request.',
+    'Use tracked workers for project implementation, product documents, tests and repairs. ' +
+    'Send defects back to the writer; dispatch a scoped follow-up for closed tasks. Do not use ' +
+    'host shell to bypass file routing. Use the performance specialist on explicit request.',
 }

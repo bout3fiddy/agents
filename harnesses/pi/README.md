@@ -10,9 +10,9 @@ Resolve conflicts, unsafe paths or filesystem errors before continuing. If an in
 `.pi-tiger-style.lock`, confirm no setup is active before removing the empty directory.
 
 Codex workshops designs with the user and parallel Fable advice. It has shell and file tools for
-investigation, setup and small quick edits. Background task coordinators handle delegated work while
-discussion continues. Substantial implementation uses isolated Astra workers, executable checks and
-optional performance measurement.
+investigation, setup and acceptance. Tracked workers make project changes while discussion
+continues. Implementation uses isolated Astra workers by default, executable checks and optional
+performance measurement.
 
 `/start_whiteboard` opens this conversation’s tldraw-sync board. Use the iPad URL or scan the QR on
 its Mac stage; keep the stage open for PNG snapshots. Notify agent and Interpret sketchboard queue
@@ -163,13 +163,16 @@ no model-turn or elapsed-session cap. Session shutdown, replacement, reload and 
 pending advice. Results and inputs live in the project's private harness state under
 `consultations/`. Resuming can inspect a saved result; an abandoned running job must be restarted.
 
-The orchestrator chooses direct work or delegation from task complexity, context and disruption. A
-fresh-session repository setup, lint configuration, related document update or other routine task
-can stay on the host. Multiple files do not force delegation, and direct edits have no byte, call or
-turn quota. Substantial product implementation, explicit delegation and distracting unrelated work
-use background workers. Routine setup needs appropriate executable checks, with performance work by
-explicit request. Saving a document needs no implementation checkpoint; a Git commit requires user
-authorization.
+The orchestrator owns setup, Tiger Style customization, acceptance and authorized integration. In a
+fresh directory, it creates the starter README, ignore files and formatting manifest and runs the
+install and check itself; those files need no worker. In a product repository, changes to a README
+or package manifest go to a tracked worker.
+
+A small workshop decision can be saved to `design.md` or `design/design.md` without an
+implementation checkpoint. Use `.pi/traces/scratch/` for private probes. Send product documentation,
+code, tests and repairs through a tracked worker regardless of size. Return defects to the writer
+with the failing check. Host shell is unrestricted; never use it to bypass file routing. A Git
+commit requires user authorization.
 
 `harness_capabilities` reports the boundary. Host tools have ordinary filesystem, network and CLI
 access. Worker commands have no network/home access, Git publication or retained shell writes;
