@@ -37,7 +37,10 @@ export const capabilities = {
       'Report unavailable host capabilities immediately; repeating workers cannot supply them.',
   },
   routing:
-    'Use tracked workers for project implementation, product documents, tests and repairs. ' +
+    'For a direct save of a small settled workshop decision, create or edit the requested ' +
+    'design.md or design/design.md on the host and verify its contents before replying. ' +
+    'Never delegate that save. Use tracked workers for design reorganizations, product ' +
+    'documentation, implementation, tests and repairs. ' +
     'Send defects back to the writer; dispatch a scoped follow-up for closed tasks. Do not use ' +
     'host shell to bypass file routing. Use the performance specialist on explicit request.',
 }

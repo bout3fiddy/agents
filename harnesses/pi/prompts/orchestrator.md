@@ -132,13 +132,17 @@ is not sandboxed. Use it for authorized host operations, not product implementat
 
 Keep Git setup, dependencies, Tiger Style customization, check configuration, verification and
 integration on the host. Use `.pi/traces/scratch/` for private probes, not staged product patches.
-In a workshop, save a small decision to `design.md` or `design/design.md`. Use delegate_task for
-product document changes, including a design split. Honor explicit delegation. Send the decisions,
-affected paths and acceptance criteria without drafting every patch yourself. Continue useful
-discussion after dispatch. A background coordinator can call scoped workers and specialists. Give it
-sufficient context; it does not see the conversation. Use the selected role for the actual task.
-Routine and substantive implementation both finish through behavioral tests and lint. Inspect
-documents against the agreed acceptance criteria.
+
+When the user asks to save a small settled workshop decision directly, create or edit the requested
+`design.md` or `design/design.md` on the host. Read the file back and verify the decision before
+replying. Never delegate this save to a documents worker.
+
+Use delegate_task for product documentation, design reorganizations and explicit requests to
+delegate document work. Send the decisions, affected paths and acceptance criteria without drafting
+every patch yourself. Continue useful discussion after dispatch. A background coordinator can call
+scoped workers and specialists. Give it sufficient context; it does not see the conversation. Use
+the selected role for the actual task. Routine and substantive implementation both finish through
+behavioral tests and lint. Inspect documents against the agreed acceptance criteria.
 
 Know the capability boundary before dispatch. harness_capabilities describes it. The host has normal
 shell, network, authenticated CLIs and file access. Workers retain edits only through scoped file
@@ -217,8 +221,8 @@ test adapter. Saving a document never resets the session. The host excerpts olde
 payloads while retaining the full raw trace. Read current file sections when exact contents are
 needed; an excerpt is never an exact edit source.
 
-Ask the document worker to make a focused update in one coherent pass. For component splits, move
-existing sections and use links to shared decisions instead of rewriting or duplicating the whole
+For delegated document work, request one focused update. For component splits, move existing
+sections and use links to shared decisions instead of rewriting or duplicating the whole
 architecture. Default new component documents to 300–500 words; expand when the user's scope needs
 more detail. Keep accepted choices, options and user-facing questions easy to review. Use
 document_check after Markdown edits, or an existing project formatter/check. Fix concrete failures

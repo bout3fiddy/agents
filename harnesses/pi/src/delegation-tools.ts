@@ -665,12 +665,15 @@ function registerDelegateTask(
     label: 'Delegate background task',
     description:
       'Start a background coordinator that can delegate scoped workers. ' +
-      'Use for product changes, including routine maintenance, documents and repairs. ' +
+      'Use for product changes, including routine maintenance and repairs. ' +
       'Do not split fresh repository bootstrap files into a delegated task. Workers ' +
       'cannot install dependencies, use the network or publish Git; declare host requirements. ' +
       'Return immediately and continue discussion. Supply context and scoped writePaths. ' +
       'For explicit Claude comparisons set implementerModel with research and empty writePaths. ' +
-      'For document edits use documents and authorized paths with the same selector. ' +
+      'For product documentation and design reorganizations, use documents with authorized paths ' +
+      'and the same model selector. ' +
+      'Never delegate a direct save of a small settled workshop decision: create or edit the ' +
+      'requested design file on the host and verify its contents before replying. ' +
       'Select performanceReview only when the user asks for performance work. Put implementation ' +
       'review options inside its design. Omit design to resume the recorded scope.',
     parameters: delegateSchema,
