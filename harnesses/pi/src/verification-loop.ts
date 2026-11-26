@@ -6,8 +6,15 @@ import { Check } from 'typebox/value'
 import type { CommandResult, WorkerRequest } from './contracts.ts'
 import { digest, inventory, snapshotHash } from './paths.ts'
 import { createWorkspace, hasSkippedTests, installedNodeModules } from './project.ts'
-import { runSandboxed, workerAbortSignal } from './sandbox.ts'
+import { workerAbortSignal } from './sandbox.ts'
 import { atomicJson } from './state.ts'
+import {
+  effectiveExecution,
+  isolationUnavailable,
+  linkLockedDependencies,
+  runWorkerCommand,
+  type ExecutionPolicy,
+} from './worker-execution.ts'
 
 export const verificationLoopSchema = Type.Object(
   {
@@ -29,6 +36,15 @@ type Snapshot = { root: string; files: Map<string, Buffer>; hash: string }
 type Side = 'candidate' | 'original'
 type Failure = { status: 'failed' | 'blocked' | 'skipped' | 'cancelled'; reason: string }
 
+/** Where and how every sample of one loop runs. */
+type Samples = {
+  execution: ExecutionPolicy
+  trustedRoot: string
+  modules: string | null
+  timeoutMs: number
+  signal: AbortSignal
+}
+
 function problem(result: CommandResult): Failure | undefined {
   if (result.aborted) {
     return { status: 'cancelled', reason: 'Verification interrupted' }
@@ -40,6 +56,10 @@ function problem(result: CommandResult): Failure | undefined {
 
   if (result.exitCode === null || result.truncated) {
     return { status: 'blocked', reason: 'Incomplete command result' }
+  }
+
+  if (isolationUnavailable(result)) {
+    return { status: 'blocked', reason: 'Sandbox could not start; commands never fall back' }
   }
 
   if (result.exitCode === 71 && result.output.startsWith('sandbox-exec: execvp() of ')) {
@@ -62,17 +82,18 @@ async function capture(root: string): Promise<Snapshot> {
   return { root, files, hash: snapshotHash(files) }
 }
 
-async function runSample(
-  snapshot: Snapshot,
-  modules: string | null,
-  argv: string[],
-  timeoutMs: number,
-  signal?: AbortSignal,
-) {
+async function runSample(snapshot: Snapshot, argv: string[], samples: Samples) {
+  const { execution, trustedRoot, modules, timeoutMs, signal } = samples
   const workspace = await createWorkspace(snapshot.root, snapshot.files, modules)
 
   try {
-    return await runSandboxed(workspace, argv, timeoutMs, signal)
+    const readable = await linkLockedDependencies(
+      workspace,
+      trustedRoot,
+      snapshot.files.keys(),
+      execution,
+    )
+    return await runWorkerCommand(execution, { workspace, argv, timeoutMs, signal, readable })
   } finally {
     await rm(workspace, { recursive: true, force: true })
   }
@@ -88,18 +109,25 @@ async function runCases(
   input: Input,
   candidate: Snapshot,
   original: Snapshot | undefined,
+  project: WorkerRequest['project'],
   signal: AbortSignal,
 ) {
   const samples: { seed: number; original: number; candidate: number }[] = []
   const order: Side[] = ['original', 'candidate']
   const start = Date.now()
-  const modules = await installedNodeModules(candidate.root)
+  const run: Samples = {
+    execution: await effectiveExecution(project),
+    trustedRoot: project.root,
+    modules: await installedNodeModules(candidate.root),
+    timeoutMs: input.timeoutMs ?? 30000,
+    signal,
+  }
 
   for (let index = 0; index < input.count; index++) {
     const seed = input.firstSeed + index
     const argv = input.argv.map((value) => value.replaceAll('{seed}', String(seed)))
     const replay = { ...input, firstSeed: seed, count: 1 }
-    const partial = { completed: index, seed, replay, samples }
+    const partial = { completed: index, seed, replay, samples, execution: run.execution.mode }
     const outputs: Partial<Record<Side, string>> = {}
     const sides = original ? (index % 2 ? order.toReversed() : order) : (['candidate'] as const)
 
@@ -109,7 +137,7 @@ async function runCases(
 
       try {
         signal.throwIfAborted()
-        result = await runSample(snapshot, modules, argv, input.timeoutMs ?? 30000, signal)
+        result = await runSample(snapshot, argv, run)
       } catch (error) {
         return {
           ...partial,
@@ -174,6 +202,7 @@ async function runCases(
     completed: input.count,
     samples,
     comparison,
+    execution: run.execution.mode,
     elapsedMs: Date.now() - start,
   }
 }
@@ -209,7 +238,7 @@ export async function verifyLoop(request: WorkerRequest, raw: unknown, signal?: 
   const report =
     input.mode !== 'seeded' && !original
       ? { status: 'blocked', completed: 0, samples: [], reason: 'Original snapshot unavailable' }
-      : await runCases(input, candidate, original, abort)
+      : await runCases(input, candidate, original, request.project, abort)
   const status = deadline.aborted && report.status === 'cancelled' ? 'blocked' : report.status
   const receipt = request.outputPath + '.verify-' + randomUUID() + '.json'
   const { samples, ...summary } = report

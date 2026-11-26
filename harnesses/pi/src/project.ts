@@ -15,6 +15,13 @@ import type { Project, ProjectCheck, Receipt } from './contracts.ts'
 import { runOnHost, runSandboxed } from './sandbox.ts'
 import { addGitIndex } from './probe-git.ts'
 import { taskDirectory, temporaryDirectory, type TaskOwner } from './temp.ts'
+import {
+  checkRunner,
+  effectiveExecution,
+  linkLockedDependencies,
+  resolveExecution,
+  type ExecutionPolicy,
+} from './worker-execution.ts'
 
 export const harnessRoot = fileURLToPath(new URL('../', import.meta.url))
 export const defaultDatabasePaths = [
@@ -27,9 +34,12 @@ export const defaultDatabasePaths = [
 
 type ReadMetadata = <T>(path: string) => Promise<T | undefined>
 
+/** Load the project adapter and freeze the host's execution decision for this root. The decision
+ * comes from the host's registry and environment, never from the adapter or any project file. */
 export async function loadProject(
   root: string,
   read: ReadMetadata = (path) => readJson(join(root, path)),
+  execution: (root: string) => Promise<ExecutionPolicy> = resolveExecution,
 ): Promise<Project> {
   const adapter = await read<{
     checks?: ProjectCheck[]
@@ -97,7 +107,13 @@ export async function loadProject(
   const databasePaths = adapter?.databasePaths ?? defaultDatabasePaths
   validateScope(instrumentationPaths)
   validateScope(databasePaths)
-  return { root: resolve(root), checks, instrumentationPaths, databasePaths }
+  return {
+    root: resolve(root),
+    checks,
+    instrumentationPaths,
+    databasePaths,
+    execution: await execution(resolve(root)),
+  }
 }
 
 async function linkedDependency(root: string, name: string): Promise<string | null> {
@@ -307,29 +323,73 @@ async function attributeLintFindings(
 
 type CheckRun = { check: ProjectCheck; probe: string; argv: string[] }
 
+/** One verification of one snapshot under the execution decision in force when it started. */
+type CheckContext = {
+  workspace: string
+  files: Map<string, Buffer>
+  project: Project
+  execution: ExecutionPolicy
+  signal: AbortSignal | undefined
+}
+
 async function runCheck(
-  workspace: string,
-  files: Map<string, Buffer>,
+  context: CheckContext,
   check: ProjectCheck,
-  project: Project,
-  signal: AbortSignal | undefined,
+  runner: 'sandbox' | 'host',
   prepare?: (run: CheckRun) => Promise<string[]>,
 ) {
+  const { workspace, files, project, execution, signal } = context
 
   // Every command receives a disposable copy, so test code cannot alter the reviewed candidate.
   const probe = await realpath(await createWorkspace(workspace, files))
 
   try {
     const git = await addGitIndex(probe, workspace, project.root)
+    const linked = await linkLockedDependencies(probe, project.root, files.keys(), execution)
     const argv = prepare ? await prepare({ check, probe, argv: check.argv }) : check.argv
     const result =
-      check.runner === 'host'
+      runner === 'host'
         ? await runOnHost(probe, argv, check.timeoutMs, signal)
-        : await runSandboxed(probe, argv, check.timeoutMs, signal, { readable: git })
+        : await runSandboxed(probe, argv, check.timeoutMs, signal, {
+            readable: [...git, ...linked],
+          })
     return { probe, result }
   } finally {
     await rm(probe, { recursive: true, force: true })
   }
+}
+
+/** Run one project check where the execution decision allows. A check that needs the host under
+ * required isolation is reported unavailable: it neither runs on the host nor passes unrun. */
+async function projectReceipt(
+  context: CheckContext,
+  check: ProjectCheck,
+  snapshot: string,
+): Promise<Receipt> {
+  const runner = checkRunner(context.execution, check.runner)
+
+  if (runner === 'refused') {
+    return {
+      snapshot,
+      check: check.id,
+      status: 'unavailable',
+      result: {
+        argv: check.argv,
+        exitCode: null,
+        output:
+          `Check ${check.id} declares runner=host, but the host requires isolation ` +
+          `(${context.execution.reason}). It was not run. The user can lift the requirement ` +
+          'or the project can make the check sandbox-compatible.',
+        timedOut: false,
+        aborted: false,
+        truncated: false,
+        durationMs: 0,
+      },
+    }
+  }
+
+  const { result } = await runCheck(context, check, runner)
+  return { snapshot, check: check.id, status: checkStatus(result, true), result }
 }
 
 function checkStatus(result: Receipt['result'], tests: boolean): Receipt['status'] {
@@ -341,7 +401,9 @@ function checkStatus(result: Receipt['result'], tests: boolean): Receipt['status
 }
 
 /** Behavioral checks run first and all report. Harness lint and host checks form the final gate:
- * they run only once every sandbox check passes, so earlier repair rounds never see them. */
+ * they run only once every sandbox check passes, so earlier repair rounds never see them.
+ * A trusted-local project runs its checks as local commands in the same order; harness lint
+ * always stays in the sandbox. */
 export async function verifyProject(
   workspace: string,
   project: Project,
@@ -365,13 +427,14 @@ export async function verifyProject(
       : []
   const checks = project.checks.filter((check) => check.kind !== 'benchmark')
   const receipts: Receipt[] = []
+  const execution = await effectiveExecution(project)
+  const context: CheckContext = { workspace, files, project, execution, signal }
   let open = true
 
   for (const check of checks.filter((item) => item.runner !== 'host')) {
-    const { result } = await runCheck(workspace, files, check, project, signal)
-    const status = checkStatus(result, true)
-    receipts.push({ snapshot: hash, check: check.id, status, result })
-    open &&= status === 'passed' || !check.required
+    const receipt = await projectReceipt(context, check, hash)
+    receipts.push(receipt)
+    open &&= receipt.status === 'passed' || !check.required
   }
 
   if (open) {
@@ -383,7 +446,7 @@ export async function verifyProject(
       timeoutMs: 120_000,
     }
     let probeRoot = ''
-    const { result } = await runCheck(workspace, files, lint, project, signal, async (run) => {
+    const { result } = await runCheck(context, lint, 'sandbox', async (run) => {
       probeRoot = run.probe
 
       if (!retained.length) {
@@ -427,10 +490,9 @@ export async function verifyProject(
       break
     }
 
-    const { result } = await runCheck(workspace, files, check, project, signal)
-    const status = checkStatus(result, true)
-    receipts.push({ snapshot: hash, check: check.id, status, result })
-    open = status === 'passed' || !check.required
+    const receipt = await projectReceipt(context, check, hash)
+    receipts.push(receipt)
+    open = receipt.status === 'passed' || !check.required
   }
 
   for (const kind of ['test', ...(database ? ['database'] : [])]) {

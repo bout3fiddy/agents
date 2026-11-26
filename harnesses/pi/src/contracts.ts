@@ -2,6 +2,7 @@ import { Type, type Static } from 'typebox'
 import { Check } from 'typebox/value'
 import { engineeringReviewSchema } from './testing-assessment.ts'
 import { hostCapability } from './capabilities.ts'
+import type { ExecutionPolicy } from './worker-execution.ts'
 
 export const roleNames = [
   'orchestrator',
@@ -179,6 +180,9 @@ export type CommandResult = {
   aborted: boolean
   truncated: boolean
   durationMs: number
+
+  /** How the process actually ran. Absent on results recorded before execution policy. */
+  runner?: 'sandbox' | 'host'
 }
 
 export type ProjectCheck = {
@@ -188,7 +192,8 @@ export type ProjectCheck = {
   kind: 'test' | 'database' | 'benchmark' | 'static'
   timeoutMs: number
 
-  /** Host checks run after sandbox checks pass, outside the worker sandbox. */
+  /** Host checks run after sandbox checks pass, outside the worker sandbox. Required isolation
+   * refuses them; a trusted-local project runs every check as a local command. */
   runner?: 'sandbox' | 'host'
 }
 
@@ -198,6 +203,10 @@ export type Project = {
   instrumentationPaths: string[]
   databasePaths: string[]
   nodeModules?: string
+
+  /** The host's execution decision for this root, frozen at dispatch. Absent means isolated.
+   * Commands run under the stricter of this and the host's current decision. */
+  execution?: ExecutionPolicy
 }
 
 export type Receipt = {
@@ -244,6 +253,9 @@ export type WorkerEvidence = Partial<ModelRoute> & {
   closedReview?: { snapshot: string; model: string; paths: string[] }
   thinking?: string
   liveWorkerId?: string
+
+  /** The execution decision in force when the worker submitted. */
+  execution?: ExecutionPolicy
   role: WorkerRole | 'reviewer' | 'database-reviewer' // Historical receipts.
   snapshot: string
   result: WorkerResult

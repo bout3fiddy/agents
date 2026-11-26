@@ -26,6 +26,7 @@ import { runLocalCandidate } from './local-candidate.ts'
 import { runBranchTask } from './branch-runner.ts'
 import { dispatcher } from './dispatch.ts'
 import { trackDispatch } from './progress.ts'
+import { taskExecution } from './worker-execution.ts'
 
 async function integrationLock(store: StateStore, signal: AbortSignal) {
   for (let attempt = 0; attempt < 200; attempt++) {
@@ -171,7 +172,10 @@ export async function runDelegation(
       return state
     }
 
-    const project = await loadProject(request.root)
+    const loaded = await loadProject(request.root)
+
+    // A task the host marked for isolation keeps it whatever the project's own decision is.
+    const project = { ...loaded, execution: taskExecution(loaded.execution, request) }
     const retained = await readJson<{ workspace: string; originals: string }>(
       join(directory, 'workspace.json'),
     )

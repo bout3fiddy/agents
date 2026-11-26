@@ -1,5 +1,5 @@
-import { rm, readFile, writeFile } from 'node:fs/promises'
-import { join } from 'node:path'
+import { mkdir, rm, readFile, writeFile } from 'node:fs/promises'
+import { dirname, join } from 'node:path'
 import { Type } from 'typebox'
 import type { ToolDefinition } from '@earendil-works/pi-coding-agent'
 import {
@@ -14,12 +14,19 @@ import {
 } from './contracts.ts'
 import { fileTools, textResult } from './file-tools.ts'
 import { createWorkspace, harnessRoot, instructions } from './project.ts'
-import { runSandboxed } from './sandbox.ts'
 import { addGitIndex } from './probe-git.ts'
-import { fileHashes, inventory, snapshotPath, writable } from './paths.ts'
+import { fileHashes, inventory, safePath, snapshotPath, writable } from './paths.ts'
 import { checkDocuments } from './document-tools.ts'
-import { capabilities } from './capabilities.ts'
+import { workerCapabilities } from './capabilities.ts'
 import { atomicJson } from './state.ts'
+import {
+  effectiveExecution,
+  isolationUnavailable,
+  linkLockedDependencies,
+  runWorkerCommand,
+  storedExecution,
+  type ExecutionMode,
+} from './worker-execution.ts'
 
 import { verificationLoopSchema, verifyLoop } from './verification-loop.ts'
 import { formatSource } from './source-format.ts'
@@ -31,6 +38,67 @@ export const references: Record<string, string> = {
   machine: 'skills/zig/references/machine-level-hypotheses.md',
   housekeeping: 'skills/housekeeping/SKILL.md',
   'readability-spacing': 'harnesses/pi/scripts/linting/readability.mjs',
+}
+
+const commandGuidance =
+  'Call run_command directly for shell commands and tests, including independent checks. ' +
+  'Preserve each check’s exit status when grouping commands or filtering output. ' +
+  'The copy has a Git index and HEAD for read-only git commands. ' +
+  'Retain edits with project_edit/project_write. '
+
+/** Describe the command tool for the decision frozen at dispatch. Each result also reports the
+ * mode and runner actually used, which can only be more isolated. */
+function commandDescription(mode: ExecutionMode): string {
+  return mode === 'trusted-local'
+    ? commandGuidance +
+        'Runs argv as a normal local command in a disposable copy of the candidate: installed ' +
+        'dependencies, loopback and network behave as in the trusted checkout. Write temporary ' +
+        'files under $TMPDIR. Writes in the copy are discarded, and changes to candidate paths ' +
+        'outside the assignment are undone. Do not install dependencies or change other files.'
+    : commandGuidance +
+        'Run isolated argv. npm/npx use installed tools or offline cache. ' +
+        'No network/home access; write temporary files under $TMPDIR, since /tmp is denied.'
+}
+
+/** A trusted-local command has the user's file authority, so it can reach the candidate by
+ * absolute path. Undo what it changed outside the assignment: only scoped file tools retain
+ * edits. Paths excluded from snapshots are not observed. Returns the restored paths.
+ *
+ * This attributes every change during the command to the command, as the coordinator's own
+ * write check does for a child. It is correct only while one worker at a time holds a candidate:
+ * the coordinator runs children serially and each local or branch candidate has its own
+ * worktree. Running workers concurrently on one candidate would let this revert a sibling's
+ * edit, so that change must replace this step first. */
+async function restoreUnassigned(
+  workspace: string,
+  before: Map<string, Buffer>,
+  assigned: (path: string) => boolean,
+): Promise<string[]> {
+  const after = await inventory(workspace)
+  const restored: string[] = []
+
+  for (const name of new Set([...before.keys(), ...after.keys()])) {
+    const original = before.get(name)
+    const current = after.get(name)
+    const unchanged = original ? current?.equals(original) : !current
+
+    if (unchanged || assigned(name)) {
+      continue
+    }
+
+    const target = await safePath(workspace, name)
+
+    if (original) {
+      await mkdir(dirname(target), { recursive: true })
+      await writeFile(target, original)
+    } else {
+      await rm(target, { force: true })
+    }
+
+    restored.push(name)
+  }
+
+  return restored.sort()
 }
 
 export function createWorkerTools(request: WorkerRequest, role: Role) {
@@ -50,6 +118,19 @@ export function createWorkerTools(request: WorkerRequest, role: Role) {
     request.documentsOnly,
     snapshotPath,
   )
+  const assigned = (path: string) => {
+    try {
+      return (
+        writeScopes !== undefined &&
+        writable(path, writeScopes, request.documentsOnly) &&
+        writable(path, roleScopes)
+      )
+    } catch {
+
+      // A name the scope rules reject outright is never part of an assignment.
+      return false
+    }
+  }
 
   if (request.originals) {
     const originalRead = fileTools(
@@ -168,33 +249,64 @@ export function createWorkerTools(request: WorkerRequest, role: Role) {
         'or paired medians. Raw samples are retained. Project acceptance checks remain required.',
       parameters: verificationLoopSchema,
       async execute(_id, input, signal) {
+        const execution = await effectiveExecution(request.project)
+        const before =
+          execution.mode === 'trusted-local' ? await inventory(request.workspace) : undefined
         const result = await verifyLoop(request, input, signal)
-        return { ...textResult(result), isError: result.status !== 'passed' }
+        const restored = before ? await restoreUnassigned(request.workspace, before, assigned) : []
+        return {
+          ...textResult({
+            ...result,
+            ...(restored.length > 0 && { restoredCandidatePaths: restored }),
+          }),
+          isError: result.status !== 'passed' || restored.length > 0,
+        }
       },
     },
     {
       name: 'run_command',
-      label: 'Run isolated command',
-      description:
-        'Call run_command directly for shell commands and tests, including independent checks. ' +
-        'Run isolated argv. npm/npx use installed tools or offline cache. ' +
-        'Preserve each check’s exit status when grouping commands or filtering output. ' +
-        'No network/home access; write temporary files under $TMPDIR, since /tmp is denied. ' +
-        'The copy has a Git index and HEAD for read-only git commands. ' +
-        'Retain edits with project_edit/project_write.',
+      label: 'Run command',
+      description: commandDescription(storedExecution(request.project.execution).mode),
+
+      // The mode is not a parameter: it comes from the host's decision alone.
       parameters: Type.Object({
         argv: Type.Array(Type.String(), { minItems: 1, maxItems: 100 }),
         timeoutMs: Type.Optional(Type.Integer({ minimum: 1, maximum: 120000 })),
       }),
       async execute(id, raw, signal) {
         const { argv, timeoutMs } = raw as { argv: string[]; timeoutMs?: number }
-        const probe = await createWorkspace(request.workspace)
+        const execution = await effectiveExecution(request.project)
+        const files = await inventory(request.workspace)
+        const probe = await createWorkspace(request.workspace, files)
 
         try {
-          const readable = await addGitIndex(probe, request.workspace, request.project.root)
-          const result = await runSandboxed(probe, argv, timeoutMs, signal, { readable })
+          const root = request.project.root
+          const git = await addGitIndex(probe, request.workspace, root)
+          const linked = await linkLockedDependencies(probe, root, files.keys(), execution)
+          const result = await runWorkerCommand(execution, {
+            workspace: probe,
+            argv,
+            timeoutMs,
+            signal,
+            readable: [...git, ...linked],
+          })
           commands.push(result)
-          return textResult({ ...result, call: id })
+          const restored =
+            execution.mode === 'trusted-local'
+              ? await restoreUnassigned(request.workspace, files, assigned)
+              : []
+          return {
+            ...textResult({
+              ...result,
+              execution: execution.mode,
+              ...(isolationUnavailable(result) && {
+                isolation: 'The sandbox could not start. The command did not run on the host.',
+              }),
+              ...(restored.length > 0 && { restoredCandidatePaths: restored }),
+              call: id,
+            }),
+            ...(restored.length > 0 && { isError: true }),
+          }
         } finally {
           await rm(probe, { recursive: true, force: true })
         }
@@ -295,7 +407,8 @@ export async function assignment(request: WorkerRequest) {
     changedFiles: request.changedFiles ?? (await changedSinceBaseline(request)),
     ...(smallIndex ? { originalPaths: paths } : {}),
     checks: request.project.checks,
-    capabilities: capabilities.workers,
+    execution: storedExecution(request.project.execution),
+    capabilities: workerCapabilities(storedExecution(request.project.execution).mode),
     ...(request.documentsOnly ? { retainedFileTypes: ['.md', '.txt', '.rst'] } : {}),
     folderInstructions: await instructions(request.workspace, request.checkpoint.writePaths),
     output: submissionInstructions(request.role),

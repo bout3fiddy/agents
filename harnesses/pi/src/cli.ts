@@ -12,6 +12,22 @@ import { runSandboxed } from './sandbox.ts'
 import { runWorkflow } from './workflow.ts'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
+import {
+  recordTrustDecision,
+  resolveExecution,
+  trustRegistryPath,
+  type TrustDecision,
+} from './worker-execution.ts'
+
+/** Show or record the user's execution decision for one project. Host only: the registry sits in
+ * the private agent directory, which isolated worker commands can neither read nor write. */
+export async function trust(root: string, decision?: string) {
+  const execution =
+    decision === undefined
+      ? await resolveExecution(root)
+      : await recordTrustDecision(root, decision as TrustDecision | 'unknown')
+  return { project: root, registry: trustRegistryPath(), execution }
+}
 
 export async function doctor(agentDir = join(homedir(), '.pi', 'agent')) {
   const roles = await Promise.all(
@@ -79,6 +95,13 @@ if (process.argv[1] && resolve(process.argv[1]) === new URL(import.meta.url).pat
     case 'doctor':
       console.log(JSON.stringify(await doctor(argument), null, 2))
       break
+    case 'trust':
+      if (process.argv.length > 4) {
+        throw new Error('From the project root: trust [trusted-local|required-isolation|unknown]')
+      }
+
+      console.log(JSON.stringify(await trust(store.projectRoot, argument), null, 2))
+      break
     case 'run': {
       const controller = new AbortController()
       process.once('SIGINT', () => controller.abort())
@@ -114,6 +137,9 @@ if (process.argv[1] && resolve(process.argv[1]) === new URL(import.meta.url).pat
       break
     }
     default:
-      throw new Error('Commands: doctor, gc [--dry-run], run [provider/model], status')
+      throw new Error(
+        'Commands: doctor, gc [--dry-run], run [provider/model], status, ' +
+          'trust [trusted-local|required-isolation|unknown]',
+      )
   }
 }

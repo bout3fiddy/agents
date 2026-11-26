@@ -1,14 +1,7 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { gitCommand, GitCommandError } from './git-branches.ts'
-
-type LockEntry = {
-  version?: string
-  link?: boolean
-  dependencies?: Record<string, string>
-  devDependencies?: Record<string, string>
-}
-type Lockfile = { packages?: Record<string, LockEntry> }
+import { lockedDependencyDrift } from './worker-execution.ts'
 
 async function readOptional(path: string): Promise<string | undefined> {
   try {
@@ -41,7 +34,9 @@ async function lockfile(root: string, commit: string | undefined, signal?: Abort
 }
 
 /** Compare the direct dependencies a lockfile pins with the host node_modules that workers link.
- * Workers run offline, so a mismatch here fails every check that imports the missing package. */
+ * Workers cannot install, so a mismatch here fails every check that imports the missing package.
+ * Nested trees are compared with their own lockfiles when a command copy links them; see
+ * linkLockedDependencies. */
 export async function dependencyDrift(
   root: string,
   commit?: string,
@@ -53,42 +48,7 @@ export async function dependencyDrift(
     return []
   }
 
-  let lock: Lockfile
-
-  try {
-    lock = JSON.parse(text) as Lockfile
-  } catch {
-    return ['package-lock.json is not valid JSON']
-  }
-
-  const manifest = lock.packages?.['']
-  const names = Object.keys({ ...manifest?.dependencies, ...manifest?.devDependencies }).sort()
-  const problems: string[] = []
-
-  for (const name of names) {
-    const entry = lock.packages?.[`node_modules/${name}`]
-
-    if (!entry?.version || entry.link) {
-      continue
-    }
-
-    const installed = await readOptional(join(root, 'node_modules', name, 'package.json'))
-    let version: string | undefined
-
-    try {
-      version = installed ? (JSON.parse(installed) as { version?: string }).version : undefined
-    } catch {
-      version = undefined
-    }
-
-    if (!version) {
-      problems.push(`${name}@${entry.version} is missing`)
-    } else if (version !== entry.version) {
-      problems.push(`${name} is ${version}; the lockfile pins ${entry.version}`)
-    }
-  }
-
-  return problems
+  return lockedDependencyDrift(text, join(root, 'node_modules'))
 }
 
 /** Reject dispatch once, on the host, instead of letting every worker rediscover the gap. */
