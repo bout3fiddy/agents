@@ -106,21 +106,27 @@ export async function runSandboxed(
   signal?: AbortSignal,
   options: RunOptions = {},
 ): Promise<CommandResult> {
-  return runCommand(workspace, argv, timeoutMs, signal, { ...options, host: false })
+  const result = await runCommand(workspace, argv, timeoutMs, signal, { ...options, host: false })
+  return { ...result, runner: 'sandbox' }
 }
 
 /** Project checks marked runner=host need services the sandbox denies: database servers,
- * browsers, loopback listeners or Docker. They still run in a disposable copy with a minimal
- * environment, but with the user's normal filesystem, network and process permissions. */
+ * browsers, loopback listeners or Docker. Commands of a trusted-local project take this route
+ * too. They still run in a disposable copy with a minimal environment, but with the user's normal
+ * filesystem, network and process permissions. Callers decide through worker-execution.ts; this
+ * is never a fallback for a sandbox that failed to start. */
 export async function runOnHost(
   workspace: string,
   argv: string[],
   timeoutMs = 120_000,
   signal?: AbortSignal,
 ): Promise<CommandResult> {
-  return runCommand(workspace, argv, timeoutMs, signal, { host: true })
+  const result = await runCommand(workspace, argv, timeoutMs, signal, { host: true })
+  return { ...result, runner: 'host' }
 }
 
+// Only these names cross from the host process, so provider tokens and other credentials held in
+// its environment never reach a command or its captured output.
 function hostEnvironment(scratch: string): NodeJS.ProcessEnv {
   const inherited = ['PATH', 'USER', 'LOGNAME', 'SHELL', 'DOCKER_HOST', 'DOCKER_CONFIG']
   return {

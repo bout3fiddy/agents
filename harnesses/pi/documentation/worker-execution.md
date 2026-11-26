@@ -1,0 +1,160 @@
+# Worker execution policy
+
+Worker-issued commands run one of two ways: as normal local commands, or inside the command sandbox.
+The user decides which, per project, and the host records that decision outside every project.
+Workers, project files, prompts and tool arguments can add isolation but can never remove it. The
+sandbox is configured software behind the existing tools; no tool selects it.
+
+## Modes
+
+- `trusted-local`: the user enrolled this exact project root. Commands run as local commands.
+- `isolated`: no decision is recorded. This is the default. Commands run in the sandbox.
+- `required-isolation`: the user, the host process or the host task demands it. Commands run in the
+  sandbox and nothing runs on the host.
+
+The modes are ordered from least to most isolated. Whenever two decisions meet, the more isolated
+one applies.
+
+A project nobody enrolled behaves exactly as before this policy existed: commands are sandboxed and
+a check the project adapter marks `runner: host` still runs on the host. `required-isolation`
+removes that last route as well.
+
+## Recording a decision (host only)
+
+Run the harness CLI from the project root. `h` is the installed `harnesses/pi` directory.
+
+```sh
+h=/absolute/path/to/harnesses/pi
+cd /absolute/path/to/project || exit 1
+cli() { node --import "$h/node_modules/tsx/dist/loader.mjs" "$h/src/cli.ts" "$@"; }
+
+cli trust                     # show the decision in force
+cli trust trusted-local       # enroll: normal local commands
+cli trust required-isolation  # always sandbox this project
+cli trust unknown             # forget the decision; back to isolated
+```
+
+Each form prints the project, the registry path and the resulting decision. The registry is
+`harness-trust.json` in the private agent directory (`~/.pi/agent`, or `PI_HARNESS_AGENT_DIR`),
+written atomically with mode `0600`. It holds at most 256 projects in 256 KiB. Concurrent recordings
+are not serialized; the last one wins.
+
+Enrollment names one canonical directory. A child directory, a copy, another checkout of the same
+repository or a path that does not resolve is unknown and stays isolated. Task worktrees below an
+enrolled project use that project's decision, because the decision follows the project root the host
+dispatched from, not the worktree path.
+
+Enrolling is a statement that you trust the code in that checkout and the changes workers make to
+it. Do not enroll a repository you would not run `npm test` in yourself.
+
+## Requiring isolation
+
+Any one of these is enough, and none can be overridden from below:
+
+- **Project:** `cli trust required-isolation` in that project.
+- **Host process:** start the host with `PI_HARNESS_ISOLATION=required`. Every project it dispatches
+  is isolated, enrolled or not. Any other non-empty value is rejected rather than interpreted.
+- **Host task:** a stored task request carrying `isolation: 'required'`. The delegation, local
+  candidate and branch runners apply it to that task's workers and verification.
+
+The task field is read today but no host tool sets it yet: the delegation tool schemas sit outside
+the change that introduced this policy. Until one does, use the project or host-process form for
+external or untrusted work. The foreground `workflow` route reads the project and host-process
+decisions only.
+
+## How a decision is applied
+
+The host resolves the decision when it loads the project and freezes it into each worker request.
+Before every command the worker resolves the host's current decision again and uses the stricter of
+the two. Consequences:
+
+- A request that claims trust for a root the host never enrolled runs isolated.
+- Revoking trust, or setting the host requirement, takes effect on the next command of a running
+  worker.
+- Granting trust never reaches a worker that was dispatched isolated; dispatch again.
+
+The project adapter `.pi/harness.json` is a repository file. It has no execution field and an
+unknown field is rejected. Under `required-isolation` a check it marks `runner: host` is reported
+`unavailable` with the reason; it neither runs on the host nor passes unrun.
+
+A malformed registry, an invalid `PI_HARNESS_ISOLATION` or a malformed stored decision stops
+resolution with an error. Nothing defaults to a less isolated mode.
+
+## No fallback
+
+When the sandbox cannot start, the command fails and reports it. That covers platforms other than
+macOS and `sandbox-exec` nested inside another sandbox. `run_command` returns the failed result with
+an `isolation` note, and `verify_loop` reports `blocked`. Nothing retries on the host.
+
+Every command result records `runner` (`sandbox` or `host`), and worker evidence records the
+decision in force at submission.
+
+## What trusted-local changes
+
+`run_command`, `verify_loop` and project checks run argv directly, still in a disposable copy of the
+candidate, with these properties:
+
+- Installed dependencies, loopback listeners and network behave as in the checkout.
+- The environment is a short allowlist (`PATH`, `USER`, `LOGNAME`, `SHELL`, Docker settings) plus
+  the user's `HOME`, a private `TMPDIR`, `CI=1` and `NO_COLOR=1`. Other variables of the host
+  process, including provider tokens, are not passed and so cannot appear in captured output.
+- Timeouts, cancellation and process-group cleanup are the same code as sandboxed commands.
+- Writes in the working directory land in the copy and are discarded. Retained edits still go
+  through the scoped file tools.
+- After each command the tool compares the candidate with its state before the command and undoes
+  changes to paths outside the assignment, reporting them as `restoredCandidatePaths` with an error
+  result. Host verification still checks scope and snapshot independently.
+
+The restore step attributes every change made during a command to that command. That holds because
+one worker at a time holds a candidate: the coordinator runs its children serially and each local or
+branch candidate has its own worktree. Concurrent workers on one candidate would need a different
+safeguard first.
+
+Harness lint always runs in the sandbox. Benchmark checks still run in the sandbox in every mode and
+do not receive nested dependency links; that route is outside the change that introduced this
+policy.
+
+### What it does not protect
+
+`trusted-local` is not a containment boundary. A local command has your file, network and process
+authority. It can read credential files in your home directory, write anywhere you can, including
+the registry itself, and start processes that outlive it. The restore step above catches accidental
+writes to the candidate; it does not observe paths excluded from snapshots (dependency directories,
+`.env` files, private harness state) and cannot stop a process that writes later. Scoped retained
+writes, the disposable candidate, check receipts, host publication and independent acceptance are
+unchanged, but under `trusted-local` they guard against mistakes, not against hostile code.
+
+For work you do not trust, use isolation. The sandbox limits are described in
+[architecture.md](architecture.md).
+
+## Nested dependencies
+
+A command copy has always linked the project's root `node_modules`. A package below the root with
+its own `package-lock.json` now also gets its installed tree linked from the project root the host
+dispatched from, in both modes, so tests there resolve the versions that lockfile pins.
+
+- A tree is linked only when the direct dependencies it holds match the lockfile in the copy.
+- A tree that differs stops the command with the mismatches and the `npm ci` location to hand to the
+  host. Skipping the link would let resolution climb to a parent tree and load another version.
+- A lockfile without an installed tree is left alone; imports fail as they would in the checkout.
+- Under isolation a tree is readable and never writable, and one that resolves outside the project
+  is refused. A trusted checkout may link its dependencies wherever it keeps them.
+- At most 64 nested trees are linked per copy.
+
+Workers still cannot install dependencies. Under `trusted-local` an install command would write
+through the link into the host tree; treat installation as a host action.
+
+## Verification
+
+`tests/worker-execution.test.ts` covers the decisions with Node built-ins only, so it runs inside an
+isolated candidate copy without installed dependencies:
+
+```sh
+node --experimental-strip-types --test harnesses/pi/tests/worker-execution.test.ts
+```
+
+`tests/verification-loop.test.ts` and `tests/worker-lifecycle.test.ts` drive the real worker tools,
+the host check route and the Claude MCP bridge. Their loopback, host-runner refusal, cancellation
+and timeout cases need an unsandboxed host with a working `sandbox-exec`; run them with `npm test`
+from `harnesses/pi`. With `PI_HARNESS_ISOLATION=required` set in that shell, existing tests that
+expect a `runner: host` check to run will fail by design.

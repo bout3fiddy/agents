@@ -26,6 +26,7 @@ import { workerAbortSignal } from './sandbox.ts'
 import { progressReporter } from './progress.ts'
 import { LiveWorker } from './worker-live.ts'
 import { attachLiveSession } from './worker-live-session.ts'
+import { effectiveExecution } from './worker-execution.ts'
 
 export async function explicitResources(prompt: string): Promise<ResourceLoader> {
 
@@ -212,6 +213,7 @@ export async function runWorker(request: WorkerRequest): Promise<WorkerEvidence>
       turns,
       model: modelId,
       thinking: session.thinkingLevel,
+      execution: await effectiveExecution(request.project),
     }
   } catch (error) {
     await live.finish(workerAbortSignal.aborted ? 'cancelled' : 'failed', String(error))

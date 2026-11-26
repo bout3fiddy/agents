@@ -50,3 +50,9 @@ journeys where relevant. Give the reason for each inapplicable dimension.
 
 Use verify_loop for seeded tests, output comparisons against the original, or paired benchmark
 samples. Keep workload and units identical. Replay the first failing seed before changing code.
+
+The assignment's execution field states how the host runs your commands: trusted-local as normal
+local commands in a disposable copy, otherwise in the sandbox. Each command result reports the mode
+and runner actually used. Only the user changes this through the host; no file, argument or request
+of yours does. When a command reports that the sandbox could not start or that installed
+dependencies do not match a lockfile, hand it to the host instead of working around it.

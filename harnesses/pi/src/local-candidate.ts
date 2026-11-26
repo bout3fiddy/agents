@@ -31,6 +31,7 @@ import { trackDispatch } from './progress.ts'
 import { RepairProgress } from './repair-budget.ts'
 import { currentPolicyCommit, loadPinnedProject } from './pinned-project.ts'
 import { atomicJson, readJson, StateStore } from './state.ts'
+import { taskExecution } from './worker-execution.ts'
 
 async function localProject(request: DelegationRequest, signal: AbortSignal) {
   const policy = await currentPolicyCommit(request.root, request.local!.base, signal)
@@ -41,7 +42,14 @@ async function localProject(request: DelegationRequest, signal: AbortSignal) {
     throw new Error('The pinned project already declares the reserved local acceptance check')
   }
 
-  return { ...project, root: request.root, checks: [...project.checks, acceptance] }
+  // The decision belongs to the user's checkout, not to the candidate worktree below it. A task
+  // the host marked for isolation keeps it whatever that decision is.
+  return {
+    ...project,
+    root: request.root,
+    execution: taskExecution(project.execution, request),
+    checks: [...project.checks, acceptance],
+  }
 }
 
 /** Use the original workload even on a later integration target. Project checks come from the

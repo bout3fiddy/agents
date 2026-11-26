@@ -13,6 +13,7 @@ import { inventory, snapshotHash } from './paths.ts'
 import { progressReporter } from './progress.ts'
 import { LiveWorker } from './worker-live.ts'
 import { ClaudeLiveTrace } from './worker-live-claude.ts'
+import { effectiveExecution } from './worker-execution.ts'
 import {
   completedResult,
   validateResult,
@@ -323,6 +324,9 @@ async function runClaudeProcess(
       turns: response.num_turns ?? 0,
       model: `claude-cli/${actualModel}`,
       thinking: role.thinking,
+
+      // The bridge resolves the same decision for each command from this request's project.
+      execution: await effectiveExecution(request.project),
     }
   } catch (error) {
     await live.finish('failed', String(error))

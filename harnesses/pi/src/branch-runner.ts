@@ -37,6 +37,7 @@ import { digest, fileHashes, inventory, snapshotHash, readBoundedFile, safePath 
 import { RepairProgress } from './repair-budget.ts'
 import { validateDesign, type Checkpoint, type Project, type Receipt } from './contracts.ts'
 import { mergeReviewLoop } from './merge-reviews.ts'
+import { resolveExecution, taskExecution } from './worker-execution.ts'
 
 export type BranchAdapters = {
   pullRequest: typeof ensureBranchPullRequest
@@ -386,7 +387,14 @@ async function openValidation(
     throw new Error('The design document changed on main; retained branch needs reconciliation')
   }
 
-  const project = { ...(await loadProject(originals)), root: request.root }
+  // Checks come from the baseline worktree; the execution decision belongs to the user's
+  // checkout. Resolving it for the worktree path would always find an unknown project.
+  const loaded = await loadProject(originals, undefined, () => resolveExecution(request.root))
+  const project = {
+    ...loaded,
+    root: request.root,
+    execution: taskExecution(loaded.execution, request),
+  }
   requireBranchChecks(project, plan.design)
   return {
     session,
