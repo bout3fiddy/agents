@@ -1,5 +1,6 @@
 import { atomicJson, readJson } from './state.ts'
 import type { Dispatcher } from './dispatch.ts'
+import { ActiveSiblings } from './coordinator-swarm.ts'
 
 import type { ModelRoute } from './contracts.ts'
 
@@ -48,13 +49,17 @@ export async function readProgress(output: string): Promise<TaskProgress | undef
 /** Accepted workflows use the same parent-visible activity stream as task coordinators. */
 export function trackDispatch(dispatch: Dispatcher, output: string): Dispatcher {
   const progress = progressReporter(output)
-  const active = new Map<string, TaskProgress>()
+  const active = new ActiveSiblings<TaskProgress>()
+  let dispatched = 0
   return async (request, signal, observer) => {
     const role = request.role
-    active.set(role, { stage: 'starting', role, updatedAt: new Date().toISOString() })
+
+    // Each dispatch is its own child. A role key would let one same-role sibling erase another.
+    const child = `${role}#${dispatched++}`
+    active.start(child, { stage: 'starting', role, updatedAt: new Date().toISOString() })
     const finish = (stage: string, message: string) => {
-      active.delete(role)
-      const sibling = active.values().next().value
+      active.finish(child)
+      const sibling = active.current()
       return progress.update({
         stage: sibling ? 'child' : stage,
         role: sibling?.role ?? role,
@@ -70,8 +75,12 @@ export function trackDispatch(dispatch: Dispatcher, output: string): Dispatcher 
 
     try {
       const evidence = await dispatch(request, signal, async (activity) => {
-        active.set(role, activity)
-        await progress.update({ stage: 'child', role, child: activity })
+
+        // Activity reported after this child finished must not point the parent back at it.
+        if (active.update(child, activity)) {
+          await progress.update({ stage: 'child', role, child: activity })
+        }
+
         await observer?.(activity)
       })
       await finish('checking', `${role}: ${evidence.result.verdict}. ${evidence.result.summary}`)

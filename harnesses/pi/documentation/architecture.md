@@ -154,10 +154,23 @@ classifying a task. A successful retry continues the same session and uses its s
 exhausted or permanent error reaches the host with its provider message.
 
 Writable leaf calls serialize against the candidate. Child receipts identify the role, model and
-snapshot. Independent branch coordinators may work concurrently. The coordinator routes a failing
-behavioral check to the implementer. The repaired branch closes on passing executable evidence.
-Database impact selects recovery checks. Explicitly selected performance workers may write
-benchmarks, instrumentation and reports.
+snapshot. A coordinator may send independent read-only questions as one research swarm: a single
+`delegate_worker` call whose `researchers` list names each researcher. The coordinator chooses the
+group and no fixed size applies. The harness starts every researcher in one pass, keeps no queue and
+retries nothing. The swarm is one serialized step, so researchers overlap only with each other while
+writers, checks and submission wait for all of them. A researcher that fails or exceeds actual
+process or provider capacity is reported by id as unfinished and blocks a passing result until that
+id completes. The researcher id is part of receipt identity: siblings share a role and an empty
+scope, yet each has exactly one receipt per dispatch, sees only its own previous findings and cannot
+clear another's. An edit during a swarm, mismatched evidence or a lost receipt invalidates the
+candidate. Cancellation stops every researcher before the call returns and records no receipt.
+`src/coordinator-swarm.ts` holds this contract without package dependencies. Run its test with
+`node --experimental-strip-types --test tests/coordinator-swarm.test.ts`.
+
+Independent branch coordinators may work concurrently. The coordinator routes a failing behavioral
+check to the implementer. The repaired branch closes on passing executable evidence. Database impact
+selects recovery checks. Explicitly selected performance workers may write benchmarks,
+instrumentation and reports.
 
 General task candidates are isolated from the live project. Document changes enforce document-only
 extensions, Markdown formatting, write scope and ignored/private path exclusions. Maintenance runs
@@ -332,18 +345,20 @@ and matching hash.
 
 Worker progress is persisted separately from task controls/status, including active child and tool.
 Codex streaming events and Claude output update activity timestamps; coordinators forward child
-progress. Periodic progress messages enter context privately without waking an idle model. Optional
-`report_progress` summaries capture meaningful findings or phase changes without mandatory chatter.
-A coordinator records its latest `report_milestone` summary in its progress file. The host also
-recognizes an accepted workflow's implementation handoff and a published branch awaiting merge. It
-batches new milestones by originating session and branch, deduplicates using persisted message IDs,
-and groups subsequent updates for up to a minute. An outcome or attention event can flush the batch
-earlier. Only a material event wakes the idle host. A silent task gets one attention notice per
-unchanged activity point, while completion and genuine blockers wake the orchestrator. It must
-inspect evidence, resolve authorized host-only operations or report the actual external blocker;
-repeated identical incapable workers are not a recovery strategy. Recovery first reconciles current
-project state and user updates; work already completed directly must not be retried or overwritten
-from an old failed candidate.
+progress. Concurrent children are tracked by identity, not role, and the parent record points at the
+running child with the most recent activity, never at one that finished. Periodic progress messages
+enter context privately without waking an idle model. Optional `report_progress` summaries capture
+meaningful findings or phase changes without mandatory chatter. A coordinator records its latest
+`report_milestone` summary in its progress file. The host also recognizes an accepted workflow's
+implementation handoff and a published branch awaiting merge. It batches new milestones by
+originating session and branch, deduplicates using persisted message IDs, and groups subsequent
+updates for up to a minute. An outcome or attention event can flush the batch earlier. Only a
+material event wakes the idle host. A silent task gets one attention notice per unchanged activity
+point, while completion and genuine blockers wake the orchestrator. It must inspect evidence,
+resolve authorized host-only operations or report the actual external blocker; repeated identical
+incapable workers are not a recovery strategy. Recovery first reconciles current project state and
+user updates; work already completed directly must not be retried or overwritten from an old failed
+candidate.
 
 The host registers Pi code mode alongside direct tools. Its nested tool hook permits inspection
 only. The script catalog and tool descriptions use the same allowlist. Model helpers are disabled.

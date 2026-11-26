@@ -45,8 +45,18 @@ import { loadRole, rolePrompt } from './roles.ts'
 import { StateStore, atomicJson } from './state.ts'
 import { checkModelOutcome, checkWorkerThinking, explicitResources } from './worker.ts'
 import { createWorkerTools } from './worker-tools.ts'
-import { progressReporter } from './progress.ts'
+import { progressReporter, type TaskProgress } from './progress.ts'
 import { capabilities } from './capabilities.ts'
+import { invariant } from './invariant.ts'
+import {
+  ActiveSiblings,
+  dispatchSwarm,
+  duplicateIds,
+  researcherIdPattern,
+  swarmReport,
+  type SwarmOutcome,
+  type SwarmReport,
+} from './coordinator-swarm.ts'
 import { LiveWorker } from './worker-live.ts'
 import { attachLiveSession } from './worker-live-session.ts'
 
@@ -101,6 +111,15 @@ export interface TaskCoordinatorEvidence {
   checks?: Receipt[]
 }
 
+const researcherSchema = Type.Object(
+  {
+    id: Type.String({ pattern: researcherIdPattern }),
+    thinking: Type.Optional(thinkingSchema),
+    task: Type.String({ minLength: 1, maxLength: 16000 }),
+  },
+  { additionalProperties: false },
+)
+
 const delegateSchema = Type.Object(
   {
     role: Type.Union([
@@ -111,12 +130,22 @@ const delegateSchema = Type.Object(
     thinking: Type.Optional(thinkingSchema),
     task: Type.String({ minLength: 1, maxLength: 16000 }),
     writePaths: Type.Array(writePathSchema, { maxItems: 50 }),
+
+    // A research swarm. The coordinator chooses this finite group, so no fixed size applies:
+    // nothing is queued, and a researcher beyond actual capacity fails explicitly by id.
+    researchers: Type.Optional(Type.Array(researcherSchema, { minItems: 1 })),
   },
   { additionalProperties: false },
 )
 
-type Delegation = Static<typeof delegateSchema>
+type DelegateRequest = Static<typeof delegateSchema>
+type Delegation = Omit<DelegateRequest, 'researchers'> & {
+
+  /** Set on swarm members: the researcher's identity and the brief its siblings share. */
+  researcher?: { id: string; brief: string }
+}
 type ChildReceipt = { assignment: Delegation; evidence: WorkerEvidence }
+type Researcher = { id: string; assignment: Delegation; role: Role; quotaKey: string }
 const coordinatorRole = (request: TaskCoordinatorRequest) =>
   request.kind === 'branch' ? 'branch-orchestrator' : 'task-coordinator'
 
@@ -135,11 +164,14 @@ export function scopeContained(child: string[], parent: string[]): boolean {
   )
 }
 
+/** Role and scope identify a leaf. Swarm researchers share both, so their id is part of the
+ * identity: a sibling can neither clear another researcher's findings nor hide its failure. */
+function assignmentKey(raw: Delegation): string {
+  return JSON.stringify([raw.role, [...raw.writePaths].sort(), raw.researcher?.id ?? null])
+}
+
 function sameAssignment(left: Delegation, right: Delegation): boolean {
-  return (
-    left.role === right.role &&
-    JSON.stringify([...left.writePaths].sort()) === JSON.stringify([...right.writePaths].sort())
-  )
+  return assignmentKey(left) === assignmentKey(right)
 }
 
 function checkChildWrites(
@@ -203,10 +235,9 @@ export async function createTaskCoordinatorTools(
   }
 }
 
-const assignmentKey = (raw: Delegation) => JSON.stringify([raw.role, [...raw.writePaths].sort()])
-
 /** One coordinator run: its child receipts, check results and submission state. Child runs and
- * tool calls are serialized so each sees a stable candidate. */
+ * tool calls are serialized so each sees a stable candidate. A research swarm is one such
+ * serialized step whose read-only researchers overlap only with each other. */
 class Coordinator {
   readonly progress: ReturnType<typeof progressReporter>
   readonly receipts: ChildReceipt[] = []
@@ -219,7 +250,7 @@ class Coordinator {
   private checkedDatabase = false
   private declaredDatabase: boolean
   private fatal: unknown
-  private readonly failedAssignments = new Set<string>()
+  private readonly failedAssignments = new Map<string, Delegation>()
   private readonly rejectedModels = new Map<string, ProviderQuotaError>()
   private queue: Promise<unknown> = Promise.resolve()
 
@@ -267,9 +298,8 @@ class Coordinator {
     }
   }
 
-  validateAssignment(raw: unknown): Delegation {
-    const { request } = this
-
+  /** A request is one leaf, or one group of read-only researchers sharing a role and brief. */
+  validateAssignments(raw: unknown): Delegation[] {
     if (!Check(delegateSchema, raw)) {
       throw new Error('Invalid leaf assignment')
     }
@@ -277,6 +307,42 @@ class Coordinator {
     if (this.submitted || this.submitting) {
       throw new Error('Task is already submitted')
     }
+
+    const { researchers, ...leaf } = raw
+
+    if (!researchers) {
+      return [this.routeAssignment(leaf)]
+    }
+
+    if (leaf.role === 'performance') {
+      throw new Error(
+        'A research swarm takes task-worker or implementer researchers. A measurement runs alone',
+      )
+    }
+
+    if (leaf.writePaths.length) {
+      throw new Error(
+        'A research swarm is read-only: assign empty writePaths and delegate each writer alone',
+      )
+    }
+
+    const repeated = duplicateIds(researchers.map((researcher) => researcher.id))
+
+    if (repeated.length) {
+      throw new Error(`Researcher ids must be unique within a swarm: ${repeated.join(', ')}`)
+    }
+
+    const shared = this.routeAssignment(leaf)
+    return researchers.map((researcher) => ({
+      ...shared,
+      task: researcher.task,
+      thinking: researcher.thinking ?? shared.thinking,
+      researcher: { id: researcher.id, brief: leaf.task },
+    }))
+  }
+
+  private routeAssignment(raw: Delegation): Delegation {
+    const { request } = this
 
     if (
       request.implementerModel &&
@@ -321,6 +387,7 @@ class Coordinator {
 
   /** Run one child serially and record its receipt before the next tool call. */
   async delegate(assignment: Delegation): Promise<WorkerEvidence> {
+    invariant(!assignment.researcher, 'a swarm researcher runs with its group')
     this.pending++
 
     try {
@@ -406,8 +473,7 @@ class Coordinator {
     failure: { recoverable: boolean },
   ): Promise<WorkerEvidence> {
     const { request } = this
-    const implementerModel = raw.role === 'implementer' ? request.implementerModel : undefined
-    const quotaKey = implementerModel ? 'implementer/' + childRole.model : childRole.model
+    const quotaKey = this.quotaKey(raw, childRole)
 
     try {
       const rejected = this.rejectedModels.get(quotaKey)
@@ -416,25 +482,8 @@ class Coordinator {
         throw rejected
       }
 
-      return await this.dispatch(
-        {
-          role: raw.role,
-          thinking: raw.thinking,
-          implementerModel,
-          documentsOnly:
-            (request.kind === 'documents' && Boolean(implementerModel)) ||
-            (request.kind === 'branch' && raw.role === 'task-worker'),
-          task: this.childTask(raw),
-          workspace: request.workspace,
-          project: request.project,
-          checkpoint: { ...request.checkpoint, writePaths: raw.writePaths },
-          model: request.model,
-          baseline: request.baseline,
-          originals: request.originals,
-          changedFiles,
-        },
-        this.signal,
-        (activity) => this.progress.update({ stage: 'child', role: raw.role, child: activity }),
+      return await this.dispatch(this.childRequest(raw, changedFiles), this.signal, (activity) =>
+        this.progress.update({ stage: 'child', role: raw.role, child: activity }),
       )
     } catch (error) {
       checkChildWrites(request, raw, childRole, before, await inventory(request.workspace))
@@ -444,15 +493,263 @@ class Coordinator {
       }
 
       failure.recoverable = true
-      this.failedAssignments.add(assignmentKey(raw))
+      this.failedAssignments.set(assignmentKey(raw), raw)
       throw error
     }
+  }
+
+  private quotaKey(raw: Delegation, childRole: Role): string {
+    return raw.role === 'implementer' && this.request.implementerModel
+      ? 'implementer/' + childRole.model
+      : childRole.model
+  }
+
+  private childRequest(
+    raw: Delegation,
+    changedFiles: string[] | undefined,
+  ): Parameters<Dispatcher>[0] {
+    const { request } = this
+    const implementerModel = raw.role === 'implementer' ? request.implementerModel : undefined
+    return {
+      role: raw.role,
+      thinking: raw.thinking,
+      implementerModel,
+      documentsOnly:
+        (request.kind === 'documents' && Boolean(implementerModel)) ||
+        (request.kind === 'branch' && raw.role === 'task-worker'),
+      task: this.childTask(raw),
+      workspace: request.workspace,
+      project: request.project,
+      checkpoint: { ...request.checkpoint, writePaths: raw.writePaths },
+      model: request.model,
+      baseline: request.baseline,
+      originals: request.originals,
+      changedFiles,
+    }
+  }
+
+  /** Run a finite group of read-only researchers together. The group holds the candidate
+   * exclusively, so writers, checks and inspection wait until every researcher has settled. */
+  async delegateSwarm(members: Delegation[]): Promise<SwarmReport<WorkerEvidence>> {
+    this.pending++
+
+    try {
+      return await this.serialize(() => this.runSwarm(members))
+    } finally {
+      this.pending--
+    }
+  }
+
+  /** A researcher's own failure is recoverable and reported by id. A changed candidate,
+   * mismatched evidence or a lost receipt invalidates the candidate for the rest of this run. */
+  private async runSwarm(members: Delegation[]): Promise<SwarmReport<WorkerEvidence>> {
+    this.requireValidCandidate()
+    const failure = { recoverable: false }
+
+    try {
+      const before = await inventory(this.request.workspace)
+      const researchers = await this.prepareResearchers(members)
+      const outcomes = await this.dispatchResearchers(researchers, before, failure)
+      const completed = await this.acceptResearchers(researchers, outcomes, before)
+      return await this.recordResearchers(completed, outcomes)
+    } catch (error) {
+      if (!failure.recoverable && !this.fatal) {
+        this.fatal = error
+      }
+
+      await this.progress.update({ stage: 'issue', message: String(error).slice(0, 500) })
+      throw error
+    }
+  }
+
+  /** Resolve every role before any researcher starts, so starting needs no further waiting. */
+  private async prepareResearchers(members: Delegation[]): Promise<Researcher[]> {
+    const researchers: Researcher[] = []
+
+    for (const assignment of members) {
+      invariant(
+        assignment.researcher && !assignment.writePaths.length,
+        'swarm members are read-only researchers',
+      )
+      const role = await loadRole(
+        assignment.role,
+        assignment.thinking,
+        assignment.role === 'implementer' ? this.request.implementerModel : undefined,
+      )
+      researchers.push({
+        id: assignment.researcher.id,
+        assignment,
+        role,
+        quotaKey: this.quotaKey(assignment, role),
+      })
+    }
+
+    return researchers
+  }
+
+  private async dispatchResearchers(
+    researchers: Researcher[],
+    before: Map<string, Buffer>,
+    failure: { recoverable: boolean },
+  ): Promise<SwarmOutcome<WorkerEvidence>[]> {
+    const changedFiles = this.originals && changes(this.originals, before)
+    const siblings = new ActiveSiblings<TaskProgress>()
+    const ids = researchers.map((researcher) => researcher.id).join(', ')
+    await this.progress.update({
+      stage: 'child',
+      role: researchers[0]?.assignment.role,
+      child: undefined,
+      message: `Research swarm of ${researchers.length}: ${ids}`.slice(0, 240),
+    })
+
+    try {
+      return await dispatchSwarm(
+        researchers,
+        (researcher) => this.runResearcher(researcher, changedFiles, siblings, researchers.length),
+        this.signal,
+      )
+    } catch (error) {
+
+      // Cancellation ends a swarm after every researcher stopped. None has a receipt, so each
+      // stays outstanding; an edited candidate is a violation and not a recoverable stop.
+      this.requireUnchanged(before, await inventory(this.request.workspace))
+
+      for (const { assignment } of researchers) {
+        this.failedAssignments.set(assignmentKey(assignment), assignment)
+      }
+
+      failure.recoverable = this.signal.aborted
+      throw error
+    }
+  }
+
+  /** One researcher. Its dispatch call precedes the first await, so dispatchSwarm starts the
+   * whole group in one pass. Progress is keyed by researcher id, never by the shared role. */
+  private async runResearcher(
+    researcher: Researcher,
+    changedFiles: string[] | undefined,
+    siblings: ActiveSiblings<TaskProgress>,
+    total: number,
+  ): Promise<WorkerEvidence> {
+    const { id, assignment, quotaKey } = researcher
+    const role = assignment.role
+    siblings.start(id, { stage: 'starting', role, updatedAt: new Date().toISOString() })
+
+    try {
+      const rejected = this.rejectedModels.get(quotaKey)
+
+      if (rejected && rejected.retryAt > Date.now()) {
+        throw rejected
+      }
+
+      return await this.dispatch(
+        this.childRequest(assignment, changedFiles),
+        this.signal,
+        async (activity) => {
+          if (siblings.update(id, activity)) {
+            await this.progress.update({ stage: 'child', role, child: activity })
+          }
+        },
+      )
+    } finally {
+      siblings.finish(id)
+      await this.progress.update({
+        stage: 'child',
+        role,
+        child: siblings.current(),
+        message: `Research swarm: ${total - siblings.size} of ${total} settled`,
+      })
+    }
+  }
+
+  private requireUnchanged(before: Map<string, Buffer>, after: Map<string, Buffer>) {
+    const [edited] = changes(before, after)
+
+    if (edited !== undefined) {
+      throw new Error(`Read-only research swarm changed the candidate: ${edited}`)
+    }
+  }
+
+  /** Validate each settled researcher against the unchanged candidate. Failed researchers stay
+   * outstanding under their own identity until that id is dispatched again and completes. */
+  private async acceptResearchers(
+    researchers: Researcher[],
+    outcomes: SwarmOutcome<WorkerEvidence>[],
+    before: Map<string, Buffer>,
+  ): Promise<ChildReceipt[]> {
+    invariant(outcomes.length === researchers.length, 'each researcher has exactly one outcome')
+    const after = await inventory(this.request.workspace)
+    this.requireUnchanged(before, after)
+    const completed: ChildReceipt[] = []
+
+    for (const [index, outcome] of outcomes.entries()) {
+      const { id, assignment, role, quotaKey } = researchers[index]!
+      invariant(outcome.id === id, 'outcomes keep researcher order')
+
+      if (outcome.status === 'completed') {
+        checkChildEvidence(this.request, assignment, role, outcome.value, after)
+        completed.push({ assignment, evidence: outcome.value })
+        continue
+      }
+
+      if (outcome.error instanceof ProviderQuotaError) {
+        this.rejectedModels.set(quotaKey, outcome.error)
+      }
+
+      this.failedAssignments.set(assignmentKey(assignment), assignment)
+    }
+
+    const workers = completed.flatMap(({ evidence }) => evidence.liveWorkerId ?? [])
+
+    if (duplicateIds(workers).length) {
+      throw new Error('Stale or mismatched child evidence: researchers share a worker identity')
+    }
+
+    return completed
+  }
+
+  /** Persist one receipt per completed researcher in group order, then report every outcome. */
+  private async recordResearchers(
+    completed: ChildReceipt[],
+    outcomes: SwarmOutcome<WorkerEvidence>[],
+  ): Promise<SwarmReport<WorkerEvidence>> {
+    const recorded = this.receipts.length
+    await atomicJson(`${this.request.outputPath}.children.json`, [...this.receipts, ...completed])
+    this.receipts.push(...completed)
+    invariant(
+      this.receipts.length === recorded + completed.length,
+      'each completed researcher adds exactly one receipt',
+    )
+
+    for (const { assignment } of completed) {
+      this.failedAssignments.delete(assignmentKey(assignment))
+    }
+
+    const report = swarmReport(outcomes)
+    const { size, failed, capacityFailures } = report.swarm
+    await this.progress.update({
+      stage: 'coordinating',
+      role: this.role.name,
+      message:
+        `Research swarm: ${completed.length} of ${size} completed` +
+        (failed ? `, ${failed} failed (${capacityFailures} for capacity)` : ''),
+    })
+    return report
   }
 
   private childTask(raw: Delegation) {
     const { request } = this
     return JSON.stringify({
       task: raw.task,
+      ...(raw.researcher && {
+        research: {
+          researcher: raw.researcher.id,
+          sharedBrief: raw.researcher.brief,
+          access:
+            'Read-only. Sibling researchers work on the same candidate at the same time. ' +
+            'Report findings; retain no edits.',
+        },
+      }),
       parentTask: request.task,
       context: request.context,
       kind: request.kind,
@@ -587,7 +884,13 @@ class Coordinator {
     this.requireValidCandidate()
 
     if (this.pending || this.failedAssignments.size) {
-      throw new Error('Unfinished or failed child execution prevents a passing result')
+      const researchers = [...this.failedAssignments.values()].flatMap(
+        (assignment) => assignment.researcher?.id ?? [],
+      )
+      throw new Error(
+        'Unfinished or failed child execution prevents a passing result' +
+          (researchers.length ? `. Unfinished researchers: ${researchers.join(', ')}` : ''),
+      )
     }
 
     const snapshot = snapshotHash(await inventory(this.request.workspace))
@@ -620,12 +923,16 @@ function requireResolvedFindings(receipts: ChildReceipt[], snapshot: string) {
           JSON.stringify({
             role: receipt.assignment.role,
             writePaths: receipt.assignment.writePaths,
+            researcher: receipt.assignment.researcher?.id,
             verdict: latest.evidence.result.verdict,
             snapshotMatches: latest.evidence.snapshot === snapshot,
           }) +
-          '. Delegate this exact role and writePaths to resolve its prior findings. ' +
-          'A read-only follow-up with different writePaths does not clear this assignment. ' +
-          'Keep the same scope even if no edits are needed.',
+          (receipt.assignment.researcher
+            ? '. Dispatch this researcher id again with the same role to resolve its prior ' +
+              'findings. A sibling researcher or a separate leaf does not clear it.'
+            : '. Delegate this exact role and writePaths to resolve its prior findings. ' +
+              'A read-only follow-up with different writePaths does not clear this assignment. ' +
+              'Keep the same scope even if no edits are needed.'),
       )
     }
   }
@@ -717,20 +1024,32 @@ function delegateTool(coordinator: Coordinator): ToolDefinition {
     description:
       'Choose thinking for this leaf: low for mechanical tasks, medium for settled designs, ' +
       'high for unresolved tradeoffs or tricky repairs. Fable specialists support medium/high. ' +
-      'Use a performance specialist only on explicit user request.',
+      'Use a performance specialist only on explicit user request. ' +
+      'For independent read-only research, pass researchers with empty writePaths: task is ' +
+      'their shared brief, each researcher has a unique id and its own task, all start ' +
+      'together, and one call returns an outcome per id. Nothing is queued: redispatch the ' +
+      'ids listed as unfinished. Writers and checks always run alone.',
     parameters: delegateSchema,
     async execute(_id, raw) {
-      const child = coordinator.validateAssignment(raw)
+      const children = coordinator.validateAssignments(raw)
 
-      if (child.thinking !== undefined) {
-        await loadRole(
-          child.role,
-          child.thinking,
-          child.role === 'implementer' ? coordinator.request.implementerModel : undefined,
-        )
+      for (const child of children) {
+        if (child.thinking !== undefined) {
+          await loadRole(
+            child.role,
+            child.thinking,
+            child.role === 'implementer' ? coordinator.request.implementerModel : undefined,
+          )
+        }
       }
 
-      return textResult(await coordinator.delegate(child))
+      const [leaf] = children
+      invariant(leaf, 'a validated request has at least one assignment')
+      return textResult(
+        leaf.researcher
+          ? await coordinator.delegateSwarm(children)
+          : await coordinator.delegate(leaf),
+      )
     },
   }
 }
