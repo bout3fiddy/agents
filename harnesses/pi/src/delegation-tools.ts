@@ -212,20 +212,51 @@ class TaskFeed {
     }
   }
 
+  /**
+   * The session this feed may still deliver into through ctx, or undefined once it has shut down
+   * or the SDK has invalidated ctx. The context and this feed's pi share one extension runtime,
+   * so invalidation ends the feed for good; a reload or replacement session loads its own feed.
+   */
+  private owned(ctx: ExtensionContext): string | undefined {
+    if (this.closed) {
+      return undefined
+    }
+
+    const session = liveSession(ctx)
+
+    if (session === undefined) {
+      this.close()
+    }
+
+    return session
+  }
+
+  /** Forget unsent messages so the session's next owner still delivers them. */
+  private retract(session: string, messages: CustomMessageEntryDraft[]) {
+    for (const message of messages) {
+      for (const id of messageIds(message.details)) {
+        this.delivered.delete(`${session}:${id}`)
+      }
+    }
+  }
+
   async collect(ctx: ExtensionContext): Promise<CustomMessageEntryDraft[]> {
-    if (this.closed || this.collecting) {
+    const session = this.collecting ? undefined : this.owned(ctx)
+
+    if (session === undefined) {
       return []
     }
 
     this.collecting = true
 
     try {
-      const session = ctx.sessionManager.getSessionId()
       const store = await storeFor(ctx.cwd)
       const jobs = await new Delegations(store).list()
       const footer = await taskStatusLine(store, jobs, session)
 
-      if (this.closed || session !== ctx.sessionManager.getSessionId()) {
+      // The session can shut down, be disposed or change while the reads are pending. Check
+      // before marking anything delivered; everything after this runs without yielding.
+      if (this.owned(ctx) !== session) {
         return []
       }
 
@@ -382,19 +413,16 @@ class TaskFeed {
 
   /** Deliver collected messages while idle; only the last non-progress message wakes a turn. */
   async idle(ctx: ExtensionContext) {
-    if (!ctx.isIdle() || ctx.hasPendingMessages()) {
+    const session = this.owned(ctx)
+
+    if (session === undefined || !ctx.isIdle() || ctx.hasPendingMessages()) {
       return
     }
 
     const messages = await this.collect(ctx)
 
-    if (this.closed || !ctx.isIdle() || ctx.hasPendingMessages()) {
-      for (const message of messages) {
-        for (const id of messageIds(message.details)) {
-          this.delivered.delete(`${ctx.sessionManager.getSessionId()}:${id}`)
-        }
-      }
-
+    if (this.owned(ctx) !== session || !ctx.isIdle() || ctx.hasPendingMessages()) {
+      this.retract(session, messages)
       return
     }
 
@@ -427,6 +455,27 @@ class TaskFeed {
             : { continue: true }),
         }
       : undefined
+  }
+}
+
+// Opening of the error every member of an invalidated SDK extension context throws.
+const staleContext = 'This extension ctx is stale'
+
+/**
+ * The session ctx serves, or undefined once the SDK has invalidated ctx. Disposing a session
+ * invalidates its contexts without emitting session_shutdown, and the SDK exposes no other
+ * liveness probe. Only that invalidation counts as a lost session; any other failure propagates.
+ * tests/task-notifications.test.ts replays the disposal against the installed SDK.
+ */
+function liveSession(ctx: ExtensionContext): string | undefined {
+  try {
+    return ctx.sessionManager.getSessionId()
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith(staleContext)) {
+      return undefined
+    }
+
+    throw error
   }
 }
 

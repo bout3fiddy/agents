@@ -1,13 +1,27 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { join } from 'node:path'
+import { writeFileSync } from 'node:fs'
 import { rm } from 'node:fs/promises'
 import { setTimeout as delay } from 'node:timers/promises'
 import { fixture } from './support.ts'
 import { captureSession } from './session-support.ts'
 import { registerDelegation } from '../src/delegation-tools.ts'
 import { StateStore, atomicJson } from '../src/state.ts'
-import { Delegations, delegationDirectory } from '../src/delegation-state.ts'
+import { Delegations, delegationDirectory, type Delegation } from '../src/delegation-state.ts'
+
+const dispatchDocuments = () =>
+  ['one.md', 'two.md'].map((path, index) => ({
+    type: 'toolCall' as const,
+    id: `dispatch-${index}`,
+    name: 'delegate_task',
+    arguments: {
+      task: `Update ${path}`,
+      kind: 'documents',
+      writePaths: [path],
+      context: '',
+    },
+  }))
 
 for (const mode of ['idle', 'busy', 'queued'] as const) {
   test(`completed jobs notify once in one batch while ${mode}`, async () => {
@@ -47,17 +61,7 @@ for (const mode of ['idle', 'busy', 'queued'] as const) {
         }
 
         if (requests === 1) {
-          return ['one.md', 'two.md'].map((path, index) => ({
-            type: 'toolCall' as const,
-            id: `dispatch-${index}`,
-            name: 'delegate_task',
-            arguments: {
-              task: `Update ${path}`,
-              kind: 'documents',
-              writePaths: [path],
-              context: '',
-            },
-          }))
+          return dispatchDocuments()
         }
 
         if (mode !== 'idle' && requests === 3) {
@@ -122,6 +126,129 @@ for (const mode of ['idle', 'busy', 'queued'] as const) {
       assert.equal(acknowledge, 1, 'Reload must not repeat a completion wake-up')
     } finally {
       release()
+      await session.abort()
+      session.dispose()
+      await runtime.settleCredentialWrites()
+      await rm(base, { recursive: true, force: true })
+    }
+  })
+}
+
+// Replays the SDK 1.6.1 release-gate failure. The session reports idle before agent_settled
+// handlers finish, so its owner can end it while the feed's settled collection awaits file reads.
+// Disposal invalidates the extension context without session_shutdown; reload shuts down first.
+for (const ending of ['dispose', 'reload'] as const) {
+  test(`a session ended by ${ending} during settled collection loses no completion`, async () => {
+    const { root, base } = await fixture()
+    const jobs = new Delegations(new StateStore(root))
+    let requests = 0
+    let acknowledge = 0
+    let armed = true
+    let dispatched: Delegation[] = []
+    let ended: Promise<void> | undefined
+    const { session, runtime } = await captureSession(
+      root,
+      base,
+      [
+        (pi) => {
+
+          // Registered first, so this handler runs immediately before the feed's settled handler.
+          pi.on('agent_settled', () => {
+            if (!armed) {
+              return
+            }
+
+            armed = false
+
+            for (const [index, job] of dispatched.entries()) {
+              writeFileSync(
+                join(delegationDirectory(jobs.store, job.request.id), 'status.json'),
+                JSON.stringify({
+                  ...job.state,
+                  status: 'complete',
+                  summary: index ? 'Second finished' : 'First finished',
+                }),
+              )
+            }
+
+            // Ticks run after the pending promise jobs and before any file read completes. The
+            // feed's handler has then suspended on its first read: the session ends mid-collection.
+            process.nextTick(() => {
+              if (ending === 'reload') {
+                ended = session.reload()
+                return
+              }
+
+              session.dispose()
+              ended = Promise.resolve()
+            })
+          })
+        },
+        (pi) => {
+          registerDelegation(pi, async () => {})
+        },
+      ],
+      async (context) => {
+        requests++
+
+        if (JSON.stringify(context).includes('Background task outcome.')) {
+          acknowledge++
+          assert.match(JSON.stringify(context), /First finished/)
+          assert.match(JSON.stringify(context), /Second finished/)
+          return [{ type: 'text', text: 'Both updates finished. Continuing the discussion.' }]
+        }
+
+        if (requests === 1) {
+          return dispatchDocuments()
+        }
+
+        dispatched = await jobs.list()
+        return [{ type: 'text', text: 'Which constraint matters next?' }]
+      },
+    )
+    const receipts = () =>
+      session.sessionManager
+        .getEntries()
+        .flatMap((entry) =>
+          entry.type === 'custom_message' && entry.customType === 'pi-task-result'
+            ? [(entry.details as { taskIds: string[] }).taskIds]
+            : [],
+        )
+
+    try {
+      await session.prompt('Update the documents and continue discussion.')
+      assert.equal(dispatched.length, 2)
+      assert.ok(ended, 'The session must end during its first settlement')
+      await ended
+      const completed = await jobs.list()
+      assert.deepEqual(
+        completed.map((job) => job.state.status),
+        ['complete', 'complete'],
+      )
+
+      if (ending === 'dispose') {
+        assert.deepEqual(receipts(), [], 'A disposed session must record no delivery receipt')
+        assert.equal(acknowledge, 0, 'A disposed session must not be woken')
+        assert.equal(requests, 2)
+        return
+      }
+
+      for (let attempt = 0; attempt < 50; attempt++) {
+        if (acknowledge) {
+          break
+        }
+
+        await delay(50)
+      }
+
+      await session.waitForIdle()
+      assert.equal(acknowledge, 1, 'The reloaded feed must deliver the completion exactly once')
+      assert.deepEqual(
+        receipts().map((ids) => ids.length),
+        [2],
+      )
+      assert.equal(requests, 3)
+    } finally {
       await session.abort()
       session.dispose()
       await runtime.settleCredentialWrites()
