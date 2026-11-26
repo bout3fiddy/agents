@@ -1,17 +1,17 @@
 import type { ExtensionAPI } from '@earendil-works/pi-coding-agent'
-import { installPush } from './push-follow-up.ts'
+import { InterruptInput } from './interrupt-input.ts'
 
 export default function registerSteering(pi: ExtensionAPI): void {
-  let uninstall: (() => void) | undefined
+  let interrupt: InterruptInput | undefined
   pi.on('session_start', (_event, ctx) => {
     if (ctx.mode === 'tui') {
-      uninstall?.()
-      uninstall = installPush(ctx)
+      interrupt?.uninstall()
+      interrupt = new InterruptInput(ctx)
     }
   })
   pi.on('session_shutdown', () => {
-    uninstall?.()
-    uninstall = undefined
+    interrupt?.uninstall()
+    interrupt = undefined
   })
   pi.registerCommand('steer', {
     description: 'Send human guidance at the next safe boundary, without cancelling work',
@@ -21,7 +21,13 @@ export default function registerSteering(pi: ExtensionAPI): void {
         return
       }
 
-      pi.sendUserMessage(args, { deliverAs: 'steer' })
+      const send = () => pi.sendUserMessage(args, { deliverAs: 'steer' })
+
+      if (interrupt) {
+        interrupt.steer(send)
+      } else {
+        send()
+      }
     },
   })
 }

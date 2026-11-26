@@ -56,7 +56,7 @@ function latch() {
 }
 
 test(
-  'Enter steers; empty follow-up key promotes one editor message without dropping work',
+  'Enter and /steer steer without cancelling work; edit-all restores the queue',
   {
     timeout: 20_000,
   },
@@ -88,7 +88,7 @@ test(
       { extensionPaths: [fileURLToPath(new URL('../src/steering.ts', import.meta.url))] },
     )
     const tui = editorFor(session)
-    const originalDisplay = tui.updatePendingMessagesDisplay
+    const originalDisplay = Reflect.get(InteractiveMode.prototype, 'updatePendingMessagesDisplay')
     const originalEnqueue = session.agent.followUp
     const originalAction = Reflect.get(InteractiveMode.prototype, 'handleFollowUp')
     const send = (text: string, key: string) => {
@@ -116,20 +116,8 @@ test(
       await setImmediate()
     }
 
-    const ui = tui.createExtensionUIContext()
-    let receipt: string | undefined
-    const setStatus = ui.setStatus
-    ui.setStatus = (key, value) => {
-      if (key === 'host-input') {
-        receipt = value
-      }
-
-      setStatus(key, value)
-    }
-
     try {
-      await session.bindExtensions({ mode: 'tui', uiContext: ui })
-      assert.equal(receipt, undefined, 'Idle editor has no steering footer')
+      await session.bindExtensions({ mode: 'tui', uiContext: tui.createExtensionUIContext() })
       send('', '\x1b\r')
       assert.deepEqual(tui.pendingUserInputs, [])
       send('start', '\r')
@@ -137,21 +125,18 @@ test(
       session.setSteeringMode('all')
       const run = session.prompt(tui.pendingUserInputs.shift()!)
       await started.promise
-      assert.equal(receipt, undefined, 'Starting work is not a steering interaction')
       assert.equal(panel(), '')
       await submitQueued('RETRACT_STEER', '\r')
+      await submitQueued('RETRACT_TOO', '\r')
       const editKey = tui.getAppKeyDisplay('app.message.dequeue')
       const editHint = `${editKey} to edit all queued messages`
-      const pushKey = tui.getAppKeyDisplay('app.message.followUp')
-      const pushHint = `${pushKey} on empty: push next human follow-up`
+      const interruptKey = tui.getAppKeyDisplay('app.message.followUp')
+      const interruptHint = `${interruptKey} on empty: interrupt and send the first human message`
       assert.match(panel(), /Steering: RETRACT_STEER/)
       assert.equal(panel().split(editHint).length, 2, 'Show the native edit-all action only once')
-      assert.ok(!panel().includes(pushHint), 'A steer is already prioritized')
-      await submitQueued('RETRACT_LATER', '\x1b\r')
-      assert.match(panel(), /Follow-up: RETRACT_LATER/)
-      assert.ok(panel().includes(pushHint))
+      assert.equal(panel().split(interruptHint).length, 2, 'Show the interrupt option once')
       tui.editor.handleInput(process.platform === 'win32' ? '\x1bq' : '\x1b[1;3A')
-      assert.match(tui.editor.getText(), /^RETRACT_STEER\s+RETRACT_LATER$/)
+      assert.match(tui.editor.getText(), /^RETRACT_STEER\s+RETRACT_TOO$/)
       assert.equal(panel(), '', 'Withdrawing the queue retires both actions')
       tui.editor.setText('')
       await session.sendCustomMessage(
@@ -162,56 +147,36 @@ test(
         },
       )
 
-      // Same text, different owner: a push must move the editor object, not the first match.
-      await session.sendUserMessage('PUSH_ME', { deliverAs: 'followUp' })
       await session.sendUserMessage('EXTENSION_FOLLOW_UP', { deliverAs: 'followUp' })
+      assert.ok(!panel().includes(interruptHint), 'Extension messages are not human input')
 
-      assert.equal(receipt, undefined, 'Automated messages do not offer editor controls')
-      assert.ok(!panel().includes(pushHint), 'Extension follow-ups are not pushable')
-
-      for (const [text, key] of [
-        ['ENTER_STEER', '\r'],
-        ['/steer SLASH_STEER', '\r'],
-        ['PUSH_ME', '\x1b\r'],
-        ['KEEP_LATER', '\x1b\r'],
-      ] as const) {
-        await submitQueued(text, key)
+      for (const text of ['ENTER_STEER', '/steer SLASH_STEER']) {
+        await submitQueued(text, '\r')
       }
 
-      send('', '\x1b\r')
-      assert.equal(panel().split(pushHint).length, 2, 'One human follow-up is still waiting')
-      assert.deepEqual(session.getSteeringMessages(), ['ENTER_STEER', 'SLASH_STEER', 'PUSH_ME'])
-      assert.deepEqual(session.getFollowUpMessages(), [
-        'PUSH_ME',
-        'EXTENSION_FOLLOW_UP',
-        'KEEP_LATER',
-      ])
+      assert.equal(panel().split(interruptHint).length, 2)
+      assert.deepEqual(session.getSteeringMessages(), ['ENTER_STEER', 'SLASH_STEER'])
+      assert.deepEqual(session.getFollowUpMessages(), ['EXTENSION_FOLLOW_UP'])
+      assert.equal(session.agent.signal?.aborted, false, 'Steering never cancels the run')
       assert.equal(requests.length, 1)
       proceed.release()
       await run
       assert.equal(panel(), '', 'Delivery retires pending messages and their actions')
-      assert.doesNotMatch(requests.at(-1)!, /RETRACT_STEER|RETRACT_LATER/)
+      assert.doesNotMatch(requests.at(-1)!, /RETRACT_STEER|RETRACT_TOO/)
       assert.match(requests[1]!, /ENTER_STEER/)
-      assert.equal(requests[1]!.split('PUSH_ME').length, 2)
+      assert.match(requests[1]!, /SLASH_STEER/)
       assert.match(requests[1]!, /"toolCallId":"one"/)
       assert.match(requests[1]!, /"toolCallId":"two"/)
-      assert.doesNotMatch(requests[1]!, /KEEP_LATER|BOARD_EVENT|EXTENSION_FOLLOW_UP/)
+      assert.doesNotMatch(requests[1]!, /BOARD_EVENT|EXTENSION_FOLLOW_UP/)
 
       for (const path of ['one', 'two']) {
         assert.equal(await readFile(join(root, path), 'utf8'), path)
       }
 
-      assert.equal(requests.at(-1)!.split('PUSH_ME').length, 3)
       send('', '\x1b\r')
       assert.equal(tui.pendingUserInputs.length, 0)
 
-      for (const text of [
-        'ENTER_STEER',
-        'SLASH_STEER',
-        'KEEP_LATER',
-        'BOARD_EVENT',
-        'EXTENSION_FOLLOW_UP',
-      ]) {
+      for (const text of ['ENTER_STEER', 'SLASH_STEER', 'BOARD_EVENT', 'EXTENSION_FOLLOW_UP']) {
         assert.equal(requests.at(-1)!.split(text).length, 2, text + ' must arrive exactly once')
       }
     } finally {
@@ -219,7 +184,10 @@ test(
       await session.abort()
       await session.extensionRunner.emit({ type: 'session_shutdown', reason: 'quit' })
       offPanel()
-      assert.equal(tui.updatePendingMessagesDisplay, originalDisplay)
+      assert.equal(
+        Reflect.get(InteractiveMode.prototype, 'updatePendingMessagesDisplay'),
+        originalDisplay,
+      )
       assert.equal(session.agent.followUp, originalEnqueue)
       assert.equal(Reflect.get(InteractiveMode.prototype, 'handleFollowUp'), originalAction)
       session.dispose()

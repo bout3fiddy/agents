@@ -21,11 +21,16 @@ busy **Enter**, look for `Steering:` above the editor. Pi shows the configured s
 **all** queued messages there. That bulk action clears the queue and restores the listed messages to
 the editor; it does not withdraw just the last steer.
 
-**Alt+Enter** with text requests a follow-up after the current run has no more work. While a human
-follow-up is waiting, `pih` shows one more option: press **Alt+Enter with an empty editor** to push
-that follow-up into steering. Only the first waiting human follow-up moves; other messages keep
-their delivery modes. The hint uses your configured follow-up key. Pending steers arrive together by
-default; an explicit one-at-a-time steering preference still applies.
+**Alt+Enter** (Option+Enter on macOS, or your configured follow-up key) interrupts the foreground
+run. With editor text, it requests cancellation at once and sends that text as the next turn after
+the run stops. With an empty editor, it sends the first pending human steer, otherwise the first
+human follow-up; with neither, it explains and cancels nothing. Unlike Esc, it leaves other queued
+and extension messages in their order and delivery mode. `Interrupting with:` above the editor shows
+the held correction until the run settles. A tool that ignores cancellation keeps it waiting; no
+second turn starts and repeated presses change nothing. Completed effects are not undone, and
+background tasks continue. A correction that cannot be sent returns to the editor, or to the front
+of its queue. When idle, Alt+Enter sends like Enter. Pending steers arrive together by default; an
+explicit one-at-a-time steering preference still applies.
 
 The editor’s working indicator shows the latest streamed reasoning caption on one line and clears
 when idle. The installer sets transcript thinking to collapsed. Use Pi’s thinking display toggle if
