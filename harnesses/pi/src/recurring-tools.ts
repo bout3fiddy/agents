@@ -86,6 +86,8 @@ export function registerRecurring(pi: ExtensionAPI, pollMs = 5000) {
       'Runs while Pi is open. For progress audits set work.kind=audit, model, thinking, ' +
       'reportDirectory and optional stopWhen. startImmediately runs the baseline. ' +
       'Use work.notifyEveryInterval for explicit periodic user updates, including quiet ticks. ' +
+      'Set work.isolation to required when the scheduled work reads external or untrusted ' +
+      'input; every occurrence then runs isolated. ' +
       'Other work uses normal scoped background delegation. Remove cancels outstanding work.',
     parameters: Type.Object(
       {

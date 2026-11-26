@@ -26,7 +26,7 @@ import { runLocalCandidate } from './local-candidate.ts'
 import { runBranchTask } from './branch-runner.ts'
 import { dispatcher } from './dispatch.ts'
 import { trackDispatch } from './progress.ts'
-import { taskExecution } from './worker-execution.ts'
+import { taskExecution, taskRequiresIsolation } from './worker-execution.ts'
 
 async function integrationLock(store: StateStore, signal: AbortSignal) {
   for (let attempt = 0; attempt < 200; attempt++) {
@@ -68,6 +68,7 @@ export async function runDelegation(
   id: string,
   signal: AbortSignal,
   coordinate = runTaskCoordinator,
+  workers = dispatcher,
 ): Promise<DelegationStatus> {
   const jobs = new Delegations(store)
   const { request, state: initial } = await jobs.get(id)
@@ -145,11 +146,14 @@ export async function runDelegation(
         request.model,
         signal,
         trackDispatch(
-          dispatcher(new StateStore(request.root, directory)),
+          workers(new StateStore(request.root, directory)),
           join(directory, state.progressFile ?? 'coordinator.json'),
         ),
         { ...request.specialistThinking, implementer: request.thinking },
         request.implementerModel,
+
+        // Validated here so a malformed stored value stops the task instead of being ignored.
+        taskRequiresIsolation(request) ? 'required' : undefined,
       )
       const control = await controls()
       await save({

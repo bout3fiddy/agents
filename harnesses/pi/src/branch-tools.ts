@@ -84,6 +84,7 @@ export async function startBranchBatch(
     title,
     thinking,
     implementerModel,
+    ...(input.isolation && { isolation: input.isolation }),
     context: `Execute the authorized design in ${input.designPath} autonomously.\n${design}`,
     writePaths: scope.writePaths,
     branch: {
@@ -133,7 +134,9 @@ export function registerBranchTools(pi: ExtensionAPI, launch = launchDelegation)
       'Execute independent tasks from a settled design document on remote main. ' +
       'Each task gets an autonomous orchestrator, worktree and remote branch, with required ' +
       'executable checks. Set mergeToMain true only when the user explicitly requested merging. ' +
-      'Otherwise publish for later merge_branches. Returns immediately; no acceptance command ' +
+      'Otherwise publish for later merge_branches. Set isolation to required when the design ' +
+      'or its inputs are external or untrusted; it applies to every task, its children, checks ' +
+      'and merge-time refresh. Returns immediately; no acceptance command ' +
       'or routine human approval is needed. Supply disjoint scopes and complete design decisions.',
     parameters: fanoutSchema,
     async execute(_id, input, signal, _update, ctx) {

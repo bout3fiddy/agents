@@ -2,8 +2,10 @@ import { Type, type Static } from 'typebox'
 import {
   implementerModelSchema,
   performanceReviewSchema,
+  taskIsolationSchema,
   taskTitleSchema,
   thinkingSchema,
+  type TaskIsolation,
   type WorkerThinking,
   writePathSchema,
   type Design,
@@ -41,6 +43,7 @@ export const fanoutSchema = Type.Object(
     tasks: Type.Array(branchTaskSchema, { minItems: 1, maxItems: 4 }),
     remote: Type.Optional(Type.String({ pattern: '^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$' })),
     mergeToMain: Type.Optional(Type.Boolean()),
+    isolation: taskIsolationSchema,
   },
   { additionalProperties: false },
 )
@@ -70,6 +73,9 @@ export type BranchTaskInput = {
   context: string
   writePaths: string[]
   branch: BranchPlan
+
+  /** The batch requirement, stored on every branch task of the batch. */
+  isolation?: TaskIsolation
 }
 
 export function requireBranchChecks(

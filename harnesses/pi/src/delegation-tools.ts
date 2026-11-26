@@ -649,7 +649,11 @@ function registerDelegateTask(
       'Start a background coordinator that can delegate scoped workers. ' +
       'Use for product changes, including routine maintenance and repairs. ' +
       'Do not split fresh repository bootstrap files into a delegated task. Workers ' +
-      'cannot install dependencies, use the network or publish Git; declare host requirements. ' +
+      'cannot install dependencies or publish Git; declare host requirements. Worker commands ' +
+      'are sandboxed without network unless the user enrolled the project as trusted-local. ' +
+      'Set isolation to required when the task or its inputs are external or untrusted: its ' +
+      'coordinator, children and checks then stay sandboxed in every project, also after ' +
+      'resume or revision. ' +
       'Return immediately and continue discussion. Supply context and scoped writePaths. ' +
       'For explicit Claude comparisons set implementerModel with research and empty writePaths. ' +
       'For product documentation and design reorganizations, use documents with authorized paths ' +

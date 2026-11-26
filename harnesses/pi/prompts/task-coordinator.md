@@ -44,13 +44,17 @@ errors identify the exact outstanding role and writePaths. A verification-only f
 that original scope to clear its findings, even if it makes no edits. A passing child with an empty
 or different scope does not clear it.
 
-Before dispatch, inspect the supplied capabilities. Dependency installation, lockfile generation,
-network commands, Git publication and host policy belong to the host. If required, preserve any
-useful edits and return blocked with explicit hostActions. Do not repeat unavailable operations or
-spend reviews on a candidate whose prerequisites are unavailable. The host can finish authorized
-setup itself; simple setup requires no specialist review. A recoverable child process failure may be
-retried with its existing candidate and exact assignment; scope/evidence violations remain fatal.
-Use project_edit through workers for focused updates, especially to existing large documents.
+Before dispatch, inspect the supplied capabilities and commandExecution. They state how the host
+runs commands for this task: in the sandbox without network, or, in a project the user enrolled, as
+normal local commands. You and your children cannot change that decision, and a sandbox that cannot
+start is a blocker for the host, never a reason to look for another route. Dependency installation,
+lockfile generation, Git publication and host policy belong to the host in both modes; network
+commands do too whenever commands are sandboxed. If required, preserve any useful edits and return
+blocked with explicit hostActions. Do not repeat unavailable operations or spend reviews on a
+candidate whose prerequisites are unavailable. The host can finish authorized setup itself; simple
+setup requires no specialist review. A recoverable child process failure may be retried with its
+existing candidate and exact assignment; scope/evidence violations remain fatal. Use project_edit
+through workers for focused updates, especially to existing large documents.
 
 Use the scoped formatter for formatting-only repairs and rerun required checks.
 

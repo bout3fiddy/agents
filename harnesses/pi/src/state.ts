@@ -10,6 +10,7 @@ import {
   type Checkpoint,
   type Design,
   type Receipt,
+  type TaskIsolation,
   type WorkerEvidence,
   type WorkerResult,
 } from './contracts.ts'
@@ -115,16 +116,18 @@ export class StateStore {
     return checkpoint
   }
 
-  /** Freeze worker scope without changing the host conversation. Caller owns the project lock. */
-  async pin(design: Design): Promise<Checkpoint> {
+  /** Freeze worker scope without changing the host conversation. Caller owns the project lock.
+   * A scope pinned for isolated work stays isolated each time the recorded scope is resumed. */
+  async pin(design: Design, isolation?: TaskIsolation): Promise<Checkpoint> {
     validateDesign(design)
     validateWriteScope(design.writePaths)
     const previous = await this.checkpoint()
-    const checkpoint = {
+    const checkpoint: Checkpoint = {
       ...design,
       version: (previous?.version ?? 0) + 1,
       hash: digest(JSON.stringify(design)),
       acceptedAt: new Date().toISOString(),
+      ...(isolation && { isolation }),
     }
     await atomicJson(join(this.directory, 'designs', `${checkpoint.version}.json`), checkpoint)
     await atomicJson(join(this.directory, 'accepted.json'), checkpoint)

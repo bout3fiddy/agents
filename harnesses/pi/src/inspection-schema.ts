@@ -48,6 +48,7 @@ export const capabilitySchema = Type.Object({
     git: string,
     failure: string,
   }),
+  execution: string,
   routing: string,
 })
 

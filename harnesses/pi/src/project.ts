@@ -16,9 +16,10 @@ import { runOnHost, runSandboxed } from './sandbox.ts'
 import { addGitIndex } from './probe-git.ts'
 import { taskDirectory, temporaryDirectory, type TaskOwner } from './temp.ts'
 import {
+  benchmarkRunner,
   checkRunner,
   effectiveExecution,
-  linkLockedDependencies,
+  prepareDependencies,
   resolveExecution,
   type ExecutionPolicy,
 } from './worker-execution.ts'
@@ -345,7 +346,7 @@ async function runCheck(
 
   try {
     const git = await addGitIndex(probe, workspace, project.root)
-    const linked = await linkLockedDependencies(probe, project.root, files.keys(), execution)
+    const linked = await prepareDependencies(probe, project.root, files.keys(), execution)
     const argv = prepare ? await prepare({ check, probe, argv: check.argv }) : check.argv
     const result =
       runner === 'host'
@@ -512,6 +513,49 @@ export async function verifyProject(
         },
       })
     }
+  }
+
+  return receipts
+}
+
+/** Run the project's benchmark checks under the execution decision in force now, each in its own
+ * command copy with the nested dependency trees its lockfiles pin. A trusted-local project
+ * measures as a local command; every other project measures in the sandbox, and a sandbox that
+ * cannot start is a failed receipt, never a host run. */
+export async function benchmarkReceipts(
+  workspace: string,
+  project: Project,
+  signal?: AbortSignal,
+): Promise<Receipt[]> {
+  const files = await inventory(workspace)
+  const snapshot = snapshotHash(files)
+  const execution = await effectiveExecution(project)
+  const context: CheckContext = { workspace, files, project, execution, signal }
+  const receipts: Receipt[] = []
+
+  for (const check of project.checks.filter((item) => item.kind === 'benchmark')) {
+    const { result } = await runCheck(context, check, benchmarkRunner(execution))
+
+    // A benchmark that skipped cases measured nothing, so it fails rather than reporting a skip.
+    const status = checkStatus(result, true) === 'passed' ? 'passed' : 'failed'
+    receipts.push({ snapshot, check: check.id, status, result })
+  }
+
+  if (!project.checks.some((check) => check.kind === 'benchmark' && check.required)) {
+    receipts.push({
+      snapshot,
+      check: 'required-benchmark',
+      status: 'unavailable',
+      result: {
+        argv: [],
+        exitCode: null,
+        output: 'Declare a required benchmark check in .pi/harness.json',
+        timedOut: false,
+        aborted: false,
+        truncated: false,
+        durationMs: 0,
+      },
+    })
   }
 
   return receipts

@@ -22,7 +22,7 @@ import { atomicJson } from './state.ts'
 import {
   effectiveExecution,
   isolationUnavailable,
-  linkLockedDependencies,
+  prepareDependencies,
   runWorkerCommand,
   storedExecution,
   type ExecutionMode,
@@ -64,11 +64,16 @@ function commandDescription(mode: ExecutionMode): string {
  * absolute path. Undo what it changed outside the assignment: only scoped file tools retain
  * edits. Paths excluded from snapshots are not observed. Returns the restored paths.
  *
- * This attributes every change during the command to the command, as the coordinator's own
- * write check does for a child. It is correct only while one worker at a time holds a candidate:
- * the coordinator runs children serially and each local or branch candidate has its own
- * worktree. Running workers concurrently on one candidate would let this revert a sibling's
- * edit, so that change must replace this step first. */
+ * This attributes every unassigned change during the command to the command, and never touches
+ * an assigned path. It therefore cannot undo a legitimate edit as long as legitimate edits only
+ * land on the assigned paths of the one worker that may write the candidate. The callers keep
+ * that true: a writer holds its candidate alone (the coordinator serializes children and its own
+ * tools, and each local or branch candidate has its own worktree), and the only workers that
+ * share a candidate are research-swarm siblings, which are dispatched with an empty write scope
+ * and never together with a writer. Siblings can still undo each other's stray command writes in
+ * either order; the coordinator rejects a swarm that leaves the candidate changed. Dispatching a
+ * writer beside any other worker on one candidate would break this and must replace this step
+ * first. */
 async function restoreUnassigned(
   workspace: string,
   before: Map<string, Buffer>,
@@ -243,7 +248,8 @@ export function createWorkerTools(request: WorkerRequest, role: Role) {
       executionMode: 'sequential',
       label: 'Run verification loop',
       description:
-        'Run isolated seeded cases in one call. Use {seed} in argv. Differential compares ' +
+        'Run seeded cases in one call, each in a fresh copy under the same execution decision ' +
+        'as run_command. Use {seed} in argv. Differential compares ' +
         'stable text from original and candidate. Benchmark runs matching inputs in alternating ' +
         'order; emit one numeric value and specify metric with unit. Return first failing replay ' +
         'or paired medians. Raw samples are retained. Project acceptance checks remain required.',
@@ -282,7 +288,7 @@ export function createWorkerTools(request: WorkerRequest, role: Role) {
         try {
           const root = request.project.root
           const git = await addGitIndex(probe, request.workspace, root)
-          const linked = await linkLockedDependencies(probe, root, files.keys(), execution)
+          const linked = await prepareDependencies(probe, root, files.keys(), execution)
           const result = await runWorkerCommand(execution, {
             workspace: probe,
             argv,
@@ -392,7 +398,7 @@ function submissionInstructions(role: WorkerRequest['role']) {
 
   return (
     'Use submit_result when finished. If a host capability is required, return blocked ' +
-    'with hostActions immediately. Do not retry unavailable operations in the sandbox.'
+    'with hostActions immediately. Do not retry an operation your commands cannot perform.'
   )
 }
 

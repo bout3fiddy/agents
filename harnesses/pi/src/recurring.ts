@@ -13,7 +13,7 @@ import {
   reportDirectorySchema,
   type AuditCursor,
 } from './recurring-audit.ts'
-import { thinkingSchema } from './contracts.ts'
+import { taskIsolationSchema, thinkingSchema } from './contracts.ts'
 import {
   activeTask,
   delegateSchema,
@@ -40,6 +40,7 @@ const audit = Type.Object(
     model: Type.Optional(Type.Union([Type.Literal('codex'), Type.Literal('fable')])),
     reportDirectory: Type.Optional(reportDirectorySchema),
     notifyEveryInterval: Type.Optional(Type.Boolean()),
+    isolation: taskIsolationSchema,
     stopWhen: Type.Optional(
       Type.String({
         minLength: 1,
@@ -389,6 +390,7 @@ export class RecurringTasks {
             kind: 'research',
             task: work.task,
             thinking: work.thinking,
+            ...(work.isolation && { isolation: work.isolation }),
             writePaths: [],
             context:
               'Read-only recurring audit. The host writes your report. ' +

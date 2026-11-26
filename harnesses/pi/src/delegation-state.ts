@@ -16,6 +16,7 @@ import {
   thinkingSchema,
   workflowSpecialistsSchema,
   designSchema,
+  taskIsolationSchema,
   validateDesign,
   writePathSchema,
 } from './contracts.ts'
@@ -46,6 +47,7 @@ export const delegateSchema = Type.Object(
     requires: Type.Optional(Type.Array(hostCapability, { maxItems: 4 })),
     design: Type.Optional(designSchema),
     performanceReview: performanceReviewSchema,
+    isolation: taskIsolationSchema,
   },
   { additionalProperties: false },
 )
@@ -321,6 +323,7 @@ export function delegationView(job: Delegation) {
     }),
     ...(job.request.recurring && { schedule: job.request.recurring.name }),
     thinking: job.request.thinking,
+    ...(job.request.isolation !== undefined && { isolation: job.request.isolation }),
     task: job.request.task.slice(0, 500),
     writePaths: job.request.writePaths,
     ...state,
@@ -478,8 +481,12 @@ export class Delegations {
         throw new Error('Supply a settled design to workflow; resolve blockers for this scope')
       }
 
+      // Resuming the recorded scope keeps the isolation it was pinned with. A request that
+      // supplies a design states its own requirement, which the new pin records.
+      const isolation = input.isolation ?? (input.design ? undefined : checkpoint?.isolation)
       const request: DelegationRequest = {
         ...input,
+        ...(isolation && { isolation }),
         ...origin,
         originRoot,
         originSession: origin.session,
@@ -509,7 +516,7 @@ export class Delegations {
 
         try {
           release.assertHeld()
-          request.checkpointHash = (await this.store.pin(input.design)).hash
+          request.checkpointHash = (await this.store.pin(input.design, input.isolation)).hash
         } finally {
           await release()
         }

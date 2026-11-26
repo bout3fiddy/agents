@@ -6,6 +6,7 @@ import type {
   ImplementerModel,
   Project,
   Receipt,
+  TaskIsolation,
   WorkerEvidence,
   WorkerResult,
   WorkerRole,
@@ -15,7 +16,7 @@ import type { ReleaseLock } from './lock.ts'
 import { RepairProgress } from './repair-budget.ts'
 import { StateStore, atomicJson, type TaskState } from './state.ts'
 import { dispatcher, type Dispatcher } from './dispatch.ts'
-import { createWorkspace, hasSkippedTests, loadProject, verifyProject } from './project.ts'
+import { benchmarkReceipts, createWorkspace, loadProject, verifyProject } from './project.ts'
 import { changes, integrate, recoverIntegration } from './integration.ts'
 import {
   documentPath,
@@ -26,9 +27,9 @@ import {
   writable,
   rejectIgnoredAdditions,
 } from './paths.ts'
-import { runSandboxed } from './sandbox.ts'
 import { retainedCandidate } from './resume.ts'
 import { receiptView } from './context.ts'
+import { taskExecution } from './worker-execution.ts'
 
 // A changed adapter can alter transaction semantics below an unchanged driver import.
 const databaseStatements = new RegExp(
@@ -108,53 +109,8 @@ function failed(receipts: Receipt[], project: Project): Receipt[] {
   )
 }
 
-export async function benchmarks(
-  workspace: string,
-  project: Project,
-  signal?: AbortSignal,
-): Promise<Receipt[]> {
-  const snapshot = snapshotHash(await inventory(workspace))
-  const receipts: Receipt[] = []
-
-  for (const check of project.checks.filter((item) => item.kind === 'benchmark')) {
-    const probe = await createWorkspace(workspace)
-    const result = await runSandboxed(probe, check.argv, check.timeoutMs, signal).finally(() =>
-      rm(probe, { recursive: true, force: true }),
-    )
-    receipts.push({
-      snapshot,
-      check: check.id,
-      status:
-        result.exitCode === 0 &&
-        !result.timedOut &&
-        !result.aborted &&
-        !result.truncated &&
-        !hasSkippedTests(result.output)
-          ? 'passed'
-          : 'failed',
-      result,
-    })
-  }
-
-  if (!project.checks.some((check) => check.kind === 'benchmark' && check.required)) {
-    receipts.push({
-      snapshot,
-      check: 'required-benchmark',
-      status: 'unavailable',
-      result: {
-        argv: [],
-        exitCode: null,
-        output: 'Declare a required benchmark check in .pi/harness.json',
-        timedOut: false,
-        aborted: false,
-        truncated: false,
-        durationMs: 0,
-      },
-    })
-  }
-
-  return receipts
-}
+/** Benchmark checks follow the project's execution decision like every other check. */
+export const benchmarks = benchmarkReceipts
 
 type WorkflowRole = Exclude<WorkerRole, 'task-worker' | 'progress-auditor'>
 
@@ -166,6 +122,9 @@ type WorkflowRun = {
   dispatch: Dispatcher
   thinking: Partial<Record<WorkflowRole, WorkerThinking>>
   implementerModel?: ImplementerModel
+
+  /** The host task's own requirement. The pinned scope can add one; neither removes it. */
+  isolation?: TaskIsolation
   release: ReleaseLock
   checkpoint: Checkpoint
   project: Project
@@ -195,6 +154,7 @@ export async function runWorkflow(
   dispatch: Dispatcher = dispatcher(store),
   thinking: Partial<Record<WorkflowRole, WorkerThinking>> = {},
   implementerModel?: ImplementerModel,
+  isolation?: TaskIsolation,
 ): Promise<TaskState> {
   const release = await store.lock()
   const opened: { task?: TaskState } = {}
@@ -203,7 +163,17 @@ export async function runWorkflow(
     await recoverIntegration(store)
     const checkpoint = await acceptedCheckpoint(store)
     const run = await openWorkflow(
-      { store, model, signal, dispatch, thinking, implementerModel, release, checkpoint },
+      {
+        store,
+        model,
+        signal,
+        dispatch,
+        thinking,
+        implementerModel,
+        isolation,
+        release,
+        checkpoint,
+      },
       opened,
     )
     let step: WorkflowStep = { kind: 'implement', feedback: initialFeedback(run), round: 1 }
@@ -253,6 +223,7 @@ type WorkflowInputs = Pick<
   | 'dispatch'
   | 'thinking'
   | 'implementerModel'
+  | 'isolation'
   | 'release'
   | 'checkpoint'
 >
@@ -263,7 +234,16 @@ async function openWorkflow(
   opened: { task?: TaskState },
 ): Promise<WorkflowRun> {
   const { store, checkpoint, signal } = inputs
-  const project = await loadProject(store.projectRoot)
+  const loaded = await loadProject(store.projectRoot)
+
+  // A task or pinned scope the host marked for isolation keeps it whatever the project's own
+  // decision is. Every worker, check and benchmark of this run reads the narrowed project.
+  const project = {
+    ...loaded,
+    execution: taskExecution(loaded.execution, {
+      isolation: inputs.isolation ?? checkpoint.isolation,
+    }),
+  }
   const requiredKinds = [
     'test',
     ...(checkpoint.database ? ['database'] : []),

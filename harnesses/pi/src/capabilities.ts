@@ -29,7 +29,10 @@ export const capabilities = {
     authority: 'Only actions authorized by the user; a worker request never grants new permission.',
   },
   workers: {
-    shell: 'Disposable project copies. No network, host-home access or retained shell writes.',
+    shell:
+      'Disposable project copies without retained shell writes. Sandboxed with no network or ' +
+      'host-home access unless the user enrolled the project as trusted-local; then commands ' +
+      "run as normal local commands with the user's authority.",
     writes: 'Scoped file tools: project_edit for focused edits; project_write for new/full files.',
     dependencies:
       'Existing dependencies are readable. Installation and lockfile generation need host.',
@@ -41,8 +44,13 @@ export const capabilities = {
     'The user decides per project how worker commands run: trusted-local (normal local ' +
     'commands in disposable copies), required-isolation, or isolated when no decision is ' +
     "recorded. Enrollment is a host action with the user's authorization: run the harness CLI " +
-    'trust command from the project root. Workers, project files, prompts and tool arguments ' +
-    'cannot lift isolation, and a sandbox that cannot start never falls back to the host.',
+    'trust command from the project root. trusted-local is not containment: use it only for a ' +
+    'checkout the user trusts. For one task whose input is external or untrusted, set ' +
+    "isolation: 'required' on workflow, delegate_task, delegate_local, delegate_branches or a " +
+    'recurring_task definition; it is stored with the task and applies to its children, ' +
+    'checks, benchmarks, resumption and revision. Workers, project files, prompts and tool ' +
+    'arguments cannot lift isolation, and a sandbox that cannot start never falls back to the ' +
+    'host.',
   routing:
     'For a direct save of a small settled workshop decision, create or edit the requested ' +
     'design.md or design/design.md on the host and verify its contents before replying. ' +
@@ -55,10 +63,11 @@ export const capabilities = {
 const trustedShell =
   'Normal local commands in disposable project copies: installed dependencies, loopback and ' +
   'network behave as in the trusted checkout. Shell writes are discarded with the copy.'
+const isolatedShell =
+  'Disposable project copies. No network, host-home access or retained shell writes.'
 
-/** What a worker is told about its shell under the execution decision frozen at dispatch. */
+/** What a worker is told about its shell under the execution decision frozen at dispatch. The
+ * host-facing text above describes both modes; a worker reads only the one it runs under. */
 export function workerCapabilities(mode: ExecutionMode) {
-  return mode === 'trusted-local'
-    ? { ...capabilities.workers, shell: trustedShell }
-    : capabilities.workers
+  return { ...capabilities.workers, shell: mode === 'trusted-local' ? trustedShell : isolatedShell }
 }

@@ -398,7 +398,8 @@ review is supplementary evidence; the regression tests establish the corrected b
 
 The command sandbox currently supports macOS only. Network-backed database services and external
 virtual environments require a separate tested adapter. Provider clients themselves remain trusted
-host programs with login/network access; the command sandbox isolates delegated worker commands. The
+host programs with login/network access; the command sandbox isolates delegated worker commands
+except in a project the user enrolled as trusted-local, where they run as normal local commands. The
 orchestrator intentionally has ordinary host shell and file access.
 
 SQLite crash tests establish the stated single-machine process-crash contract. They do not establish

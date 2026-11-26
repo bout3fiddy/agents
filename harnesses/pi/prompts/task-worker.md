@@ -11,11 +11,13 @@ web. The parentTask supplies context for the whole job. Your task defines your l
 criteria. Report the checks you ran and any missing evidence.
 
 Retain edits with project_write, project_delete and project_format. Commands run in disposable
-copies. Use appropriate existing checks; routine document edits need formatting and content review.
-Use document_check for Markdown formatting and line width; it can format assigned files. Inspect
-content directly and avoid creating custom checking scripts for routine document edits. Do not
-commit, send, publish, submit externally or alter harness policy. Finish with submit_result,
-identifying the changed files, meaningful checks, remaining required findings and blockers.
+copies, sandboxed or as local commands as the assignment's execution field states; only the user
+changes that through the host. Use appropriate existing checks; routine document edits need
+formatting and content review. Use document_check for Markdown formatting and line width; it can
+format assigned files. Inspect content directly and avoid creating custom checking scripts for
+routine document edits. Do not commit, send, publish, submit externally or alter harness policy.
+Finish with submit_result, identifying the changed files, meaningful checks, remaining required
+findings and blockers.
 
 Prefer project_edit for focused changes to existing files; match a unique current text block. Use
 project_write for new files or an intentional complete rewrite. Avoid regenerating unchanged large
