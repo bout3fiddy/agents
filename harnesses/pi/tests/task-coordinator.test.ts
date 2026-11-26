@@ -198,9 +198,9 @@ test('Markdown and source formatters agree on fenced TypeScript', async (t) => {
   await invoke(worker.tools, 'project_format', { paths: [path] })
   assert.equal(await readFile(absolute, 'utf8'), canonical)
   const checked = await invoke(worker.tools, 'document_check', { paths: [path] })
-  const report = checked.content[0]
-  assert.ok(report?.type === 'text')
-  assert.equal(JSON.parse(report.text).status, 'passed')
+  const checkContent = checked.content[0]
+  assert.ok(checkContent?.type === 'text')
+  assert.equal(JSON.parse(checkContent.text).status, 'passed')
 
   await writeFile(absolute, unformatted)
   await invoke(worker.tools, 'document_check', { paths: [path], format: true })
@@ -675,21 +675,21 @@ test('research receipts must match the selected writer or its attributed fallbac
     { selection: 'opus', report: fallback, accepted: false },
   ] as const
 
-  for (const { selection, report, accepted } of cases) {
+  for (const { selection, report: modelReport, accepted } of cases) {
     const { request, controller } = await setup(t)
     Object.assign(request, { kind: 'research', implementerModel: selection })
     request.checkpoint.writePaths = []
     const worker = await createTaskCoordinatorTools(request, controller.signal, async (child) => {
       assert.equal(child.role, 'implementer')
       assert.equal(child.implementerModel, selection)
-      return { ...(await evidence(child)), ...report }
+      return { ...(await evidence(child)), ...modelReport }
     })
     const delegation = invoke(worker.tools, 'delegate_worker', {
       ...leaf,
       writePaths: [],
       thinking: 'high',
     })
-    const label = `${selection} selection with ${JSON.stringify(report)}`
+    const label = `${selection} selection with ${JSON.stringify(modelReport)}`
 
     if (accepted) {
       await delegation
