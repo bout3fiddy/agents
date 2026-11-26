@@ -16,11 +16,16 @@ performance measurement.
 
 In the host editor, **Enter** sends when idle and **steers** while working. A steer reaches the
 model after the in-flight response and its tool batch, before the next model request. It does not
-cancel a tool or undo its effects. `/steer TEXT` explicitly uses the same delivery priority.
-**Alt+Enter** with text requests a follow-up after the current run has no more work. In `pih`, press
-**Alt+Enter with an empty editor** to push one waiting human follow-up into steering. The other
-messages keep their delivery modes. Pending steers arrive together by default; an explicit
-one-at-a-time steering preference still applies. If you remapped Pi’s follow-up key, use that key.
+cancel a tool or undo its effects. `/steer TEXT` explicitly uses the same delivery priority. After a
+busy **Enter**, look for `Steering:` above the editor. Pi shows the configured shortcut to edit
+**all** queued messages there. That bulk action clears the queue and restores the listed messages to
+the editor; it does not withdraw just the last steer.
+
+**Alt+Enter** with text requests a follow-up after the current run has no more work. While a human
+follow-up is waiting, `pih` shows one more option: press **Alt+Enter with an empty editor** to push
+that follow-up into steering. Only the first waiting human follow-up moves; other messages keep
+their delivery modes. The hint uses your configured follow-up key. Pending steers arrive together by
+default; an explicit one-at-a-time steering preference still applies.
 
 The editor’s working indicator shows the latest streamed reasoning caption on one line and clears
 when idle. The installer sets transcript thinking to collapsed. Use Pi’s thinking display toggle if

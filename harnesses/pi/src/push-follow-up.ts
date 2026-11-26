@@ -5,6 +5,7 @@ import {
   type AgentSession,
   type ExtensionContext,
 } from '@earendil-works/pi-coding-agent'
+import { TruncatedText, type Container } from '@earendil-works/pi-tui'
 import { invariant } from './invariant.ts'
 
 // Narrow adapter for the pinned Pi editor: its extension API can submit a steer, but the only
@@ -13,6 +14,8 @@ type FollowUpAction = {
   session: AgentSession
   editor: { getText(): string }
   compactionQueuedMessages: { mode: 'steer' | 'followUp' }[]
+  getAppKeyDisplay(action: 'app.message.followUp'): string
+  pendingMessagesContainer: Container
   updatePendingMessagesDisplay(): void
   ui: { requestRender(): void }
   handleFollowUp(): Promise<void>
@@ -36,14 +39,19 @@ function pendingDisplay(session: AgentSession) {
   return { followUpLabels, steeringLabels, notify: notify.bind(session) }
 }
 
-// Move the original object (including attachments) while the JS event loop cannot drain it.
-// Pi keeps a second, text-only list for its pending display. Validate both before any mutation.
-function promote(session: AgentSession, human: WeakSet<AgentMessage>): boolean {
+function pendingFollowUps(session: AgentSession): AgentMessage[] {
   const { followUpQueue } = session.agent as unknown as {
     followUpQueue?: { messages?: AgentMessage[] }
   }
   const pending = followUpQueue?.messages
   invariant(Array.isArray(pending), 'Pending follow-up messages must be available')
+  return pending
+}
+
+// Move the original object (including attachments) while the JS event loop cannot drain it.
+// Pi keeps a second, text-only list for its pending display. Validate both before any mutation.
+function promote(session: AgentSession, human: WeakSet<AgentMessage>): boolean {
+  const pending = pendingFollowUps(session)
   const index = pending.findIndex((message) => human.has(message))
   const message = pending[index]
 
@@ -117,18 +125,57 @@ function trackOrigin(session: AgentSession, human: WeakSet<AgentMessage>): () =>
   }
 }
 
+// Pi already renders the steer receipt and configured edit-all key. Only the push action is
+// specific to pih. Refresh it with Pi's pending display so withdrawal and delivery retire it.
+function trackPushHint(
+  tui: FollowUpAction,
+  ctx: ExtensionContext,
+  human: WeakSet<AgentMessage>,
+): () => void {
+  const update = tui.updatePendingMessagesDisplay
+  const key = tui.getAppKeyDisplay('app.message.followUp')
+  const label = ctx.ui.theme.fg('dim', `↳ ${key} on empty: push next human follow-up`)
+  const hint = new TruncatedText(label, 1, 0)
+  tui.updatePendingMessagesDisplay = () => {
+    update.call(tui)
+    const waiting =
+      tui.compactionQueuedMessages.some((message) => message.mode === 'followUp') ||
+      (!tui.session.isIdle && pendingFollowUps(tui.session).some((message) => human.has(message)))
+
+    if (waiting) {
+      tui.pendingMessagesContainer.addChild(hint)
+    }
+  }
+  const clear = () => {
+    tui.pendingMessagesContainer.removeChild(hint)
+    tui.ui.requestRender()
+  }
+  const unsubscribe = tui.session.subscribe((event) => {
+    if (event.type === 'agent_settled' && tui.session.isIdle) {
+      clear()
+    }
+  })
+  return () => {
+    unsubscribe()
+    tui.updatePendingMessagesDisplay = update
+    clear()
+  }
+}
+
 export function installPush(ctx: ExtensionContext): () => void {
   const interactive = InteractiveMode.prototype as unknown as FollowUpAction
   const submit = interactive.handleFollowUp
   const owner = ctx.sessionManager
   const human = new WeakSet<AgentMessage>()
   let restoreAgent: (() => void) | undefined
+  let restoreHint: (() => void) | undefined
   interactive.handleFollowUp = async function () {
     if (this.session.sessionManager !== owner) {
       return submit.call(this)
     }
 
     restoreAgent ??= trackOrigin(this.session, human)
+    restoreHint ??= trackPushHint(this, ctx, human)
 
     if (this.editor.getText().trim()) {
       return submit.call(this)
@@ -153,5 +200,6 @@ export function installPush(ctx: ExtensionContext): () => void {
   return () => {
     interactive.handleFollowUp = submit
     restoreAgent?.()
+    restoreHint?.()
   }
 }
