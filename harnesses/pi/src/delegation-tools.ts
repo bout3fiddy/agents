@@ -1,4 +1,5 @@
 import { WorkersCatalog } from './workers-data.ts'
+import { taskStatusLine } from './task-footer.ts'
 import { taskStatusSchema } from './inspection-schema.ts'
 import { realpath } from 'node:fs/promises'
 import { basename, dirname, join, relative, resolve } from 'node:path'
@@ -220,13 +221,15 @@ class TaskFeed {
 
     try {
       const session = ctx.sessionManager.getSessionId()
-      const jobs = await new Delegations(await storeFor(ctx.cwd)).list()
+      const store = await storeFor(ctx.cwd)
+      const jobs = await new Delegations(store).list()
+      const footer = await taskStatusLine(store, jobs, session)
 
       if (this.closed || session !== ctx.sessionManager.getSessionId()) {
         return []
       }
 
-      ctx.ui.setStatus('pi-tasks', taskStatusLine(jobs))
+      ctx.ui.setStatus('pi-tasks', footer)
       const view = sessionView(ctx, session)
       const ready = this.readyResults(jobs, view)
       const messages: CustomMessageEntryDraft[] = ready.length ? [resultMessage(ready)] : []
@@ -425,27 +428,6 @@ class TaskFeed {
         }
       : undefined
   }
-}
-
-function taskStatusLine(jobs: Delegation[]): string | undefined {
-  const active = jobs.filter((job) => activeTask(job.state))
-
-  if (!active.length) {
-    return undefined
-  }
-
-  return (
-    'Tasks · ' +
-    active
-      .map((job) => {
-        const progress = job.state.progress
-        return (
-          `${job.request.id.slice(0, 6)} ${progress?.role ?? job.state.status}/` +
-          `${progress?.child?.tool ?? progress?.stage ?? 'starting'}`
-        )
-      })
-      .join(' · ')
-  )
 }
 
 function sessionView(ctx: ExtensionContext, session: string): SessionView {

@@ -177,6 +177,29 @@ export function activeTask(state: DelegationStatus): boolean {
   return activeStates.has(state.status)
 }
 
+/** Project the effective supervisor state without changing the owner's persisted task. */
+export function observedTaskState(state: DelegationStatus): DelegationStatus {
+  if (activeTask(state) && state.pid) {
+    try {
+      process.kill(state.pid, 0)
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ESRCH') {
+        return {
+          ...state,
+          status: 'needs_attention',
+          error: 'Task supervisor stopped; inspect retained candidate and integration evidence.',
+        }
+      }
+    }
+  }
+
+  if (state.status === 'queued' && Date.now() - Date.parse(state.updatedAt) > 60000) {
+    return { ...state, status: 'failed', error: 'Task supervisor did not start within 60 seconds' }
+  }
+
+  return state
+}
+
 export function ownsTaskPaths(state: DelegationStatus): boolean {
   return activeTask(state) || state.status === 'paused'
 }
@@ -401,27 +424,7 @@ export class Delegations {
       throw new Error('No delegated task with this ID in the project')
     }
 
-    if (activeTask(state) && state.pid) {
-      try {
-        process.kill(state.pid, 0)
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code === 'ESRCH') {
-          state = {
-            ...state,
-            status: 'needs_attention',
-            error: 'Task supervisor stopped; inspect retained candidate and integration evidence.',
-          }
-        }
-      }
-    }
-
-    if (state.status === 'queued' && Date.now() - Date.parse(state.updatedAt) > 60000) {
-      state = {
-        ...state,
-        status: 'failed',
-        error: 'Task supervisor did not start within 60 seconds',
-      }
-    }
+    state = observedTaskState(state)
 
     const report = await readProgress(join(directory, state.progressFile ?? 'coordinator.json'))
     const milestone = report?.milestone
