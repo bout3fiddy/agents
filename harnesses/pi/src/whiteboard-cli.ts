@@ -165,7 +165,7 @@ function requiredByCLI(failure: unknown) {
 // code chooses the hint.
 const hints: Record<string, string> = {
   stage_closed: 'Reopen the Mac stage with /start_whiteboard.',
-  revision_conflict: 'The canvas changed. Take a fresh snapshot.',
+  revision_conflict: 'The agent print changed. Take a fresh snapshot.',
   sketch_changed: 'The sketch changed. Take a fresh snapshot.',
   session_mismatch: 'The scene names another board. Take a fresh snapshot.',
   invalid_scene: 'The scene is invalid. Check it against the snapshot schema.',

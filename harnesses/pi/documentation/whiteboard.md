@@ -1,13 +1,23 @@
 # Whiteboard integration check
 
-tldraw-sync owns the composer, read-only stage, canvas revision and Sketchboard undo. pih links and
-polls with `--protocol 4`. Three parties hold a protocol number: the pih launcher, the tldraw-sync
-CLI and the running daemon, which keeps the protocol it was started with until it restarts. A
-mismatch reports all three, for example
+tldraw-sync owns the composer, read-only stage, the agent print revision and Sketch undo. pih links
+and polls with `--protocol 4`. Three parties hold a protocol number: the pih launcher, the
+tldraw-sync CLI and the running daemon, which keeps the protocol it was started with until it
+restarts. A mismatch reports all three, for example
 `pih requests 4, the tldraw-sync CLI supports 4, the daemon reports 3`. `tldraw-sync stop` saves the
 board before stopping; the next `/start_whiteboard` starts the current daemon and reopens the same
 binding. Do not stop a daemon another session is using without telling its owner. Keep binding files
 private; never inspect or paste their contents.
+
+## One canvas
+
+Sketch and the agent print are layers of one dotted surface that share one camera; there is no other
+view to switch to. The human editor owns Sketch: pih has no action that writes it. `publish` owns
+the agent print and replaces it whole with the previewed scene file, guarded by the agent print
+revision and the sketch hash. The snapshot image is a composite of both layers, so it never shows
+which pixels are human ink; the host checks the snapshot's saved original agent records for
+provenance and completeness. Only the human can inspect a printed shape and take it into Sketch, as
+one edit that one undo reverses. This changes no tool action and no protocol 4 field.
 
 ## Private chat
 
@@ -61,10 +71,11 @@ To check delivery end to end:
    The first is answered on the board and publishes nothing; the second is drawn. Then send a
    private note without the sketch: confirm one natural answer appears for it on the board, that no
    snapshot was taken, and that the working ACK alone showed no answer.
-3. Snapshot, edit the scene file, preview it and inspect the image; confirm the canvas revision did
-   not move. Publish the same file. Race a sketch-basis scene against new ink; it must not publish.
-   As the human, replace Sketch, check the native shapes are editable, then undo the replacement
-   once.
+3. Snapshot, edit the scene file, preview it and inspect the image; confirm the agent print revision
+   did not move. Publish the same file and confirm the print shares the Sketch camera on one
+   surface. Race a sketch-basis scene against new ink; it must not publish. As the human, inspect a
+   printed shape and take it into Sketch, check it is an editable native shape, then undo once and
+   confirm Sketch is as before.
 4. Reload pih. Confirm delivered requests do not wake it again. Close the stage and request a new
    snapshot; confirm a tool error rather than a successful publication. Reopen the stage with
    `/start_whiteboard` and verify recovery. Fork or start a new session: no access without a start.

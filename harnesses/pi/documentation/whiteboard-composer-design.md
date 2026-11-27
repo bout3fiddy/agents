@@ -2,6 +2,11 @@
 
 # Whiteboard composer and unified Agent canvas
 
+> **Superseded.** This archived protocol 2 design describes separate Sketchboard and Agent canvas
+> views that no longer exist. The current board is one dotted surface where Sketch and the agent
+> print share one camera; the human editor owns Sketch and publish owns the agent print. See the
+> [whiteboard integration check](whiteboard.md) for current behavior.
+
 ## Authority and priority
 
 The user authorized implementation on separate feature branches, then merge to main, push both

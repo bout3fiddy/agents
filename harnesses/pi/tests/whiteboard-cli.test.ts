@@ -56,6 +56,10 @@ if (command === 'whiteboard-link') {
   console.error('private-marker')
   console.log(JSON.stringify({status:'failure', code:'stage_closed', message:'private-marker'}))
   process.exit(2)
+} else if (field('--file') === 'conflict') {
+  const conflict = { status: 'failure', code: 'revision_conflict', message: 'private-marker' }
+  console.log(JSON.stringify(conflict))
+  process.exit(2)
 } else {
   reply.args = args
 }
@@ -144,13 +148,18 @@ test('CLI argv, binding privacy, flat envelopes and output cap', async (t) => {
   const published = await endpoint.run('publish', args, signal)
   assert.deepEqual(published.args, ['--binding', endpoint.binding, ...args, '--json'])
 
-  for (const file of ['large', 'closed']) {
+  for (const file of ['large', 'closed', 'conflict']) {
     await assert.rejects(endpoint.run('publish', ['--file', file], signal), (error: Error) => {
       assert.doesNotMatch(JSON.stringify(error) + error.stack, /private-marker|with space/)
       assert.match(error.message, /Whiteboard publish failed/)
 
       if (file === 'closed') {
         assert.match(error.message, /Reopen the Mac stage/)
+      }
+
+      // Publish owns only the agent print; its revision guards that layer, not a retired canvas.
+      if (file === 'conflict') {
+        assert.match(error.message, /The agent print changed\. Take a fresh snapshot\./)
       }
 
       return true
