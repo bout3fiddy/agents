@@ -7,6 +7,31 @@ import { fixture } from './support.ts'
 import { harnessRoot } from '../src/project.ts'
 import { StateStore } from '../src/state.ts'
 import { captureBuild } from '../src/runtime-version.ts'
+import { needsRestart } from '../src/pi-host.ts'
+
+test('reload can change the extension but not the launcher, entry point or Pi version', () => {
+  const source = '/release/'
+  const pi = { version: '1.6.1', entry: '/shared/cli.js' }
+  const install = { pi, source, wrapper: '/bin/pih', sourceHash: 'next', installedAt: 'next' }
+  const host = {
+    ...pi,
+    executable: process.execPath,
+    launcherSource: source,
+    wrapper: install.wrapper,
+  }
+  assert.equal(needsRestart(source, host, install), false)
+
+  for (const change of [
+    { version: '0.9' },
+    { entry: '/global/cli.js' },
+    { wrapper: undefined },
+    { launcherSource: '/another/release/' },
+  ]) {
+    assert.equal(needsRestart(source, { ...host, ...change }, install), true)
+  }
+
+  assert.equal(needsRestart('/old/extension/', host, install), true)
+})
 
 test('startup and reload receipts identify loaded code and tools', async () => {
   const { root, base } = await fixture()

@@ -15,14 +15,14 @@ def main():
     source = Path(__file__).resolve().parents[1]
 
     with tempfile.TemporaryDirectory(prefix="pi-auto-reload-") as directory:
-        base = Path(directory)
+        base = Path(directory).resolve()
         harness = base / "harness"
         project = base / "project"
         agent = base / "agent"
         project.mkdir()
         harness.mkdir()
 
-        for name in ("src", "prompts", "roles", "scripts"):
+        for name in ("src", "prompts", "roles", "scripts", "guidelines"):
             shutil.copytree(source / name, harness / name)
 
         for name in ("package.json", "package-lock.json"):
@@ -31,13 +31,13 @@ def main():
         (harness / "node_modules").symlink_to(source / "node_modules")
         installer = ["node", "--import", "tsx", "scripts/install.ts", str(agent)]
 
-        def install():
-            subprocess.run(installer, cwd=harness, check=True, stdout=subprocess.DEVNULL)
+        def install(release=harness):
+            subprocess.run(installer, cwd=release, check=True, stdout=subprocess.DEVNULL)
             return json.loads((agent / "harness-install.json").read_text())["sourceHash"]
 
         initial = install()
         cli = pexpect.spawn(
-            str(agent / "bin/pi-harness"), ["--no-session"], cwd=str(project),
+            str(agent / "bin/pi-harness"), ["--no-session", "--offline"], cwd=str(project),
             env={**os.environ, "TERM": "xterm-256color"}, encoding="utf-8", timeout=30,
         )
 
@@ -82,7 +82,28 @@ def main():
             time.sleep(4)
             assert len(loads()) == 3, "same build reloaded twice"
             assert not (project / ".pi/traces/harness/timing").exists(), "unexpected model turn"
-            print("Draft and picker deferred reload. Both builds loaded without a model turn.")
+
+            # Identical bits in another release directory still require a fresh host process.
+            release = base / "next release"
+            shutil.copytree(harness, release, symlinks=True)
+            assert install(release) == next_target
+            cli.expect("Reload cannot replace this host")
+            assert len(loads()) == 3 and Path(loads()[-1]["source"]) == harness
+            fresh = pexpect.spawn(
+                str(agent / "bin/pi-harness"), ["--no-session", "--offline"], cwd=str(project),
+                env={**os.environ, "TERM": "xterm-256color"}, encoding="utf-8", timeout=30,
+            )
+
+            try:
+                fresh.expect("Pi harness ")
+                current = next(p for p in receipts.parent.glob("*.jsonl") if p != receipts)
+                record = json.loads(current.read_text().splitlines()[0])
+                assert Path(record["source"]) == release
+                assert record["pid"] != entries[0]["pid"] and "launcherWarning" not in record
+            finally:
+                fresh.terminate(force=True)
+
+            print("Idle reloads preserved the process; a new release required a fresh host.")
         finally:
             cli.terminate(force=True)
 

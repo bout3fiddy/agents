@@ -1,11 +1,9 @@
-import { homedir } from 'node:os'
-import { join } from 'node:path'
+import { needsRestart, restartCommand, type PiInstall } from './pi-host.ts'
 import type { ExtensionAPI, ExtensionContext } from '@earendil-works/pi-coding-agent'
-import { captureBuild, type LoadedRuntime } from './runtime-version.ts'
-import { readJson } from './state.ts'
+import { captureBuild, readInstall, type LoadedRuntime } from './runtime-version.ts'
 
 const command = 'harness-apply-install'
-type Install = Pick<LoadedRuntime, 'source' | 'sourceHash'> & { installedAt: string }
+type ReloadTarget = Pick<PiInstall, 'sourceHash' | 'installedAt'> & { pid: number }
 
 export function registerAutoReload(
   pi: ExtensionAPI,
@@ -18,7 +16,7 @@ export function registerAutoReload(
   let quietAfter = 0
   let checking = false
   let attempted = ''
-  let pending: Install | undefined
+  let pending: PiInstall | undefined
   const ready = (ctx: ExtensionContext) =>
     Date.now() >= quietAfter &&
     ctx.isIdle() &&
@@ -33,6 +31,12 @@ export function registerAutoReload(
       pending = undefined
 
       if (!install || !session || !ready(ctx)) {
+        return
+      }
+
+      const latest = await readInstall()
+
+      if (latest?.installedAt !== install.installedAt || !session || !ready(ctx)) {
         return
       }
 
@@ -56,7 +60,7 @@ export function registerAutoReload(
     },
   })
 
-  const check = async (ctx: ExtensionContext, path: string) => {
+  const check = async (ctx: ExtensionContext) => {
     if (checking || !ready(ctx)) {
       return
     }
@@ -64,18 +68,35 @@ export function registerAutoReload(
     checking = true
 
     try {
-      const install = await readJson<Install>(path)
+      const install = await readInstall()
       const loaded = current()
 
       if (
         !install ||
         !loaded ||
         ctx !== session ||
-        install.source !== loaded.source ||
-        install.sourceHash === loaded.sourceHash ||
         install.installedAt === attempted ||
         !ready(ctx)
       ) {
+        return
+      }
+
+      if (needsRestart(loaded.source, loaded.piHost, install)) {
+        attempted = install.installedAt
+
+        if (!loaded.launcherWarning || loaded.install?.installedAt !== install.installedAt) {
+          const restart = restartCommand(install.wrapper, ctx.sessionManager)
+          ctx.ui.notify(
+            `Reload cannot replace this host. Local install: ${install.source} ` +
+              `(Pi ${install.pi?.version ?? 'unknown'}). Exit and run: ${restart}`,
+            'warning',
+          )
+        }
+
+        return
+      }
+
+      if (install.sourceHash === loaded.sourceHash) {
         return
       }
 
@@ -94,11 +115,6 @@ export function registerAutoReload(
     }
 
     session = ctx
-    const dir =
-      process.env.PI_HARNESS_AGENT_DIR ??
-      process.env.PI_CODING_AGENT_DIR ??
-      join(homedir(), '.pi', 'agent')
-    const path = join(dir, 'harness-install.json')
     const previous = ctx.sessionManager
       .getEntries()
       .filter(
@@ -113,7 +129,7 @@ export function registerAutoReload(
       previous.customType === 'pi-auto-reload' &&
       event.reason === 'reload'
     ) {
-      const target = previous.data as Install & { pid: number }
+      const target = previous.data as ReloadTarget
 
       if (target?.pid === process.pid) {
         attempted = target.installedAt
@@ -133,7 +149,7 @@ export function registerAutoReload(
     })
     let warned = false
     timer = setInterval(() => {
-      void check(ctx, path).catch(() => {
+      void check(ctx).catch(() => {
         if (!warned && session === ctx) {
           warned = true
           ctx.ui.notify(
