@@ -196,3 +196,24 @@ test('only the user cancels: /jobs cancel stops the job and the model is told', 
   assert.match(said(h.contexts[3]!), /"status\\":\\"cancelled\\"/)
   assert.match(said(h.contexts[3]!), /never restart it without a new request/)
 })
+
+test('job_start validates scope, refs and delivery before anything is recorded', async (t) => {
+  const bad = [
+    { ...start, writePaths: [] },
+    { ...start, writePaths: ['src/*.js'] },
+    { ...start, deliver: 'branch' },
+    { ...start, deliver: 'branch', branch: '--force' },
+    { ...start, base: '--upload-pack=x' },
+    { ...start, mode: 'documents', design: {} },
+  ]
+  const h = await host(t, async (_context, turn) =>
+    turn <= bad.length
+      ? [{ type: 'toolCall', id: `bad-${turn}`, name: 'job_start', arguments: bad[turn - 1]! }]
+      : 'Done.',
+  )
+  await h.session.prompt('Try invalid jobs.')
+  const results = h.session.state.messages.filter((message) => message.role === 'toolResult')
+  assert.equal(results.length, bad.length)
+  assert.ok(results.every((result) => result.isError))
+  assert.deepEqual(h.store.list(), [])
+})

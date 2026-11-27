@@ -135,6 +135,11 @@ function specFor(input: StartInput, model: string): JobSpec {
     throw new Error('Branch delivery needs a valid branch name')
   }
 
+  // A ref reaches Git as an argument: it must look like a ref and never like an option.
+  if (input.base && !/^[A-Za-z0-9][A-Za-z0-9_./~^-]{0,150}$/.test(input.base)) {
+    throw new Error('base must be a commit, branch or tag name')
+  }
+
   if (input.design && input.mode !== 'implement') {
     throw new Error('A design belongs to an implement job')
   }
