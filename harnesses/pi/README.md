@@ -87,9 +87,10 @@ What the host does for every job, in code and never by a model's decision:
 4. Run the project's checks on the copy. A failure goes back to the same worker with the output. The
    loop stops when the same failure repeats, or after six failed rounds.
 5. Deliver: apply to the checkout, or advance the branch. A path the checkout changed meanwhile is a
-   conflict; then nothing is written and the verified result stays available as a commit.
+   conflict; then nothing is written and the verified result stays available as a commit. A retry
+   rebuilds it on the files as they now stand.
 
-Jobs do not reserve files. Up to four run at once; overlapping results collide at delivery.
+Jobs do not reserve files. Any number run at once; overlapping results collide at delivery.
 
 Outcomes reach the conversation on their own. At every turn boundary and idle tick the host reads
 which outcomes the session has not been shown and offers them; an outcome counts as delivered only
@@ -102,6 +103,9 @@ starts with the recorded state of the session's open jobs.
 | `/jobs j12`        | Show one job in full                                       |
 | `/jobs cancel j12` | Stop it. Its work so far is kept as a commit               |
 | `/workers`         | Browse live workers and their conversations, send guidance |
+
+Before the orchestrator stops after doing work, with no job running, the host asks it once whether a
+step you authorized is still undone. It then continues or says what it is waiting on.
 
 Only you can stop running work. The model has no cancel tool. It can guide a running job
 (`job_message`), retry a stopped one from the work it kept (`job_retry`) or close a stopped one with

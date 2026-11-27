@@ -22,6 +22,7 @@ import {
   materialize,
   openRepository,
   pin,
+  replay,
   resolveCommit,
   snapshotCheckout,
   type Repository,
@@ -123,8 +124,47 @@ function checkpointFor(job: Job): Checkpoint {
   }
 }
 
-/** The commit a job starts from, fixed on its first run and reused by every retry. */
+/**
+ * A retry after a delivery conflict starts from the checkout as it stands now. The earlier work
+ * is replayed on it when the two do not touch the same lines; otherwise the worker redoes the
+ * task on the current files.
+ */
+async function rebase(store: JobStore, job: Job, repo: Repository): Promise<string> {
+  const base = await snapshotCheckout(repo, (await inventory(job.root)).keys())
+  const earlier = job.head ?? job.wip
+  const wip =
+    earlier &&
+    (await replay(repo, {
+      base: job.base!,
+      onto: base,
+      commit: earlier,
+      message: `Pi harness work in progress: ${job.spec.title}`,
+    }))
+  await pin(repo, job.id, 'base', base)
+
+  if (wip) {
+    await pin(repo, job.id, 'wip', wip)
+  } else {
+    store.addMessage(
+      job.id,
+      `Your earlier result could not be delivered: ${job.result.conflicts!.join(', ')} changed ` +
+        'in the checkout meanwhile. You now have the current files. Make the change again on them.',
+    )
+  }
+
+  store.update(job.id, { base, wip, head: undefined, result: {} })
+  return base
+}
+
+/**
+ * The commit a job starts from, fixed on its first run and reused by every retry, except a
+ * retry after a delivery conflict.
+ */
 async function resolveBase(store: JobStore, job: Job, repo: Repository): Promise<string> {
+  if (job.base && job.result.conflicts?.length) {
+    return rebase(store, job, repo)
+  }
+
   if (job.base) {
     return job.base
   }
@@ -210,6 +250,7 @@ async function openRun(
   }
 
   const base = await resolveBase(store, job, repo)
+  job = store.get(job.id)
   const containers: string[] = []
   const copy = async (commit: string) => {
     const made = await copyOf(repo, commit, job.root)
@@ -517,7 +558,7 @@ async function deliver(run: Run, candidate: Candidate): Promise<Outcome> {
     return {
       ...attention(
         'The checkout changed under this job. Nothing was written. The verified result is ' +
-          `commit ${head}: apply it with git, or retry the job to rebuild on the current files.`,
+          `commit ${head}: retry the job to rebuild it on the current files, or apply it with git.`,
         { ...result, conflicts: applied.conflicts },
       ),
       head,

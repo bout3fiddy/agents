@@ -122,6 +122,56 @@ test('a concurrent edit to a changed path blocks delivery and keeps the result',
   assert.equal(git(root, 'show', `${done!.head}:src/value.js`), 'export const value = 1')
 })
 
+test('a retry after a delivery conflict rebuilds on the current files', async (t) => {
+  const { root, store } = await project(t)
+  const job = store.create({ root, session: 's1', spec: spec() })
+  const stopped = await runJob(store, job.id, async (request) => {
+    await writeFile(join(root, 'src/value.js'), 'export const value = 7 // user\n')
+    return writes({ 'src/value.js': 'export const value = 1\n', 'src/new.js': '// new\n' })(request)
+  })
+  assert.deepEqual(stopped?.result.conflicts, ['src/value.js'])
+  store.requeue(job.id)
+  const tasks: string[] = []
+  const done = await runJob(store, job.id, async (request) => {
+    const current = await readFile(join(request.workspace, 'src/value.js'), 'utf8')
+    assert.equal(current, 'export const value = 7 // user\n', 'the worker sees the current file')
+    return writes({ 'src/value.js': 'export const value = 1 // user\n' }, tasks)(request)
+  })
+  assert.equal(done?.status, 'done', done?.error)
+  assert.match(tasks[0]!, /src\/value\.js changed in the checkout meanwhile/)
+  assert.equal(
+    await readFile(join(root, 'src/value.js'), 'utf8'),
+    'export const value = 1 // user\n',
+  )
+})
+
+test('a retry after a conflict keeps earlier work that does not overlap', async (t) => {
+  const { root, store } = await project(t)
+  const lines = (first: string, last: string) => `${first}\n\n// middle\n\n${last}\n`
+  await writeFile(join(root, 'src/long.js'), lines('// top', '// end'))
+  const job = store.create({ root, session: 's1', spec: spec() })
+  const stopped = await runJob(store, job.id, async (request) => {
+    await writeFile(join(root, 'src/long.js'), lines('// top by user', '// end'))
+    return writes({
+      'src/value.js': 'export const value = 1\n',
+      'src/long.js': lines('// top', '// end by job'),
+    })(request)
+  })
+  assert.deepEqual(stopped?.result.conflicts, ['src/long.js'])
+  store.requeue(job.id)
+  const done = await runJob(store, job.id, async (request) => {
+    const merged = await readFile(join(request.workspace, 'src/long.js'), 'utf8')
+    assert.equal(merged, lines('// top by user', '// end by job'))
+    return evidence(request)
+  })
+  assert.equal(done?.status, 'done', done?.error)
+  assert.equal(
+    await readFile(join(root, 'src/long.js'), 'utf8'),
+    lines('// top by user', '// end by job'),
+  )
+  assert.equal(await readFile(join(root, 'src/value.js'), 'utf8'), 'export const value = 1\n')
+})
+
 test('an unrelated concurrent edit does not block delivery', async (t) => {
   const { root, store } = await project(t)
   const job = store.create({ root, session: 's1', spec: spec() })

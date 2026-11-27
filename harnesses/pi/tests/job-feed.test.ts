@@ -72,14 +72,15 @@ test('an outcome wakes an idle host once and is acknowledged from the transcript
   assert.match(said(h.contexts[1]!), /The outcome arrives automatically/)
   const done = await h.work()
   assert.equal(done?.status, 'done', done?.error)
-  await h.until(() => h.contexts.length === 3)
+  await h.until(() => h.contexts.length === 4)
   await h.session.waitForIdle()
   assert.match(said(h.contexts[2]!), /"status\\":\\"done\\"/)
+  assert.match(said(h.contexts[3]!), /Before you stop: nothing is running/)
   assert.match(said(h.contexts[2]!), /already in the checkout/)
   assert.equal(await readFile(join(h.root, 'src/value.js'), 'utf8'), 'export const value = 1\n')
   await h.until(() => h.store.pendingEvents(job!.session).length === 0)
   await delay(150)
-  assert.equal(h.contexts.length, 3, 'an acknowledged outcome is not offered again')
+  assert.equal(h.contexts.length, 4, 'an acknowledged outcome is not offered again')
   assert.equal(outcomes(h.contexts[2]!), 1)
 })
 
@@ -106,10 +107,10 @@ test('an outcome that finishes during a turn joins it at the next boundary', asy
   release()
   await turn
   await h.session.waitForIdle()
-  assert.equal(h.contexts.length, 3, 'the same run continues; no second wake is needed')
+  assert.equal(h.contexts.length, 4, 'the same run continues; no second wake is needed')
   assert.equal(outcomes(h.contexts[2]!), 1)
   await delay(150)
-  assert.equal(h.contexts.length, 3)
+  assert.equal(h.contexts.length, 4)
 })
 
 test('a wake that is lost is offered again until its message is persisted', async (t) => {
@@ -137,6 +138,21 @@ test('a wake that is lost is offered again until its message is persisted', asyn
   await h.session.waitForIdle()
   assert.equal(dropped, 2)
   assert.equal(outcomes(h.contexts[2]!), 1)
+})
+
+test('a host that worked is asked once before stopping, and not while a job runs', async (t) => {
+  const list = [{ type: 'toolCall' as const, id: 'ls', name: 'ls', arguments: { path: '.' } }]
+  const h = await host(t, async (_context, turn) =>
+    turn === 1 || turn === 3 ? list : turn === 6 ? startCall : 'Noted.',
+  )
+  await h.session.prompt('Look around and ship it.')
+  assert.equal(h.contexts.length, 5, 'asked after each stretch of work, then left alone')
+  assert.match(said(h.contexts[2]!), /Before you stop: nothing is running/)
+  assert.equal(said(h.contexts[4]!).split('Before you stop').length - 1, 2)
+  await h.session.prompt('Set the value to 1.')
+  assert.equal(h.contexts.length, 7, 'a running job is the reason to stop')
+  await h.session.prompt('Thanks.')
+  assert.equal(h.contexts.length, 8, 'a reply without work is not questioned')
 })
 
 test('a stopped job is restated every turn until the host resolves it', async (t) => {

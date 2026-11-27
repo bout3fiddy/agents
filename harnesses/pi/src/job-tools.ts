@@ -42,6 +42,7 @@ import { WorkerMailbox } from './worker-mailbox.ts'
 export const outcomeType = 'pi-job-outcome'
 const openType = 'pi-open-jobs'
 const nudgeType = 'pi-job-nudge'
+const stopType = 'pi-stop-check'
 
 /** Tools a script may call. Everything that reads or drives jobs is scriptable. */
 export const jobTools = ['job_start', 'job_status', 'job_message', 'job_retry', 'job_close']
@@ -372,6 +373,58 @@ function emptyAnswer(event: AgentBeforeSettleEvent) {
   }
 }
 
+/**
+ * A run that did work and is about to stop with nothing running is asked once whether an
+ * authorized step is still undone. It is asked again only after it has done more work.
+ */
+function stopCheck(event: AgentBeforeSettleEvent, ctx: ExtensionContext) {
+  const messages = event.context.contextMessages
+  const last = messages.at(-1)
+
+  if (
+    event.outcome !== 'completed' ||
+    event.continue ||
+    event.context.pendingMessages.length ||
+    last?.role !== 'assistant' ||
+    last.stopReason !== 'stop'
+  ) {
+    return undefined
+  }
+
+  const since = messages.findLastIndex(
+    (message) =>
+      message.role === 'user' || (message.role === 'custom' && message.customType === stopType),
+  )
+  const worked = messages.slice(since + 1).some((message) => message.role === 'toolResult')
+  const session = liveSession(ctx)
+  const running =
+    session &&
+    jobStore(ctx.cwd)
+      .list({ session, open: true })
+      .some((job) => job.status === 'queued' || job.status === 'running')
+
+  if (!worked || running) {
+    return undefined
+  }
+
+  return {
+    entries: [
+      ...event.entries,
+      {
+        type: 'custom_message' as const,
+        customType: stopType,
+        display: false,
+        content:
+          'Before you stop: nothing is running for this session. If a step the user authorized ' +
+          'is still undone and you can do it now, do it. Otherwise say in one short line that ' +
+          'the request is complete, or what exactly you are waiting on and who provides it. Do ' +
+          'not repeat a question you just asked.',
+      },
+    ],
+    continue: true,
+  }
+}
+
 /** Every turn starts from the recorded state of the session's open jobs, not from memory. */
 function openJobs(ctx: ExtensionContext) {
   const session = liveSession(ctx)
@@ -674,7 +727,10 @@ export function registerJobs(pi: ExtensionAPI, options: JobOptions = {}) {
     return kept.length === messages.length ? undefined : { messages: kept }
   })
   pi.on('turn_end', (event, ctx) => feed.boundary(event, ctx))
-  pi.on('agent_before_settle', (event, ctx) => feed.boundary(event, ctx) ?? emptyAnswer(event))
+  pi.on(
+    'agent_before_settle',
+    (event, ctx) => feed.boundary(event, ctx) ?? emptyAnswer(event) ?? stopCheck(event, ctx),
+  )
   pi.on('agent_settled', (_event, ctx) => feed.idle(ctx))
   pi.on('tool_call', (event, ctx) => hostWriteBlock(event, ctx, bootstrapRoot))
   feed.observe(options.tickMs ?? 1000)

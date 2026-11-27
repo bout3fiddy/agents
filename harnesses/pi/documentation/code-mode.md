@@ -24,7 +24,8 @@ Pi workers script only their read-only inspections: `project_read`, `project_sea
 
 ## Why a script cannot overreach
 
-- Job creation is bounded in the store: four active jobs per repository, and one job per `key`.
+- A looping script cannot create a job twice: the store keeps one job per `key`. The number of jobs
+  is the orchestrator's decision; the store sets no limit.
 - There is no cancel or pause function. Stopping work is the user's `/jobs cancel`.
 - A nested call to a tool outside the allowed set is blocked at execution, whatever the script
   names.

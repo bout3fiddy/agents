@@ -95,7 +95,9 @@ test('one scripted PR inspection returns check-run and commit-status links', asy
     [harness],
     async (ctx) => {
       if (called) {
-        reply = JSON.stringify(ctx.messages.at(-1)?.content)
+        reply = JSON.stringify(
+          ctx.messages.findLast((message) => message.role === 'toolResult')?.content,
+        )
         return [{ type: 'text', text: 'done' }]
       }
 
@@ -144,7 +146,7 @@ test('the host SDK allows nested reads and blocks nested writes in the same scri
     [harness],
     async (ctx) => {
       if (called) {
-        response = JSON.stringify(ctx.messages.at(-1))
+        response = JSON.stringify(ctx.messages.findLast((message) => message.role === 'toolResult'))
         return [{ type: 'text', text: 'done' }]
       }
 

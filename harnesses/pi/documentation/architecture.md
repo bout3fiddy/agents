@@ -13,7 +13,6 @@ detached runners open it concurrently in WAL mode. Every change is one transacti
 
 - A job cannot finish without an outcome event: `finish` writes both together.
 - A job cannot be created twice by a looping script: `(session, key)` is unique.
-- A script cannot flood the machine: creation fails beyond four active jobs.
 - Two observers cannot both report a dead runner: `finish` acts only on an active job.
 
 All checkouts of a repository use the primary checkout's store. There is no registry, lock file or
@@ -35,6 +34,9 @@ HEAD, stash and working tree are never touched to record them.
 - Delivery compares each changed path in the checkout with the base and the result. A path that
   holds neither is the user's concurrent edit: nothing at all is written and the result stays at
   `head`. Unrelated edits elsewhere do not block.
+- A retry after such a conflict takes a new base from the checkout as it stands. The earlier result
+  is replayed on it when the two changes do not overlap; otherwise the worker redoes the task on the
+  current files. Either way the checks run again before delivery.
 - `branch` delivery creates or fast-forwards a local branch with an expected-old-value update and
   refuses a branch that is checked out in any worktree.
 
@@ -73,6 +75,9 @@ seconds of silence becomes `needs_attention`, found by any session's next read o
 - An event is acknowledged only when its message is found in the session's persisted entries.
 - Every turn starts with one statement of the session's open jobs; older statements leave context.
 - A run that answers an outcome with nothing is asked once to act or name what blocks it.
+- A run that did work and is about to stop while no job of the session is active is asked once
+  whether an authorized step is still undone. It is asked again only after more work. This is the
+  whole defence against a host that stalls: there is no record of host work, timer or audit.
 
 ## Authority
 

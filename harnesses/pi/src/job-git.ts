@@ -353,6 +353,33 @@ export async function advanceBranch(
   await git(repo, ['update-ref', `refs/heads/${branch}`, head, expected ?? '0'.repeat(40)])
 }
 
+/**
+ * A commit's change since base, replayed on onto. Undefined when both sides changed the same
+ * lines, in which case nothing is recorded.
+ */
+export async function replay(
+  repo: Repository,
+  input: { base: string; onto: string; commit: string; message: string },
+): Promise<string | undefined> {
+  const merged = await git(repo, [
+    'merge-tree',
+    '--write-tree',
+    `--merge-base=${input.base}`,
+    input.onto,
+    input.commit,
+  ]).catch(() => undefined)
+  const tree = merged?.split('\n')[0]
+
+  if (!tree || !objectId.test(tree)) {
+    return undefined
+  }
+
+  return git(repo, ['commit-tree', tree, '-p', input.onto, '-F', '-'], {
+    env: harnessIdentity,
+    input: input.message + '\n',
+  })
+}
+
 const jobRef = (id: string, name: string) => `refs/pi/jobs/${id}/${name}`
 
 /** Keep a job's commit reachable. */

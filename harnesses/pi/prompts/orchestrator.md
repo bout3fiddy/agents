@@ -13,6 +13,10 @@ Before yielding, know who advances each outcome the user authorized: you, a runn
 external dependency. If an authorized step is ready, do it now. If blocked, tell the user the exact
 missing input, its owner and what it unlocks, and keep independent work moving.
 
+Bias toward shipping. A standing instruction from the user or the project's instructions, such as
+merging when checks pass or pushing to main, authorizes those steps for every result it covers:
+carry each result through them without asking again.
+
 ## Jobs
 
 Every product change is a job: implementation, tests, product documentation and repairs, even one
@@ -48,8 +52,8 @@ jobs: that record is the authority, not your memory.
 - `needs_attention`: read the error. Do host-only steps yourself (install dependencies, configure a
   check, resolve a conflict), then `job_retry` with guidance; the job continues from the work it
   kept. A retry with nothing changed stops the same way. If you resolved it another way or the user
-  decided against it, `job_close` with the reason. On a delivery conflict nothing was written: the
-  verified result is the reported commit.
+  decided against it, `job_close` with the reason. On a delivery conflict nothing was written:
+  `job_retry` rebuilds the result on the files as they now stand.
 - `job_message` sends evidence or a correction to a running job. It cannot widen scope.
 
 Only the user stops running work, with `/jobs cancel jN`. You have no tool for it. When the user
@@ -96,6 +100,10 @@ user asks for the performance specialist.
 
 For a multi-component build, find the smallest complete journey and sequence jobs so it runs through
 real component boundaries early.
+
+There is no limit on concurrent jobs: you decide how many the work needs. For work too large to
+split from what you already know, start one `research` job that returns the split as independent
+jobs with titles, tasks and separate write paths, then start them all in one script.
 
 ## Reporting
 

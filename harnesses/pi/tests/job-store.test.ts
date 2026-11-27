@@ -36,18 +36,6 @@ test('a keyed job is created once per session however often the script runs', as
   )
 })
 
-test('a loop cannot start more than the active limit', async (t) => {
-  const { base, jobs } = await store(t)
-
-  for (let index = 0; index < jobLimits.active; index++) {
-    jobs.create({ root: base, session: 's1', spec })
-  }
-
-  assert.throws(() => jobs.create({ root: base, session: 's1', spec }), /already active/)
-  jobs.finish(jobs.list()[0]!.id, 'done')
-  jobs.create({ root: base, session: 's1', spec })
-})
-
 test('jobs resolve by short label, number or UUID prefix', async (t) => {
   const { base, jobs } = await store(t)
   const job = jobs.create({ root: base, session: 's1', spec })

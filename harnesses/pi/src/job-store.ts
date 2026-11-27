@@ -12,9 +12,6 @@ export const schemaVersion = 1
 
 export const jobLimits = {
 
-  /** Jobs that may be queued or running in one repository. */
-  active: 4,
-
   /** Runner heartbeat period, and the silence after which a runner is taken for dead. */
   heartbeatMs: 2000,
   staleMs: 20000,
@@ -266,17 +263,6 @@ export class JobStore {
         if (existing) {
           return { job: toJob(existing), created: false }
         }
-      }
-
-      const active = this.db
-        .prepare("SELECT COUNT(*) AS count FROM jobs WHERE status IN ('queued', 'running')")
-        .get() as { count: number }
-
-      if (active.count >= jobLimits.active) {
-        throw new Error(
-          `${jobLimits.active} jobs are already active in this repository. ` +
-            'Their outcomes arrive on their own; start more once one finishes.',
-        )
       }
 
       const next = this.db.prepare('SELECT COALESCE(MAX(number), 0) + 1 AS n FROM jobs').get() as {
