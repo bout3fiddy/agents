@@ -3,8 +3,20 @@ import type { ExtensionAPI } from '@earendil-works/pi-coding-agent'
 import type { AssistantMessage } from '@earendil-works/pi-ai'
 import { createAssistantMessageEventStream } from '@earendil-works/pi-ai'
 
-const calls: { name: string; arguments: Record<string, string> }[] = [
-  { name: 'host_work', arguments: { state: 'active', detail: 'TRACK_OPERATION_START' } },
+type Arguments = Record<string, string | Record<string, string>>
+
+// The host opens one assignment, works on it and closes it with evidence for its target.
+const target = 'local checkout'
+const calls: { name: string; arguments: Arguments }[] = [
+  {
+    name: 'host_work',
+    arguments: {
+      outcome: 'Merge pull request 61',
+      target,
+      state: 'active',
+      detail: 'TRACK_OPERATION_START',
+    },
+  },
   { name: 'project_read', arguments: { path: 'guide.md' } },
   {
     name: 'bash',
@@ -17,7 +29,14 @@ const calls: { name: string; arguments: Record<string, string> }[] = [
     },
   },
   { name: 'project_read', arguments: { path: 'missing-file.md' } },
-  { name: 'host_work', arguments: { state: 'done', detail: 'TRACK_OPERATION_END' } },
+  {
+    name: 'host_work',
+    arguments: {
+      state: 'done',
+      detail: 'TRACK_OPERATION_END',
+      evidence: { target, revision: 'refs/pull/61/head' },
+    },
+  },
 ]
 
 export default function shellTerminalProvider(pi: ExtensionAPI) {

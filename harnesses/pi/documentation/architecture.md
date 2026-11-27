@@ -213,6 +213,105 @@ Other readers may observe a partially replayed batch, but all participants remai
 Revision baselines supersede archived steering without reusing review authorization. Branch tasks
 keep their worktree and fixed scope; changing branch ownership requires replacement tasks.
 
+## Assignments
+
+An assignment is one outcome the user authorized, the target it must reach and who advances it next.
+`host_work` records it; the orchestrator chooses the worker, coordinator or branch orchestrator.
+Records live in `harness/assignments/<session>.json` under the session's originating project, one
+bounded ledger per session: at most 12 open assignments, 48 retained records, eight wake sources and
+the last eight attempts per record. A full ledger rejects a new assignment instead of dropping one.
+The ledger is independent of the conversation. Navigating the session tree, a new request or a
+status question changes no record, and one assignment's update, failure or cancellation leaves the
+others unchanged. An interrupt stops the current turn and changes no record either: nothing is
+paused, bound workers continue, and no continuation or wake follows for work the host was already
+shown. The next turn states the records as they are.
+
+Pausing or cancelling a record takes the user's own confirmation naming it. The runtime reads the
+user's latest message on the current branch and accepts only a whole line of the form `pause a2` or
+`cancel a2` (several IDs may follow, `please` and a final period are allowed). It does not interpret
+prose: a sentence that mentions stopping, a question or a negation confirms nothing. `host_work`
+with `paused` or `cancelled` is refused without that line, whatever the call says, and the refusal
+names the line to ask the user for. A confirmation stops each thing it names once; the record keeps
+the last 16 uses, with the entry that carried each. `/assignments pause a2` and
+`/assignments cancel a2` are the same authority given directly: the command applies the change to
+that record without a model turn, keeps its recorded next step and tells the host at its next turn.
+`task_control cancel` on a task that an open assignment of this session waits on is held to the same
+rule: the line names the assignment, or the task by its ID or the first eight characters of it, and
+then stops that task alone. A task no open assignment tracks is controlled as before, and so are
+recurring schedules and coordinators, which stop their own tasks without this tool.
+`task_control pause`, `revise_tasks` and `resume_task` stay available to the host for repair and
+repartition: a paused task keeps its candidate and its assignment returns to the host. Unreadable
+records refuse a cancellation instead of allowing it.
+
+The rule follows the task across sessions. A task that advances an open assignment of another
+session, in the same checkout, belongs to that session's record. Before `task_control` pauses or
+cancels a task it did not bind, the runtime reads the records of the session that started the task
+and of the one that last resumed it. If one of them waits on the task, the acting host needs the
+user's line naming the task itself, `pause 1a2b3c4d` or `cancel 1a2b3c4d`. An assignment ID does not
+reach across: `cancel a1` names the acting session's own `a1`. The use is recorded in the acting
+session's ledger, which keeps the last 16, and stops the task once. The other session's records are
+only read.
+
+Automatic wakes that belong to no assignment, such as whiteboard requests, are parked only while
+every open assignment of the session is paused. Pausing one assignment leaves the session awake for
+the others, whichever record changed last.
+
+A record is active (the host owns the next step), waiting (registered sources own it), blocked (a
+visible dependency with its owner and resume condition), paused, done or cancelled. Waiting requires
+a registered wake source: a tracked task of this session, in this checkout or another, or a run
+registered with `watch_github_run`. A source that already finished leaves the assignment active, so
+a result that arrives before its binding is never waited on. Outcome and target are fixed when the
+record opens. Closing requires evidence naming that target and the delivered revision; evidence for
+a preview, candidate or other target is kept as progress and cannot close. The runtime never closes
+a record: a finished source hands it back to the host, which retains acceptance. A confirmed
+cancellation requests cancellation of that record's running tasks, withdraws its watches and touches
+nothing else.
+
+Reconciliation uses no model call. While a record is open, a one-second pass reads each bound source
+from its own registry and applies the result idempotently. Each finished delivery version counts as
+one attempt, a resumed task re-arms its source, and a source unreadable three times is recorded as
+unavailable. When every source of a waiting record has finished, the record returns to the host.
+
+At settlement the host is asked to continue each active assignment it owns, and a run answers only
+for what it was asked. A continuation answered with no action other than `host_work` stalls the
+assignments that continuation named: each becomes blocked, says why and is not asked again. Any
+other active assignment was never put to the host by that continuation, whether a source handed it
+back while the run was under way or an interrupt left it active earlier, so it gets its own
+continuation instead of the blocker. A run that ends in an error stalls the assignments its
+continuation named and no others. An error in a run no continuation started belongs to the session:
+every active record stays active, the user is notified, and each is offered to the host once more
+after the first retry delay. A second error then stalls it through the continuation that names it.
+One error streak never offers the same record twice.
+
+A completed `documents` task is delivered by its supervisor. After the scope, document-type,
+Markdown format and line-width checks pass and the candidate is applied, the supervisor records a
+`delivery` receipt in the task state: the checkout, a revision over every applied path and its
+content hash, and the hash and word count of up to eight files. The worker cannot write it. The
+outcome message carries the receipt, and when an assignment's target is those documents in that
+checkout the host closes on that revision without repeating the checks. For any other target the
+receipt is progress. A resumed task has no receipt until it is applied again.
+
+A wake is an offer, not a delivery. Pi starts a run asynchronously and reports a failed start only
+to its error channel. The task feed, the run watch and the assignment desk therefore treat a
+notification as delivered only when its receipt is persisted in the session. Until then an idle wake
+is offered again after 5, 10, 20 and 40 seconds, five times in total, and a turn that is already
+running appends it at its next boundary. A second copy of an outcome keeps its place in the
+transcript and tells the model to take no action. If a result's own wake is lost entirely, the desk
+wakes the host for the handed-back assignment after a ten-second grace period under the same bound.
+When that is exhausted too, the record becomes blocked, the user is notified and the next turn
+resumes it. Tasks bound to an assignment are delivered on any branch of the session and from any
+checkout. Unbound tasks keep their originating branch; from another checkout they are delivered only
+when this session dispatched them through a task tool, which records the route in the session. Run
+watches belong to the session: a tree change no longer withdraws one.
+
+Each turn starts with one compact statement of the open records; older statements leave model
+context. `/assignments` shows the same records with their sources, attempts and evidence. A session
+that recorded host work under the earlier latest-entry scheme has that entry carried forward when it
+is next loaded: active and paused keep their state, a wait is bound to the task it names, and a wait
+with no registered source becomes a visible blocked record. In-flight tasks and watches are never
+cancelled by the change. Progress while Pi is closed and restart recovery are out of scope: a
+session that is not running reconciles when it is reopened.
+
 ## Live worker observation and guidance
 
 The host binds cross-checkout tasks through the [Workers origin registry](workers.md). The index

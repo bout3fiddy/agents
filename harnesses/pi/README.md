@@ -335,13 +335,14 @@ for active tasks to finish or cancel.
 
 Jobs survive `/reload` and Pi exit; their process, controls, status and evidence live under
 `.pi/traces/harness/delegations/<id>/`. Stop a job through `task_control`; an ordinary conversation
-interrupt only stops the foreground turn. Completion delivery is session/branch-specific, while
-`task_status` works from a new session. Failed or conflicted candidates remain available for
-inspection. `resume_task` restarts a paused or failed coordinator against its retained candidate.
-Use `revise_tasks` after stopping all affected workers to replace their prompts and repartition
-existing authorized scopes as one recoverable batch. Retained edits transfer to their new owner;
-conflicts and scope expansion are rejected, approvals are invalidated, and tasks remain paused until
-resumed. Paused files remain reserved. Explicitly cancelled work needs a new user request. Accepted
+interrupt only stops the foreground turn. Cancelling a job that an [assignment](#assignments) waits
+on needs your confirmation line. Completion delivery is session/branch-specific, while `task_status`
+works from a new session. Failed or conflicted candidates remain available for inspection.
+`resume_task` restarts a paused or failed coordinator against its retained candidate. Use
+`revise_tasks` after stopping all affected workers to replace their prompts and repartition existing
+authorized scopes as one recoverable batch. Retained edits transfer to their new owner; conflicts
+and scope expansion are rejected, approvals are invalidated, and tasks remain paused until resumed.
+Paused files remain reserved. Explicitly cancelled work needs a new user request. Accepted
 implementation can resume its original assignment with `resume_task`. Preserve the candidate and use
 `workflow` with the revised design when that assignment changes and its reservation is released.
 Agents have no model-turn, child-call or total-task duration ceiling. Individual commands still have
@@ -626,8 +627,9 @@ earns 0–2 points. Pi rounds earned points divided by possible points to a perc
 exemption adds no points. An unscored review has no percentage. Required findings and executable
 checks still govern acceptance. Earlier receipts retain their original evidence.
 
-When the host starts retrying an operational prerequisite, `host_work.retry` shows the blocker and
-the observation that permits progress. Repeated reports of the same condition stay quiet.
+When the host starts retrying an operational prerequisite, `host_work.retry` shows the assignment,
+its blocker and the observation that permits progress. Repeated reports of the same condition stay
+quiet.
 
 An idle Pi host refreshes `origin/main` in the background at most every ten minutes across
 worktrees. A completed Pi merge or an observed `gh pr merge` requests an earlier refresh. Git
@@ -732,9 +734,11 @@ idle, subject to queued user input.
 
 When a pending Actions run gates the next step, the orchestrator uses `watch_github_run` to save the
 repository, run ID and intended follow-up in its session. Pi checks GitHub every 30 seconds while
-that conversation is open and wakes it at idle with the conclusion, commit and attempt. Reopening
-the same session restores outstanding watches. Three consecutive lookup failures wake the host with
-a diagnostic. The host retains its existing permissions for any subsequent action.
+that conversation is open and wakes it at idle with the conclusion, commit and attempt. A watch
+belongs to its session, on any branch of the conversation tree, and a wake is repeated until the
+session has recorded it. Reopening the same session restores outstanding watches. Three consecutive
+lookup failures wake the host with a diagnostic. The host retains its existing permissions for any
+subsequent action.
 
 For a PR merge, pass its number and expected head in the watch's `pullRequest` field. A changed
 head, conflict or closed PR wakes the session even while the old run is pending. Query `inspect_pr`
@@ -743,13 +747,35 @@ Ordinary inspections keep their single GitHub query. If a run stops gating your 
 call `watch_github_run` with `action: "cancel"`, repository and run ID. Cancellation survives reload
 and leaves the remote workflow running. An optional PR pin limits cancellation to that candidate.
 
-### Host-owned work
+### Assignments
 
-The orchestrator uses `host_work` for an authorized multi-step task it must execute itself. A status
-update can finish while the task keeps running. The session continues at the next model boundary
-while the host owns a runnable step. An explicit wait, pause or verified completion stops the
-continuation. A continuation that only restates a plan surfaces a stalled notice. State lives in the
-originating Pi conversation.
+Each outcome you authorize is recorded as an assignment: the outcome, the target it must reach, who
+advances it next, its attempts and its evidence. You ask for the work as before; the orchestrator
+records it with `host_work` and chooses the worker, coordinator or branch orchestrator. Several
+assignments run side by side. A new request, a side question, an interrupt or moving around the
+conversation tree never pauses or cancels one. An interrupt stops the current turn only.
+`/assignments` shows the records with their IDs.
+
+To stop one assignment, name it. Run `/assignments pause a2` or `/assignments cancel a2`, which acts
+at once on that record, or put the line `pause a2` or `cancel a2` in a message so the orchestrator
+may do it. Pi accepts only that exact line from your latest message: the orchestrator cannot pause
+or cancel an assignment on its own reading of a request, and when you ask in other words it asks you
+for the line. Pausing holds the orchestrator's next step while running workers finish their attempt.
+Cancelling also stops that assignment's running workers and watches. `cancel` followed by the first
+eight characters of a task ID stops that one worker and keeps its assignment open. A worker that
+another session's assignment waits on is paused or cancelled from this session only on that task
+line, `pause 1a2b3c4d` or `cancel 1a2b3c4d`. Pausing one assignment leaves the others, and requests
+arriving for them, moving.
+
+An assignment waits only on something Pi can observe: a tracked task, in this checkout or another,
+or a run registered with `watch_github_run`. When that source finishes, Pi hands the assignment back
+to the orchestrator without a prompt from you, also when the notification itself was lost. A
+dependency Pi cannot observe is shown as a blocker with its owner and resume condition. A finished
+worker, candidate or preview does not close an assignment: closing needs evidence for the authorized
+target and its revision, and the orchestrator keeps acceptance. A continuation that only restates a
+plan surfaces a stalled notice for the assignments it named and no others. Records are kept per
+session and reconcile while Pi is running; a closed session catches up when it is reopened.
+[Architecture](documentation/architecture.md#assignments) has the bounds and delivery rules.
 
 Local fan-out, competing candidates and evidence-based integration are described in
 [Independent branch orchestration](documentation/branches.md#local-candidates).

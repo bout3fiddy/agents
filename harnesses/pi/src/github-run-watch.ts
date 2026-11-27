@@ -5,6 +5,7 @@ import type { ExtensionAPI, ExtensionContext } from '@earendil-works/pi-coding-a
 import { githubApi, type GitHubCommand } from './branch-github.ts'
 import { githubPrState } from './github-pr-state.ts'
 import { textResult } from './file-tools.ts'
+import { DeliveryLedger, deliveryLimits, type DeliveryLimits } from './delivery.ts'
 
 const watchFields = Type.Object({
   repository: Type.String({
@@ -42,11 +43,37 @@ const runSchema = Type.Object({
 type Watch = Static<typeof registration>
 type Pending = { watch: Watch; errors: number; result?: Static<typeof runSchema> | string }
 
-export function registerGitHubRunWatch(pi: ExtensionAPI, run?: GitHubCommand, intervalMs = 30000) {
+/** What a registered watch currently is, for anything that waits on it. */
+export type RunWatchState = { status: string; terminal: boolean }
+export type RunWatches = {
+
+  /** The latest watch this session registered for a run, on any branch of its tree. */
+  find(ctx: ExtensionContext, repository: string, runId: number): string | undefined
+  state(ctx: ExtensionContext, watch: string): RunWatchState | undefined
+
+  /** Stop the local follow-up of one pending watch. GitHub continues running. */
+  withdraw(watch: string): boolean
+}
+
+function resultStatus(result: Pending['result']): string {
+  if (typeof result === 'string') {
+    return result.slice(0, 120)
+  }
+
+  return result ? `${result.status}/${result.conclusion} at ${result.head_sha.slice(0, 12)}` : ''
+}
+
+export function registerGitHubRunWatch(
+  pi: ExtensionAPI,
+  run?: GitHubCommand,
+  intervalMs = 30000,
+  delivery: DeliveryLimits = deliveryLimits,
+): RunWatches {
   let pending = new Map<string, Pending>()
   let controller = new AbortController()
   let timer: ReturnType<typeof setInterval> | undefined
   let polling = false
+  let offers = new DeliveryLedger(delivery)
 
   function stop() {
     clearInterval(timer)
@@ -55,6 +82,24 @@ export function registerGitHubRunWatch(pi: ExtensionAPI, run?: GitHubCommand, in
     controller = new AbortController()
     pending = new Map()
     polling = false
+    offers = new DeliveryLedger(delivery)
+  }
+
+  /** Watches whose result message is persisted in the session. Only that is delivery. */
+  function acknowledge(ctx: ExtensionContext) {
+    for (const entry of ctx.sessionManager.getEntries()) {
+      if (
+        entry.type === 'custom_message' &&
+        entry.customType === 'pi-github-run-result' &&
+        Check(resultIds, entry.details)
+      ) {
+        for (const id of entry.details) {
+          if (offers.acknowledge(id)) {
+            pending.delete(id)
+          }
+        }
+      }
+    }
   }
 
   async function inspect(item: Pending, signal: AbortSignal) {
@@ -136,11 +181,33 @@ export function registerGitHubRunWatch(pi: ExtensionAPI, run?: GitHubCommand, in
         const items = [...pending.values()]
         await Promise.all(items.map((item) => inspect(item, signal)))
 
-        if (signal.aborted || !ctx.isIdle() || ctx.hasPendingMessages()) {
+        if (signal.aborted) {
           return
         }
 
-        const ready = items.filter((item) => item.result && pending.get(item.watch.id) === item)
+        acknowledge(ctx)
+        const now = Date.now()
+
+        if (offers.exhausted(now).length) {
+          ctx.ui.notify(
+            'A finished GitHub run watch could not wake this session. It stays recorded; ' +
+              'reopen the session or ask for the run result.',
+            'warning',
+          )
+        }
+
+        if (!ctx.isIdle() || ctx.hasPendingMessages()) {
+          return
+        }
+
+        // A sent wake is only an offer. The watch stays pending until its receipt is persisted,
+        // and is offered again after a growing delay if the wake was dropped.
+        const ready = items.filter(
+          (item) =>
+            item.result &&
+            pending.get(item.watch.id) === item &&
+            offers.dueWhileIdle(item.watch.id, now),
+        )
 
         if (ready.length) {
           const results = ready.map(({ watch, result }) => ({
@@ -164,7 +231,7 @@ export function registerGitHubRunWatch(pi: ExtensionAPI, run?: GitHubCommand, in
           )
 
           for (const item of ready) {
-            pending.delete(item.watch.id)
+            offers.offer(item.watch.id, now)
           }
         }
 
@@ -192,11 +259,16 @@ export function registerGitHubRunWatch(pi: ExtensionAPI, run?: GitHubCommand, in
     timer.unref()
   }
 
+  /**
+   * Rebuild the watches from every entry of the session, in the order they were recorded. A watch
+   * belongs to the session, not to the branch that registered it: navigating the tree must not
+   * silently withdraw a follow-up, and a cancellation or receipt on any branch still counts.
+   */
   function restore(ctx: ExtensionContext) {
     stop()
     const session = ctx.sessionManager.getSessionId()
 
-    for (const entry of ctx.sessionManager.getBranch()) {
+    for (const entry of ctx.sessionManager.getEntries()) {
       if (entry.type === 'custom' && entry.customType === 'pi-github-run-watch') {
         if (Check(registration, entry.data) && entry.data.session === session) {
           pending.set(entry.data.id, { watch: entry.data, errors: 0 })
@@ -220,7 +292,6 @@ export function registerGitHubRunWatch(pi: ExtensionAPI, run?: GitHubCommand, in
   }
 
   pi.on('session_start', (_event, ctx) => restore(ctx))
-  pi.on('session_tree', (_event, ctx) => restore(ctx))
   pi.on('session_shutdown', stop)
   pi.registerTool({
     name: 'watch_github_run',
@@ -252,6 +323,7 @@ export function registerGitHubRunWatch(pi: ExtensionAPI, run?: GitHubCommand, in
 
           for (const id of ids) {
             pending.delete(id)
+            offers.acknowledge(id)
           }
 
           if (!pending.size) {
@@ -296,4 +368,70 @@ export function registerGitHubRunWatch(pi: ExtensionAPI, run?: GitHubCommand, in
       return textResult({ watching: watch.runId, repository, followUp: watch.followUp })
     },
   })
+
+  return {
+    find(ctx, repository, runId) {
+      const session = ctx.sessionManager.getSessionId()
+      const name = repository.toLowerCase()
+      const entry = ctx.sessionManager
+        .getEntries()
+        .findLast(
+          (item) =>
+            item.type === 'custom' &&
+            item.customType === 'pi-github-run-watch' &&
+            Check(registration, item.data) &&
+            item.data.session === session &&
+            item.data.repository === name &&
+            item.data.runId === runId,
+        )
+      return entry?.type === 'custom' && Check(registration, entry.data) ? entry.data.id : undefined
+    },
+    state(ctx, watch) {
+      const item = pending.get(watch)
+
+      if (item) {
+        return item.result
+          ? { status: resultStatus(item.result), terminal: true }
+          : { status: 'pending', terminal: false }
+      }
+
+      // No longer pending: its result was delivered, or the watch was withdrawn.
+      for (const entry of ctx.sessionManager.getEntries().toReversed()) {
+        if (
+          entry.type === 'custom_message' &&
+          entry.customType === 'pi-github-run-result' &&
+          Check(resultIds, entry.details) &&
+          entry.details.includes(watch)
+        ) {
+          return { status: 'finished', terminal: true }
+        }
+
+        if (
+          entry.type === 'custom' &&
+          entry.customType === 'pi-github-run-unwatch' &&
+          Check(resultIds, entry.data) &&
+          entry.data.includes(watch)
+        ) {
+          return { status: 'withdrawn', terminal: true }
+        }
+      }
+
+      return undefined
+    },
+    withdraw(watch) {
+      if (!pending.has(watch)) {
+        return false
+      }
+
+      pi.appendEntry('pi-github-run-unwatch', [watch])
+      pending.delete(watch)
+      offers.acknowledge(watch)
+
+      if (!pending.size) {
+        stop()
+      }
+
+      return true
+    },
+  }
 }

@@ -86,7 +86,7 @@ export default function harness(pi: ExtensionAPI): void {
   const workerWindow = { open: false }
   registerWorkers(pi, workerWindow)
   registerRecurring(pi)
-  registerGitHubRunWatch(pi)
+  const watches = registerGitHubRunWatch(pi)
   registerWhiteboard(pi)
   const { consultations } = registerWorkshop(pi)
   registerWorkshopContext(pi)
@@ -95,8 +95,10 @@ export default function harness(pi: ExtensionAPI): void {
   registerTiming(pi, runtime.current)
   const afterMerge = registerMainSync(pi)
   registerCleanup(pi)
-  const delegation = registerDelegation(pi, undefined, afterMerge)
-  registerHostWork(pi)
+
+  // Assignment records come first: the task feed routes bound results by them.
+  const assignments = registerHostWork(pi, { watches })
+  const delegation = registerDelegation(pi, undefined, afterMerge, { assignments })
   registerShellActivity(pi)
   registerActivityCaption(pi)
   registerSteering(pi)
