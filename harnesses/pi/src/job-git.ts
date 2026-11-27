@@ -17,6 +17,12 @@ export type Repository = {
 
   /** A directory without Git gets a shadow store. It can apply results but not publish them. */
   shadow: boolean
+
+  /** Top of the checkout the job targets. Commits always hold paths relative to it. */
+  top: string
+
+  /** The job's own directory below the top: '' or a path ending in a slash. */
+  prefix: string
 }
 
 const objectId = /^[0-9a-f]{40,64}$/
@@ -64,16 +70,22 @@ async function git(repo: Repository, args: string[], options: GitOptions = {}): 
 /** The repository holding root's history, or a shadow store when root is not under Git. */
 export async function openRepository(root: string, stateDirectory: string): Promise<Repository> {
   try {
-    const common = await run(
-      ['-C', root, 'rev-parse', '--path-format=absolute', '--git-common-dir'],
-      {},
-    )
-    return { gitDir: common.toString().trim(), shadow: false }
+    const answers = await run([
+      '-C',
+      root,
+      'rev-parse',
+      '--path-format=absolute',
+      '--git-common-dir',
+      '--show-toplevel',
+      '--show-prefix',
+    ])
+    const [gitDir, top, prefix] = answers.toString().split('\n')
+    return { gitDir: gitDir!, shadow: false, top: top!, prefix: prefix ?? '' }
   } catch {
     const gitDir = join(stateDirectory, 'shadow.git')
     await mkdir(stateDirectory, { recursive: true, mode: 0o700 })
     await run(['init', '--quiet', '--bare', gitDir])
-    return { gitDir, shadow: true }
+    return { gitDir, shadow: true, top: root, prefix: '' }
   }
 }
 
@@ -124,18 +136,22 @@ async function indexEntries(repo: Repository, env: NodeJS.ProcessEnv): Promise<T
     .map((line) => ({ mode: line.slice(0, 6), path: line.slice(line.indexOf('\t') + 1) }))
 }
 
-/** Regular files a worker may see: no links, submodules, credentials or private state. */
-const visible = (entry: TreeEntry) => entry.mode.startsWith('100') && !sensitive(entry.path)
+/** Regular files of the job's directory that a worker may see: no links, submodules,
+ * credentials or private state. */
+const visible = (repo: Repository) => (entry: TreeEntry) =>
+  entry.mode.startsWith('100') &&
+  entry.path.startsWith(repo.prefix) &&
+  !sensitive(entry.path.slice(repo.prefix.length))
 
 export type CommitInput = {
 
   /** Tree to start from. Absent: an empty tree. */
   from?: string
 
-  /** Directory holding the current content of the paths below. */
+  /** Directory laid out like the checkout from its top, holding the content of the paths. */
   directory: string
 
-  /** Paths to refresh from directory: present files are stored, missing ones are removed. */
+  /** Paths below the job's directory to refresh: present files are stored, missing removed. */
   paths: string[]
   parents: string[]
   message: string
@@ -157,7 +173,7 @@ export async function commitPaths(repo: Repository, input: CommitInput): Promise
       await git(repo, ['update-index', '--add', '--remove', '-z', '--stdin'], {
         env,
         cwd: input.directory,
-        input: input.paths.join('\0') + '\0',
+        input: input.paths.map((path) => repo.prefix + path).join('\0') + '\0',
       })
     }
 
@@ -173,41 +189,44 @@ export async function commitPaths(repo: Repository, input: CommitInput): Promise
 }
 
 /**
- * The checkout's working tree as a commit: tracked and untracked authored files exactly as they
- * stand, without staging, stashing or moving HEAD. names is the checkout's inventory.
+ * The job directory's working tree as a commit: tracked and untracked authored files exactly as
+ * they stand, without staging, stashing or moving HEAD. names is that directory's inventory.
+ * The rest of the checkout is recorded as HEAD has it.
  */
-export async function snapshotCheckout(
-  repo: Repository,
-  root: string,
-  names: Iterable<string>,
-): Promise<string> {
-  const head = repo.shadow ? undefined : await checkoutHead(root)
+export async function snapshotCheckout(repo: Repository, names: Iterable<string>): Promise<string> {
+  const head = repo.shadow ? undefined : await checkoutHead(repo.top)
   const tracked = head
     ? await withIndex(async (env) => {
         await git(repo, ['read-tree', head], { env })
-        return (await indexEntries(repo, env)).filter(visible).map((entry) => entry.path)
+        return (await indexEntries(repo, env))
+          .filter(visible(repo))
+          .map((entry) => entry.path.slice(repo.prefix.length))
       })
     : []
   return commitPaths(repo, {
     from: head,
-    directory: root,
+    directory: repo.top,
     paths: [...new Set([...names, ...tracked])],
     parents: head ? [head] : [],
     message: 'Pi harness snapshot of the working tree',
   })
 }
 
-/** Write a commit's visible files into an empty directory. */
+/**
+ * Write the visible files of the job's directory, as a commit has them, below an empty
+ * directory. Returns the copy of the job's directory inside it.
+ */
 export async function materialize(
   repo: Repository,
   commit: string,
   directory: string,
-): Promise<void> {
-  await mkdir(directory, { recursive: true })
+): Promise<string> {
+  const workspace = join(directory, repo.prefix)
+  await mkdir(workspace, { recursive: true })
   await withIndex(async (index) => {
     const env = { ...index, GIT_WORK_TREE: directory }
     await git(repo, ['read-tree', commit], { env })
-    const paths = (await indexEntries(repo, env)).filter(visible).map((entry) => entry.path)
+    const paths = (await indexEntries(repo, env)).filter(visible(repo)).map((entry) => entry.path)
 
     if (paths.length) {
       await git(repo, ['checkout-index', '-z', '--stdin', `--prefix=${directory}/`], {
@@ -216,8 +235,10 @@ export async function materialize(
       })
     }
   })
+  return workspace
 }
 
+/** Paths below the job's directory that differ between two commits. */
 export async function changedPaths(
   repo: Repository,
   base: string,
@@ -226,21 +247,25 @@ export async function changedPaths(
   const listing = await git(repo, ['diff', '--name-only', '--no-renames', '-z', base, head], {
     raw: true,
   })
-  return listing.split('\0').filter(Boolean).sort()
+  return listing
+    .split('\0')
+    .filter((path) => path && path.startsWith(repo.prefix))
+    .map((path) => path.slice(repo.prefix.length))
+    .sort()
 }
 
 async function blob(repo: Repository, commit: string, path: string) {
-  const entry = await git(repo, ['ls-tree', '-z', commit, '--', path], { raw: true })
+  const entry = await git(repo, ['ls-tree', '-z', commit, '--', repo.prefix + path], { raw: true })
   const match = /^(\d{6}) blob ([0-9a-f]+)\t/.exec(entry)
   return match ? { mode: match[1]!, id: match[2]! } : undefined
 }
 
-async function workingBlob(repo: Repository, root: string, path: string) {
+async function workingBlob(repo: Repository, path: string) {
   try {
-    await safePath(root, path)
-    return await git(repo, ['hash-object', '--', path], {
-      cwd: root,
-      env: { GIT_WORK_TREE: root },
+    await safePath(repo.top, repo.prefix + path)
+    return await git(repo, ['hash-object', '--', repo.prefix + path], {
+      cwd: repo.top,
+      env: { GIT_WORK_TREE: repo.top },
     })
   } catch {
     return undefined
@@ -254,7 +279,6 @@ async function workingBlob(repo: Repository, root: string, path: string) {
  */
 export async function applyToCheckout(
   repo: Repository,
-  root: string,
   base: string,
   head: string,
 ): Promise<{ applied: string[]; conflicts: string[] }> {
@@ -266,7 +290,7 @@ export async function applyToCheckout(
     const [before, target, current] = await Promise.all([
       blob(repo, base, path),
       blob(repo, head, path),
-      workingBlob(repo, root, path),
+      workingBlob(repo, path),
     ])
 
     if (current !== before?.id && current !== target?.id) {
@@ -281,7 +305,7 @@ export async function applyToCheckout(
   }
 
   for (const { path, target } of plan) {
-    const destination = await safePath(root, path)
+    const destination = await safePath(repo.top, repo.prefix + path)
 
     if (!target) {
       await rm(destination, { force: true })

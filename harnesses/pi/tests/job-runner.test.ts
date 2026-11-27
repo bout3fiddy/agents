@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test, { type TestContext } from 'node:test'
 import { execFileSync } from 'node:child_process'
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readdir, readFile, realpath, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { Dispatcher } from '../src/dispatch.ts'
@@ -302,4 +302,52 @@ test('required isolation reaches the worker whatever the project trusts', async 
   const ordinary = store.create({ root, session: 's1', spec: spec() })
   await runJob(store, ordinary.id, observe({ 'src/value.js': 'export const value = 2\n' }))
   assert.deepEqual(modes, ['required-isolation', 'isolated'])
+})
+
+test('a session in a subdirectory changes only its own part of the repository', async (t) => {
+  const { base, root, store } = await project(t)
+  const outer = join(base, 'monorepo')
+  await mkdir(join(outer, 'packages'), { recursive: true })
+  await writeFile(join(outer, 'root.txt'), 'top level\n')
+  execFileSync('git', ['init', '-q', '--template=', '-b', 'main', outer])
+  git(outer, 'config', 'user.email', 'test@example.org')
+  git(outer, 'config', 'user.name', 'Test')
+  await rm(join(root, '.git'), { recursive: true })
+  execFileSync('mv', [root, join(outer, 'packages/app')])
+  const app = await realpath(join(outer, 'packages/app'))
+  git(outer, 'add', '-A')
+  git(outer, 'commit', '-q', '-m', 'initial')
+  await writeFile(join(app, 'src/dirty.js'), '// uncommitted\n')
+  const seen: string[] = []
+  const worker: Dispatcher = async (request) => {
+    seen.push(...(await readdir(request.workspace)).sort())
+    assert.equal(
+      await readFile(join(request.workspace, 'src/dirty.js'), 'utf8'),
+      '// uncommitted\n',
+    )
+    return writes({ 'src/value.js': 'export const value = 1\n' })(request)
+  }
+  const applied = store.create({ root: app, session: 's1', spec: spec() })
+  const done = await runJob(store, applied.id, worker)
+  assert.equal(done?.status, 'done', done?.error)
+  assert.deepEqual(seen, ['.pi', 'src'], 'the worker sees its directory, not the whole repository')
+  assert.deepEqual(done?.result.changed, ['src/value.js'])
+  assert.equal(await readFile(join(app, 'src/value.js'), 'utf8'), 'export const value = 1\n')
+  assert.equal(
+    git(outer, 'status', '--porcelain'),
+    'M packages/app/src/value.js\n?? packages/app/src/dirty.js',
+  )
+  git(outer, 'checkout', '-q', '--', '.')
+  await rm(join(app, 'src/dirty.js'))
+  const branch = spec({ deliver: 'branch', branch: 'feat/app' })
+  const published = store.create({ root: app, session: 's1', spec: branch })
+  const committed = await runJob(
+    store,
+    published.id,
+    writes({ 'src/value.js': 'export const value = 2\n' }),
+  )
+  assert.equal(committed?.status, 'done', committed?.error)
+  assert.equal(git(outer, 'show', 'feat/app:packages/app/src/value.js'), 'export const value = 2')
+  assert.equal(git(outer, 'show', 'feat/app:root.txt'), 'top level', 'the rest of the tree is kept')
+  assert.equal(git(outer, 'diff', '--name-only', 'main', 'feat/app'), 'packages/app/src/value.js')
 })

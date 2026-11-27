@@ -76,6 +76,9 @@ type Run = {
   before: Map<string, Buffer>
   workspace: string
   originals: string
+
+  /** Temporary directories holding the two copies; removed when the run ends. */
+  containers: string[]
   role: WorkerRole
   needsDatabase: boolean
 }
@@ -142,7 +145,7 @@ async function resolveBase(store: JobStore, job: Job, repo: Repository): Promise
       throw new Error('Branch delivery needs a commit to start from; this checkout has none')
     }
   } else {
-    base = await snapshotCheckout(repo, job.root, (await inventory(job.root)).keys())
+    base = await snapshotCheckout(repo, (await inventory(job.root)).keys())
   }
 
   await pin(repo, job.id, 'base', base)
@@ -151,9 +154,9 @@ async function resolveBase(store: JobStore, job: Job, repo: Repository): Promise
 }
 
 /** A disposable copy of a commit, with the checkout's installed dependencies linked in. */
-async function copyOf(repo: Repository, commit: string, root: string): Promise<string> {
-  const directory = await temporaryDirectory('w')
-  await materialize(repo, commit, directory)
+async function copyOf(repo: Repository, commit: string, root: string) {
+  const container = await temporaryDirectory('w')
+  const directory = await materialize(repo, commit, container)
 
   for (const [name, installed] of [
     ['node_modules', await installedNodeModules(root)],
@@ -168,7 +171,7 @@ async function copyOf(repo: Repository, commit: string, root: string): Promise<s
     }
   }
 
-  return directory
+  return { container, directory }
 }
 
 async function openRun(
@@ -207,8 +210,14 @@ async function openRun(
   }
 
   const base = await resolveBase(store, job, repo)
-  const originals = await copyOf(repo, base, job.root)
-  const workspace = await copyOf(repo, job.wip ?? base, job.root)
+  const containers: string[] = []
+  const copy = async (commit: string) => {
+    const made = await copyOf(repo, commit, job.root)
+    containers.push(made.container)
+    return made.directory
+  }
+  const originals = await copy(base)
+  const workspace = await copy(job.wip ?? base)
   return {
     store,
     job,
@@ -221,6 +230,7 @@ async function openRun(
     before: await inventory(originals),
     workspace,
     originals,
+    containers,
     role: spec.mode === 'implement' || spec.implementerModel ? 'implementer' : 'task-worker',
     needsDatabase: checkpoint.database,
   }
@@ -230,7 +240,7 @@ async function openRun(
 async function saveProgress(run: Run, changed: string[]): Promise<string> {
   const wip = await commitPaths(run.repo, {
     from: run.base,
-    directory: run.workspace,
+    directory: run.containers[1]!,
     paths: changed,
     parents: [run.base],
     message: `Pi harness work in progress: ${run.job.spec.title}`,
@@ -488,7 +498,7 @@ async function deliver(run: Run, candidate: Candidate): Promise<Outcome> {
   store.update(job.id, { phase: 'delivering' })
   const head = await commitPaths(repo, {
     from: run.base,
-    directory: run.workspace,
+    directory: run.containers[1]!,
     paths: candidate.changed,
     parents: [run.base],
     message: `${spec.title}\n\n${summary.slice(0, 2000)}`,
@@ -501,7 +511,7 @@ async function deliver(run: Run, candidate: Candidate): Promise<Outcome> {
     return { status: 'done', summary, head, result }
   }
 
-  const applied = await applyToCheckout(repo, job.root, run.base, head)
+  const applied = await applyToCheckout(repo, run.base, head)
 
   if (applied.conflicts.length) {
     return {
@@ -563,10 +573,8 @@ export async function runJob(
   } finally {
     clearInterval(beat)
 
-    for (const path of [run?.workspace, run?.originals]) {
-      if (path) {
-        await rm(path, { recursive: true, force: true })
-      }
+    for (const path of run?.containers ?? []) {
+      await rm(path, { recursive: true, force: true })
     }
   }
 }
