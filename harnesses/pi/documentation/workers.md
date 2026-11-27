@@ -14,6 +14,26 @@ entries confirmed complete for more than 30 days. Unreadable or active entries a
 evicted. A full registry rejects a new registration before its worker starts. A damaged entry
 produces a warning rather than preventing observation of healthy tasks.
 
+## Dispatch into another checkout
+
+`delegate_task`, `task_status`, `task_control` and `resume_task` accept `project`, the absolute root
+of another checkout or worktree. The task is registered in that project's own registry. Its write
+reservations, concurrency limits, dependency check, `.pi/harness.json` checks and the user's worker
+execution enrollment for that root apply unchanged. A path inside a `.pi` directory is refused: task
+candidates are steered through their task. The origin index records the relationship for the picker,
+and the dispatching session records the route in its own entries. A routed task's result reaches
+that session like a local one. Steering a task there requires that this session started it. A task
+ID from another checkout is a valid wake source for an [assignment](architecture.md#assignments),
+which delivers its result on any branch of the session. A task that is only listed in the origin
+index, without a route or an assignment, stays display-only. `task_control` cancels a task that an
+open assignment waits on, in either checkout, only on the user's
+[confirmation](architecture.md#assignments) naming that assignment or task. A task that another
+session's open assignment waits on is paused or cancelled from this session only on the user's
+confirmation naming the task.
+
+The host shell is never the route. A worker started by hand has no registry entry, no reservation
+and no completion delivery.
+
 ## Register existing tasks (host only)
 
 From the originating project, run `register-worker-origin OWNER_ROOT TASK_UUID SESSION` using the

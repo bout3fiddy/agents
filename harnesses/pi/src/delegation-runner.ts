@@ -17,7 +17,12 @@ import { digest, fileHashes, inventory, snapshotHash } from './paths.ts'
 import { changes, integrate } from './integration.ts'
 import { acquireLock } from './lock.ts'
 import { runWorkflow } from './workflow.ts'
-import { checkDelegation, DelegationChecksFailed } from './delegation-checks.ts'
+import {
+  checkDelegation,
+  DelegationChecksFailed,
+  documentReceipt,
+  type DocumentChecks,
+} from './delegation-checks.ts'
 import { writeAuditReport } from './recurring-audit.ts'
 import { runProgressAuditor } from './progress-auditor.ts'
 import { runTaskCoordinator } from './task-coordinator.ts'
@@ -101,6 +106,9 @@ export async function runDelegation(
     ...(await readJson<DelegationStatus>(join(directory, 'status.json'))),
     id,
     status: 'running',
+
+    // A receipt describes one finished attempt. A resumed task earns its own or has none.
+    delivery: undefined,
     pid: process.pid,
     updatedAt: new Date().toISOString(),
   }
@@ -247,6 +255,7 @@ export async function runDelegation(
       throw new Error('A recurring audit requires a read-only research worker')
     }
 
+    const documents: DocumentChecks = { checked: [], formattingSkipped: [] }
     const receipts = await checkDelegation(
       request,
       workspace,
@@ -255,6 +264,7 @@ export async function runDelegation(
       after,
       evidence,
       signal,
+      documents,
     )
     await save({ receipts })
     const verified = snapshotHash(after)
@@ -314,7 +324,16 @@ export async function runDelegation(
 
           await save({ ...report, status: 'complete' })
         } else {
-          await save({ status: 'complete' })
+
+          // Only a documents task is delivered by this application; its receipt says what the
+          // checkout now holds. Any earlier receipt of a resumed task is replaced or cleared.
+          const applied = request.kind === 'documents' ? (state.changedPaths ?? []) : []
+          await save({
+            status: 'complete',
+            delivery: applied.length
+              ? documentReceipt(request.root, applied, after, documents, new Date())
+              : undefined,
+          })
         }
       })
     } finally {

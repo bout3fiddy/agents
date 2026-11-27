@@ -1,8 +1,8 @@
 import { WorkersCatalog } from './workers-data.ts'
 import { taskStatusLine } from './task-footer.ts'
 import { taskStatusSchema } from './inspection-schema.ts'
-import { realpath } from 'node:fs/promises'
-import { basename, dirname, join, relative, resolve } from 'node:path'
+import { lstat, realpath } from 'node:fs/promises'
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { Type } from 'typebox'
 import type {
   AgentBeforeSettleEvent,
@@ -30,10 +30,103 @@ import {
   type DelegationRequest,
 } from './delegation-state.ts'
 import { implementationRecovery, revisionSchema, reviseTasks } from './task-recovery.ts'
+import { DeliveryLedger, deliveryLimits, liveSession, type DeliveryLimits } from './delivery.ts'
+import type { BoundTask, TaskOwner } from './host-work.ts'
+import { Check } from 'typebox/value'
 
 type Launcher = (request: DelegationRequest) => Promise<void>
 const idSchema = Type.String({ minLength: 36, maxLength: 36 })
+const projectSchema = Type.String({ minLength: 1, maxLength: 1024 })
 const storeFor = async (cwd: string) => new StateStore(await realpath(cwd))
+
+// A cross-checkout dispatch made through a task tool, recorded in the dispatching session.
+const routeType = 'pi-task-route'
+const routeSchema = Type.Object({
+  id: Type.String(),
+  project: Type.String(),
+  session: Type.String(),
+})
+const maxRoutes = 128
+
+/** The assignment records the task tools consult; only the bindings, never the records. */
+export type TaskBindings = {
+  boundTasks(session: string): BoundTask[]
+
+  /**
+   * Throws unless the user confirmed this stop, when an open assignment tracks the task:
+   * cancelling one of this session's, or pausing or cancelling one of another session's.
+   */
+  authorizeTaskStop(
+    ctx: ExtensionContext,
+    action: 'pause' | 'cancel',
+    task: TaskOwner,
+  ): Promise<void>
+}
+export type FeedOptions = {
+  assignments?: TaskBindings
+
+  /** Idle observation period. */
+  tickMs?: number
+  delivery?: DeliveryLimits
+}
+
+/**
+ * The checkout a task tool addresses: the session's own, or another checkout or worktree the
+ * host names. Routing through the tool keeps that project's registry, reservations, checks and
+ * worker execution policy in force; a host shell started there would bypass all of them.
+ */
+async function taskStore(ctx: ExtensionContext, project?: string): Promise<StateStore> {
+  if (project === undefined) {
+    return storeFor(ctx.cwd)
+  }
+
+  if (!isAbsolute(project) || project.includes('\0')) {
+    throw new Error('project is the absolute path of a checkout or worktree root')
+  }
+
+  let root: string
+
+  try {
+    root = await realpath(project)
+  } catch {
+    throw new Error(`No checkout at ${project}`)
+  }
+
+  if (root.split(sep).includes('.pi')) {
+    throw new Error(
+      'Task candidates and private harness directories belong to their task. ' +
+        'Steer that task instead of dispatching into its workspace.',
+    )
+  }
+
+  const marked = await Promise.all(
+    ['.git', '.pi'].map((name) =>
+      lstat(join(root, name)).then(
+        () => true,
+        () => false,
+      ),
+    ),
+  )
+
+  if (!marked.includes(true)) {
+    throw new Error(`${root} is not a checkout root: it has neither .git nor .pi`)
+  }
+
+  return new StateStore(root)
+}
+
+/** A task in another checkout is steered only by the session that started it. */
+function requireOwnTask(job: Delegation, session: string, project?: string) {
+  if (
+    project !== undefined &&
+    job.request.session !== session &&
+    job.request.originSession !== session
+  ) {
+    throw new Error(
+      `Task ${job.request.id} in ${project} belongs to another session; steer it from there`,
+    )
+  }
+}
 
 async function destination(cwd: string, path: string): Promise<string> {
   let current = resolve(cwd, path)
@@ -74,11 +167,29 @@ function taskMilestone(job: Delegation) {
   return summary ? { key: digest(summary), summary } : undefined
 }
 
-function resultMessage(jobs: Delegation[]): CustomMessageEntryDraft {
+function resultMessage(
+  jobs: Delegation[],
+  bound: ReadonlyMap<string, BoundTask>,
+): CustomMessageEntryDraft {
   const actionableAudit = jobs.some(
     ({ request, state }) =>
       request.recurring?.audit && (state.auditRequired?.length || state.hostActions?.length),
   )
+  const assignments = jobs.flatMap(({ request }) => {
+    const binding = bound.get(request.id)
+    return binding
+      ? [
+          {
+            task: request.id,
+            assignment: binding.assignment,
+            outcome: binding.outcome,
+            target: binding.target,
+          },
+        ]
+      : []
+  })
+  const delivered = jobs.filter(deliveredDocuments).map(({ request }) => request.id)
+  const deliveredBound = assignments.some(({ task }) => delivered.includes(task))
   return {
     type: 'custom_message',
     customType: 'pi-task-result',
@@ -95,6 +206,28 @@ function resultMessage(jobs: Delegation[]): CustomMessageEntryDraft {
       (jobs.some((job) => job.request.local)
         ? 'Compare verified local candidates and integrate the selected work when in scope. '
         : '') +
+      (assignments.length
+        ? 'These results belong to recorded assignments: ' +
+          JSON.stringify(assignments) +
+          '. Continue each named assignment and no other; leave a paused one paused. A ' +
+          'finished worker, candidate or preview is not delivery to its target: you own ' +
+          'acceptance and the next step. '
+        : '') +
+      (delivered.length
+        ? 'A complete task whose view carries delivery is a documents task the harness ' +
+          'already checked and applied: write scope, document type, Markdown format and line ' +
+          'width passed on exactly that content, and delivery.checkout received ' +
+          'delivery.revision with the listed file hashes and word counts. Treat that receipt ' +
+          'as verified. Do not repeat document_check, hashing, word counts or a status ' +
+          'lookup. Read a delivered file once only if its content still has to be judged ' +
+          'against the outcome. '
+        : '') +
+      (deliveredBound
+        ? 'When a named assignment has those documents in that checkout as its target, the ' +
+          'receipt is its delivery evidence: close it with host_work done, evidence target ' +
+          'the assignment target and revision delivery.revision, then acknowledge briefly. ' +
+          'For any other target the receipt is progress and the assignment stays open. '
+        : '') +
       'For failures, inspect the retained candidate and evidence. ' +
       'Recover within the original authorized scope: handle host-only operations on the host, ' +
       'preserve useful work and rerun relevant checks. Do not repeat a worker lacking the needed ' +
@@ -106,13 +239,60 @@ function resultMessage(jobs: Delegation[]): CustomMessageEntryDraft {
   }
 }
 
+/** A documents task the supervisor checked, applied and issued a delivery receipt for. */
+function deliveredDocuments({ request, state }: Delegation): boolean {
+  return request.kind === 'documents' && state.status === 'complete' && Boolean(state.delivery)
+}
+
+/**
+ * Tell the model which outcome messages repeat one it already received. Delivery is retried
+ * until its receipt is persisted, so a slow receipt can produce a second copy; the copy keeps
+ * its place in the transcript and loses its instructions.
+ */
+function withoutRepeatedOutcomes<T extends { role: string }>(messages: T[]): T[] | undefined {
+  const received = new Set<string>()
+  let repeated = false
+  const kept = messages.map((message) => {
+    const custom = message as T & { customType?: string; details?: unknown }
+
+    if (custom.role !== 'custom' || custom.customType !== 'pi-task-result') {
+      return message
+    }
+
+    const ids = messageIds(custom.details)
+
+    if (ids.length && ids.every((id) => received.has(id))) {
+      repeated = true
+      return {
+        ...message,
+        content:
+          'Repeated delivery of a background task outcome already received above (' +
+          ids.join(', ') +
+          '). It carries nothing new: take no action for this notice.',
+      }
+    }
+
+    for (const id of ids) {
+      received.add(id)
+    }
+
+    return message
+  })
+  return repeated ? kept : undefined
+}
+
 export function registerDelegation(
   pi: ExtensionAPI,
   launch: Launcher = launchDelegation,
   afterMerge?: () => void,
+  options: FeedOptions = {},
 ) {
   pi.registerMessageRenderer('pi-task-progress', () => ({ render: () => [], invalidate() {} }))
-  const feed = new TaskFeed(pi, afterMerge)
+  const feed = new TaskFeed(pi, afterMerge, options)
+  pi.on('context', ({ messages }) => {
+    const kept = withoutRepeatedOutcomes(messages)
+    return kept ? { messages: kept } : undefined
+  })
   const boundary = (event: BoundaryState, ctx: ExtensionContext) => feed.boundary(event, ctx)
   pi.on('turn_end', boundary)
   pi.on('agent_before_settle', async (event, ctx) => {
@@ -140,12 +320,13 @@ export function registerDelegation(
   feed.observe()
   pi.on('session_shutdown', () => feed.close())
   pi.on('tool_call', (event, ctx) => hostWriteBlock(event, ctx, bootstrapRoot))
-  const start = (ctx: ExtensionContext, input: DelegateInput) => startTask(ctx, input, launch)
+  const start = (ctx: ExtensionContext, input: DelegateInput, project?: string) =>
+    startTask(ctx, input, launch, project, feed)
   registerDelegateTask(pi, start)
   registerTaskStatus(pi)
-  registerTaskControl(pi)
+  registerTaskControl(pi, options.assignments)
   registerReviseTasks(pi)
-  registerResumeTask(pi, launch)
+  registerResumeTask(pi, launch, feed)
   return { start }
 }
 
@@ -155,6 +336,13 @@ type SessionView = {
   entries: ReturnType<ExtensionContext['sessionManager']['getEntries']>
   branch: Set<string>
   persisted: Set<string>
+
+  /** Tasks bound to an open assignment: delivered whatever branch the session is on. */
+  bound: ReadonlyMap<string, BoundTask>
+  now: number
+
+  /** Collected at a turn boundary, which appends reliably, rather than as an idle wake. */
+  boundary: boolean
 }
 
 type Milestone = { id: string; task: string; summary: string }
@@ -172,12 +360,25 @@ class TaskFeed {
   private closed = false
   private collecting = false
   private timer: ReturnType<typeof setInterval> | undefined
-  private readonly delivered = new Set<string>()
+
+  /** Offered notifications awaiting their persisted receipt. An offer is not a delivery. */
+  private readonly offers: DeliveryLedger
+
+  /** Tasks in other checkouts whose current outcome this session has already received. */
+  private readonly settledElsewhere = new Set<string>()
 
   constructor(
     private readonly pi: ExtensionAPI,
     private readonly afterMerge?: () => void,
-  ) {}
+    private readonly options: FeedOptions = {},
+  ) {
+    this.offers = new DeliveryLedger(options.delivery ?? deliveryLimits)
+  }
+
+  /** A task in another checkout was started again: observe it once more. */
+  reopen(id: string) {
+    this.settledElsewhere.delete(id)
+  }
 
   open(ctx: ExtensionContext) {
     this.closed = false
@@ -195,7 +396,7 @@ class TaskFeed {
       if (this.current && !this.closed) {
         void this.idle(this.current).catch((error: unknown) => this.stopObserving(error))
       }
-    }, 1000)
+    }, this.options.tickMs ?? 1000)
     this.timer.unref()
   }
 
@@ -235,12 +436,49 @@ class TaskFeed {
   private retract(session: string, messages: CustomMessageEntryDraft[]) {
     for (const message of messages) {
       for (const id of messageIds(message.details)) {
-        this.delivered.delete(`${session}:${id}`)
+        this.offers.retract(`${session}:${id}`)
       }
     }
   }
 
-  async collect(ctx: ExtensionContext): Promise<CustomMessageEntryDraft[]> {
+  /** Record that this session dispatched a task into another checkout through a task tool. */
+  route(job: Delegation, session: string) {
+    this.pi.appendEntry(routeType, { id: job.request.id, project: job.request.root, session })
+  }
+
+  /**
+   * Tasks this session routed into another checkout or bound to one of its assignments. Each is
+   * read from its owning registry; nothing is copied or moved. A task that is merely listed in
+   * the origin index stays display-only, as before.
+   */
+  private async elsewhere(
+    local: StateStore,
+    session: string,
+    routes: { id: string; project: string }[],
+  ): Promise<Delegation[]> {
+    const wanted = new Map(routes.map((route) => [route.id, route.project]))
+    const jobs: Delegation[] = []
+
+    for (const [id, root] of wanted) {
+      if (root === local.projectRoot || this.settledElsewhere.has(id)) {
+        continue
+      }
+
+      try {
+        const job = await new Delegations(new StateStore(root, undefined, false)).get(id)
+
+        if (job.request.session === session || job.request.originSession === session) {
+          jobs.push(job)
+        }
+      } catch {
+        // A removed or unreadable checkout cannot report. Its assignment records that itself.
+      }
+    }
+
+    return jobs
+  }
+
+  async collect(ctx: ExtensionContext, boundary = false): Promise<CustomMessageEntryDraft[]> {
     const session = this.collecting ? undefined : this.owned(ctx)
 
     if (session === undefined) {
@@ -251,19 +489,38 @@ class TaskFeed {
 
     try {
       const store = await storeFor(ctx.cwd)
-      const jobs = await new Delegations(store).list()
-      const footer = await taskStatusLine(store, jobs, session)
+      const local = await new Delegations(store).list()
+      const footer = await taskStatusLine(store, local, session)
 
-      // The session can shut down, be disposed or change while the reads are pending. Check
-      // before marking anything delivered; everything after this runs without yielding.
+      // The session can shut down, be disposed or change while reads are pending. Check after
+      // each group of reads and before touching the context or marking anything delivered.
+      if (this.owned(ctx) !== session) {
+        return []
+      }
+
+      const bound = this.options.assignments?.boundTasks(session) ?? []
+      const routes = [...routedTasks(ctx, session), ...bound]
+      const jobs = [...local, ...(await this.elsewhere(store, session, routes))]
+
+      // Everything after this check runs without yielding.
       if (this.owned(ctx) !== session) {
         return []
       }
 
       ctx.ui.setStatus('pi-tasks', footer)
-      const view = sessionView(ctx, session)
+      const view = sessionView(ctx, session, bound, boundary)
+      this.reportUndelivered(ctx, view)
       const ready = this.readyResults(jobs, view)
-      const messages: CustomMessageEntryDraft[] = ready.length ? [resultMessage(ready)] : []
+
+      for (const job of jobs) {
+        if (job.request.root !== store.projectRoot && view.persisted.has(notificationId(job))) {
+          this.settledElsewhere.add(job.request.id)
+        }
+      }
+
+      const messages: CustomMessageEntryDraft[] = ready.length
+        ? [resultMessage(ready, view.bound)]
+        : []
       const milestones = this.progress(jobs, view, messages)
       const milestone = this.milestoneMessage(milestones, view, messages)
       return milestone ? [...messages, milestone] : messages
@@ -272,15 +529,46 @@ class TaskFeed {
     }
   }
 
+  /** Say once that an outcome could not wake the session, instead of offering it forever. */
+  private reportUndelivered(ctx: ExtensionContext, view: SessionView) {
+    const prefix = view.session + ':'
+    const tasks = this.offers
+      .exhausted(view.now)
+      .filter((key) => key.startsWith(prefix))
+      .map((key) => key.slice(prefix.length, prefix.length + 8))
+
+    if (tasks.length) {
+      ctx.ui.notify(
+        `Background task outcome (${tasks.join(', ')}) could not wake this session after ` +
+          `${this.offers.limits.attempts} attempts. It stays recorded: task_status shows it ` +
+          'and the next turn receives it.',
+        'warning',
+      )
+    }
+  }
+
+  /** Whether id needs no offer now: its receipt is persisted, or an offer is still pending. */
   private seen(view: SessionView, id: string) {
-    return view.persisted.has(id) || this.delivered.has(`${view.session}:${id}`)
+    const key = `${view.session}:${id}`
+
+    if (view.persisted.has(id)) {
+      this.offers.acknowledge(key)
+      return true
+    }
+
+    return view.boundary
+      ? !this.offers.dueAtBoundary(key, view.now)
+      : !this.offers.dueWhileIdle(key, view.now)
   }
 
   private deliver(view: SessionView, id: string) {
-    this.delivered.add(`${view.session}:${id}`)
+    this.offers.offer(`${view.session}:${id}`, view.now, view.boundary)
   }
 
-  /** Finished tasks of this session and branch whose outcome has not been delivered. */
+  /**
+   * Finished tasks whose outcome this session has not received: those of its current branch,
+   * and those bound to one of its assignments on any branch.
+   */
   private readyResults(jobs: Delegation[], view: SessionView): Delegation[] {
     const ready = jobs.filter(
       (job) =>
@@ -419,7 +707,7 @@ class TaskFeed {
       return
     }
 
-    const messages = await this.collect(ctx)
+    const messages = await this.collect(ctx, false)
 
     if (this.owned(ctx) !== session || !ctx.isIdle() || ctx.hasPendingMessages()) {
       this.retract(session, messages)
@@ -445,7 +733,7 @@ class TaskFeed {
       return
     }
 
-    const messages = await this.collect(ctx)
+    const messages = await this.collect(ctx, true)
     return messages.length
       ? {
           entries: [...event.entries, ...messages],
@@ -458,31 +746,33 @@ class TaskFeed {
   }
 }
 
-// Opening of the error every member of an invalidated SDK extension context throws.
-const staleContext = 'This extension ctx is stale'
-
-/**
- * The session ctx serves, or undefined once the SDK has invalidated ctx. Disposing a session
- * invalidates its contexts without emitting session_shutdown, and the SDK exposes no other
- * liveness probe. Only that invalidation counts as a lost session; any other failure propagates.
- * tests/task-notifications.test.ts replays the disposal against the installed SDK.
- */
-function liveSession(ctx: ExtensionContext): string | undefined {
-  try {
-    return ctx.sessionManager.getSessionId()
-  } catch (error) {
-    if (error instanceof Error && error.message.startsWith(staleContext)) {
-      return undefined
-    }
-
-    throw error
-  }
+/** Cross-checkout dispatches this session recorded, on any branch of its tree. */
+function routedTasks(ctx: ExtensionContext, session: string) {
+  return ctx.sessionManager
+    .getEntries()
+    .flatMap((entry) =>
+      entry.type === 'custom' &&
+      entry.customType === routeType &&
+      Check(routeSchema, entry.data) &&
+      entry.data.session === session
+        ? [entry.data]
+        : [],
+    )
+    .slice(-maxRoutes)
 }
 
-function sessionView(ctx: ExtensionContext, session: string): SessionView {
+function sessionView(
+  ctx: ExtensionContext,
+  session: string,
+  bound: BoundTask[],
+  boundary: boolean,
+): SessionView {
   const entries = ctx.sessionManager.getEntries()
   return {
     session,
+    bound: new Map(bound.map((task) => [task.id, task])),
+    now: Date.now(),
+    boundary,
     entries,
     branch: new Set(ctx.sessionManager.getBranch().map((entry) => entry.id)),
     persisted: new Set(
@@ -504,11 +794,16 @@ function quietAudit(job: Delegation) {
   )
 }
 
-/** Tasks belong to the session and conversation branch that started them. */
+/**
+ * Tasks belong to the session and conversation branch that started them. A task bound to one of
+ * the session's assignments belongs to that record instead, wherever the session tree now points.
+ */
 function ownedByView(job: Delegation, view: SessionView) {
   return (
     job.request.session === view.session &&
-    (!job.request.originEntry || view.branch.has(job.request.originEntry))
+    (!job.request.originEntry ||
+      view.branch.has(job.request.originEntry) ||
+      view.bound.has(job.request.id))
   )
 }
 
@@ -678,18 +973,39 @@ function taskOrigin(ctx: ExtensionContext) {
   }
 }
 
-async function startTask(ctx: ExtensionContext, input: DelegateInput, launch: Launcher) {
+async function startTask(
+  ctx: ExtensionContext,
+  input: DelegateInput,
+  launch: Launcher,
+  project: string | undefined,
+  feed: TaskFeed,
+) {
   const origin = taskOrigin(ctx)
-  const job = await new Delegations(await storeFor(ctx.cwd)).start(input, origin, launch)
+  const store = await taskStore(ctx, project)
+  const job = await new Delegations(store).start(input, origin, launch)
+
+  if (project !== undefined) {
+    feed.route(job, origin.session)
+  }
+
   return textResult({
     ...delegationView(job),
+    ...(project !== undefined && { project: store.projectRoot }),
     next: 'Continue the conversation. Completion arrives automatically; do not poll or wait.',
   })
 }
 
+const otherCheckout =
+  'Set project to the absolute root of another checkout or worktree to address a task there; ' +
+  'that project keeps its own reservations, checks and worker execution policy. '
+
 function registerDelegateTask(
   pi: ExtensionAPI,
-  start: (ctx: ExtensionContext, input: DelegateInput) => ReturnType<typeof startTask>,
+  start: (
+    ctx: ExtensionContext,
+    input: DelegateInput,
+    project?: string,
+  ) => ReturnType<typeof startTask>,
 ) {
   pi.registerTool({
     name: 'delegate_task',
@@ -710,10 +1026,16 @@ function registerDelegateTask(
       'Never delegate a direct save of a small settled workshop decision: create or edit the ' +
       'requested design file on the host and verify its contents before replying. ' +
       'Select performanceReview only when the user asks for performance work. Put implementation ' +
-      'review options inside its design. Omit design to resume the recorded scope.',
-    parameters: delegateSchema,
+      'review options inside its design. Omit design to resume the recorded scope. ' +
+      otherCheckout +
+      'Never start a worker there through the host shell.',
+    parameters: Type.Object(
+      { ...delegateSchema.properties, project: Type.Optional(projectSchema) },
+      { additionalProperties: false },
+    ),
     async execute(_id, args, _signal, _update, ctx) {
-      return start(ctx, args)
+      const { project, ...input } = args
+      return start(ctx, input, project)
     },
   })
 }
@@ -723,11 +1045,15 @@ function registerTaskStatus(pi: ExtensionAPI) {
     name: 'task_status',
     label: 'Inspect background tasks',
     description:
-      'Inspect saved task status/evidence when needed. Completion arrives automatically.',
-    parameters: Type.Object({ id: Type.Optional(idSchema) }),
+      'Inspect saved task status/evidence when needed. Completion arrives automatically. ' +
+      otherCheckout,
+    parameters: Type.Object({
+      id: Type.Optional(idSchema),
+      project: Type.Optional(projectSchema),
+    }),
     outputSchema: Type.Union([taskStatusSchema, Type.Array(taskStatusSchema)]),
     async execute(_id, args, _signal, _update, ctx) {
-      const jobs = new Delegations(await storeFor(ctx.cwd))
+      const jobs = new Delegations(await taskStore(ctx, args.project))
       return structuredResult(
         args.id ? delegationView(await jobs.get(args.id)) : (await jobs.list()).map(delegationView),
       )
@@ -735,7 +1061,7 @@ function registerTaskStatus(pi: ExtensionAPI) {
   })
 }
 
-function registerTaskControl(pi: ExtensionAPI) {
+function registerTaskControl(pi: ExtensionAPI, assignments?: TaskBindings) {
   pi.registerTool({
     name: 'task_control',
     label: 'Steer, pause or cancel task',
@@ -743,9 +1069,19 @@ function registerTaskControl(pi: ExtensionAPI) {
       'Use evidence to send a host observation to the active implementer of a fixed design. ' +
       'Use message for task updates. Pause stops the process tree and ' +
       'preserves candidate and ownership. Wait for the paused outcome before revise_tasks or ' +
-      'resume_task. Cancellation releases ownership after the worker stops.',
+      'resume_task. Cancellation releases ownership after the worker stops. Each action ' +
+      'reaches the one named task. Cancelling a task that an open assignment waits on is ' +
+      "accepted only on the user's own confirmation: a line of their latest message that " +
+      'reads "cancel aN" for its assignment or "cancel" with the first eight characters of ' +
+      'the task ID. Your message is not that authority; a new request or a change of ' +
+      'priority never cancels recorded work. Pause it instead when you must reassign scope: ' +
+      'its assignment stays open and returns to you. A task that advances an assignment ' +
+      'another session recorded is not yours to stop: pausing or cancelling it needs the ' +
+      'user\'s line "pause" or "cancel" with the first eight characters of the task ID. ' +
+      otherCheckout,
     parameters: Type.Object({
       id: idSchema,
+      project: Type.Optional(projectSchema),
       action: Type.Union([
         Type.Literal('message'),
         Type.Literal('evidence'),
@@ -766,9 +1102,15 @@ function registerTaskControl(pi: ExtensionAPI) {
         )
       }
 
-      return textResult(
-        await new Delegations(await storeFor(ctx.cwd)).control(args.id, args.action, args.message),
-      )
+      const jobs = new Delegations(await taskStore(ctx, args.project))
+      const job = await jobs.get(args.id)
+      requireOwnTask(job, ctx.sessionManager.getSessionId(), args.project)
+
+      if (args.action === 'pause' || args.action === 'cancel') {
+        await assignments?.authorizeTaskStop(ctx, args.action, job.request)
+      }
+
+      return textResult(await jobs.control(args.id, args.action, args.message))
     },
   })
 }
@@ -791,18 +1133,21 @@ function registerReviseTasks(pi: ExtensionAPI) {
   })
 }
 
-function registerResumeTask(pi: ExtensionAPI, launch: Launcher) {
+function registerResumeTask(pi: ExtensionAPI, launch: Launcher, feed: TaskFeed) {
   pi.registerTool({
     name: 'resume_task',
     label: 'Resume retained task',
     description:
       'Resume a paused or failed task after inspecting its blocker and retained work. ' +
       'Reuses the candidate and starts fresh orchestration with current instructions. ' +
-      'Conflicting ownership is rejected. Explicitly cancelled work needs a new user request.',
-    parameters: Type.Object({ id: idSchema }),
+      'Conflicting ownership is rejected. Explicitly cancelled work needs a new user request. ' +
+      otherCheckout,
+    parameters: Type.Object({ id: idSchema, project: Type.Optional(projectSchema) }),
     async execute(_id, args, _signal, _update, ctx) {
       const origin = taskOrigin(ctx)
-      const jobs = new Delegations(await storeFor(ctx.cwd))
+      const jobs = new Delegations(await taskStore(ctx, args.project))
+      requireOwnTask(await jobs.get(args.id), origin.session, args.project)
+      feed.reopen(args.id)
       return textResult(delegationView(await jobs.resume(args.id, origin, launch)))
     },
   })

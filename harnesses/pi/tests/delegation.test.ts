@@ -14,7 +14,7 @@ import { runDelegation } from '../src/delegation-runner.ts'
 import type { TaskCoordinatorEvidence } from '../src/task-coordinator.ts'
 import { registerDelegation } from '../src/delegation-tools.ts'
 import { captureSession } from './session-support.ts'
-import { inventory, snapshotHash } from '../src/paths.ts'
+import { digest, inventory, snapshotHash } from '../src/paths.ts'
 
 const input: DelegateInput = {
   task: 'Record the decision in docs',
@@ -226,6 +226,15 @@ test('documents preserve unrelated edits without a checkpoint', async () => {
     assert.deepEqual(state.changedPaths, ['decision.md'])
     assert.deepEqual(state.receipts, [])
     assert.equal(state.candidate, undefined)
+
+    // The supervisor's receipt names what the checkout now holds, so nobody has to re-derive it.
+    const sha256 = digest(await readFile(join(root, 'decision.md')))
+    assert.equal(state.delivery?.checkout, job.request.root)
+    assert.deepEqual(state.delivery?.files, [{ path: 'decision.md', sha256, words: 3 }])
+    assert.equal(state.delivery?.revision, digest(JSON.stringify([[['decision.md', sha256]], []])))
+    assert.match(state.delivery?.checks.join('\n') ?? '', /Markdown format .* passed on 1 file/)
+    assert.equal(state.delivery?.formattingSkipped, undefined)
+    assert.deepEqual((await jobs.get(job.request.id)).state.delivery, state.delivery)
     await assert.rejects(readFile(join(candidate, 'decision.md')), { code: 'ENOENT' })
   } finally {
     await rm(base, { recursive: true, force: true })
@@ -251,6 +260,10 @@ test('document integration respects repository formatting exclusions', async () 
     assert.equal(state.status, 'complete', state.error)
     assert.equal(attempts, 1, 'Excluded formatting must not trigger a repair cycle')
     assert.equal(await readFile(join(root, 'decision.md'), 'utf8'), candidate)
+    assert.deepEqual(state.delivery?.formattingSkipped, ['decision.md'])
+    assert.deepEqual(state.delivery?.files, [
+      { path: 'decision.md', sha256: digest(candidate), words: 3 },
+    ])
   } finally {
     await rm(base, { recursive: true, force: true })
   }
@@ -318,6 +331,7 @@ for (const failure of [
       })
       assert.equal(state.status, failure === 'cancel' ? 'cancelled' : 'needs_attention')
       assert.ok(state.error)
+      assert.equal(state.delivery, undefined, 'nothing was delivered, so nothing is receipted')
       assert.equal(await readFile(join(root, 'src/value.js'), 'utf8'), 'export const value = 0\n')
 
       if (failure === 'conflict') {

@@ -193,7 +193,7 @@ test('withdrawn CI stays silent through in-flight completion and reload', async 
     root,
     base,
     [
-      (pi) =>
+      (pi) => {
         registerGitHubRunWatch(
           pi,
           async (args) => {
@@ -213,7 +213,8 @@ test('withdrawn CI stays silent through in-flight completion and reload', async 
             })
           },
           15,
-        ),
+        )
+      },
     ],
     async (ctx) => {
       const last = JSON.stringify(ctx.messages.at(-1)?.content)

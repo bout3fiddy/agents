@@ -73,8 +73,42 @@ export type DelegationRequest = Omit<DelegateInput, 'kind'> & {
   }
   checkpointHash?: string
 }
+export const documentReceiptLimits = {
+
+  /** Files listed in one receipt. The revision still covers every applied path. */
+  files: 8,
+} as const
+
+/**
+ * What a completed documents task put in its checkout, written by the task supervisor after
+ * its checks passed and the candidate was applied. The worker cannot write it. The revision
+ * identifies the applied content of every changed path, so it is evidence for an assignment
+ * whose target is those documents in that checkout.
+ */
+export type DocumentReceipt = {
+
+  /** The checkout the documents were applied to. */
+  checkout: string
+
+  /** sha256 over every changed path and its applied content hash, in path order. */
+  revision: string
+  appliedAt: string
+
+  /** The first applied files; `more` counts the applied files not listed. */
+  files: { path: string; sha256: string; words: number }[]
+  more?: number
+  removed?: string[]
+
+  /** The checks the supervisor passed on exactly this content before applying it. */
+  checks: string[]
+
+  /** Markdown the root .prettierignore excludes from formatting; its width was still checked. */
+  formattingSkipped?: string[]
+}
+
 export type DelegationStatus = {
   id: string
+  delivery?: DocumentReceipt
   status:
     | 'queued'
     | 'running'
