@@ -106,15 +106,18 @@ starts with the recorded state of the session's open jobs.
 | ------------------ | ---------------------------------------------------------- |
 | `/jobs`            | List recent jobs                                           |
 | `/jobs j12`        | Show one job in full                                       |
-| `/jobs cancel j12` | Stop it. Its work so far is kept as a commit               |
+| `/jobs cancel j12` | Request a stop. Its last recorded commit is kept           |
 | `/workers`         | Browse live workers and their conversations, send guidance |
 
 Before the orchestrator stops after doing work, with no job running, the host asks it once whether a
 step you authorized is still undone. It then continues or says what it is waiting on.
 
-Only you can stop running work. The model has no cancel tool. It can guide a running job
-(`job_message`), retry a stopped one from the work it kept (`job_retry`) or close a stopped one with
-a reason (`job_close`), and you are shown every closure.
+The orchestrator can guide or cancel its own session's jobs. `job_cancel` records a reason: a queued
+job is cancelled immediately; a running job reports its outcome when it settles. Delivery already
+under way may finish. To restart the same authorized assignment it calls `job_retry` with guidance,
+without needing another user turn. The retry keeps the brief, model, scope and last recorded work;
+execution policy is read again at launch. If you asked to stop, it must not restart without a new
+request. You can still use `/jobs cancel j12` yourself. Workers have neither control.
 
 A job that stops is `needs_attention` with the reason: a blocked worker and the host actions it
 asked for, failing checks, an edit outside scope, a delivery conflict, or a runner that died. A dead

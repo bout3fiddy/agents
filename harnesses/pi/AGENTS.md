@@ -37,9 +37,10 @@ Follow the repository [Tiger Style](../../TIGER_STYLE.md).
   same change. Do not add a second store, lock, journal, registry or delivery path.
 - **No compatibility code.** Earlier state is never read or migrated. Raise `schemaVersion` when the
   store changes shape; the old file is set aside.
-- **Control flow stays out of models.** Which worker runs, when checks run and when a job stops are
-  decided in `job-runner.ts`. Do not add a coordinating role.
-- **Stopping work stays with the user.** Never register a tool that cancels or pauses a job.
+- **The runner owns the pipeline.** `job-runner.ts` selects the worker, runs checks and settles
+  running jobs. Do not add a coordinating role.
+- **Job control belongs to the owning host session.** Workers cannot cancel or retry. Preserve the
+  user's `/jobs cancel` control and never automatically undo a user stop.
 - **Keep the orchestrator's direct tools few.** A new host capability is a tool callable from code
   mode. Only the shell and host file writes are direct-only.
 - **Optional features are separate extensions** that read the job store: schedules, extra viewers,

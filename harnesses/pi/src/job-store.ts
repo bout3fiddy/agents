@@ -8,7 +8,7 @@ import { StateStore } from './state.ts'
 import type { Design, ImplementerModel, TaskIsolation, WorkerThinking } from './contracts.ts'
 
 /** Raised when the schema changes shape. State written by another version is set aside. */
-export const schemaVersion = 1
+export const schemaVersion = 2
 
 export const jobLimits = {
 
@@ -73,7 +73,7 @@ export type Job = {
   head?: string
   pid?: number
   heartbeat?: number
-  cancelRequested: boolean
+  cancellation?: { by: 'user' | 'orchestrator'; reason: string; at: number }
   summary?: string
   error?: string
   result: JobResult
@@ -133,7 +133,7 @@ function toJob(row: Row): Job {
     head: text('head'),
     pid: number('pid'),
     heartbeat: number('heartbeat'),
-    cancelRequested: Number(row.cancel) === 1,
+    cancellation: row.cancel === null ? undefined : JSON.parse(String(row.cancel)),
     summary: text('summary'),
     error: text('error'),
     result: JSON.parse(String(row.result)) as JobResult,
@@ -209,7 +209,7 @@ export class JobStore {
         id TEXT PRIMARY KEY, number INTEGER NOT NULL UNIQUE, root TEXT NOT NULL,
         session TEXT NOT NULL, key TEXT, spec TEXT NOT NULL, status TEXT NOT NULL,
         phase TEXT NOT NULL, round INTEGER NOT NULL DEFAULT 0, base TEXT, wip TEXT, head TEXT,
-        pid INTEGER, heartbeat INTEGER, cancel INTEGER NOT NULL DEFAULT 0, summary TEXT,
+        pid INTEGER, heartbeat INTEGER, cancel TEXT, summary TEXT,
         error TEXT, result TEXT NOT NULL DEFAULT '{}', created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL, UNIQUE(session, key));
       CREATE TABLE IF NOT EXISTS events(
@@ -362,18 +362,18 @@ export class JobStore {
     const outcome = this.db
       .prepare(
         `UPDATE jobs SET status = 'running', phase = 'starting', pid = ?, heartbeat = ?,
-           error = NULL, updated_at = ? WHERE id = ? AND status = 'queued' AND cancel = 0`,
+           error = NULL, updated_at = ? WHERE id = ? AND status = 'queued' AND cancel IS NULL`,
       )
       .run(pid, Date.now(), new Date().toISOString(), id)
     return Number(outcome.changes) === 1
   }
 
-  /** Beat, and report whether the user asked for this job to stop. */
+  /** Beat, and report whether this attempt has a stop request. */
   heartbeat(id: string): boolean {
-    this.db.prepare('UPDATE jobs SET heartbeat = ? WHERE id = ?').run(Date.now(), id)
-    const row = this.db.prepare('SELECT cancel FROM jobs WHERE id = ?').get(id) as
-      { cancel: number } | undefined
-    return row?.cancel === 1
+    const row = this.db
+      .prepare('UPDATE jobs SET heartbeat = ? WHERE id = ? RETURNING cancel')
+      .get(Date.now(), id)
+    return row?.cancel != null
   }
 
   /**
@@ -389,6 +389,13 @@ export class JobStore {
         return current
       }
 
+      // A committed delivery wins a late stop. Otherwise honour the stop even if the worker
+      // returned or failed before its next heartbeat observed the request.
+      if (current.cancellation && status !== 'done') {
+        status = 'cancelled'
+        patch = { ...patch, summary: current.cancellation.reason }
+      }
+
       const job = this.update(id, { ...patch, status, phase: status })
       this.db.prepare('UPDATE jobs SET pid = NULL WHERE id = ?').run(id)
       this.db
@@ -399,7 +406,7 @@ export class JobStore {
   }
 
   /** Put a stopped job back in the queue for another run from its latest commit. */
-  requeue(id: string): Job {
+  requeue(id: string, guidance?: string, lastUserAt = 0): Job {
     return this.transaction(() => {
       const job = this.get(id)
 
@@ -407,25 +414,53 @@ export class JobStore {
         throw new Error(`Job j${job.number} is ${job.status}; only a stopped job can be retried`)
       }
 
-      this.db.prepare('UPDATE jobs SET cancel = 0, pid = NULL WHERE id = ?').run(id)
-      return this.update(id, { status: 'queued', phase: 'queued' })
+      if (job.cancellation?.by === 'user' && !(lastUserAt > job.cancellation.at)) {
+        throw new Error('The user stopped this job; retry only on a new request from the user.')
+      }
+
+      // No old outcome may wake the host describing the new attempt as finished.
+      this.db.prepare('DELETE FROM events WHERE job = ? AND acked_at IS NULL').run(id)
+      this.db.prepare('UPDATE jobs SET cancel = NULL, pid = NULL WHERE id = ?').run(id)
+
+      if (guidance) {
+        this.addMessage(id, guidance)
+      }
+
+      return this.update(id, { status: 'queued', phase: 'queued', summary: undefined })
     })
   }
 
-  /** The user's stop. A queued job ends here; a running one is ended by its runner. */
-  requestCancel(id: string): Job {
+  /** Only a queued job ends here. A running job's owner finishes it and emits the event. */
+  requestCancel(id: string, reason?: string): Job {
     return this.transaction(() => {
       const job = this.get(id)
+      const manual = reason === undefined
+      const active = job.status === 'queued' || job.status === 'running'
+
+      if (!active && !(manual && job.status === 'cancelled')) {
+        return job
+      }
+
+      if (!manual && job.cancellation) {
+        return job
+      }
+
+      const why = manual ? 'Stopped by the user.' : reason.trim()
+
+      if (!why || why.length > 1000) {
+        throw new Error('Give a cancellation reason of 1 to 1000 characters.')
+      }
+
+      const cancellation = { by: manual ? 'user' : 'orchestrator', reason: why, at: Date.now() }
+      this.db
+        .prepare('UPDATE jobs SET cancel = ? WHERE id = ?')
+        .run(JSON.stringify(cancellation), id)
 
       if (job.status === 'queued') {
-        return this.finish(id, 'cancelled', { summary: 'Cancelled by the user before it started.' })
+        return this.finish(id, 'cancelled')
       }
 
-      if (job.status === 'running') {
-        this.db.prepare('UPDATE jobs SET cancel = 1 WHERE id = ?').run(id)
-      }
-
-      return this.get(id)
+      return job.status === 'cancelled' ? this.update(id, { summary: why }) : this.get(id)
     })
   }
 
@@ -437,11 +472,21 @@ export class JobStore {
       const silent = now - (job.heartbeat ?? Date.parse(job.updatedAt)) > jobLimits.staleMs
 
       if (job.status === 'running' && silent && !(job.pid && processAlive(job.pid))) {
-        lost.push(
-          this.finish(job.id, job.cancelRequested ? 'cancelled' : 'needs_attention', {
-            error: 'The job runner stopped before finishing. Its latest work is kept.',
-          }),
-        )
+        this.transaction(() => {
+          const current = this.get(job.id)
+
+          if (
+            current.status === 'running' &&
+            current.pid === job.pid &&
+            current.heartbeat === job.heartbeat
+          ) {
+            lost.push(
+              this.finish(job.id, 'needs_attention', {
+                error: 'The job runner stopped before finishing. Its latest work is kept.',
+              }),
+            )
+          }
+        })
       }
     }
 
@@ -500,6 +545,7 @@ export function jobView(job: Job) {
     deliver: job.spec.deliver,
     status: job.status,
     phase: job.phase,
+    ...(job.cancellation && { cancellation: job.cancellation }),
     round: job.round,
     ...(job.root && { checkout: job.root }),
     ...(job.spec.branch && job.spec.deliver === 'branch' && { branch: job.spec.branch }),

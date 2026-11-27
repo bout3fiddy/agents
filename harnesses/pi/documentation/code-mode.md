@@ -12,7 +12,7 @@ visible.
 | Tools                                                      | Notes                              |
 | ---------------------------------------------------------- | ---------------------------------- |
 | `job_start`, `job_status`, `job_message`, `job_retry`,     | Results are objects. Give every    |
-| `job_close`                                                | scripted `job_start` a `key`       |
+| `job_cancel`, `job_close`                                  | scripted `job_start` a `key`       |
 | `read`, `grep`, `find`, `ls`, `project_read`,              | `project_search` returns hits with |
 | `project_search`                                           | path and line for follow-up reads  |
 | `inspect_pr`, `inspect_ci_run`, `watch_github_run`         | Batch PRs or runs in one script    |
@@ -26,7 +26,7 @@ Pi workers script only their read-only inspections: `project_read`, `project_sea
 
 - A looping script cannot create a job twice: the store keeps one job per `key`. The number of jobs
   is the orchestrator's decision; the store sets no limit.
-- There is no cancel or pause function. Stopping work is the user's `/jobs cancel`.
+- Only the owning host session can cancel or retry a job. A pending stop cannot be retried.
 - A nested call to a tool outside the allowed set is blocked at execution, whatever the script
   names.
 - Host file writes are subject to the same routing hook inside a script as outside it.

@@ -45,7 +45,14 @@ const nudgeType = 'pi-job-nudge'
 const stopType = 'pi-stop-check'
 
 /** Tools a script may call. Everything that reads or drives jobs is scriptable. */
-export const jobTools = ['job_start', 'job_status', 'job_message', 'job_retry', 'job_close']
+export const jobTools = [
+  'job_start',
+  'job_status',
+  'job_message',
+  'job_cancel',
+  'job_retry',
+  'job_close',
+]
 
 const stores = new Map<string, JobStore>()
 
@@ -200,6 +207,9 @@ async function activeWorker(job: Job): Promise<string | undefined> {
   return undefined
 }
 
+// A transcript can outlive a version of the database and its event sequence.
+const eventKey = (event: JobEvent) => `${event.job}:${event.id}`
+
 function outcomeMessage(jobs: Job[], events: JobEvent[]) {
   return {
     type: 'custom_message' as const,
@@ -210,10 +220,11 @@ function outcomeMessage(jobs: Job[], events: JobEvent[]) {
       'result, and an apply delivery is already in the checkout: do not rerun its checks. ' +
       'Tell the user what they can now use or must decide, briefly. For needs_attention read ' +
       'the error: do host-only actions yourself, then job_retry with guidance, or job_close ' +
-      'with the reason if you resolved it another way. A cancelled job was stopped by the ' +
-      'user: never restart it without a new request.\n' +
+      'with the reason if you resolved it another way. For cancelled jobs, read the stop ' +
+      'reason. Respect a user stop: never restart it without a new request. Otherwise retry ' +
+      'with guidance if the same assignment should continue.\n' +
       JSON.stringify(jobs.map(jobView)),
-    details: { events: events.map((event) => event.id) },
+    details: { events: events.map(eventKey) },
   }
 }
 
@@ -267,13 +278,14 @@ class JobFeed {
         .getEntries()
         .flatMap((entry) =>
           entry.type === 'custom_message' && entry.customType === outcomeType
-            ? ((entry.details as { events?: number[] } | undefined)?.events ?? [])
+            ? ((entry.details as { events?: string[] } | undefined)?.events ?? [])
             : [],
         ),
     )
     const events = store.pendingEvents(session)
-    store.acknowledge(events.filter((event) => persisted.has(event.id)).map((event) => event.id))
-    const fresh = events.filter((event) => !persisted.has(event.id))
+    const delivered = (event: JobEvent) => persisted.has(eventKey(event))
+    store.acknowledge(events.filter(delivered).map((event) => event.id))
+    const fresh = events.filter((event) => !delivered(event))
     const active = store
       .list({ session, open: true })
       .filter((job) => job.status !== 'needs_attention')
@@ -507,6 +519,30 @@ async function hostWriteBlock(
   return undefined
 }
 
+function ownedJob(store: JobStore, id: string, ctx: ExtensionContext) {
+  const job = store.get(id)
+
+  if (job.session !== ctx.sessionManager.getSessionId()) {
+    throw new Error(`Job ${jobLabel(job)} belongs to another session. Nothing changed.`)
+  }
+
+  return job
+}
+
+function afterCancel(job: Job): string {
+  if (job.status === 'running') {
+    return 'Stop requested. Wait for the automatic outcome; do not poll or retry yet.'
+  }
+
+  if (job.status !== 'cancelled') {
+    return 'Job already settled. Nothing changed.'
+  }
+
+  return job.cancellation?.by === 'user'
+    ? 'Respect the user stop.'
+    : 'Stopped. Use job_retry with guidance if this assignment should continue.'
+}
+
 function registerTools(pi: ExtensionAPI, launch: Launcher) {
   pi.registerTool({
     name: 'job_start',
@@ -591,7 +627,7 @@ function registerTools(pi: ExtensionAPI, launch: Launcher) {
     }),
     async execute(_id, { id, text }, _signal, _update, ctx) {
       const store = jobStore(ctx.cwd)
-      const job = store.get(id)
+      const job = ownedJob(store, id, ctx)
 
       if (job.status !== 'queued' && job.status !== 'running') {
         throw new Error(`Job ${jobLabel(job)} is ${job.status}; use job_retry with guidance`)
@@ -613,21 +649,46 @@ function registerTools(pi: ExtensionAPI, launch: Launcher) {
     },
   })
   pi.registerTool({
+    name: 'job_cancel',
+    outputSchema: jobOutput,
+    label: 'Stop background job',
+    description:
+      'Stop a queued or running job of this session. Give the reason. A running stop is ' +
+      'pending until its outcome arrives. Completed delivery is not undone.',
+    parameters: Type.Object(
+      {
+        id: Type.String(),
+        reason: Type.String({ minLength: 1, maxLength: 1000 }),
+      },
+      { additionalProperties: false },
+    ),
+    async execute(_id, { id, reason }, _signal, _update, ctx) {
+      const store = jobStore(ctx.cwd)
+      const job = store.requestCancel(ownedJob(store, id, ctx).id, reason)
+      return structuredResult({ ...jobView(job), next: afterCancel(job) })
+    },
+  })
+  pi.registerTool({
     name: 'job_retry',
     outputSchema: jobOutput,
     label: 'Retry stopped job',
     description:
-      'Run a needs_attention job again from the work it kept, with guidance on what to do ' +
-      'differently. Do this after resolving what stopped it; an identical retry stops the ' +
-      'same way. A job the user cancelled is retried only on a new request from the user.',
-    parameters: Type.Object({
-      id: Type.String(),
-      guidance: Type.String({ minLength: 1, maxLength: 8000 }),
-    }),
+      'Restart this session’s needs_attention or cancelled job from its last checkpoint. ' +
+      'Supply guidance, not a new brief. Respect a user stop unless the user asks to resume.',
+    parameters: Type.Object(
+      {
+        id: Type.String(),
+        guidance: Type.String({ minLength: 1, maxLength: 8000 }),
+      },
+      { additionalProperties: false },
+    ),
     async execute(_id, { id, guidance }, _signal, _update, ctx) {
       const store = jobStore(ctx.cwd)
-      const job = store.requeue(store.get(id).id)
-      store.addMessage(job.id, guidance)
+      const previous = ownedJob(store, id, ctx)
+      const latest = ctx.sessionManager
+        .getBranch()
+        .findLast((entry) => entry.type === 'message' && entry.message.role === 'user')
+      const job = store.requeue(previous.id, guidance, latest ? Date.parse(latest.timestamp) : 0)
       await launch(store, job.id)
       return structuredResult({ ...jobView(job), next: 'The outcome arrives automatically.' })
     },
@@ -638,20 +699,18 @@ function registerTools(pi: ExtensionAPI, launch: Launcher) {
     label: 'Close stopped job',
     description:
       'Close a needs_attention job that will not be retried, with the reason: it was resolved ' +
-      'another way, or the user decided against it. The user is shown the closure. A running ' +
-      'job cannot be closed or cancelled by you: only the user stops work, with /jobs cancel.',
+      'another way, or the user decided against it. The user is shown the closure.',
     parameters: Type.Object({
       id: Type.String(),
       reason: Type.String({ minLength: 1, maxLength: 1000 }),
     }),
     async execute(_id, { id, reason }, _signal, _update, ctx) {
       const store = jobStore(ctx.cwd)
-      const job = store.get(id)
+      const job = ownedJob(store, id, ctx)
 
       if (job.status !== 'needs_attention') {
         throw new Error(
-          `Job ${jobLabel(job)} is ${job.status}. Only a needs_attention job can be closed; ` +
-            'the user stops running work with /jobs cancel.',
+          `Job ${jobLabel(job)} is ${job.status}. Only a needs_attention job can be closed.`,
         )
       }
 
@@ -667,7 +726,7 @@ function describe(job: Job): string {
   return `${jobLabel(job)}  ${job.status.padEnd(15)} ${job.spec.title}  ${detail.slice(0, 120)}`
 }
 
-/** The user's own controls. Cancelling is here and nowhere in the model's tools. */
+/** The user's repository-wide controls are independent of model session ownership. */
 function registerCommand(pi: ExtensionAPI) {
   pi.registerCommand('jobs', {
     description: 'Show jobs; "/jobs jN" for one in full, "/jobs cancel jN" to stop it',

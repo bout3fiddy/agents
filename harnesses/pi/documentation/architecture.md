@@ -17,7 +17,9 @@ detached runners open it concurrently in WAL mode. Every change is one transacti
 
 All checkouts of a repository use the primary checkout's store. There is no registry, lock file or
 journal beside it. The schema has a version; a file written by another version is renamed aside and
-a fresh one is created. Nothing is migrated.
+a fresh one is created. Nothing is migrated. Before deploying the version 2 store (which records
+stop provenance), let active jobs settle and collect their results. The old store is set aside; its
+short job labels do not identify jobs in the new store.
 
 ## 2. Git records the work; copies do the work
 
@@ -50,7 +52,7 @@ A directory without Git gets a bare shadow store in its state directory and can 
 resolve base → copy → [ worker → record wip → scope check → host checks ]* → deliver
 ```
 
-No model decides which worker runs, when checks run, or when to stop.
+No model decides which worker runs or when checks run. The runner settles pending stops.
 
 - Scope is checked on the bytes: every changed path must match the job's write paths, and a
   `documents` job may change only `.md`, `.txt` and `.rst`. A `research` job may change nothing.
@@ -73,6 +75,7 @@ seconds of silence becomes `needs_attention`, found by any session's next read o
 - At a boundary the outcome joins the running turn. While idle it starts one, repeated every ten
   seconds until it lands.
 - An event is acknowledged only when its message is found in the session's persisted entries.
+- Requeue discards any superseded pending outcome and records guidance in the same transaction.
 - Every turn starts with one statement of the session's open jobs; older statements leave context.
 - A run that answers an outcome with nothing is asked once to act or name what blocks it.
 - A run that did work and is about to stop while no job of the session is active is asked once
@@ -81,9 +84,10 @@ seconds of silence becomes `needs_attention`, found by any session's next read o
 
 ## Authority
 
-- **Stopping work is the user's.** `/jobs cancel jN` is the only way to stop a queued or running
-  job. No tool available to the model cancels or pauses. The model may close a `needs_attention` job
-  with a reason, and the user is shown it.
+- **Job control is session-owned.** The host can guide, cancel, retry or close its own jobs, never
+  another session's. A queued stop settles immediately; a running stop is a request, not proof the
+  runner stopped. A late stop cannot undo delivery. `/jobs cancel jN` remains repository-wide and
+  takes precedence over a model stop. Retrying a manual stop requires a new user request.
 - **Product files change only through jobs.** A `tool_call` hook lets the host's own file tools
   write setup files, `.pi/harness.json`, small decisions in `design.md` and private scratch.
 - **Isolation is the host's decision.** See [worker-execution.md](worker-execution.md).
@@ -95,7 +99,7 @@ seconds of silence becomes `needs_attention`, found by any session's next read o
 
 `src/inspection-mode.ts`. Every orchestrator tool is callable from a `codemode` script except
 `bash`, `write` and `edit`. Authority is enforced where the tool executes, not by which tools a
-script may name: the store bounds job creation and no cancel function exists to call. See
+script may name: the host checks job ownership and workers have no job controls. See
 [code-mode.md](code-mode.md).
 
 ## What is deliberately absent

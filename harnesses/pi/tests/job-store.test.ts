@@ -84,6 +84,45 @@ test('the user cancels; a queued job ends at once and a running one is signalled
   assert.throws(() => jobs.requeue(running.id), /only a stopped job can be retried/)
 })
 
+test('manual stop wins a pending model stop, including after a lost runner', async (t) => {
+  const { base, jobs } = await store(t)
+  const { id } = jobs.create({ root: base, session: 's1', spec })
+  jobs.claim(id, 2 ** 22 + 12345)
+  const first = jobs.requestCancel(id, 'Restart with corrected guidance.')
+  assert.deepEqual(jobs.requestCancel(id, 'Repeated stop.'), first)
+  const manual = jobs.requestCancel(id)
+  assert.deepEqual(jobs.requestCancel(id, 'Override the stop.'), manual)
+  const [lost] = jobs.reconcile(Date.now() + jobLimits.staleMs + 1)
+  assert.equal(lost?.status, 'cancelled')
+  assert.equal(lost.cancellation?.by, 'user')
+  assert.throws(() => jobs.requeue(id, 'Ignore the user.'), /user stopped this job/)
+  assert.deepEqual(jobs.takeMessages(id), [])
+  assert.equal(jobs.pendingEvents('s1').length, 1)
+})
+
+test('a retry before feed delivery supersedes only the retried outcome', async (t) => {
+  const { base, jobs } = await store(t)
+  const { id } = jobs.create({ root: base, session: 's1', spec })
+  const sibling = jobs.create({ root: base, session: 's1', spec })
+  jobs.finish(sibling.id, 'done')
+  assert.throws(() => jobs.requestCancel(id, '  '), /cancellation reason/)
+  jobs.requestCancel(id, 'Correct the input.')
+  assert.equal(jobs.claim(id, process.pid), false)
+  jobs.requeue(id, 'New input.')
+  assert.equal(jobs.claim(id, process.pid), true)
+  assert.equal(jobs.claim(id, process.pid), false)
+  assert.deepEqual(
+    jobs.pendingEvents('s1').map((event) => event.job),
+    [sibling.id],
+  )
+  assert.deepEqual(jobs.takeMessages(id), ['New input.'])
+  jobs.requestCancel(id, 'Late stop during delivery.')
+  const done = jobs.finish(id, 'done', { summary: 'Already delivered.' })
+  assert.equal(done.status, 'done')
+  assert.deepEqual(jobs.requestCancel(id, 'Too late.'), done)
+  assert.throws(() => jobs.requeue(id), /is done/)
+})
+
 test('guidance is handed to a round exactly once', async (t) => {
   const { base, jobs } = await store(t)
   const job = jobs.create({ root: base, session: 's1', spec })

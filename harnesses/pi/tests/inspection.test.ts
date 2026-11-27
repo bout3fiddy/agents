@@ -18,16 +18,25 @@ test('the host scripts every tool except the shell and file writes', async () =>
   const scriptable = orchestrator.tools.filter((name) => !directOnly.has(name))
   assert.deepEqual([...directOnly].sort(), ['bash', 'codemode', 'edit', 'write'])
 
-  for (const name of ['job_start', 'job_status', 'job_message', 'job_retry', 'job_close']) {
+  for (const name of [
+    'job_start',
+    'job_status',
+    'job_message',
+    'job_cancel',
+    'job_retry',
+    'job_close',
+  ]) {
     assert.ok(scriptable.includes(name), name)
   }
-
-  assert.ok(!orchestrator.tools.some((name) => /cancel|pause/.test(name)))
 
   for (const role of roles) {
     assert.equal(role.tools.includes('codemode'), role.backend === 'pi', role.name)
     assert.equal(role.tools.includes('whiteboard'), role.name === 'orchestrator', role.name)
-    assert.equal(role.tools.includes('job_start'), role.name === 'orchestrator', role.name)
+
+    for (const tool of ['job_start', 'job_cancel', 'job_retry']) {
+      assert.equal(role.tools.includes(tool), role.name === 'orchestrator', role.name)
+      assert.equal(workerInspectionTools.has(tool), false)
+    }
 
     for (const name of workerInspectionTools) {
       assert.ok(role.name === 'orchestrator' || !directOnly.has(name))
@@ -206,7 +215,7 @@ test('one host script starts jobs idempotently and chains typed reads', async (t
     await session.prompt('Start the count and inspect the fixture.')
     assert.match(response, /Script completed/)
     assert.match(response, /1,1,.*queued.*lookup:fixture.md.*true/)
-    assert.match(response, /only the user stops running work|Only a needs_attention job/i)
+    assert.match(response, /Only a needs_attention job/i)
     assert.equal(launched.length, 1, 'three starts with one key launch one runner')
   } finally {
     await session.dispose()

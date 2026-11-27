@@ -29,7 +29,9 @@ async function host(
   wrap: (pi: ExtensionAPI) => ExtensionAPI = (pi) => pi,
 ) {
   const item = await fixture()
-  const harness = createHarness({ jobs: { launch: async () => {}, tickMs: 15, retryMs: 60 } })
+  const launches: string[] = []
+  const launch = async (_store: unknown, id: string) => void launches.push(id)
+  const harness = createHarness({ jobs: { launch, tickMs: 15, retryMs: 60 } })
   const contexts: Context[] = []
   const { session, runtime } = await captureSession(
     item.root,
@@ -68,7 +70,7 @@ async function host(
     assert.equal(outcomes(latest), 1, 'the model saw exactly one outcome')
     return said(latest)
   }
-  return { ...item, session, store, contexts, work, until, waitForOutcome }
+  return { ...item, session, store, contexts, launches, work, until, waitForOutcome }
 }
 
 test('an outcome wakes an idle host once and is acknowledged from the transcript', async (t) => {
@@ -191,7 +193,104 @@ test('a stopped job is restated every turn until the host resolves it', async (t
   assert.deepEqual(h.store.takeMessages(h.store.get('j1').id), ['Do not write the word broken.'])
 })
 
-test('only the user cancels: /jobs cancel stops the job and the model is told', async (t) => {
+function control(name: string, args: Record<string, string>) {
+  return [{ type: 'toolCall' as const, id: name, name, arguments: args }]
+}
+
+test('one host turn cancels and restarts its queued job without a manual command', async (t) => {
+  const cancel = control('codemode', {
+    code: 'text(await tools.job_cancel({ id: "j1", reason: "Restart with corrected guidance." }))',
+  })
+  const retry = control('job_retry', { id: 'j1', guidance: 'Use the corrected input.' })
+  const h = await host(t, async (_context, turn) =>
+    turn === 1 ? startCall : turn === 2 ? cancel : turn === 3 || turn === 4 ? retry : 'Noted.',
+  )
+  await h.session.prompt('Start the job, then restart it with corrected guidance.')
+  const [job] = h.store.list()
+  assert.match(said(h.contexts[2]!), /"status\\":\\"cancelled\\"/)
+  assert.match(said(h.contexts[2]!), /Restart with corrected guidance/)
+  assert.equal(job?.status, 'queued')
+  assert.deepEqual(h.launches, [job.id, job.id])
+  assert.deepEqual(h.store.takeMessages(job.id), ['Use the corrected input.'])
+  assert.deepEqual(h.store.pendingEvents(job.session), [])
+  assert.match(said(h.contexts[4]!), /only a stopped job can be retried/)
+})
+
+test('a running stop waits for its outcome and never retries a sibling', async (t) => {
+  const cancel = control('job_cancel', { id: 'j1', reason: 'Correct the input.' })
+  const retry = control('job_retry', { id: 'j1', guidance: 'Use the correction.' })
+  const h = await host(t, async (context, turn) => {
+    if (turn === 1) {
+      return startCall
+    }
+
+    if (turn === 2) {
+      const job = h.store.get('j1')
+      h.store.claim(job.id, process.pid)
+      h.store.create({ root: h.root, session: job.session, spec: job.spec })
+      return cancel
+    }
+
+    if (turn === 3) {
+      return retry
+    }
+
+    if (turn === 4) {
+      h.store.finish(h.store.get('j1').id, 'needs_attention')
+      return 'Awaiting the outcome.'
+    }
+
+    return turn === 5 && outcomes(context) === 1 ? retry : 'Noted.'
+  })
+
+  // The transcript survives a store version change; old numeric receipts must not swallow
+  // a new job's first outcome, even though the fresh store numbers events from one again.
+  h.session.sessionManager.appendCustomMessageEntry(outcomeType, 'Earlier job.', false, {
+    events: [1],
+  })
+  await h.session.prompt('Restart the first job with corrected input.')
+  const job = h.store.get('j1')
+  assert.match(said(h.contexts[2]!), /Stop requested/)
+  assert.match(said(h.contexts[3]!), /only a stopped job can be retried/)
+  assert.deepEqual(h.launches, [job.id, job.id])
+  assert.equal(job.status, 'queued')
+  assert.deepEqual(h.store.takeMessages(job.id), ['Use the correction.'])
+  assert.equal(h.store.get('j2').cancellation, undefined)
+  assert.equal(h.store.get('j2').status, 'queued')
+})
+
+test('another session cannot control jobs even from code mode', async (t) => {
+  const code = [
+    'await Promise.allSettled([tools.job_cancel({id:"j1",reason:"stop"}),',
+    'tools.job_retry({id:"j2",guidance:"retry"}),tools.job_message({id:"j1",text:"edit"}),',
+    'tools.job_close({id:"j2",reason:"close"})]).then(text)',
+  ].join('')
+  const h = await host(t, async (_context, turn) =>
+    turn === 1 ? control('codemode', { code }) : 'Noted.',
+  )
+  const input = {
+    root: h.root,
+    session: 'other',
+    spec: {
+      title: 'Count',
+      task: 'Count files.',
+      mode: 'research' as const,
+      deliver: 'none' as const,
+      writePaths: [],
+      model: 'capture/capture',
+    },
+  }
+  const active = h.store.create(input)
+  const stopped = h.store.finish(h.store.create(input).id, 'needs_attention')
+  await h.session.prompt('Try to control the other session’s jobs.')
+  assert.match(said(h.contexts[1]!), /belongs to another session/)
+  assert.deepEqual(h.store.get(active.id), active)
+  assert.deepEqual(h.store.get(stopped.id), stopped)
+  assert.deepEqual(h.store.takeMessages(active.id), [])
+  assert.deepEqual(h.launches, [])
+})
+
+test('/jobs cancel stops the job and blocks an unsolicited retry', async (t) => {
   const close = [
     {
       type: 'toolCall' as const,
@@ -200,12 +299,21 @@ test('only the user cancels: /jobs cancel stops the job and the model is told', 
       arguments: { id: 'j1', reason: 'Superseded.' },
     },
   ]
-  const h = await host(t, async (_context, turn) =>
-    turn === 1 ? startCall : turn === 2 ? close : 'Noted.',
-  )
+  const retry = control('job_retry', { id: 'j1', guidance: 'Resume the original job.' })
+  let resume = false
+  let attempted = false
+  const h = await host(t, async (context, turn) => {
+    if (outcomes(context) && (!attempted || resume)) {
+      attempted = true
+      resume = false
+      return retry
+    }
+
+    return turn === 1 ? startCall : turn === 2 ? close : 'Noted.'
+  })
   await h.session.prompt('Set the value to 1, then change your mind.')
   assert.match(said(h.contexts[2]!), /Only a needs_attention job can be closed/)
-  assert.equal(h.store.get('j1').status, 'queued', 'the model could not stop it')
+  assert.equal(h.store.get('j1').status, 'queued', 'close is not a stop request')
   const rows = await new WorkersCatalog(h.root).list()
   assert.deepEqual(
     rows.map((row) => [row.info.role, row.taskStatus, row.active]),
@@ -216,7 +324,13 @@ test('only the user cancels: /jobs cancel stops the job and the model is told', 
   assert.equal(h.store.get('j1').status, 'cancelled')
   const delivered = await h.waitForOutcome()
   assert.match(delivered, /"status\\":\\"cancelled\\"/)
-  assert.match(delivered, /never restart it without a new request/)
+  assert.match(delivered, /retry only on a new request from the user/)
+  assert.equal(h.store.get('j1').status, 'cancelled')
+  assert.equal(h.launches.length, 1)
+  resume = true
+  await h.session.prompt('Please resume j1 now.')
+  assert.equal(h.store.get('j1').status, 'queued')
+  assert.equal(h.launches.length, 2)
 })
 
 test('job_start validates scope, refs and delivery before anything is recorded', async (t) => {

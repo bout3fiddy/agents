@@ -333,6 +333,52 @@ test('a user cancellation stops the worker and keeps the job cancelled', async (
   assert.equal(await runJob(store, job.id), undefined, 'a cancelled job is not claimed again')
 })
 
+test('a stop retains the checkpoint; retry reads execution policy anew', async (t) => {
+  const { root, store } = await project(t)
+  const job = store.create({
+    root,
+    session: 's1',
+    spec: spec({
+      mode: 'documents',
+      writePaths: ['notes.txt'],
+      isolation: 'required',
+    }),
+  })
+  const first = await runJob(store, job.id, async (request) => {
+    assert.equal(request.project.execution?.reason, 'task-policy')
+    store.requestCancel(job.id, 'Correct the notes before delivery.')
+    return writes({ 'notes.txt': 'First draft.\n' })(request)
+  })
+  assert.equal(first?.status, 'cancelled', first?.error)
+  assert.equal(first.summary, 'Correct the notes before delivery.')
+  assert.ok(first.wip)
+  await assert.rejects(readFile(join(root, 'notes.txt')), { code: 'ENOENT' })
+  store.requeue(job.id, 'Revise the draft.')
+  const saved = process.env.PI_HARNESS_ISOLATION
+  process.env.PI_HARNESS_ISOLATION = 'required'
+
+  try {
+    const done = await runJob(store, job.id, async (request) => {
+      assert.equal(request.project.execution?.reason, 'host-policy')
+      assert.equal(request.model, job.spec.model)
+      assert.equal(request.checkpoint?.acceptedAt, job.createdAt)
+      assert.deepEqual(request.checkpoint?.writePaths, job.spec.writePaths)
+      assert.equal(await readFile(join(request.workspace, 'notes.txt'), 'utf8'), 'First draft.\n')
+      assert.match(request.task, /Revise the draft/)
+      return writes({ 'notes.txt': 'Corrected draft.\n' })(request)
+    })
+    assert.equal(done?.status, 'done', done?.error)
+    assert.deepEqual(done.spec, job.spec)
+    assert.equal(await readFile(join(root, 'notes.txt'), 'utf8'), 'Corrected draft.\n')
+  } finally {
+    if (saved === undefined) {
+      delete process.env.PI_HARNESS_ISOLATION
+    } else {
+      process.env.PI_HARNESS_ISOLATION = saved
+    }
+  }
+})
+
 test('required isolation reaches the worker whatever the project trusts', async (t) => {
   const { root, store } = await project(t)
   const modes: (string | undefined)[] = []

@@ -18,6 +18,7 @@
     "job_start",
     "job_status",
     "job_message",
+    "job_cancel",
     "job_retry",
     "job_close",
     "consult_design",

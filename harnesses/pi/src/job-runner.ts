@@ -532,6 +532,8 @@ async function deliver(run: Run, candidate: Candidate): Promise<Outcome> {
   const result = report(candidate)
   const summary = candidate.evidence.result.summary
 
+  ensureNotStopped(run)
+
   if (spec.deliver === 'none' || !candidate.changed.length) {
     return { status: 'done', summary, result }
   }
@@ -548,10 +550,13 @@ async function deliver(run: Run, candidate: Candidate): Promise<Outcome> {
   await pin(repo, job.id, 'head', head)
 
   if (spec.deliver === 'branch') {
-    await advanceBranch(repo, spec.branch!, head, await branchTip(repo, spec.branch!))
+    const tip = await branchTip(repo, spec.branch!)
+    ensureNotStopped(run)
+    await advanceBranch(repo, spec.branch!, head, tip)
     return { status: 'done', summary, head, result }
   }
 
+  ensureNotStopped(run)
   const applied = await applyToCheckout(repo, run.base, head)
 
   if (applied.conflicts.length) {
@@ -568,6 +573,13 @@ async function deliver(run: Run, candidate: Candidate): Promise<Outcome> {
   return { status: 'done', summary, head, result }
 }
 
+// Do not enter delivery with a stop already recorded but not yet observed by the heartbeat.
+function ensureNotStopped(run: Run) {
+  if (run.store.get(run.job.id).cancellation) {
+    throw new Error('Cancellation requested before delivery.')
+  }
+}
+
 async function execute(run: Run): Promise<Outcome> {
   const candidate = await work(run)
   return 'status' in candidate ? candidate : deliver(run, candidate)
@@ -575,7 +587,7 @@ async function execute(run: Run): Promise<Outcome> {
 
 /**
  * Run one queued job to an outcome. Whatever happens, the job leaves here finished in the
- * store with an event for its session: done, needing the host, or cancelled by the user.
+ * store with an event for its session: done, needing the host, or cancelled.
  */
 export async function runJob(
   store: JobStore,
@@ -608,9 +620,7 @@ export async function runJob(
     })
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
-    return controller.signal.aborted
-      ? store.finish(id, 'cancelled', { summary: 'Cancelled by the user. Its work is kept.' })
-      : store.finish(id, 'needs_attention', { error: message, summary: message })
+    return store.finish(id, 'needs_attention', { error: message, summary: message })
   } finally {
     clearInterval(beat)
 
