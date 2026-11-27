@@ -181,6 +181,12 @@ test('interactive exit and legacy resume identify the CLI and preserve the sessi
   assert.ok(update, rendered)
   assert.match(run('/bin/sh', ['-c', `${update} --help`]), /Usage: pi-harness update/)
   run('/bin/sh', ['-c', `${command} "$@"`, 'resume', ...flags])
+
+  // Pi renders the same argv it hands to the terminal. Check the exact file, not just the ID.
+  const operands = run('/bin/sh', ['-c', `printf '%s\\0' ${command}`]).split('\0')
+  assert.equal(operands[0], wrapper)
+  assert.equal(operands[operands.indexOf('--session') + 1], file)
+
   manifest.version = '0.0.7'
   await writeFile(join(global, 'package.json'), JSON.stringify(manifest))
   const legacy = spawn('pi', ['--session-dir', sessions, '--session', id, '--offline'], options)

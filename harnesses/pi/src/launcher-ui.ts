@@ -3,7 +3,7 @@ import { dirname, join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { capturePiHost, shellQuote } from './pi-host.ts'
 
-// Pi 1.6.1 has no launcher-command option. Adapt only the command operands in its unbundled
+// Pi 1.7.0 has no launcher-command option. Adapt only the command operands in its unbundled
 // interactive UI, at module load. Keep Pi's persistence checks, warning triggers and rendering.
 // Never rewrite terminal output, change APP_NAME (also used for settings), or edit node_modules.
 function installUiAdapter(wrapper: string): void {
@@ -11,10 +11,10 @@ function installUiAdapter(wrapper: string): void {
   const target = pathToFileURL(join(dirname(host.entry), 'modes/interactive/interactive-mode.js'))
   const command = JSON.stringify(shellQuote(wrapper))
   const replacements = [
-    ['const args = [APP_NAME];', `const args = [${command}];`],
+    ['const args = [APP_NAME];', `const args = [${JSON.stringify(wrapper)}];`],
     [
       'args.push("--session", sessionManager.getSessionId());',
-      'args.push("--session", quoteIfNeeded(sessionFile));',
+      'args.push("--session", sessionFile);',
     ],
     ['`Restart ${APP_NAME}.`', '"Restart " + ' + command + ' + "."'],
     ['`${APP_NAME} update`', command + ' + " update"'],

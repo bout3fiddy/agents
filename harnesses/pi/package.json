@@ -19,8 +19,8 @@
     "update:pi": "tsx scripts/update-pi.ts"
   },
   "dependencies": {
-    "@earendil-works/pi-coding-agent": "1.6.1",
-    "@earendil-works/pi-tui": "1.6.1",
+    "@earendil-works/pi-coding-agent": "1.7.0",
+    "@earendil-works/pi-tui": "1.7.0",
     "@modelcontextprotocol/sdk": "1.32.2",
     "typebox": "1.3.27"
   },
