@@ -12,14 +12,50 @@ export class MissingBoardCLI extends Error {
     super('Install tldraw-sync on PATH or set PI_WHITEBOARD_BIN, then run /start_whiteboard.')
   }
 }
+
+// The one protocol this launcher speaks. tldraw-sync names the same number in
+// src/shared/whiteboard.ts; the launcher, the CLI and the running daemon must all agree.
+export const boardProtocol = 3
+
+/** Three parties hold a protocol number. A mismatch names each one, so the fix is not a guess. */
+export interface BoardVersions {
+  requested: number
+  cli?: number
+  daemon?: number | 'stopped'
+}
+
+function upgradeAdvice({ requested, cli, daemon }: BoardVersions) {
+  if (cli !== undefined && cli < requested) {
+    return 'Upgrade tldraw-sync'
+  }
+
+  if (cli !== undefined && cli > requested) {
+    return 'Update pih with `pih update`'
+  }
+
+  if (typeof daemon === 'number' && daemon !== requested) {
+    return 'The daemon predates its CLI. Run `tldraw-sync stop`, which saves the board'
+  }
+
+  return 'Bring pih, tldraw-sync and its daemon to the same protocol'
+}
+
 export class BoardUpgradeRequired extends Error {
-  constructor() {
+  readonly versions: BoardVersions
+
+  constructor(versions: BoardVersions = { requested: boardProtocol }) {
+    const daemon = versions.daemon === 'stopped' ? 'is not running' : 'reports'
     super(
-      'Upgrade tldraw-sync to protocol 2, safely restart its daemon, then run /start_whiteboard.',
+      `Whiteboard protocol mismatch: pih requests ${versions.requested}, ` +
+        `the tldraw-sync CLI supports ${versions.cli ?? 'an unknown version'}, ` +
+        `the daemon ${daemon}${typeof versions.daemon === 'number' ? ' ' + versions.daemon : ''}` +
+        `${versions.daemon === undefined ? ' an unknown version' : ''}. ` +
+        `${upgradeAdvice(versions)}, then run /start_whiteboard.`,
     )
+    this.versions = versions
   }
 }
-export type BoardCommand = 'link' | 'poll' | 'ack' | 'snapshot' | 'publish'
+export type BoardCommand = 'link' | 'poll' | 'ack' | 'snapshot' | 'preview' | 'publish'
 export type BoardReply = Record<string, unknown>
 export interface BoardEndpoint {
   binding: string
@@ -109,32 +145,85 @@ function publicField(key: string, value: unknown) {
   return value
 }
 
+function protocolNumber(value: unknown) {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value > 0 && value < 10000
+    ? value
+    : undefined
+}
+
+// The CLI names the one protocol it speaks only in this fixed sentence. Nothing else is read
+// from a failure message.
+function requiredByCLI(failure: unknown) {
+  const match =
+    object(failure) && typeof failure.message === 'string'
+      ? /^Whiteboard protocol (\d{1,4}) is required\.$/.exec(failure.message)
+      : null
+  return match ? protocolNumber(Number(match[1])) : undefined
+}
+
+// Scene codes a model can act on. The CLI's own message may quote drawn content, so only the
+// code chooses the hint.
+const hints: Record<string, string> = {
+  stage_closed: 'Reopen the Mac stage with /start_whiteboard.',
+  revision_conflict: 'The canvas changed. Take a fresh snapshot.',
+  sketch_changed: 'The sketch changed. Take a fresh snapshot.',
+  session_mismatch: 'The scene names another board. Take a fresh snapshot.',
+  invalid_scene: 'The scene is invalid. Check it against the snapshot schema.',
+  scene_too_large: 'The scene file is over the size limit.',
+  scene_unreadable: 'The scene file is not a readable regular file.',
+  preview_not_ready: 'The Mac stage did not draw the draft in time. Preview again.',
+  image_not_ready: 'The Mac stage did not render in time. Try again.',
+  sketch_busy: 'The sketch kept changing. Try again.',
+}
+
 function commandFailure(command: BoardCommand, failure: unknown) {
-  let hint =
-    command === 'link' || command === 'poll'
-      ? 'Check the daemon and upgrade the CLI and daemon if they lack protocol 2.'
-      : 'Check the daemon, open Mac stage and current revision.'
-
-  if (object(failure) && failure.status === 'failure') {
-    if (failure.code === 'upgrade_required') {
-      return new BoardUpgradeRequired()
-    }
-
-    if (failure.code === 'stage_closed') {
-      hint = 'Reopen the Mac stage with /start_whiteboard.'
-    } else if (failure.code === 'revision_conflict' || failure.code === 'stale_snapshot') {
-      hint = 'Take a fresh snapshot before publishing.'
-    }
-  }
-
+  const code = object(failure) && failure.status === 'failure' ? failure.code : undefined
+  const hint =
+    (typeof code === 'string' && Object.hasOwn(hints, code) && hints[code]) ||
+    (command === 'link' || command === 'poll'
+      ? 'Check the daemon with `tldraw-sync status`.'
+      : 'Check the daemon, open Mac stage and current revision.')
   return new Error(`Whiteboard ${command} failed. ${hint}`)
 }
 
 // Never attach stdout, stderr, argv or the underlying execFile error to a model-visible error.
-export async function openBoardEndpoint(cwd: string, owner: string): Promise<BoardEndpoint> {
+export async function openBoardEndpoint(
+  cwd: string,
+  owner: string,
+  requested = boardProtocol,
+): Promise<BoardEndpoint> {
   const root = await realpath(await projectRoot(cwd))
   const [bin, ...prefix] = await launch(root, cwd)
   const binding = await bindingPath(root, owner)
+
+  // `status` needs no binding and changes nothing. It is asked only after a mismatch.
+  async function daemonProtocol(signal: AbortSignal): Promise<BoardVersions['daemon']> {
+    const options = { cwd, signal, timeout: 3000, maxBuffer: 65536, encoding: 'utf8' as const }
+    let reply: unknown
+
+    try {
+      reply = JSON.parse((await execute(bin, [...prefix, 'status', '--json'], options)).stdout)
+    } catch (error) {
+      signal.throwIfAborted()
+
+      try {
+        reply = JSON.parse(object(error) ? String(error.stdout) : '')
+      } catch {
+        return undefined
+      }
+    }
+
+    if (object(reply) && reply.status === 'failure' && reply.code === 'not_running') {
+      return 'stopped'
+    }
+
+    return object(reply) && reply.status === 'success' ? protocolNumber(reply.protocol) : undefined
+  }
+
+  async function mismatch(cli: number | undefined, signal: AbortSignal) {
+    return new BoardUpgradeRequired({ requested, cli, daemon: await daemonProtocol(signal) })
+  }
+
   return {
     binding,
     async run(command, args, signal) {
@@ -143,13 +232,14 @@ export async function openBoardEndpoint(cwd: string, owner: string): Promise<Boa
       const argv = link ? ['--owner', owner, '--out', binding] : ['--binding', binding]
 
       if (link || command === 'poll') {
-        argv.push('--protocol', '2')
+        argv.push('--protocol', String(requested))
       }
 
+      // A preview waits for the Mac stage to draw the draft.
       const options = {
         cwd,
         signal,
-        timeout: command === 'poll' ? 1500 : 15000,
+        timeout: command === 'poll' ? 1500 : command === 'preview' ? 40000 : 15000,
         maxBuffer: (command === 'poll' ? 2 : 1) * 1024 * 1024,
         killSignal: 'SIGKILL' as const,
         encoding: 'utf8' as const,
@@ -178,6 +268,10 @@ export async function openBoardEndpoint(cwd: string, owner: string): Promise<Boa
           }
         }
 
+        if (object(response) && response.code === 'upgrade_required') {
+          throw await mismatch(requiredByCLI(response), signal)
+        }
+
         throw commandFailure(command, response)
       }
 
@@ -185,8 +279,8 @@ export async function openBoardEndpoint(cwd: string, owner: string): Promise<Boa
         throw commandFailure(command, response)
       }
 
-      if ((link || command === 'poll') && response.protocol !== 2) {
-        throw new BoardUpgradeRequired()
+      if ((link || command === 'poll') && response.protocol !== requested) {
+        throw await mismatch(protocolNumber(response.protocol), signal)
       }
 
       if (link) {

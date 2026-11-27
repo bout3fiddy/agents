@@ -47,8 +47,8 @@ test('user input wins; mixed requests append once and recover a lost ACK', async
   assert.deepEqual(turns, [], 'Commands and empty polls do not invoke the model')
   const work = session.prompt('First user request')
   await first.wait
-  board.add('notify', 'sketch_notify', 'Typed notify')
-  board.add('interpret', 'interpret_request', 'Typed cleanup')
+  board.add('notify', 'Typed notify')
+  board.add('drawn', 'Typed drawing')
   await clock.tick()
   assert.equal(receipts().length, 0)
   await session.followUp('Priority user follow-up')
@@ -57,10 +57,9 @@ test('user input wins; mixed requests append once and recover a lost ACK', async
   await session.waitForIdle()
   assert.equal(turns.length, 3)
   assert.match(turns[1]!, /Priority user follow-up/)
-  assert.match(turns[2]!, /interpret_request/)
   assert.match(turns[2]!, /sketch_notify/)
   assert.match(turns[2]!, /Typed notify/)
-  assert.match(turns[2]!, /Typed cleanup/)
+  assert.match(turns[2]!, /Typed drawing/)
   assert.equal(receipts().length, 1)
   let attempts = 0
   board.before = async (command) => {
@@ -86,7 +85,7 @@ test('user input wins; mixed requests append once and recover a lost ACK', async
   await session.waitForIdle()
   assert.equal(receipts().length, 2)
   assert.equal(turns.length, 4)
-  assert.doesNotMatch(turns.at(-1)!, /interpret_request/)
+  assert.doesNotMatch(turns.at(-1)!, /Typed drawing/)
   await session.prompt('/stop_whiteboard')
   await session.reload()
   assert.equal(clock.delay, undefined)
@@ -135,7 +134,7 @@ test('dropped draft retries without ACK; paused work stays quiet', async (t) => 
   await session.prompt('/start_whiteboard')
   const work = session.prompt('Working')
   await first.wait
-  board.add('request', 'sketch_notify', 'Park this request until resumed.')
+  board.add('request', 'Park this request until resumed.')
   await clock.tick()
   release.release()
   await work
@@ -167,7 +166,7 @@ test('dropped draft retries without ACK; paused work stays quiet', async (t) => 
   assert.equal(board.events[0]?.state, 'received')
 })
 
-test('an unavailable ACK does not starve the next interpretation wake', async (t) => {
+test('an unavailable ACK does not starve the next wake', async (t) => {
   const { root, base } = await fixture()
   const board = new FixtureBoard()
   const clock = new ManualClock()
@@ -195,7 +194,7 @@ test('an unavailable ACK does not starve the next interpretation wake', async (t
       throw new Error('First event rejected')
     }
   }
-  board.add('second', 'interpret_request')
+  board.add('second', 'Second note')
 
   for (let i = 0; i < 6; i++) {
     await clock.tick()
@@ -203,7 +202,7 @@ test('an unavailable ACK does not starve the next interpretation wake', async (t
   }
 
   assert.equal(turns.length, 2)
-  assert.match(turns[1]!, /interpret_request/)
+  assert.match(turns[1]!, /Second note/)
   assert.deepEqual(
     board.events.map((e) => e.state),
     ['queued', 'received'],

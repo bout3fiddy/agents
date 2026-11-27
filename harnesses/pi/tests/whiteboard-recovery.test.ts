@@ -75,7 +75,7 @@ test(`whiteboard recovery schedule, seed ${seed}`, async (t) => {
       await session.reload()
     }
 
-    board.add(`event-${tick}`, next() % 2 === 0 ? 'interpret_request' : 'sketch_notify')
+    board.add(`event-${tick}`, next() % 2 === 0 ? 'A note' : undefined)
     const count = batches().length
     await clock.tick()
     await session.waitForIdle()

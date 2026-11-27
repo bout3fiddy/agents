@@ -4,7 +4,7 @@ import { chmod, mkdir, mkdtemp, realpath, rm, symlink, writeFile } from 'node:fs
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
-import { openBoardEndpoint } from '../src/whiteboard-cli.ts'
+import { BoardUpgradeRequired, boardProtocol, openBoardEndpoint } from '../src/whiteboard-cli.ts'
 import { parseLink, parsePoll } from '../src/whiteboard-protocol.ts'
 
 const cli = `#!/usr/bin/env node
@@ -13,13 +13,27 @@ const [command, ...args] = process.argv.slice(2)
 const field = (name) => args[args.indexOf(name) + 1]
 const file = field('--out')
 const reply = { status: 'success', session: 'board', owner: 'host' }
-if (['whiteboard-link', 'whiteboard-poll'].includes(command)) {
-  if (field('--protocol') !== '2') process.exit(2)
-  if (fs.existsSync('old-daemon')) {
-    console.log(JSON.stringify({ status: 'failure', code: 'upgrade_required' }))
+// Like tldraw-sync: the CLI speaks one protocol, and the daemon may still be running another.
+const number = (name, otherwise) =>
+  fs.existsSync(name) ? Number(fs.readFileSync(name, 'utf8')) : otherwise
+const supported = number('cli-protocol', 3)
+const daemon = number('daemon-protocol', supported)
+if (command === 'status') {
+  if (fs.existsSync('status-broken')) process.exit(1)
+  if (daemon === 0) {
+    console.log(JSON.stringify({ status: 'failure', code: 'not_running', token: 'private-marker' }))
     process.exit(2)
   }
-  if (!fs.existsSync('old-cli')) reply.protocol = 2
+  console.log(JSON.stringify({ status: 'success', code: 'running', protocol: daemon }))
+  process.exit(0)
+}
+if (['whiteboard-link', 'whiteboard-poll'].includes(command)) {
+  if (field('--protocol') !== String(supported) || daemon !== supported) {
+    console.log(JSON.stringify({ status: 'failure', code: 'upgrade_required',
+      message: 'Whiteboard protocol ' + supported + ' is required.' }))
+    process.exit(1)
+  }
+  if (!fs.existsSync('silent-cli')) reply.protocol = supported
 }
 if (command === 'whiteboard-link') {
   fs.writeFileSync(file, 'private-binding-marker', { mode: 0o600 })
@@ -68,14 +82,10 @@ test('CLI argv, binding privacy, flat envelopes and output cap', async (t) => {
   const endpoint = await openBoardEndpoint(subdir, 'host')
   const signal = new AbortController().signal
   assert.equal(endpoint.binding, join(root, '.pi/traces/harness/whiteboards/host.json'))
-  const oldDaemon = join(subdir, 'old-daemon')
-  await writeFile(oldDaemon, '')
-  await assert.rejects(endpoint.run('link', [], signal), /Upgrade.*protocol 2/)
-  await rm(oldDaemon)
-  const oldCli = join(subdir, 'old-cli')
-  await writeFile(oldCli, '')
-  await assert.rejects(endpoint.run('link', [], signal), /Upgrade.*protocol 2/)
-  await rm(oldCli)
+  const silent = join(subdir, 'silent-cli')
+  await writeFile(silent, '')
+  await assert.rejects(endpoint.run('link', [], signal), /protocol mismatch: pih requests 3/)
+  await rm(silent)
   const linked = parseLink(await endpoint.run('link', [], signal), 'host', endpoint.binding)
   assert.equal(linked.draw, 'http://lan/draw')
   execFileSync('git', ['check-ignore', '--', endpoint.binding], { cwd: root })
@@ -108,7 +118,7 @@ test('CLI argv, binding privacy, flat envelopes and output cap', async (t) => {
   await writeFile(padding, String(2 * 1024 * 1024))
   await assert.rejects(endpoint.run('poll', [], signal), /poll failed/)
   await rm(padding)
-  const args = ['--layer', 'canvas', '--file', 'with space; echo not-a-shell']
+  const args = ['--file', 'with space; echo not-a-shell']
   const published = await endpoint.run('publish', args, signal)
   assert.deepEqual(published.args, ['--binding', endpoint.binding, ...args, '--json'])
 
@@ -125,7 +135,7 @@ test('CLI argv, binding privacy, flat envelopes and output cap', async (t) => {
     })
   }
 
-  await assert.rejects(endpoint.run('snapshot', ['--layer', 'canvas'], signal), /snapshot failed/)
+  await assert.rejects(endpoint.run('snapshot', [], signal), /snapshot failed/)
   await writeFile(join(subdir, 'slow-poll'), '')
   const deadline = AbortSignal.timeout(6000)
   await assert.rejects(endpoint.run('poll', [], deadline), /poll failed/)
@@ -138,4 +148,85 @@ test('CLI argv, binding privacy, flat envelopes and output cap', async (t) => {
   await assert.rejects(openBoardEndpoint(root, '../unscoped'), /session owner/)
   process.env.PI_WHITEBOARD_BIN = join(root, 'absent')
   await assert.rejects(openBoardEndpoint(root, 'host'), /Install tldraw-sync on PATH/)
+})
+
+// Escaped bug: tldraw-sync shipped protocol 3 while the installed launcher asked for 2 and a
+// daemon started before the upgrade still served 2. The launcher said only "upgrade to protocol
+// 2 and restart", which named none of the three and could not be acted on.
+test('a protocol mismatch names the launcher, CLI and daemon versions', async (t) => {
+  const root = await realpath(await mkdtemp(join(tmpdir(), 'whiteboard-versions-')))
+  t.after(() => rm(root, { recursive: true, force: true }))
+  execFileSync('git', ['init', '-q', root])
+  const bin = join(root, 'cli.cjs')
+  await writeFile(bin, cli, { mode: 0o700 })
+  const override = process.env.PI_WHITEBOARD_BIN
+  t.after(() => {
+    if (override === undefined) {
+      delete process.env.PI_WHITEBOARD_BIN
+    } else {
+      process.env.PI_WHITEBOARD_BIN = override
+    }
+  })
+  process.env.PI_WHITEBOARD_BIN = bin
+  const signal = new AbortController().signal
+  const set = async (name: string, value?: number) =>
+    value === undefined
+      ? rm(join(root, name), { force: true })
+      : writeFile(join(root, name), String(value))
+
+  async function mismatch(requested: number, supported: number, daemon: number) {
+    await set('cli-protocol', supported)
+    await set('daemon-protocol', daemon)
+    const endpoint = await openBoardEndpoint(root, 'host', requested)
+    const errors: unknown[] = []
+
+    for (const command of ['link', 'poll'] as const) {
+      if (command === 'poll') {
+        await writeFile(endpoint.binding, 'private-binding-marker', { mode: 0o600 })
+      }
+
+      errors.push(await endpoint.run(command, [], signal).catch((error) => error))
+      await rm(endpoint.binding, { force: true })
+    }
+
+    assert.ok(
+      errors[0] instanceof BoardUpgradeRequired && errors[1] instanceof BoardUpgradeRequired,
+    )
+    assert.equal(errors[0].message, errors[1].message)
+    assert.doesNotMatch(errors[0].message + errors[0].stack, /private-marker/)
+    return errors[0]
+  }
+
+  // The observed failure: launcher 2, CLI 3, daemon 2.
+  const observed = await mismatch(2, 3, 2)
+  assert.deepEqual(observed.versions, { requested: 2, cli: 3, daemon: 2 })
+  assert.match(
+    observed.message,
+    /pih requests 2, the tldraw-sync CLI supports 3, the daemon reports 2\. Update pih/,
+  )
+
+  // The same board once the launcher is current: only the daemon is behind.
+  const stale = await mismatch(boardProtocol, 3, 2)
+  assert.deepEqual(stale.versions, { requested: 3, cli: 3, daemon: 2 })
+  assert.match(stale.message, /CLI supports 3, the daemon reports 2\. .*tldraw-sync stop/)
+
+  const old = await mismatch(boardProtocol, 2, 2)
+  assert.deepEqual(old.versions, { requested: 3, cli: 2, daemon: 2 })
+  assert.match(old.message, /CLI supports 2, the daemon reports 2\. Upgrade tldraw-sync/)
+
+  const stopped = await mismatch(2, 3, 0)
+  assert.deepEqual(stopped.versions, { requested: 2, cli: 3, daemon: 'stopped' })
+  assert.match(stopped.message, /the daemon is not running\. Update pih/)
+
+  // A status that cannot be read is reported as unknown, never guessed.
+  await writeFile(join(root, 'status-broken'), '')
+  const unknown = await mismatch(2, 3, 2)
+  assert.deepEqual(unknown.versions, { requested: 2, cli: 3, daemon: undefined })
+  assert.match(unknown.message, /the daemon reports an unknown version/)
+  await rm(join(root, 'status-broken'))
+
+  await set('cli-protocol', 3)
+  await set('daemon-protocol', 3)
+  const endpoint = await openBoardEndpoint(root, 'host')
+  assert.equal((await endpoint.run('link', [], signal)).protocol, 3)
 })
