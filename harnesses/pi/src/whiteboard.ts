@@ -4,7 +4,7 @@ import { invariant } from './invariant.ts'
 import { textResult } from './file-tools.ts'
 import { BoardFeed, boardClock, type BoardClock } from './whiteboard-feed.ts'
 import { object, openBoardEndpoint, type BoardEndpoint } from './whiteboard-cli.ts'
-import { identifier, parseLink, type BoardLink } from './whiteboard-protocol.ts'
+import { controlLimit, identifier, parseLink, type BoardLink } from './whiteboard-protocol.ts'
 
 const attachment = 'pi-whiteboard-link'
 const parameters = Type.Object(
@@ -36,6 +36,16 @@ const parameters = Type.Object(
         description:
           'Required for updated or failed, omitted for working: the answer the paired user ' +
           'reads, 1 to 4000 Unicode code points, sent exactly.',
+      }),
+    ),
+    controls: Type.Optional(
+      Type.Record(Type.String({ minLength: 1, maxLength: 40 }), Type.String({ maxLength: 40 }), {
+        maxProperties: controlLimit,
+        description:
+          'Preview only: the option to show for each named control the snapshot describes, ' +
+          'as { control_id: option_value }. Any controls, even {}, preview the selected view; ' +
+          'unnamed controls keep their resting values. Omit them to preview the rest view. ' +
+          'Publish never takes controls and saves the scene as written.',
       }),
     ),
   },
@@ -175,7 +185,10 @@ function registerBoardTool(pi: ExtensionAPI, board: Attachment) {
     parameters,
     description:
       'Inspect requests, snapshot the board, preview a draft scene without publishing it, ' +
-      'publish a scene as the entire agent print, or acknowledge an event. Sketch and the ' +
+      'publish a scene as the entire agent print, or acknowledge an event. A snapshot ' +
+      "returns the board's own description of the scene format and authoring capabilities, " +
+      'with artifact paths. A preview may show selected control options; publish saves ' +
+      'the scene without them. Sketch and the ' +
       'agent print share one dotted surface and camera. The human editor owns Sketch; only ' +
       'the human can take a printed shape into it. A snapshot image is a composite, never ' +
       'proof of human ink; its saved original agent records show provenance and ' +

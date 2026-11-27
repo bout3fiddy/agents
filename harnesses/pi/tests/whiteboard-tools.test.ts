@@ -56,12 +56,22 @@ test('the host receives One Canvas tool guidance with unchanged actions', async 
   const { properties } = tool.parameters as {
     properties: Record<string, { anyOf?: { const: string }[]; description?: string }>
   }
-  assert.deepEqual(Object.keys(properties), ['action', 'file', 'event', 'state', 'message'])
+  assert.deepEqual(Object.keys(properties), [
+    'action',
+    'file',
+    'event',
+    'state',
+    'message',
+    'controls',
+  ])
   assert.deepEqual(
     properties.action?.anyOf?.map((option) => option.const),
     ['status', 'snapshot', 'preview', 'publish', 'ack'],
   )
   assert.match(properties.file?.description ?? '', /entire agent print/)
+  assert.match(properties.controls?.description ?? '', /^Preview only/)
+  assert.match(properties.controls?.description ?? '', /Publish never takes controls/)
+  assert.ok(tool.description.includes('authoring capabilities, with artifact paths'))
   assert.deepEqual(board.calls, [], 'Reading the guidance takes no board action')
 })
 
@@ -292,6 +302,9 @@ test('SDK tool snapshots, previews, publishes and acks in the owning session', a
     image_path: '/preview',
     records_hash: 'records-1',
     shapes_count: 1,
+    view: 'rest',
+    state: { layout: 'grid' },
+    states_count: 2,
     published: false,
   })
   assert.match(JSON.stringify(results[6]?.content), /require a scene file/)
@@ -311,6 +324,109 @@ test('SDK tool snapshots, previews, publishes and acks in the owning session', a
   assert.deepEqual(
     board.calls.filter((c) => c.command === 'ack').map((c) => c.args[3]),
     ['received', 'working', 'updated'],
+  )
+})
+
+// A selected preview reaches the CLI as one exact --state value and reports the drawn state;
+// a publish of the same file never carries it, and a bad map never reaches the board.
+test('SDK preview shows selected controls and publish stays canonical', async (t) => {
+  const { root, base } = await fixture()
+  const board = new FixtureBoard()
+  const clock = new ManualClock()
+  const controls = { theme: 'dark', step: '2' }
+  const actions: Record<string, string | Record<string, string>>[] = [
+    { action: 'preview', file: 'scene.json', controls },
+    { action: 'preview', file: 'scene.json', controls: { '1bad': 'x' } },
+    { action: 'publish', file: 'scene.json', controls },
+    { action: 'preview', file: 'scene.json', state: 'working' },
+    { action: 'preview', file: 'scene.json', controls: { theme: 'light' } },
+    { action: 'preview', file: 'scene.json' },
+    { action: 'publish', file: 'scene.json' },
+    { action: 'preview', file: 'scene.json', controls: {} },
+    { action: 'preview', file: 'scene.json', controls: { layout: 'rows' } },
+  ]
+  const light = JSON.stringify({ theme: 'light' })
+  const rows = JSON.stringify({ layout: 'rows' })
+
+  // The fifth preview finds a board that drew its resting state instead of the request; the
+  // last finds one that drew the rest view for a selected request.
+  const open = async (cwd: string, owner: string) => {
+    const endpoint = await board.open(cwd, owner)
+    return {
+      ...endpoint,
+      run: async (...args: Parameters<typeof endpoint.run>) => {
+        const data = await endpoint.run(...args)
+
+        if (args[1].includes(rows)) {
+          return { ...data, view: 'rest', state: board.resting }
+        }
+
+        return args[1].includes(light) ? { ...data, state: { theme: 'dark' } } : data
+      },
+    }
+  }
+  let step = 0
+  const { session, runtime } = await captureSession(
+    root,
+    base,
+    [(pi) => registerWhiteboard(pi, open, clock)],
+    async () => {
+      const args = actions[step++]
+      const call = { type: 'toolCall' as const, id: String(step), name: 'whiteboard' }
+      return args ? [{ ...call, arguments: args }] : done
+    },
+  )
+  t.after(async () => {
+    await session.dispose()
+    await runtime.settleCredentialWrites()
+    await rm(base, { recursive: true, force: true })
+  })
+  await session.prompt('/start_whiteboard')
+  await session.prompt('Preview the dark theme')
+  const results = session.messages.filter((m) => m.role === 'toolResult')
+  assert.deepEqual(
+    results.map((m) => m.isError),
+    [false, true, true, true, true, false, false, false, true],
+  )
+  const text = (i: number) => {
+    const part = results[i]?.content[0]
+    assert.ok(part?.type === 'text')
+    return part.text
+  }
+  assert.deepEqual(JSON.parse(text(0)).state, { layout: 'grid', ...controls })
+  assert.equal(JSON.parse(text(0)).published, false)
+  assert.match(text(1), /control id must match/)
+  assert.match(text(2), /Only a preview takes controls/)
+  assert.match(text(3), /belong to an ACK/)
+  assert.match(text(4), /did not draw the requested controls/)
+  assert.deepEqual(JSON.parse(text(0)).view, 'selected')
+  assert.deepEqual(
+    JSON.parse(text(5)),
+    {
+      session: board.session,
+      image_path: '/preview',
+      records_hash: 'records-1',
+      shapes_count: 1,
+      view: 'rest',
+      state: board.resting,
+      states_count: 2,
+      published: false,
+    },
+    'A static preview surfaces the validated rest view',
+  )
+  assert.equal(JSON.parse(text(7)).view, 'selected', 'An explicit {} selects')
+  assert.deepEqual(JSON.parse(text(7)).state, board.resting)
+  assert.match(text(8), /drew the rest view, not the requested selected view/)
+  assert.deepEqual(
+    board.calls.filter((c) => ['preview', 'publish'].includes(c.command)),
+    [
+      { command: 'preview', args: ['--file', 'scene.json', '--state', JSON.stringify(controls)] },
+      { command: 'preview', args: ['--file', 'scene.json', '--state', light] },
+      { command: 'preview', args: ['--file', 'scene.json'] },
+      { command: 'publish', args: ['--file', 'scene.json'] },
+      { command: 'preview', args: ['--file', 'scene.json', '--state', '{}'] },
+      { command: 'preview', args: ['--file', 'scene.json', '--state', rows] },
+    ],
   )
 })
 

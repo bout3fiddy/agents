@@ -47,6 +47,7 @@ export class FixtureBoard {
   binding = '/private/fixture.json'
   session = 'board-1'
   events: BoardRow[] = []
+  resting: Record<string, string> = { layout: 'grid' }
   calls: { command: BoardCommand; args: string[] }[] = []
   before?: (command: BoardCommand, args: string[], signal: AbortSignal) => Promise<void>
   private sequence = 0
@@ -105,12 +106,19 @@ export class FixtureBoard {
         }
       }
 
+      // Like the protocol 4 CLI, every preview names its view and completes omitted controls
+      // with resting values. --state, even {}, selects the selected view.
       if (command === 'preview') {
+        const state = args.indexOf('--state')
+        const selected = state < 0 ? {} : JSON.parse(args[state + 1]!)
         return {
           ...base,
           image_path: '/preview',
           records_hash: 'records-1',
           shapes_count: 1,
+          view: state < 0 ? 'rest' : 'selected',
+          state: { ...this.resting, ...selected },
+          states_count: 2,
           published: false,
         }
       }

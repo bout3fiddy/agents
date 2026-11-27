@@ -210,6 +210,46 @@ export type BoardInput = {
   event?: string
   state?: 'working' | 'updated' | 'failed'
   message?: string
+  controls?: Record<string, string>
+}
+
+// The board's selected-state bounds (tldraw-sync src/shared/constants.ts at 2f71dff). The board
+// completes an omitted control with its resting value and rejects anything else. An explicit
+// empty map selects the selected view with every control at rest.
+export const controlLimit = 8
+const controlBytes = 1024
+const controlId = /^[A-Za-z][A-Za-z0-9_-]{0,39}$/
+const optionValue = /^[A-Za-z0-9_-]{1,40}$/
+
+/** Each named control's option, validated and serialized once in caller order. */
+export function selectedState(value: unknown) {
+  const proto = object(value) ? Object.getPrototypeOf(value) : undefined
+
+  if (!object(value) || (proto !== Object.prototype && proto !== null)) {
+    throw new Error('Preview controls must map control ids to option values')
+  }
+
+  const entries = Object.entries(value)
+
+  if (entries.length > controlLimit) {
+    throw new Error(`Preview controls must name 0 to ${controlLimit} controls`)
+  }
+
+  for (const [id, option] of entries) {
+    if (!controlId.test(id) || typeof option !== 'string' || !optionValue.test(option)) {
+      throw new Error(
+        'Each preview control id must match /^[A-Za-z][A-Za-z0-9_-]{0,39}$/ and its option ' +
+          '/^[A-Za-z0-9_-]{1,40}$/',
+      )
+    }
+  }
+
+  // Eight ASCII entries of at most 40 + 40 characters serialize to at most 689 bytes, so the
+  // board's byte bound is an invariant, not a branch.
+  const json = JSON.stringify(Object.fromEntries(entries))
+  invariant(Buffer.byteLength(json) <= controlBytes, 'Selected state exceeds 1024 bytes')
+  invariant(json.startsWith('{'), 'Serialized controls must not look like an option')
+  return { controls: Object.fromEntries(entries) as Record<string, string>, json }
 }
 
 /** The answer the paired user reads for one event. Never an option-like argv value. */
@@ -228,6 +268,10 @@ function answer(value: unknown) {
 }
 
 export function boardArguments(input: BoardInput): string[] {
+  if (input.controls !== undefined && input.action !== 'preview') {
+    throw new Error('Only a preview takes controls; publish saves the canonical scene')
+  }
+
   if (input.action === 'status') {
     return []
   }
@@ -259,6 +303,10 @@ export function boardArguments(input: BoardInput): string[] {
     return []
   }
 
+  if (input.event !== undefined || input.state !== undefined || input.message !== undefined) {
+    throw new Error('event, state and message belong to an ACK, not a preview or publish')
+  }
+
   // A preview and a publish read the same scene file, so what was previewed is what is saved.
   if (
     !input.file ||
@@ -269,13 +317,24 @@ export function boardArguments(input: BoardInput): string[] {
     throw new Error('Preview and publish require a scene file')
   }
 
-  return ['--file', input.file]
+  const file = ['--file', input.file]
+  return input.controls === undefined
+    ? file
+    : [...file, '--state', selectedState(input.controls).json]
 }
 
 function artifact(value: unknown): value is string {
   return (
     typeof value === 'string' && value.length > 0 && value.length <= 4096 && !value.includes('\0')
   )
+}
+
+// The snapshot describes the board's authoring capabilities itself (`capabilities`,
+// `capabilities_path`, `scene_controls`, `states_count`); pih passes them through unchanged. It
+// checks that every named artifact is a usable path and that a states count is positive or, from
+// a daemon that predates selected state, null.
+function artifactsReadable(data: BoardReply) {
+  return Object.entries(data).every(([key, value]) => !key.endsWith('_path') || artifact(value))
 }
 
 export function canvasSnapshot(data: BoardReply, link: BoardLink) {
@@ -286,6 +345,8 @@ export function canvasSnapshot(data: BoardReply, link: BoardLink) {
     !artifact(data.records_path) ||
     !artifact(data.strokes_path) ||
     !artifact(data.scene_path) ||
+    !artifactsReadable(data) ||
+    !(data.states_count == null || statesCount(data.states_count)) ||
     !identifier(data.snapshot) ||
     !validRevision(data.base_revision) ||
     typeof data.prompt !== 'string' ||
@@ -297,8 +358,80 @@ export function canvasSnapshot(data: BoardReply, link: BoardLink) {
   return data
 }
 
+function statesCount(value: unknown): value is number {
+  return counter(value) && value > 0
+}
+
+export type PreviewView =
+  | { view: 'rest' | 'selected'; state: Record<string, string>; states_count: number }
+  | { view: 'rest'; state: null; states_count: null }
+
+/**
+ * The view the board drew. A protocol 4 CLI always names it: `rest` with the completed resting
+ * state, or `rest` with null state and count from a daemon that predates selected state, or
+ * `selected` with the completed selected state. An older CLI names nothing for a static preview.
+ * A requested control must come back with its option; the board completes the others at rest.
+ */
+function drawnView(data: BoardReply, requested?: Record<string, string>): PreviewView | undefined {
+  const expected = requested === undefined ? 'rest' : 'selected'
+
+  if (data.view === undefined && data.state === undefined && data.states_count === undefined) {
+    return expected === 'rest' ? undefined : invalid()
+  }
+
+  if (data.view !== 'rest' && data.view !== 'selected') {
+    return invalid()
+  }
+
+  if (data.view !== expected) {
+    throw new Error(`The preview drew the ${data.view} view, not the requested ${expected} view`)
+  }
+
+  if (expected === 'rest' && data.state === null && data.states_count === null) {
+    return { view: 'rest', state: null, states_count: null }
+  }
+
+  let state: Record<string, string>
+
+  try {
+    state = selectedState(data.state).controls
+  } catch {
+    return invalid()
+  }
+
+  if (!statesCount(data.states_count)) {
+    return invalid()
+  }
+
+  for (const [id, option] of Object.entries(requested ?? {})) {
+    if (!Object.hasOwn(state, id) || state[id] !== option) {
+      throw new Error('The preview did not draw the requested controls')
+    }
+  }
+
+  invariant(expected === 'selected' || requested === undefined, 'A rest view requests nothing')
+  return { view: expected, state, states_count: data.states_count }
+}
+
 /** A preview is a rendering of the draft. It must say that it published nothing. */
-export function preview(data: BoardReply, link: BoardLink) {
+export interface PreviewReceipt {
+  session: string
+  image_path: string
+  records_hash: string
+  shapes_count: number
+
+  // Absent only from an older CLI's static preview.
+  view?: PreviewView['view']
+  state?: PreviewView['state']
+  states_count?: PreviewView['states_count']
+  published: false
+}
+
+export function preview(
+  data: BoardReply,
+  link: BoardLink,
+  requested?: Record<string, string>,
+): PreviewReceipt {
   sameBoard(data, link)
 
   if (
@@ -310,12 +443,14 @@ export function preview(data: BoardReply, link: BoardLink) {
     return invalid()
   }
 
+  const drawn = drawnView(data, requested)
   return {
     session: link.session,
     image_path: data.image_path,
     records_hash: data.records_hash,
     shapes_count: data.shapes_count,
-    published: false,
+    ...drawn,
+    published: false as const,
   }
 }
 

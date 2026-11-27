@@ -44,8 +44,9 @@ Sketch and the agent print share one camera. Use the iPad URL or scan the QR on 
 the stage open for snapshots and previews. On iPad, optionally type a note saying what you want,
 then tap **Send**; turn off sharing the sketch to chat privately in text. Only the owning host
 receives the request. It answers each request once on the board, and for a sketch request may also
-preview and publish a freeform scene as the whole agent print. Your editor owns Sketch and the agent
-never writes it; to keep a printed shape, inspect it and take it into Sketch, which one undo
+preview and publish a freeform scene as the whole agent print. A preview can show selected control
+options the snapshot describes; a publish saves the canonical scene. Your editor owns Sketch and the
+agent never writes it; to keep a printed shape, inspect it and take it into Sketch, which one undo
 reverses. The host reads the saved original agent records, not the composite image, to tell its
 print from your ink. It can inspect outstanding work with `whiteboard status`. The listener resumes
 on reload; `/stop_whiteboard` detaches without stopping the shared daemon. pih, the tldraw-sync CLI

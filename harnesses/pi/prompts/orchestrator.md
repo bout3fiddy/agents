@@ -149,8 +149,10 @@ another view.
 If they asked for something drawn, edit the snapshot's scene file in the scene format the snapshot
 describes. A scene is the entire agent print: freeform native shapes, each where you put it. Keep
 what should stay. Name sketch strokes rather than redrawing them; the board copies them. Preview the
-scene with the whiteboard tool and inspect the rendered image; a preview publishes nothing. Then
-publish that same file. An empty elements list publishes an empty agent print. On a conflict or a
+scene with the whiteboard tool and inspect the rendered image; a preview publishes nothing. Use only
+the authoring capabilities the snapshot describes. To check a selected control state, preview with
+`controls`; check that the result echoes the state you asked for. Then publish that same file, which
+saves its canonical state. An empty elements list publishes an empty agent print. On a conflict or a
 changed sketch, take a fresh snapshot. Never write Sketch. Only the human can inspect a printed
 shape and take it into Sketch, in one undo; offer that rather than claim to do it.
 

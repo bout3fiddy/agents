@@ -404,7 +404,7 @@ export class BoardFeed {
       }
 
       if (input.action === 'preview') {
-        return preview(data, this.link)
+        return preview(data, this.link, input.controls)
       }
 
       return canvasSnapshot(data, this.link)

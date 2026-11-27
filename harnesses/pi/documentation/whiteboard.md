@@ -19,6 +19,37 @@ which pixels are human ink; the host checks the snapshot's saved original agent 
 provenance and completeness. Only the human can inspect a printed shape and take it into Sketch, as
 one edit that one undo reverses. This changes no tool action and no protocol 4 field.
 
+## Authoring capabilities and selected state
+
+The snapshot is the board's own description of what a scene may contain: its `prompt`,
+`capabilities`, `capabilities_path`, `scene_controls`, `states_count` and artifact paths reach the
+host unchanged. pih restates no board schema; it checks only that every `*_path` field is a usable
+path, that `states_count` is a positive integer or null, and that no credential-like key appears.
+
+`preview` alone may take `controls`, an object mapping named control ids to option values. pih
+checks the board's bounds (0 to 8 controls, ids matching `^[A-Za-z][A-Za-z0-9_-]{0,39}$`, options
+matching `^[A-Za-z0-9_-]{1,40}$`, at most 1024 bytes of JSON) and passes the map unchanged as one
+`--state` JSON argv value. Any `controls`, even `{}`, request the `selected` view; the board
+completes omitted controls with their resting values. A preview without `controls` sends exactly the
+earlier argv and requests the `rest` view.
+
+Every preview reply must say `published: false`. The protocol 4 CLI also names the view it drew. A
+rest request accepts:
+
+- `view: 'rest'` with the completed resting `state` (`{}` for a scene without controls) and a
+  positive `states_count`;
+- `view: 'rest'` with `state: null` and `states_count: null` from a daemon without selected state;
+- none of `view`, `state` or `states_count`, from an older CLI.
+
+A selected request accepts only `view: 'selected'` with the completed `state` and a positive
+`states_count`.
+
+A reply naming the other view, a partial set of these fields, or a `state` that disagrees with a
+requested control is rejected. pih returns the validated `view`, `state` and `states_count` to the
+host. `controls` on any other action, and ACK fields (`event`, `state`, `message`) on a preview or
+publish, are rejected before the CLI runs. `publish` never takes `--state`; it saves the canonical
+scene, which is the rest view.
+
 ## Private chat
 
 Every request is a `sketch_notify`. Protocol 4 adds an optional boolean `include_sketch`: absent or
@@ -40,12 +71,17 @@ On the Mac host with the reviewed tldraw-sync executable and a **disposable** pr
 
 ```sh
 PI_WHITEBOARD_BIN=/path/to/tldraw-sync npx --no-install tsx tests/whiteboard-live.ts \
-  /path/to/disposable/project whiteboard-smoke-pairing
+  /path/to/disposable/project whiteboard-smoke-pairing /path/to/controlled-scene.json theme=dark
 ```
 
-The driver checks reopen identity, protocol negotiation, poll ownership, readable snapshot
-artifacts, that a preview publishes nothing and that a publish saves the previewed records. It opens
-a stage and leaves the board running.
+The controlled scene is a synthetic template with at least two controls in the snapshot scene
+format; `control=option` names a non-resting option of one. The driver writes the template onto the
+board's basis (the snapshot scene's scalar fields) in the disposable project. It checks reopen
+identity, protocol negotiation, poll ownership, readable snapshot and capabilities artifacts, the
+empty canvas's rest preview (`state: {}`, `states_count: 1`), the controlled scene's rest view and a
+partial selected view completed at rest, that no preview publishes and that a publish saves the rest
+records, not the selected ones. It opens a stage and leaves the board running. Use a disposable
+`BOARD_DATA_DIR` and CLI copy.
 
 The private chat journey runs a real Pi session with a scripted host against the real CLI on a new
 temporary project and board. Prerequisites: a tldraw-sync CLI and daemon that both speak protocol 4

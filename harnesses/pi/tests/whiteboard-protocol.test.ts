@@ -8,6 +8,7 @@ import {
   parsePoll,
   preview,
   publication,
+  selectedState,
 } from '../src/whiteboard-protocol.ts'
 
 const link = { session: 'board', owner: 'host' }
@@ -152,9 +153,26 @@ test('a snapshot exposes the sketch and scene artifacts and rejects a foreign re
     { session: 'other' },
     { snapshot: {} },
     { prompt: '' },
+    { capabilities_path: '' },
+    { capabilities_path: 7 },
+    { states_count: 0 },
+    { states_count: 1.5 },
+    { states_count: '2' },
   ]) {
-    assert.throws(() => canvasSnapshot({ ...snapshot, ...change }, link))
+    assert.throws(() => canvasSnapshot({ ...snapshot, ...change }, link), JSON.stringify(change))
   }
+
+  // The board's capability fields pass through exactly as it wrote them.
+  const described = {
+    ...snapshot,
+    capabilities: { controls: { max: 8 } },
+    capabilities_path: '/capabilities.json',
+    scene_controls: [{ id: 'theme', options: ['light', 'dark'], rest: 'light' }],
+    states_count: 2,
+  }
+  assert.deepEqual(canvasSnapshot(described, link), described)
+  const stale = { ...snapshot, states_count: null }
+  assert.deepEqual(canvasSnapshot(stale, link), stale, 'A daemon without selected state')
 })
 
 test('a preview and a publish name the same scene file and nothing else', () => {
@@ -165,6 +183,154 @@ test('a preview and a publish name the same scene file and nothing else', () => 
   for (const file of [undefined, '', '-', '--binding', 'a\0b']) {
     assert.throws(() => boardArguments({ action: 'preview', file }), /scene file/)
     assert.throws(() => boardArguments({ action: 'publish', file }), /scene file/)
+  }
+})
+
+// Selected state is preview-only, bounded as the board bounds it and serialized as one exact JSON
+// argv value. It never reaches a publish, so the canonical scene is what is saved.
+test('preview controls are bounded, exact and never reach a publish or an ACK', () => {
+  const controls = { theme: 'dark', Step_2: 'b-1', z: '-x' }
+  const args = boardArguments({ action: 'preview', file: 'p', controls })
+  assert.deepEqual(args, ['--file', 'p', '--state', JSON.stringify(controls)])
+  assert.deepEqual(JSON.parse(args[3]!), controls, 'Preserved faithfully, in order')
+
+  const eight = Object.fromEntries(
+    Array.from({ length: 8 }, (_, i) => ['c' + 'x'.repeat(38) + i, 'v'.repeat(40)]),
+  )
+
+  // Eight maximal ASCII entries serialize to 689 bytes: the board's 1024-byte bound always holds.
+  assert.equal(Buffer.byteLength(JSON.stringify(eight)), 689)
+  assert.deepEqual(JSON.parse(selectedState(eight).json), eight)
+
+  const nine = Object.fromEntries(Array.from({ length: 9 }, (_, i) => ['c' + i, 'v']))
+
+  assert.deepEqual(
+    boardArguments({ action: 'preview', file: 'p', controls: {} }),
+    ['--file', 'p', '--state', '{}'],
+    'An explicit empty map selects the selected view at rest',
+  )
+
+  for (const bad of [
+    nine,
+    [],
+    'theme=dark',
+    null,
+    { '1theme': 'dark' },
+    { ['a'.repeat(41)]: 'v' },
+    { 'the me': 'dark' },
+    { theme: '' },
+    { theme: 'v'.repeat(41) },
+    { theme: 'dark mode' },
+    { theme: 'dark"' },
+    { theme: 3 },
+    { theme: { nested: 'x' } },
+    JSON.parse('{"__proto__":"x"}'),
+    new Map([['theme', 'dark']]),
+  ]) {
+    assert.throws(
+      () => boardArguments({ action: 'preview', file: 'p', controls: bad as never }),
+      /preview control/i,
+      JSON.stringify(bad),
+    )
+  }
+
+  for (const action of ['publish', 'snapshot', 'status', 'ack'] as const) {
+    assert.throws(
+      () => boardArguments({ action, file: 'p', event: 'e', state: 'working', controls }),
+      /Only a preview takes controls/,
+      action,
+    )
+  }
+
+  // ACK state stays distinct from selected state.
+  for (const action of ['preview', 'publish'] as const) {
+    for (const extra of [{ state: 'working' as const }, { event: 'e' }, { message: 'Hi' }]) {
+      assert.throws(() => boardArguments({ action, file: 'p', ...extra }), /belong to an ACK/)
+    }
+  }
+})
+
+// The released protocol 4 CLI (tldraw-sync src/cli/canvas_commands.ts at a11fbeb) names the view
+// on every preview. An older CLI names nothing for a static preview.
+test('a preview accepts every issued rest receipt and only the requested view', () => {
+  const drawn = {
+    ...link,
+    image_path: '/preview.png',
+    records_hash: 'abc',
+    shapes_count: 2,
+    published: false,
+  }
+  const shown = { session: 'board', image_path: '/preview.png', records_hash: 'abc' }
+  const rest = (change: Record<string, unknown>) => preview({ ...drawn, ...change }, link)
+
+  // A scene without controls, a daemon that predates selected state and an older CLI.
+  const empty = { view: 'rest', state: {}, states_count: 1 }
+  const stale = { view: 'rest', state: null, states_count: null }
+  assert.deepEqual(rest(empty), { ...shown, shapes_count: 2, ...empty, published: false })
+  assert.deepEqual(rest(stale), { ...shown, shapes_count: 2, ...stale, published: false })
+  assert.deepEqual(rest({}), { ...shown, shapes_count: 2, published: false })
+
+  const resting = { theme: 'light', layout: 'grid' }
+  assert.deepEqual(rest({ view: 'rest', state: resting, states_count: 4 }).state, resting)
+
+  for (const change of [
+    { view: 'selected', state: resting, states_count: 4 },
+    { view: undefined, state: {}, states_count: 1 },
+    { view: 'rest' },
+    { view: 'rest', state: {} },
+    { view: 'rest', state: {}, states_count: 0 },
+    { view: 'rest', state: {}, states_count: null },
+    { view: 'rest', state: null, states_count: 1 },
+    { view: 'rest', state: 'theme=light', states_count: 1 },
+    { view: 'rest', state: { theme: 7 }, states_count: 1 },
+    { view: 'Rest', state: {}, states_count: 1 },
+    { state: {} },
+    { states_count: 1 },
+  ]) {
+    assert.throws(() => rest(change), /Invalid|requested rest view/, JSON.stringify(change))
+  }
+})
+
+test('a selected preview names the selected view and draws every requested control', () => {
+  const drawn = {
+    ...link,
+    image_path: '/preview.png',
+    records_hash: 'abc',
+    shapes_count: 2,
+    published: false,
+  }
+  const selected = (requested: Record<string, string>, change: Record<string, unknown>) =>
+    preview({ ...drawn, ...change }, link, requested)
+  const full = { theme: 'dark', layout: 'grid' }
+  const receipt = { view: 'selected', state: full, states_count: 4 }
+  assert.deepEqual(selected({ theme: 'dark' }, receipt).state, full, 'Completed at rest')
+  assert.equal(selected({ theme: 'dark' }, receipt).states_count, 4)
+  assert.deepEqual(selected({}, receipt).state, full, 'An explicit {} is the selected view')
+
+  // A board that drew the rest view for a selected request is never reported as selected.
+  assert.throws(
+    () => selected({}, { ...receipt, view: 'rest' }),
+    /drew the rest view, not the requested selected view/,
+  )
+  assert.throws(() => selected({ theme: 'dark' }, {}), /Invalid/, 'An older CLI cannot select')
+
+  for (const state of [{ theme: 'light' }, { layout: 'grid' }]) {
+    assert.throws(
+      () => selected({ theme: 'dark' }, { ...receipt, state }),
+      /did not draw the requested controls/,
+    )
+  }
+
+  for (const change of [
+    { state: undefined },
+    { state: null, states_count: null },
+    { state: { theme: 7 } },
+    { states_count: 0 },
+    { states_count: -1 },
+    { states_count: 2 ** 53 },
+    { published: true },
+  ]) {
+    assert.throws(() => selected({}, { ...receipt, ...change }), /Invalid/, JSON.stringify(change))
   }
 })
 

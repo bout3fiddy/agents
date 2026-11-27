@@ -33,7 +33,9 @@ test('the host answers a sketch note or draws a previewed scene', async () => {
     'A scene is the entire agent print: freeform native shapes, each where you put it',
     'Name sketch strokes rather than redrawing them; the board copies them',
     'inspect the rendered image; a preview publishes nothing',
-    'Then publish that same file',
+    'Use only the authoring capabilities the snapshot describes',
+    'To check a selected control state, preview with `controls`',
+    'Then publish that same file, which saves its canonical state',
     'An empty elements list publishes an empty agent print',
   ]) {
     assert.ok(prompt.includes(required), `Host prompt is missing: ${required}`)
