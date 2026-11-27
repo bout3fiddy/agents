@@ -1,15 +1,12 @@
-import { access, chmod, cp, mkdir, rename, writeFile } from 'node:fs/promises'
+import { access, chmod, cp, mkdir, realpath, rename, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import { atomicJson, readJson } from '../src/state.ts'
 import { harnessRoot } from '../src/project.ts'
 import { loadRole, rolePrompt } from '../src/roles.ts'
 import { captureBuild } from '../src/runtime-version.ts'
-
-function shellQuote(value: string): string {
-  return `'${value.replaceAll("'", "'\\''")}'`
-}
+import { piPackage, shellQuote } from '../src/pi-host.ts'
 
 async function exists(path: string): Promise<boolean> {
   try {
@@ -83,20 +80,16 @@ export async function install(agentDir = join(homedir(), '.pi', 'agent'), binDir
       '',
     ].join('\n'),
   )
-  const wrapperDir = binDir ?? join(destination, 'bin')
+  const wrapperDir = resolve(binDir ?? join(destination, 'bin'))
   await mkdir(wrapperDir, { recursive: true })
   const wrapper = join(wrapperDir, 'pi-harness')
-  const cli = join(
-    harnessRoot,
-    'node_modules',
-    '@earendil-works',
-    'pi-coding-agent',
-    'dist',
-    'cli.js',
-  )
-  await access(cli)
+  const cli = join(harnessRoot, 'node_modules', piPackage, 'dist', 'cli.js')
+  const entry = await realpath(cli)
+  const loader = pathToFileURL(join(harnessRoot, 'src/launcher-ui.ts')).href
   const command = [
     shellQuote(process.execPath),
+    '--import',
+    shellQuote(loader),
     shellQuote(cli),
     '--no-extensions',
     '--extension',
@@ -124,6 +117,7 @@ export async function install(agentDir = join(homedir(), '.pi', 'agent'), binDir
     `#!/bin/sh\nexport PI_CODING_AGENT_DIR=${shellQuote(destination)}\n` +
       `export PI_HARNESS_AGENT_DIR=${shellQuote(destination)}\n` +
       `if [ "$1" = update ]; then\n  shift\n  exec ${update}\nfi\n` +
+      `export PI_HARNESS_LAUNCH_WRAPPER=${shellQuote(wrapper)}\n` +
       `exec ${command}\n`,
   )
   await chmod(wrapper, 0o755)
@@ -133,6 +127,7 @@ export async function install(agentDir = join(homedir(), '.pi', 'agent'), binDir
     installedAt: new Date().toISOString(),
     backup,
     wrapper,
+    pi: { version: build.piPin, entry },
     version: build.version,
     revision: build.revision,
     sourceHash: build.sourceHash,

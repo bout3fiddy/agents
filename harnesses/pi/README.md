@@ -128,12 +128,16 @@ From a project directory:
 The launcher uses the harness's own Pi dependency and disables ambient extensions, skills, prompt
 templates, context discovery and MCP. Ordinary `pi` also loads the installed role extension; the
 dedicated launcher supplies the full isolation flags even if other global Pi packages are installed
-later.
+later. When quitting the launcher, use the printed command from the same project: it quotes the
+installed wrapper and selects the exact saved session, without looking up `pi` on `PATH`. If you
+follow an older `pi --session ...` hint, the installed extension warns when the CLI is not the
+expected launcher or release. Exit normally and use the warning’s command. Nothing is upgraded or
+restarted automatically. A global Pi without the harness is unchanged.
 
 ### Update Pi
 
-Pi's update notice names `pi update`, which only manages a separately installed global `pi`. Update
-the harness's own Pi with:
+The launcher’s Pi release banner names the wrapper’s `update` command. A bare `pi update` manages a
+separately installed global Pi, not the harness. To update the harness explicitly:
 
 ```sh
 ~/.pi/agent/bin/pi-harness update          # latest release
@@ -149,7 +153,8 @@ Run the update in the canonical primary checkout. If the launcher points to a de
 run `npm run update:pi` from the primary checkout's `harnesses/pi` directory instead (append
 `-- 1.5.2` to select that version). Save or stash edits to either pin file first. Close harness
 sessions and let background workers finish before replacing their shared Pi installation. `--force`
-skips only the running-process check. Restart open sessions to load the new Pi.
+skips only the running-process check. After accepting the new pins, sync the intended release so its
+install receipt reflects them. Restart open sessions through that wrapper to load the new Pi.
 
 Authenticate independently when needed:
 
@@ -292,7 +297,7 @@ job and ask the orchestrator to list schedules for its last outcome and next run
 
 The installed launcher takes its active tool list from the loaded role on each reload. Older
 launchers pinned a process-wide tool list. If `/harness-version` reports missing role tools, exit Pi
-once and use `~/.pi/agent/bin/pi-harness --continue` from the project to resume that conversation.
+once and run the warning’s exact session command from the project.
 
 ### Background delegation
 
@@ -371,11 +376,17 @@ boundaries and usage measurement.
 
 ## Automatic harness updates
 
-An interactive host checks the completed local install receipt every three seconds. It applies a new
-source hash through Pi’s reload command at the next idle point. An unsent draft, queued work, open
-worker conversation picker or pending design consultation defers the reload. Detached worker
-processes continue on their current build. Use `/harness-version` to inspect the loaded receipt.
-Hosts running a version older than 0.6.35 need one manual `/reload` to start watching installs.
+A Git push alone does not run the local installer. After publishing, sync the intended checkout with
+`./bin/sync-pi.sh` (or `npm run install:local` in `harnesses/pi`). The installer writes the wrapper,
+settings and finally `harness-install.json`. New wrapper processes use that installation.
+
+An interactive host checks the completed local receipt every three seconds. For a changed build in
+the same source directory with the same Pi host, it reloads the extension at the next idle point. An
+unsent draft, queued work, open worker picker or pending design consultation defers reload. Reload
+does not replace the running CLI or its launcher code. A different release directory or Pi pin needs
+a process restart, even if the extension hash is identical. The host shows a restart command rather
+than claiming to have switched releases. A process predating launcher detection needs one normal
+exit and restart through the installed wrapper. Detached workers keep their build.
 
 ## Browse subagents
 
@@ -432,10 +443,13 @@ the same task and candidate; Details labels this reconstruction. Original metada
 ## Verify the loaded runtime
 
 Run `/harness-version` to inspect the currently loaded version, Git revision, source digest, load
-ID, load time, startup/reload reason and actual tool inventory. The footer shows the version and
-short digest; `harness_status` returns the same receipt. Each session records these receipts in
-`.pi/traces/harness/runtime/<session-id>.jsonl` and its raw trace. Request timing references the
-load ID. Compare the source digest with `~/.pi/agent/harness-install.json` after an installation.
+ID, load time, startup/reload reason and actual tool inventory. `piHost` records the observed CLI
+entry and its package version, if identifiable, separately from the loaded harness source and the
+install receipt’s `expectedPi`. A missing host version is unknown, not the extension SDK version.
+The footer shows the harness version and short digest; `harness_status` returns the same receipt.
+Each session records these receipts in `.pi/traces/harness/runtime/<session-id>.jsonl` and its raw
+trace. Request timing references the load ID. Compare the source digest with
+`~/.pi/agent/harness-install.json` after an installation.
 
 Code identity and orchestrator prompt/tool policy are captured for the loaded generation. Editing
 files on disk cannot relabel the running process. `/reload` activates the new generation and records
