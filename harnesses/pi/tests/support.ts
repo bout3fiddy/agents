@@ -2,8 +2,14 @@ import { mkdtemp, mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { StateStore } from '../src/state.ts'
-import { fileHashes, inventory, snapshotHash } from '../src/paths.ts'
-import type { Design, WorkerRequest, WorkerEvidence, WorkerResult } from '../src/contracts.ts'
+import { digest, fileHashes, inventory, snapshotHash } from '../src/paths.ts'
+import type {
+  Checkpoint,
+  Design,
+  WorkerRequest,
+  WorkerEvidence,
+  WorkerResult,
+} from '../src/contracts.ts'
 
 export const design: Design = {
   objective: 'A bounded, observable counter',
@@ -65,9 +71,17 @@ export async function fixture(
 
   await writeFile(join(root, '.pi', 'harness.json'), JSON.stringify({ checks }, null, 2) + '\n')
   const store = new StateStore(root, join(base, 'state'))
-  const hash = await store.draft({ ...design, ...options })
-  await store.accept(hash)
-  return { base, root, store }
+  return { base, root, store, checkpoint: checkpoint({ ...design, ...options }) }
+}
+
+/** The pinned scope a worker request carries. */
+export function checkpoint(value: Design = design): Checkpoint {
+  return {
+    ...value,
+    version: 1,
+    hash: digest(JSON.stringify(value)),
+    acceptedAt: new Date(0).toISOString(),
+  }
 }
 
 export async function evidence(

@@ -19,7 +19,6 @@ export function registerWorkers(pi: ExtensionAPI, window = { open: false }): voi
           { deliverAs: 'nextTurn', triggerTurn: false },
         )
       },
-      undefined,
       ctx.sessionManager.getSessionId(),
     )
   let closePanel: (() => void) | undefined
@@ -69,7 +68,7 @@ export function registerWorkers(pi: ExtensionAPI, window = { open: false }): voi
     async handler(args, ctx) {
       if (ctx.mode !== 'tui') {
         ctx.ui.notify(
-          '/workers requires an interactive terminal. Use task_status otherwise.',
+          '/workers requires an interactive terminal. Use job_status otherwise.',
           'info',
         )
         return

@@ -1,59 +1,50 @@
 import assert from 'node:assert/strict'
-import { spawn } from 'node:child_process'
-import { mkdir, writeFile } from 'node:fs/promises'
-import { join } from 'node:path'
+import { execFileSync, spawn } from 'node:child_process'
+import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
-import { harnessRoot } from '../src/project.ts'
-import { WorkersCatalog } from '../src/workers-data.ts'
-import { atomicJson } from '../src/state.ts'
-import { liveFixture } from './live-fixture.ts'
-import { basicFixture } from './live-basic-fixture.ts'
-import { loadRole } from '../src/roles.ts'
-import { Delegations, activeTask } from '../src/delegation-state.ts'
+import { join } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
+import { JobStore, jobView } from '../src/job-store.ts'
+import { harnessRoot } from '../src/project.ts'
+import { loadRole } from '../src/roles.ts'
+import { atomicJson } from '../src/state.ts'
+import { WorkersCatalog } from '../src/workers-data.ts'
+import { basicFixture } from './live-basic-fixture.ts'
 
+// One real journey: the orchestrator model starts a job, a real implementer works in an isolated
+// copy, the host runs the project's check and the verified result lands in the checkout.
 const implementer = process.argv.includes('--opus')
   ? 'opus'
   : process.argv.includes('--fable')
     ? 'fable'
     : undefined
-const routine = process.argv.includes('--routine')
-const basic = routine || process.argv.includes('--basic')
-const { root, store, design } = await (basic ? basicFixture() : liveFixture())
-const model = process.env.PI_HARNESS_LIVE_MODEL ?? 'openai-codex/gpt-6.1-sol'
+const { root, design } = await basicFixture()
+execFileSync('git', ['init', '-q', '-b', 'main', root])
+const model = process.env.PI_HARNESS_LIVE_MODEL ?? 'openai-codex/gpt-6.2-astra'
 const reports = join(harnessRoot, 'reports', new Date().toISOString().replaceAll(':', '-'))
 await mkdir(reports, { recursive: true })
-console.log(JSON.stringify({ root, state: store.directory, reports, model }))
+console.log(JSON.stringify({ root, reports, model }))
 const cli = join(harnessRoot, 'node_modules/@earendil-works/pi-coding-agent/dist/cli.js')
-const flags = [
-  '--no-extensions',
-  '-e',
-  join(harnessRoot, 'src/extension.ts'),
-  '--no-skills',
-  '--no-context-files',
-  '--no-prompt-templates',
-  '--no-mcp',
-  '--no-approve',
-  '--tools',
-  (await loadRole('orchestrator')).tools.join(','),
-]
 const agentDir = process.env.PI_HARNESS_AGENT_DIR ?? join(homedir(), '.pi/agent')
-const environment = {
-  ...process.env,
-  PI_CODING_AGENT_DIR: agentDir,
-  PI_HARNESS_AGENT_DIR: agentDir,
-}
-assert.equal(await store.checkpoint(), undefined)
 const controller = new AbortController()
 process.once('SIGINT', () => controller.abort())
-const timer = setTimeout(() => controller.abort(), 90 * 60 * 1000)
+const timer = setTimeout(() => controller.abort(), 60 * 60 * 1000)
 let output = ''
 let errorOutput = ''
 const child = spawn(
   process.execPath,
   [
     cli,
-    ...flags,
+    '--no-extensions',
+    '-e',
+    join(harnessRoot, 'src/extension.ts'),
+    '--no-skills',
+    '--no-context-files',
+    '--no-prompt-templates',
+    '--no-mcp',
+    '--no-approve',
+    '--tools',
+    (await loadRole('orchestrator')).tools.join(','),
     '--model',
     model,
     '--thinking',
@@ -62,11 +53,16 @@ const child = spawn(
     'json',
     '-p',
     (implementer ? `Use ${implementer} to implement this design. ` : '') +
-      'Implement this settled design now. Pass this exact design object to workflow and ' +
-      'tell me the task ID. Return while it runs in the background; do not wait or poll.\n' +
+      'Implement this settled design now as one job and tell me its ID. Return while it runs ' +
+      'in the background; do not wait or poll.\n' +
       JSON.stringify(design),
   ],
-  { cwd: root, env: environment, stdio: ['ignore', 'pipe', 'pipe'], signal: controller.signal },
+  {
+    cwd: root,
+    env: { ...process.env, PI_CODING_AGENT_DIR: agentDir, PI_HARNESS_AGENT_DIR: agentDir },
+    stdio: ['ignore', 'pipe', 'pipe'],
+    signal: controller.signal,
+  },
 )
 child.stdout.on('data', (chunk: Buffer) => {
   output = (output + chunk.toString()).slice(-8_000_000)
@@ -74,98 +70,41 @@ child.stdout.on('data', (chunk: Buffer) => {
 child.stderr.on('data', (chunk: Buffer) => {
   errorOutput = (errorOutput + chunk.toString()).slice(-16000)
 })
-let processError: string | undefined
 const code = await new Promise<number | null>((resolve) => {
-  child.once('error', (error) => {
-    processError = error.message
-  })
+  child.once('error', () => resolve(null))
   child.once('close', resolve)
-}).finally(() => clearTimeout(timer))
+})
 await writeFile(join(reports, 'orchestrator.jsonl'), output)
 await writeFile(join(reports, 'stderr.txt'), errorOutput)
-const jobs = new Delegations(store)
-const deadline = Date.now() + 90 * 60_000
-let job = (await jobs.list()).at(-1)
-assert.ok(job, 'The orchestrator must start a background workflow')
-
-while (activeTask(job.state) && Date.now() < deadline && !controller.signal.aborted) {
-  await delay(1000)
-  job = await jobs.get(job.request.id)
-}
-
-if (activeTask(job.state)) {
-  await jobs.control(job.request.id, 'cancel')
-}
-
-assert.equal(job.state.status, 'complete', job.state.error)
-const checkpoint = await store.checkpoint()
-assert.ok(checkpoint, 'Workflow must record its scope without a separate acceptance step')
-const { hash: _hash, version: _version, acceptedAt: _acceptedAt, ...recorded } = checkpoint
-assert.deepEqual(recorded, design)
-const task = await store.task()
-await atomicJson(join(reports, 'result.json'), {
-  code,
-  processError,
-  root,
-  state: store.directory,
-  task,
-})
-console.log(
-  JSON.stringify(
-    {
-      code,
-      status: task?.status,
-      rounds: task?.round,
-      roles: task?.evidence.map((item) => item.role),
-      error: task?.error,
-      reports,
-    },
-    null,
-    2,
-  ),
-)
 assert.equal(code, 0, errorOutput)
-assert.equal(task?.status, 'complete', task?.error ?? output.slice(-4000))
-assert.deepEqual(
-  new Set(task.evidence.map((item) => item.role)),
-  new Set(basic ? ['implementer'] : ['implementer', 'performance']),
-)
-assert.ok(task.receipts.every((item) => item.status === 'passed'))
+const store = JobStore.open(root)
+let [job] = store.list()
+assert.ok(job, 'The orchestrator must start a job')
+
+while ((job.status === 'queued' || job.status === 'running') && !controller.signal.aborted) {
+  await delay(1000)
+  store.reconcile()
+  job = store.get(job.id)
+}
+
+clearTimeout(timer)
+
+if (job.status === 'running') {
+  store.requestCancel(job.id)
+}
 
 const workers = await new WorkersCatalog(root).list()
-
-for (const item of task.evidence) {
-  if (!item.closedReview) {
-    const worker = workers.find((row) => row.id === item.liveWorkerId)
-    assert.equal(worker?.info.taskId, job.request.id, 'Worker must belong to the delegated task')
-  }
-
-  if (item.closedReview) {
-    assert.equal(item.model, 'harness/formatter')
-    assert.equal(item.turns, 0)
-    assert.ok(
-      task.evidence.some(
-        (original) =>
-          original.role === item.role &&
-          original.snapshot === item.closedReview!.snapshot &&
-          original.model === item.closedReview!.model &&
-          /^claude-cli\/(?:claude-fable-5-2|(?:claude-)?opus)(?:-|$)/.test(original.model),
-      ),
-    )
-  } else if (item.role === 'implementer' && item.quotaFallbackFrom) {
-    assert.equal(implementer, 'fable')
-    assert.equal(item.quotaFallbackFrom, 'claude-fable-5-2')
-    assert.match(item.model, /^claude-cli\/claude-opus-/)
-    assert.equal(item.thinking, job.request.thinking ?? 'medium')
-  } else if (item.role === 'implementer') {
-    assert.equal(
-      item.model,
-      (await loadRole('implementer', undefined, implementer)).model.replace(
-        /^claude-/,
-        'claude-cli/claude-',
-      ),
-    )
-  } else {
-    assert.ok(/^claude-cli\/(?:claude-fable-5-2|(?:claude-)?opus)(?:-|$)/.test(item.model))
-  }
-}
+await atomicJson(join(reports, 'result.json'), { root, job, workers: workers.map((w) => w.info) })
+console.log(JSON.stringify({ ...jobView(job), reports }, null, 2))
+assert.equal(job.status, 'done', job.error ?? output.slice(-4000))
+assert.equal(job.spec.mode, 'implement')
+assert.deepEqual(job.result.changed, ['src/count.mjs'])
+assert.ok(job.result.checks?.length && job.result.checks.every((c) => c.status === 'passed'))
+assert.match(await readFile(join(root, 'src/count.mjs'), 'utf8'), /parseCount/)
+execFileSync('node', ['--test', 'tests/count.mjs'], { cwd: root, stdio: 'inherit' })
+assert.ok(
+  workers.some((row) => row.info.taskId === job.id && row.info.role === 'implementer'),
+  'The implementer must be recorded against its job',
+)
+assert.equal(store.pendingEvents(job.session).length, 1, 'The outcome awaits its session')
+store.close()

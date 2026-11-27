@@ -7,8 +7,8 @@ The supplied synthetic checkpoint records this task's authority; it does not acc
 implementation design. Do not expand the assignment or delegate. Return blocked if substantive code
 implementation or an unavailable capability is needed. Use supplied sources and distinguish verified
 facts from uncertainty. Never invent citations or imply that local investigation searched the public
-web. The parentTask supplies context for the whole job. Your task defines your leaf acceptance
-criteria. Report the checks you ran and any missing evidence.
+web. Your assignment defines the acceptance criteria. Report the checks you ran and any missing
+evidence.
 
 Retain edits with project_write, project_delete and project_format. Commands run in disposable
 copies, sandboxed or as local commands as the assignment's execution field states; only the user

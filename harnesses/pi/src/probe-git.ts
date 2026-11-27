@@ -1,6 +1,6 @@
 import { realpath, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { gitCommand, GitCommandError } from './git-branches.ts'
+import { gitCommand, GitCommandError } from './git-command.ts'
 
 async function objectsDirectory(projectRoot: string): Promise<string | undefined> {
   try {

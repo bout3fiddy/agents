@@ -3,7 +3,6 @@ import { dirname, join } from 'node:path'
 import { Type } from 'typebox'
 import type { ToolDefinition } from '@earendil-works/pi-coding-agent'
 import {
-  auditResultSchema,
   implementerResultSchema,
   resultSchema,
   validateResult,
@@ -341,14 +340,9 @@ export function createWorkerTools(request: WorkerRequest, role: Role) {
       name: 'submit_result',
       label: 'Submit worker result',
       description: 'Submit a verdict and evidence. Required findings prevent pass.',
-      parameters:
-        role.name === 'implementer'
-          ? implementerResultSchema
-          : request.decideContinuation
-            ? auditResultSchema
-            : resultSchema,
+      parameters: role.name === 'implementer' ? implementerResultSchema : resultSchema,
       async execute(id, raw) {
-        const result = validateResult(raw, request.decideContinuation)
+        const result = validateResult(raw)
 
         if (role.name === 'implementer') {
           const review = result.engineeringReview
@@ -384,14 +378,10 @@ async function changedSinceBaseline(request: WorkerRequest): Promise<string[]> {
 }
 
 function submissionInstructions(role: WorkerRequest['role']) {
-  if (role === 'progress-auditor') {
-    return 'Submit a dated scorecard with evidence and identify missing proof.'
-  }
-
   if (role === 'implementer') {
     return (
       'Use submit_result with pass when the implementation is ready for verification. ' +
-      'Report your checks and any limits. The coordinator verifies and integrates. ' +
+      'Report your checks and any limits. The host verifies and delivers. ' +
       'Use blocked with hostActions when a prerequisite prevents completing your own work.'
     )
   }

@@ -62,7 +62,7 @@ async function nestedProject(t: TestContext) {
     task: 'Run commands',
     workspace: item.root,
     project,
-    checkpoint: (await item.store.checkpoint())!,
+    checkpoint: item.checkpoint,
     outputPath: join(item.base, 'attempt'),
     baseline: {},
   })
@@ -114,7 +114,7 @@ test('implementer replays the first divergent seed on frozen copies', async (t) 
     workspace: item.root,
     originals: original,
     project: await loadProject(item.root),
-    checkpoint: (await item.store.checkpoint())!,
+    checkpoint: item.checkpoint,
     outputPath: join(item.base, 'attempt'),
     baseline: {},
   }

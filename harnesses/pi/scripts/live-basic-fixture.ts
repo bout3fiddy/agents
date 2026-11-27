@@ -1,7 +1,7 @@
 import { mkdtemp, mkdir, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { StateStore, atomicJson } from '../src/state.ts'
+import { atomicJson } from '../src/state.ts'
 
 export async function basicFixture() {
   const root = await mkdtemp(join(tmpdir(), 'pi-live-counter-'))
@@ -49,7 +49,6 @@ test('canonical counts round trip and malformed inputs fail', () => {
       },
     ],
   })
-  const store = new StateStore(root)
   const design = {
     objective: 'Validate a bounded canonical decimal count',
     design:
@@ -64,5 +63,5 @@ test('canonical counts round trip and malformed inputs fail', () => {
     performance: false,
     unresolved: [],
   }
-  return { root, store, design }
+  return { root, design }
 }

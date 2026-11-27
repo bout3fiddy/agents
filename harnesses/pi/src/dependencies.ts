@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { gitCommand, GitCommandError } from './git-branches.ts'
+import { gitCommand, GitCommandError } from './git-command.ts'
 import { lockedDependencyDrift } from './worker-execution.ts'
 
 async function readOptional(path: string): Promise<string | undefined> {

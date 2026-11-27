@@ -6,14 +6,14 @@ import { compactTool } from '../src/tool-activity.ts'
 
 initTheme('dark', false)
 
-test('task controls show readable nested parameters and receipts in the transcript', () => {
-  const args = { id: '385e5165-6088-496d-9a3b-cdf340152f6a', action: 'message', message: 'Update' }
+test('job tools show readable nested parameters and receipts in the transcript', () => {
+  const args = { id: 'j12', text: 'Update' }
   const view = new ToolExecutionComponent(
-    'task_control',
+    'job_message',
     'call',
     args,
     {},
-    compactTool('task_control'),
+    compactTool('job_message'),
     { requestRender() {} } as TUI,
     process.cwd(),
   )
@@ -31,11 +31,11 @@ test('task controls show readable nested parameters and receipts in the transcri
       .map((s) => s.trimEnd())
       .join('\n')
   const folded = read()
-  assert.match(folded, /task control · message · 385e5165/)
+  assert.match(folded, /job message · j12/)
   assert.doesNotMatch(folded, /"messages"/)
   view.setExpanded(true)
   const expanded = read()
-  assert.match(expanded, /task control · arguments\n\{\n  "id":/)
+  assert.match(expanded, /job message · arguments\n\{\n  "id":/)
   assert.match(
     expanded,
     /Result\n\{\n  "revision": 2,\n  "messages": \[\n    \{\n      "text": "a, \{b\}"/,

@@ -3,7 +3,6 @@ import {
   type CodemodeToolDetails,
   type ExtensionAPI,
 } from '@earendil-works/pi-coding-agent'
-import type { reviewReceipts } from './inspection.ts'
 
 export const workerInspectionTools = new Set([
   'project_read',
@@ -12,95 +11,57 @@ export const workerInspectionTools = new Set([
   'read_reference',
 ])
 
-export function registerInspectionMode(pi: ExtensionAPI, allowed: ReadonlySet<string>) {
-  const inspectable = (tool: { name: string }) => allowed.has(tool.name)
+/** The host shell and file writes stay direct calls: each is the user's to see and approve. */
+export const directOnly = new Set(['codemode', 'bash', 'write', 'edit'])
+
+/**
+ * Code mode: one script calls many tools, chains their results and returns only what matters.
+ * `allowed` names the tools a script may call. For the host that is everything except the
+ * shell and file writes; for a worker it is its read-only inspections.
+ */
+export function registerInspectionMode(
+  pi: ExtensionAPI,
+  allowed: ReadonlySet<string>,
+  scope = 'Read-only inspection script.',
+) {
+  const scriptable = (tool: { name: string }) => allowed.has(tool.name)
   createCodemodeExtension({ models: false, mode: 'on' })({
     ...pi,
     registerTool(tool) {
       pi.registerTool({
         ...tool,
-        promptSnippet: 'Batch or chain read-only inspections in JavaScript',
+        promptSnippet: 'Batch, chain and filter tool calls in JavaScript',
         promptGuidelines: [
-          'Use codemode for independent reads, search followed by reads, or filtering a large ' +
-            'inspection result before it enters the conversation. ' +
-            'Issue commands, checks and edits as direct tool calls.',
+          'Prefer codemode whenever a step needs two or more tool calls, a search followed ' +
+            'by reads, or a large result of which only part matters.',
         ],
         prepareLoadout(loadout) {
-          const callable = loadout.callable.filter(inspectable)
-          const prepared = tool.prepareLoadout?.({
-            ...loadout,
-            callable,
-          })
+          const callable = loadout.callable.filter(scriptable)
+          const prepared = tool.prepareLoadout?.({ ...loadout, callable })
           const names = callable.map((entry) => entry.name).join(', ')
-          const scope = 'Read-only inspection script. Available tools: ' + (names || 'none') + '.'
           return {
             ...prepared,
             descriptions: {
               ...prepared?.descriptions,
               codemode:
-                scope +
-                ' Call shell commands, tests, edits and delegation directly.\n\n' +
+                `${scope} Available tools: ${names || 'none'}.\n\n` +
                 (prepared?.descriptions?.codemode ?? tool.description),
             },
           }
         },
         async execute(id, args, signal, update, ctx) {
-          const checkEvidence = new Set<string>()
           const executeTool: typeof ctx.executeTool = async (name, input, options) => {
             if (!allowed.has(name)) {
-              throw new Error('Tool unavailable inside this inspection script: ' + name)
+              throw new Error('Tool unavailable inside a script; call it directly: ' + name)
             }
 
-            const outcome = await ctx.executeTool(name, input, options)
-
-            if (name === 'review_receipts' && !outcome.isError) {
-              const receipt = outcome.result.structuredContent as
-                Awaited<ReturnType<typeof reviewReceipts>> | undefined
-
-              for (const review of receipt?.reviews ?? []) {
-                for (const finding of review.required) {
-                  checkEvidence.add(
-                    JSON.stringify({
-                      id: receipt!.id,
-                      snapshot: review.snapshot,
-                      role: review.role,
-                      severity: 'required',
-                      location: finding.location,
-                      problem: finding.problem,
-                    }),
-                  )
-                }
-              }
-
-              if (receipt && receipt.checks === null) {
-                checkEvidence.add(
-                  JSON.stringify({ id: receipt.id, attempt: receipt.attempt, checks: null }),
-                )
-              }
-
-              for (const check of receipt?.checks ?? []) {
-                if (check.status !== 'passed') {
-                  checkEvidence.add(
-                    JSON.stringify({
-                      id: receipt!.id,
-                      attempt: receipt!.attempt,
-                      check: check.check,
-                      status: check.status,
-                      snapshot: check.snapshot,
-                    }),
-                  )
-                }
-              }
-            }
-
-            return outcome
+            return ctx.executeTool(name, input, options)
           }
-          const inspectionContext = Object.create(ctx, {
-            tools: { value: ctx.tools.filter(inspectable) },
+          const scriptContext = Object.create(ctx, {
+            tools: { value: ctx.tools.filter(scriptable) },
             executeTool: { value: executeTool },
           })
-          const result = await tool.execute(id, args, signal, update, inspectionContext)
-
+          const result = await tool.execute(id, args, signal, update, scriptContext)
           const details = result.details as CodemodeToolDetails | undefined
           let content = result.content
 
@@ -150,16 +111,6 @@ export function registerInspectionMode(pi: ExtensionAPI, allowed: ReadonlySet<st
             ]
           }
 
-          if (checkEvidence.size) {
-            content = [
-              ...content,
-              {
-                type: 'text' as const,
-                text: 'Recorded review and check evidence:\n' + [...checkEvidence].join('\n'),
-              },
-            ]
-          }
-
           return { ...result, content }
         },
       })
@@ -167,7 +118,7 @@ export function registerInspectionMode(pi: ExtensionAPI, allowed: ReadonlySet<st
   })
   pi.on('tool_call', (event) => {
     if (event.parentToolCallId && !allowed.has(event.toolName)) {
-      return { block: true, reason: 'Use a direct role-authorized call for this tool.' }
+      return { block: true, reason: 'Call this tool directly, outside the script.' }
     }
   })
 }

@@ -5,18 +5,8 @@ import { createAssistantMessageEventStream } from '@earendil-works/pi-ai'
 
 type Arguments = Record<string, string | Record<string, string>>
 
-// The host opens one assignment, works on it and closes it with evidence for its target.
-const target = 'local checkout'
+// The host inspects a pull request with reads and shell calls that share one activity row.
 const calls: { name: string; arguments: Arguments }[] = [
-  {
-    name: 'host_work',
-    arguments: {
-      outcome: 'Merge pull request 61',
-      target,
-      state: 'active',
-      detail: 'TRACK_OPERATION_START',
-    },
-  },
   { name: 'project_read', arguments: { path: 'guide.md' } },
   {
     name: 'bash',
@@ -29,14 +19,6 @@ const calls: { name: string; arguments: Arguments }[] = [
     },
   },
   { name: 'project_read', arguments: { path: 'missing-file.md' } },
-  {
-    name: 'host_work',
-    arguments: {
-      state: 'done',
-      detail: 'TRACK_OPERATION_END',
-      evidence: { target, revision: 'refs/pull/61/head' },
-    },
-  },
 ]
 
 export default function shellTerminalProvider(pi: ExtensionAPI) {

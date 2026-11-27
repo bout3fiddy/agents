@@ -14,7 +14,7 @@ import { atomicJson, readJson } from './state.ts'
 import type { Project, ProjectCheck, Receipt } from './contracts.ts'
 import { runOnHost, runSandboxed } from './sandbox.ts'
 import { addGitIndex } from './probe-git.ts'
-import { taskDirectory, temporaryDirectory, type TaskOwner } from './temp.ts'
+import { temporaryDirectory } from './temp.ts'
 import {
   benchmarkRunner,
   checkRunner,
@@ -142,9 +142,8 @@ export async function createWorkspace(
   root: string,
   snapshot?: Map<string, Buffer>,
   nodeModules?: string | null,
-  owner?: TaskOwner,
 ): Promise<string> {
-  const workspace = owner ? await taskDirectory(owner) : await temporaryDirectory('w')
+  const workspace = await temporaryDirectory('w')
   const files = snapshot ?? (await inventory(root))
   await copySnapshot(files, workspace)
 

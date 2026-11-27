@@ -6,8 +6,6 @@ import { tmpdir } from 'node:os'
 import { randomUUID } from 'node:crypto'
 import { runSandboxed } from '../src/sandbox.ts'
 import { safePath, writable } from '../src/paths.ts'
-import { integrate, recoverIntegration } from '../src/integration.ts'
-import { StateStore, atomicJson } from '../src/state.ts'
 import { harnessRoot } from '../src/project.ts'
 
 test('sandbox denies outside reads, writes, symlink escapes and network', async () => {
@@ -196,42 +194,6 @@ test('escaped descendants cannot hold command completion or cancellation open', 
     }
   } finally {
     await rm(workspace, { recursive: true, force: true })
-  }
-})
-
-test('integration journal recovers partial writes and preserves concurrent edits', async () => {
-  const base = await mkdtemp(join(tmpdir(), 'pi-recovery-'))
-  const root = join(base, 'project')
-  await mkdir(root)
-  const store = new StateStore(root, join(base, 'state'))
-  const encoded = (value: string) => Buffer.from(value).toString('base64')
-
-  try {
-    await writeFile(join(root, 'a.txt'), 'after')
-    await writeFile(join(root, 'b.txt'), 'before')
-    await atomicJson(join(store.directory, 'integration.json'), {
-      status: 'pending',
-      edits: ['a.txt', 'b.txt'].map((path) => ({
-        path,
-        before: encoded('before'),
-        after: encoded('after'),
-      })),
-    })
-    assert.equal(await recoverIntegration(store), true)
-    assert.equal(await readFile(join(root, 'b.txt'), 'utf8'), 'after')
-    assert.equal(await recoverIntegration(store), false)
-    await assert.rejects(
-      integrate(
-        store,
-        new Map([['a.txt', Buffer.from('before')]]),
-        new Map([['a.txt', Buffer.from('new')]]),
-        ['**'],
-      ),
-      /Concurrent/,
-    )
-    assert.equal(await readFile(join(root, 'a.txt'), 'utf8'), 'after')
-  } finally {
-    await rm(base, { recursive: true, force: true })
   }
 })
 

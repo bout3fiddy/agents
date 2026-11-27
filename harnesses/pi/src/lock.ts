@@ -1,5 +1,4 @@
 import { spawn } from 'node:child_process'
-import { readFile } from 'node:fs/promises'
 
 export type ReleaseLock = (() => Promise<void>) & { assertHeld: () => void }
 
@@ -20,27 +19,6 @@ os.close(fd)
 `
 
 export async function acquireLock(path: string): Promise<ReleaseLock> {
-
-  // Respect a still-running supervisor from the old PID-file implementation during upgrades.
-  try {
-    const legacy = await readFile(path, 'utf8')
-
-    if (/^\d+$/.test(legacy)) {
-      try {
-        process.kill(Number(legacy), 0)
-        throw new Error('A workflow is already running for this project')
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== 'ESRCH') {
-          throw error
-        }
-      }
-    }
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
-      throw error
-    }
-  }
-
   const child = spawn('python3', ['-I', '-u', '-c', helper, path, String(process.pid)], {
     stdio: ['pipe', 'pipe', 'pipe'],
   })

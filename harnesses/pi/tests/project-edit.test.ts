@@ -204,10 +204,10 @@ test('worker assignments identify added, deleted and edited paths', async (t) =>
   await writeFile(join(item.root, 'src/value.js'), 'new')
   const payload = await assignment({
     task: 'Review changes',
-    role: 'progress-auditor',
+    role: 'performance',
     workspace: item.root,
     outputPath: item.base,
-    checkpoint: (await item.store.checkpoint())!,
+    checkpoint: item.checkpoint,
     baseline,
     model: 'test',
     project: { root: item.root, checks: [], instrumentationPaths: [], databasePaths: [] },
@@ -225,10 +225,10 @@ test('large project paths are available through paginated listings', async (t) =
   const baseline = await hashes(item.root)
   const payload = await assignment({
     task: 'Inspect',
-    role: 'progress-auditor',
+    role: 'performance',
     workspace: item.root,
     outputPath: item.base,
-    checkpoint: (await item.store.checkpoint())!,
+    checkpoint: item.checkpoint,
     baseline,
     model: 'test',
     changedFiles: [],

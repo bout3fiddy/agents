@@ -6,7 +6,7 @@ type FileCall = Pick<ToolCallEvent, 'toolName' | 'input'>
 
 export const workerHandoff =
   'Host file tools are for setup, private scratch and small workshop decisions. ' +
-  'Send repair evidence to the owning worker, or use workflow or delegate_task with the ' +
+  'Send repair evidence to the running job with job_message, or start a job with the ' +
   'affected paths and acceptance check. Do not use bash to bypass routing.'
 
 const setupFiles = new Set([

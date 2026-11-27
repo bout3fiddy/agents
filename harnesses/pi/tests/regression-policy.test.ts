@@ -25,12 +25,7 @@ const obligations = [
   'no sleeps, network or dependencies',
   'before/after result',
 ]
-const repairRoles: RoleName[] = [
-  'orchestrator',
-  'task-coordinator',
-  'branch-orchestrator',
-  'implementer',
-]
+const repairRoles: RoleName[] = ['orchestrator', 'implementer']
 
 function normalized(text: string): string {
   return text.replace(/\s+/g, ' ')

@@ -29,8 +29,7 @@ export async function loadRole(
     !['pi', 'claude-cli'].includes(role.backend) ||
     role.name !== name ||
     role.prompt !== `${name}.md` ||
-    role.mayDelegate !==
-      ['orchestrator', 'task-coordinator', 'branch-orchestrator'].includes(name) ||
+    role.mayDelegate !== (name === 'orchestrator') ||
     !Array.isArray(role.tools) ||
     !Array.isArray(role.skills) ||
     !Array.isArray(role.writes) ||

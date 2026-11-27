@@ -22,7 +22,6 @@ interface Group {
 export class ShellActivity {
   private readonly calls = new Map<string, { group: Group; call: ShellCall }>()
   private last?: Group
-  private host?: string
 
   find(id: string) {
     return this.calls.get(id)
@@ -36,11 +35,7 @@ export class ShellActivity {
     }
 
     const { purpose, operation } = describeShell(command)
-    const target =
-      operation ??
-      (this.host
-        ? { key: 'host:' + this.host, title: this.host }
-        : { key: 'command:' + command, title: purpose })
+    const target = operation ?? { key: 'command:' + command, title: purpose }
     const last = this.last
     const group =
       last &&
@@ -83,7 +78,6 @@ export class ShellActivity {
 
     if (message.role !== 'assistant') {
       this.boundary()
-      this.host = undefined
       return
     }
 
@@ -104,32 +98,13 @@ export class ShellActivity {
     }
   }
 
-  hostWork(data: unknown) {
-    this.boundary()
-    this.host = undefined
-
-    if (
-      data &&
-      typeof data === 'object' &&
-      'state' in data &&
-      data.state === 'active' &&
-      'detail' in data &&
-      typeof data.detail === 'string'
-    ) {
-      this.host = data.detail
-    }
-  }
-
   replay(entries: SessionEntry[]) {
     this.calls.clear()
-    this.host = undefined
     this.boundary()
 
     for (const entry of entries) {
       if (entry.type === 'message') {
         this.observe(entry.message)
-      } else if (entry.type === 'custom' && entry.customType === 'pi-host-work') {
-        this.hostWork(entry.data)
       } else if (
         (entry.type === 'custom_message' && entry.display) ||
         entry.type === 'branch_summary' ||

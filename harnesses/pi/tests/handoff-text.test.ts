@@ -1,10 +1,8 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { readFile, rm } from 'node:fs/promises'
-import { join } from 'node:path'
+import { rm } from 'node:fs/promises'
 import { ToolCallArgumentsStream } from '@earendil-works/pi-ai/utils/streaming-json'
 import { consultationInput, DesignConsultations } from '../src/design-advice.ts'
-import { Delegations, delegationDirectory } from '../src/delegation-state.ts'
 import { fixture } from './support.ts'
 
 const prose = '  Keep ordinary word spacing.\nQuoted: "two  spaces"; café 🧪.\t'
@@ -33,7 +31,7 @@ test('SDK streamed tool arguments preserve prose across every two-chunk boundary
   assert.equal(stream.finish().arguments.question, prose + 'Final text.')
 })
 
-test('consultation and task steering retain exact prose through persisted handoffs', async () => {
+test('a consultation retains exact prose through its persisted handoff', async () => {
   const item = await fixture()
   let received = ''
   const consultations = new DesignConsultations(async (input) => {
@@ -50,22 +48,6 @@ test('consultation and task steering retain exact prose through persisted handof
     assert.deepEqual(JSON.parse(received).userMessages, [prose])
     const restarted = new DesignConsultations()
     assert.equal((await restarted.get(item.store, 'session', job.id)).question, prose)
-
-    const tasks = new Delegations(item.store)
-    const task = await tasks.start(
-      { task: prose, context, kind: 'documents', writePaths: ['design.md'] },
-      { session: 'session', model: 'test' },
-      async () => {},
-    )
-    const message = prose + context
-    const controls = await tasks.control(task.request.id, 'message', message)
-    assert.equal(controls.messages[0]?.text, message)
-    const directory = delegationDirectory(item.store, task.request.id)
-    const persisted = JSON.parse(await readFile(join(directory, 'controls.json'), 'utf8'))
-    assert.equal(persisted.messages[0].text, message)
-    const saved = (await new Delegations(item.store).get(task.request.id)).request
-    assert.equal(saved.task, prose)
-    assert.equal(saved.context, context)
   } finally {
     await consultations.close()
     await rm(item.base, { recursive: true, force: true })

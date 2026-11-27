@@ -15,7 +15,7 @@ import { claudeArguments, parseClaudeTrace, runClaudeWorker } from '../src/claud
 import { loadRole } from '../src/roles.ts'
 
 test('Claude enables web tools and records successful calls', async () => {
-  for (const name of ['design-advisor', 'progress-auditor', 'performance'] as const) {
+  for (const name of ['design-advisor', 'performance'] as const) {
     const role = await loadRole(name)
     const args = claudeArguments(
       { ...role, tools: [...role.tools, 'Bash', 'Read', 'Agent'] },
@@ -68,7 +68,7 @@ test('Claude bridge gives performance scoped writes and denies product writes', 
     task: 'Bridge test',
     workspace: item.root,
     project: await loadProject(item.root),
-    checkpoint: await item.store.checkpoint(),
+    checkpoint: item.checkpoint,
     model: 'claude-fable-5-2',
     outputPath: join(item.base, 'output.json'),
     baseline: {},
@@ -185,16 +185,16 @@ test('a missing Claude executable reports its launch error cleanly', async () =>
     await assert.rejects(
       runClaudeWorker(
         {
-          role: 'progress-auditor',
+          role: 'performance',
           task: 'Read-only launch probe',
           workspace: item.root,
           project: await loadProject(item.root),
-          checkpoint: (await item.store.checkpoint())!,
+          checkpoint: item.checkpoint,
           model: 'unused',
           outputPath: join(item.base, 'output.json'),
           baseline: {},
         },
-        await loadRole('progress-auditor'),
+        await loadRole('performance'),
       ),
       { code: 'ENOENT' },
     )
@@ -236,16 +236,16 @@ test('a Claude run that ends without submitting gets one follow-up run to submit
   try {
     const evidence = await runClaudeWorker(
       {
-        role: 'progress-auditor',
+        role: 'performance',
         task: 'Finish and report',
         workspace: item.root,
         project: await loadProject(item.root),
-        checkpoint: (await item.store.checkpoint())!,
+        checkpoint: item.checkpoint,
         model: 'unused',
         outputPath,
         baseline: {},
       },
-      await loadRole('progress-auditor'),
+      await loadRole('performance'),
     )
     assert.equal(evidence.result.summary, 'Submitted retained work')
     await stat(`${outputPath}.claude.jsonl`)
@@ -337,7 +337,7 @@ test('consultation confirms quota and worker attributes the shared fallback', as
       task: 'Compare',
       workspace: item.root,
       project: await loadProject(item.root),
-      checkpoint: { ...(await item.store.checkpoint())!, writePaths: [] },
+      checkpoint: { ...item.checkpoint, writePaths: [] },
       baseline: {},
       model: 'unused',
       outputPath,
@@ -374,16 +374,16 @@ test('Claude traces retain live output and enforce a byte budget for Unicode', a
     await assert.rejects(
       runClaudeWorker(
         {
-          role: 'progress-auditor',
+          role: 'performance',
           task: 'Exercise the trace byte limit',
           workspace: item.root,
           project: await loadProject(item.root),
-          checkpoint: (await item.store.checkpoint())!,
+          checkpoint: item.checkpoint,
           model: 'unused',
           outputPath,
           baseline: {},
         },
-        await loadRole('progress-auditor'),
+        await loadRole('performance'),
       ),
       /trace exceeded the 16 MB output budget/,
     )

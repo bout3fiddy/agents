@@ -233,9 +233,4 @@ export function registerShellActivity(pi: ExtensionAPI) {
       activity.observe(event.message)
     }
   })
-  pi.on('tool_result', (event, ctx) => {
-    if (ctx.mode === 'tui' && event.toolName === 'host_work' && !event.isError) {
-      activity.hostWork(event.input)
-    }
-  })
 }
