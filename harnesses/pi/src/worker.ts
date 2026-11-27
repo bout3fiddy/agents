@@ -1,6 +1,7 @@
 import { join } from 'node:path'
 import { homedir, tmpdir } from 'node:os'
 import { mkdtemp, rm } from 'node:fs/promises'
+import { paperServers, registerPaper, type PaperServers } from './paper-mcp.ts'
 import { registerInspectionMode, workerInspectionTools } from './inspection-mode.ts'
 import {
   createAgentSession,
@@ -28,7 +29,10 @@ import { LiveWorker } from './worker-live.ts'
 import { attachLiveSession } from './worker-live-session.ts'
 import { effectiveExecution } from './worker-execution.ts'
 
-export async function explicitResources(prompt: string): Promise<ResourceLoader> {
+export async function explicitResources(
+  prompt: string,
+  servers: PaperServers = {},
+): Promise<ResourceLoader> {
 
   // Resolve only the trusted inline extension. Project and home packages must never be loaded
   // into a worker. Its actual tools still resolve files against its assigned snapshot.
@@ -55,7 +59,12 @@ export async function explicitResources(prompt: string): Promise<ResourceLoader>
         'Skip searches for .pi/audit and .pi/audits: only the host can read those reports. ' +
         'Use supplied excerpts and report what you verified. Request specific host evidence ' +
         'when it affects a decision.',
-      extensionFactories: [(pi) => registerInspectionMode(pi, workerInspectionTools)],
+      extensionFactories: [
+        (pi) => {
+          registerInspectionMode(pi, workerInspectionTools)
+          return registerPaper(pi, servers)
+        },
+      ],
     })
     await loader.reload()
     const extensions = loader.getExtensions()
@@ -119,15 +128,16 @@ export async function runWorker(request: WorkerRequest): Promise<WorkerEvidence>
   const progress = progressReporter(request.outputPath, request.role)
   let turns = 0
   const prompt = await rolePrompt(request.role)
+  const servers = await paperServers(request.project)
   const { session } = await createAgentSession({
     cwd: request.workspace,
     agentDir,
     modelRuntime,
     model,
     thinkingLevel: role.thinking,
-    tools: role.tools,
+    tools: servers.paper ? [...role.tools, 'mcp__paper__*'] : role.tools,
     customTools: worker.tools,
-    resourceLoader: await explicitResources(prompt),
+    resourceLoader: await explicitResources(prompt, servers),
     settingsManager: SettingsManager.inMemory({
       compaction: { enabled: true },
       retry: { enabled: true, maxRetries: 2 },
@@ -173,6 +183,7 @@ export async function runWorker(request: WorkerRequest): Promise<WorkerEvidence>
 
   try {
     checkWorkerThinking(session, role.thinking)
+    await session.bindExtensions({})
     const task = await assignment(request)
     await progress.update({ stage: 'model', message: 'Executing assigned work' })
     workerAbortSignal.throwIfAborted()
@@ -220,6 +231,7 @@ export async function runWorker(request: WorkerRequest): Promise<WorkerEvidence>
     throw error
   } finally {
     workerAbortSignal.removeEventListener('abort', abort)
+    await session.extensionRunner.emit({ type: 'session_shutdown', reason: 'quit' })
     session.dispose()
     await liveSession.dispose()
     await progress.settle()

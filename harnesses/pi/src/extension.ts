@@ -81,6 +81,8 @@ export function registerWorkflow(
 }
 
 export default function harness(pi: ExtensionAPI): void {
+  const activePaperTools = () =>
+    pi.getActiveTools().filter((name) => name.startsWith('mcp__paper__'))
   registerInspectionMode(pi, nestedInspectionTools)
   inspectionTools(pi)
   const workerWindow = { open: false }
@@ -109,7 +111,7 @@ export default function harness(pi: ExtensionAPI): void {
   pi.on('session_start', async (event, ctx) => {
     await furnishTigerStyle(ctx.cwd)
     const [role] = await orchestratorPolicy
-    pi.setActiveTools(role.tools)
+    pi.setActiveTools([...role.tools, ...activePaperTools()])
     await runtime.record(ctx, event.reason, role.tools)
   })
   registerAutoReload(pi, runtime.current, () => workerWindow.open || consultations.busy)
@@ -137,7 +139,7 @@ export default function harness(pi: ExtensionAPI): void {
     const store = await storeFor(ctx.cwd)
     const checkpoint = await store.checkpoint()
     const [role, prompt] = await orchestratorPolicy
-    pi.setActiveTools(role.tools)
+    pi.setActiveTools([...role.tools, ...activePaperTools()])
     return {
       systemPrompt: [
         prompt,
@@ -152,7 +154,10 @@ export default function harness(pi: ExtensionAPI): void {
   })
 
   pi.on('tool_call', async (event) => {
-    if (!(await orchestratorPolicy)[0].tools.includes(event.toolName)) {
+    if (
+      !(await orchestratorPolicy)[0].tools.includes(event.toolName) &&
+      !activePaperTools().includes(event.toolName)
+    ) {
       return { block: true, reason: 'This tool is not enabled in the orchestrator role.' }
     }
 
