@@ -61,7 +61,14 @@ async function host(
 
     assert.ok(condition(), 'condition was not reached')
   }
-  return { ...item, session, store, contexts, work, until }
+  const waitForOutcome = async () => {
+    await until(() => contexts.some((context) => outcomes(context) > 0))
+    await session.waitForIdle()
+    const latest = contexts.at(-1)!
+    assert.equal(outcomes(latest), 1, 'the model saw exactly one outcome')
+    return said(latest)
+  }
+  return { ...item, session, store, contexts, work, until, waitForOutcome }
 }
 
 test('an outcome wakes an idle host once and is acknowledged from the transcript', async (t) => {
@@ -72,8 +79,7 @@ test('an outcome wakes an idle host once and is acknowledged from the transcript
   assert.match(said(h.contexts[1]!), /The outcome arrives automatically/)
   const done = await h.work()
   assert.equal(done?.status, 'done', done?.error)
-  await h.until(() => h.contexts.length === 4)
-  await h.session.waitForIdle()
+  await h.waitForOutcome()
   assert.match(said(h.contexts[2]!), /"status\\":\\"done\\"/)
   assert.match(said(h.contexts[3]!), /Before you stop: nothing is running/)
   assert.match(said(h.contexts[2]!), /already in the checkout/)
@@ -134,10 +140,10 @@ test('a wake that is lost is offered again until its message is persisted', asyn
   )
   await h.session.prompt('Set the value to 1.')
   await h.work()
-  await h.until(() => h.contexts.length === 3)
-  await h.session.waitForIdle()
+  const delivered = await h.waitForOutcome()
   assert.equal(dropped, 2)
-  assert.equal(outcomes(h.contexts[2]!), 1)
+  assert.match(delivered, /"status\\":\\"done\\"/)
+  await h.until(() => h.store.pendingEvents(h.store.get('j1').session).length === 0)
 })
 
 test('a host that worked is asked once before stopping, and not while a job runs', async (t) => {
@@ -164,21 +170,22 @@ test('a stopped job is restated every turn until the host resolves it', async (t
       arguments: { id: 'j1', guidance: 'Do not write the word broken.' },
     },
   ]
+  let retryTurn: number | undefined
   const h = await host(t, async (_context, turn) =>
-    turn === 1 ? startCall : turn === 5 ? retry : 'Noted.',
+    turn === 1 ? startCall : turn === retryTurn ? retry : 'Noted.',
   )
   await h.session.prompt('Set the value to 1.')
   const stopped = await runJob(h.store, h.store.list()[0]!.id, async (request) =>
     evidence(request, { verdict: 'blocked', summary: 'Needs the registry.' }),
   )
   assert.equal(stopped?.status, 'needs_attention')
-  await h.until(() => h.contexts.length === 3)
-  await h.session.waitForIdle()
+  await h.waitForOutcome()
   await h.session.prompt('What about the weather?')
-  const later = said(h.contexts[3]!)
+  const later = said(h.contexts.at(-1)!)
   assert.match(later, /Open jobs of this session, as recorded/)
   assert.match(later, /needs_attention/)
   assert.equal(later.split('Open jobs of this session').length - 1, 1, 'only the latest statement')
+  retryTurn = h.contexts.length + 1
   await h.session.prompt('Retry it.')
   assert.equal(h.store.get('j1').status, 'queued')
   assert.deepEqual(h.store.takeMessages(h.store.get('j1').id), ['Do not write the word broken.'])
@@ -207,10 +214,9 @@ test('only the user cancels: /jobs cancel stops the job and the model is told', 
   )
   await h.session.prompt('/jobs cancel j1')
   assert.equal(h.store.get('j1').status, 'cancelled')
-  await h.until(() => h.contexts.length === 4)
-  await h.session.waitForIdle()
-  assert.match(said(h.contexts[3]!), /"status\\":\\"cancelled\\"/)
-  assert.match(said(h.contexts[3]!), /never restart it without a new request/)
+  const delivered = await h.waitForOutcome()
+  assert.match(delivered, /"status\\":\\"cancelled\\"/)
+  assert.match(delivered, /never restart it without a new request/)
 })
 
 test('job_start validates scope, refs and delivery before anything is recorded', async (t) => {
