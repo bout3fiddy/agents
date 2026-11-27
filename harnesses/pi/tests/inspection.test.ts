@@ -1,69 +1,37 @@
-import harness from '../src/extension.ts'
+import harness, { createHarness } from '../src/extension.ts'
 import { explicitResources } from '../src/worker.ts'
 import { fileTools } from '../src/file-tools.ts'
 import { loadRole } from '../src/roles.ts'
+import { atomicJson } from '../src/state.ts'
 import { fixture } from './support.ts'
 import { captureSession } from './session-support.ts'
 import assert from 'node:assert/strict'
-import { access, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises'
+import { access, readFile, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { tmpdir } from 'node:os'
-import { randomUUID } from 'node:crypto'
 import test from 'node:test'
 import { roleNames } from '../src/contracts.ts'
-import { workerInspectionTools } from '../src/inspection-mode.ts'
-import { reviewReceipts, nestedInspectionTools } from '../src/inspection.ts'
-import { atomicJson, StateStore } from '../src/state.ts'
-import { delegationDirectory } from '../src/delegation-state.ts'
+import { directOnly, workerInspectionTools } from '../src/inspection-mode.ts'
 
-test('every role tool has an explicit inspection or direct-call policy', async () => {
+test('the host scripts every tool except the shell and file writes', async () => {
   const roles = await Promise.all(roleNames.map((name) => loadRole(name)))
-  const direct = [
-    'WebFetch',
-    'WebSearch',
-    'bash',
-    'codemode',
-    'consult_design',
-    'delegate_branches',
-    'delegate_local',
-    'integrate_candidate',
-    'delegate_task',
-    'delegate_worker',
-    'design_consultation',
-    'document_check',
-    'edit',
-    'merge_branches',
-    'project_delete',
-    'project_edit',
-    'project_format',
-    'project_write',
-    'recurring_task',
-    'report_milestone',
-    'report_progress',
-    'resume_task',
-    'revise_tasks',
-    'run_checks',
-    'run_command',
-    'verify_loop',
-    'submit_result',
-    'task_control',
-    'watch_github_run',
-    'whiteboard',
-    'host_work',
-    'workflow',
-    'write',
-  ]
-  const inspected = new Set([...nestedInspectionTools, ...workerInspectionTools])
+  const orchestrator = roles.find((role) => role.name === 'orchestrator')!
+  const scriptable = orchestrator.tools.filter((name) => !directOnly.has(name))
+  assert.deepEqual([...directOnly].sort(), ['bash', 'codemode', 'edit', 'write'])
 
-  for (const name of direct) {
-    assert.ok(!inspected.has(name), name)
+  for (const name of ['job_start', 'job_status', 'job_message', 'job_retry', 'job_close']) {
+    assert.ok(scriptable.includes(name), name)
   }
 
-  assert.deepEqual(new Set(roles.flatMap((role) => role.tools)), new Set([...inspected, ...direct]))
+  assert.ok(!orchestrator.tools.some((name) => /cancel|pause/.test(name)))
 
   for (const role of roles) {
     assert.equal(role.tools.includes('codemode'), role.backend === 'pi', role.name)
     assert.equal(role.tools.includes('whiteboard'), role.name === 'orchestrator', role.name)
+    assert.equal(role.tools.includes('job_start'), role.name === 'orchestrator', role.name)
+
+    for (const name of workerInspectionTools) {
+      assert.ok(role.name === 'orchestrator' || !directOnly.has(name))
+    }
   }
 })
 
@@ -157,93 +125,12 @@ test('one scripted PR inspection returns check-run and commit-status links', asy
   }
 })
 
-test('attempt summaries preserve required findings and failed checks', async (t) => {
-  const root = await mkdtemp(join(tmpdir(), 'pi-inspection-'))
-  t.after(() => rm(root, { recursive: true, force: true }))
-  const store = new StateStore(root)
-  const id = randomUUID()
-  const dir = delegationDirectory(store, id)
-  const name = 'orchestrator-1-2.json'
-  await atomicJson(join(dir, 'status.json'), { status: 'running', progressFile: name })
-  const missing = await reviewReceipts(store, id)
-  assert.equal(missing.checks, null)
-  assert.equal(missing.reviews, null)
-  const finding = {
-    severity: 'required',
-    location: 'ledger',
-    problem: 'wrong total',
-    evidence: '2 != 3',
-  }
-  const child = (role: string, snapshot: string) => ({
-    evidence: {
-      role,
-      snapshot,
-      model: 'test',
-      result: { verdict: 'changes', findings: [finding, { ...finding, severity: 'suggestion' }] },
-    },
-  })
-  await atomicJson(join(dir, name + '.children.json'), [
-    child('reviewer', 'a'),
-    child('database-reviewer', 'b'),
-  ])
-  await atomicJson(join(dir, name + '.checks.json'), [
-    { check: 'lint', snapshot: 'b', status: 'failed', result: { output: 'broken', exitCode: 1 } },
-  ])
-  const summary = await reviewReceipts(store, id)
-  assert.deepEqual(
-    summary.reviews?.map((r) => [r.snapshot, r.required]),
-    [
-      ['a', [finding]],
-      ['b', [finding]],
-    ],
-  )
-  assert.equal(summary.checks?.[0]?.status, 'failed')
-  await rm(join(dir, name + '.checks.json'))
-  await symlink(join(dir, 'status.json'), join(dir, name + '.checks.json'))
-  await assert.rejects(reviewReceipts(store, id), /Linked/)
-})
-
-test('inspection selects final checks for this attempt, including older local tasks', async (t) => {
-  const item = await fixture()
-  t.after(() => rm(item.base, { recursive: true, force: true }))
-  const store = new StateStore(item.root)
-  const id = randomUUID()
-  const dir = delegationDirectory(store, id)
-  const receipts = [
-    {
-      check: 'lint',
-      status: 'failed',
-      snapshot: 'final',
-      result: { output: 'lint error' },
-      inheritedLintPaths: ['existing.md'],
-    },
-  ]
-  await atomicJson(join(dir, 'request.json'), { kind: 'maintenance' })
-  await atomicJson(join(dir, 'status.json'), { status: 'needs_attention', receipts })
-  const final = (await reviewReceipts(store, id)).checks?.[0]
-  assert.equal(final?.snapshot, 'final')
-  assert.ok('inheritedLintPaths' in final)
-  assert.deepEqual(final.inheritedLintPaths, ['existing.md'])
-
-  const progressFile = 'orchestrator-2-1.json'
-  const checkFile = join(dir, progressFile + '.checks.json')
-  await atomicJson(join(dir, 'request.json'), { kind: 'branch' })
-  await atomicJson(join(dir, 'status.json'), { status: 'running', progressFile, receipts })
-  assert.equal((await reviewReceipts(store, id)).checks, null)
-  await atomicJson(checkFile, [{ check: 'lint', status: 'passed', snapshot: 'provisional' }])
-  const state = { status: 'needs_attention', progressFile, receipts, receiptAttempt: progressFile }
-  await atomicJson(join(dir, 'status.json'), state)
-  assert.equal((await reviewReceipts(store, id)).checks?.[0]?.status, 'failed')
-  await atomicJson(join(dir, 'status.json'), { ...state, progressFile: 'orchestrator-3-1.json' })
-  assert.equal((await reviewReceipts(store, id)).checks, null)
-})
-
 test('the host SDK allows nested reads and blocks nested writes in the same script', async (t) => {
   const item = await fixture()
   t.after(() => rm(item.base, { recursive: true, force: true }))
   let response = ''
   const code = [
-    'const r = await tools.task_status({});',
+    'const r = await tools.job_status({});',
     'text(r);',
     'text("nested shell: " + ("bash" in tools));',
     'text("lists shell: " + ALL_TOOLS.some(tool => tool.name === "bash"));',
@@ -267,7 +154,7 @@ test('the host SDK allows nested reads and blocks nested writes in the same scri
   )
 
   try {
-    await session.prompt('Inspect active tasks')
+    await session.prompt('Inspect active jobs')
     assert.match(response, /Script completed/)
     assert.match(response, /nested shell: false/)
     assert.match(response, /lists shell: false/)
@@ -278,110 +165,30 @@ test('the host SDK allows nested reads and blocks nested writes in the same scri
   }
 })
 
-test('a verdict-only script retains a failed check on the reviewed snapshot', async (t) => {
+test('one host script starts jobs idempotently and chains typed reads', async (t) => {
   const item = await fixture()
   t.after(() => rm(item.base, { recursive: true, force: true }))
-  const id = randomUUID()
-  const dir = delegationDirectory(new StateStore(item.root), id)
-  const attempt = 'orchestrator-1-1.json'
-  await atomicJson(join(dir, 'status.json'), { status: 'needs_attention', progressFile: attempt })
-  await atomicJson(join(dir, attempt + '.children.json'), [
-    {
-      evidence: {
-        role: 'reviewer',
-        model: 'fixture',
-        snapshot: 'reviewed-head',
-        result: {
-          verdict: 'changes',
-          findings: [
-            {
-              severity: 'required',
-              location: 'api/claim',
-              problem: 'Retain the required check',
-              evidence: 'fixture',
-            },
-          ],
-        },
-      },
-    },
-  ])
-  await atomicJson(join(dir, attempt + '.checks.json'), [
-    {
-      check: 'harness-lint',
-      status: 'failed',
-      snapshot: 'reviewed-head',
-      result: { output: 'raw diagnostic text', exitCode: 1 },
-    },
-  ])
-  const code =
-    'const v=await tools.review_receipts({id:' +
-    JSON.stringify(id) +
-    '});' +
-    'text([v.state,v.reviews.slice(-1).map(x=>x.verdict)])'
-  let response = ''
-  let called = false
-  const { session, runtime } = await captureSession(
-    item.root,
-    item.base,
-    [harness],
-    async (ctx) => {
-      if (called) {
-        response = JSON.stringify(ctx.messages.at(-1)?.content)
-        return [{ type: 'text', text: 'done' }]
-      }
-
-      called = true
-      return [{ type: 'toolCall', name: 'codemode', id: 'replay', arguments: { code } }]
-    },
-  )
-
-  try {
-    await session.prompt('Read the final review verdict.')
-    assert.match(response, /changes/)
-    assert.match(response, /Retain the required check/)
-    assert.match(response, /harness-lint/)
-    assert.match(response, /failed/)
-    assert.match(response, /reviewed-head/)
-    assert.doesNotMatch(response, /raw diagnostic text/)
-  } finally {
-    session.dispose()
-    await runtime.settleCredentialWrites()
-  }
-})
-
-test('host scripts receive typed task, harness and file reads', async (t) => {
-  const item = await fixture()
-  t.after(() => rm(item.base, { recursive: true, force: true }))
-  const id = randomUUID()
-  const dir = delegationDirectory(new StateStore(item.root), id)
-  await atomicJson(join(dir, 'status.json'), { id, status: 'running', updatedAt: 'now' })
-  await atomicJson(join(dir, 'request.json'), {
-    id,
-    kind: 'research',
-    root: new StateStore(item.root).projectRoot,
-    task: 'Test status',
-    writePaths: [],
-  })
   await writeFile(join(item.root, 'lookup:fixture.md'), 'Read this marker\n')
+  const job = { title: 'Count', task: 'Count files.', mode: 'research', key: 'count' }
   const code = [
-    'const [job,cap,harness,search,receipt] = await Promise.all([',
-    'tools.task_status({id:' + JSON.stringify(id) + '}),tools.harness_capabilities({}),',
-    'tools.harness_status({}),',
-    'tools.project_search({query:"this marker",pathPrefix:"lookup:"}),',
-    'tools.review_receipts({id:' + JSON.stringify(id) + '})]);',
-    'text([receipt,job].map(x=>[x.state,x.status].join("/")).join(","));',
+    'const started = await Promise.all([1,2,3].map(() => tools.job_start(' + JSON.stringify(job),
+    ')));',
+    'const [status,search] = await Promise.all([tools.job_status({}),',
+    'tools.project_search({query:"this marker",pathPrefix:"lookup:"})]);',
     'const hit=search.hits[0];',
     'const file=await tools.project_read({path:hit.path,startLine:hit.line});',
-    'text([job.status,Array.isArray(cap.host.tasks),!!harness.runtime.version,',
-    'hit.path,search.hasMore,',
-    'file.content.includes("Read this marker")]);',
+    'text([new Set(started.map(x=>x.id)).size,status.jobs.length,status.jobs[0].status,',
+    'hit.path,file.content.includes("Read this marker")]);',
+    'try { await tools.job_close({id:"j1",reason:"superseded"}) }',
+    'catch (error) { text(String(error)) }',
   ].join('')
   let response = ''
   let called = false
+  const launched: string[] = []
   const { session, runtime } = await captureSession(
     item.root,
     item.base,
-    [harness],
+    [createHarness({ jobs: { launch: async (_store, id) => void launched.push(id) } })],
     async (ctx) => {
       if (!called) {
         called = true
@@ -394,10 +201,11 @@ test('host scripts receive typed task, harness and file reads', async (t) => {
   )
 
   try {
-    await session.prompt('Inspect the fixture.')
+    await session.prompt('Start the count and inspect the fixture.')
     assert.match(response, /Script completed/)
-    assert.match(response, /running\/running,running\/running/)
-    assert.match(response, /running.*true,true.*lookup:fixture.md.*false,true/)
+    assert.match(response, /1,1,.*queued.*lookup:fixture.md.*true/)
+    assert.match(response, /only the user stops running work|Only a needs_attention job/i)
+    assert.equal(launched.length, 1, 'three starts with one key launch one runner')
   } finally {
     await session.dispose()
     await runtime.settleCredentialWrites()
@@ -451,7 +259,10 @@ test('Pi worker scripts expose only scoped inspections', async (t) => {
   try {
     await session.prompt('Inspect the worker catalog.')
     assert.match(declaration.slice(0, 230), /Available tools: .*project_read/)
-    assert.match(declaration, /Call shell commands, tests, edits/)
+    assert.match(
+      declaration,
+      /Read-only inspection script\. Available tools: project_read, project_search\./,
+    )
     assert.match(response, /Script completed/)
     assert.match(response, /unchanged/)
     assert.match(response, /rejected/)

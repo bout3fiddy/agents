@@ -7,7 +7,7 @@ import type { ExtensionFactory } from '@earendil-works/pi-coding-agent'
 import { registerWorkshop } from '../src/workshop.ts'
 import { StateStore } from '../src/state.ts'
 import type { Advice } from '../src/design-advice.ts'
-import { design, fixture } from './support.ts'
+import { fixture } from './support.ts'
 import { captureSession } from './session-support.ts'
 
 for (const mode of ['wait', 'cancel', 'automatic'] as const) {
@@ -112,7 +112,6 @@ for (const mode of ['wait', 'cancel', 'automatic'] as const) {
         content: 'EARLIER_WORKSHOP_CONSTRAINT',
         timestamp: Date.now() - 10000,
       })
-      await new StateStore(item.root).pin(design)
       await session.prompt('Workshop a new design question')
       await session.waitForIdle()
       assert.ok(JSON.parse(advisorInput).userMessages.includes('EARLIER_WORKSHOP_CONSTRAINT'))

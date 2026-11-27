@@ -1,6 +1,6 @@
 {
   "name": "@swadhin/pi-harness",
-  "version": "0.10.5",
+  "version": "0.11.0",
   "private": true,
   "type": "module",
   "engines": {
@@ -13,20 +13,10 @@
     "typecheck": "tsc --noEmit",
     "test": "tsx --test --test-concurrency=4 tests/*.test.ts",
     "test:live": "tsx scripts/live.ts",
-    "test:live:basic": "tsx scripts/live.ts --basic",
-    "test:live:workshop": "tsx scripts/live-workshop.ts",
-    "test:live:web": "tsx scripts/live-web.ts",
     "verify": "node scripts/verify.mjs",
     "doctor": "tsx src/cli.ts doctor",
     "install:local": "tsx scripts/install.ts",
-    "update:pi": "tsx scripts/update-pi.ts",
-    "test:live:recurring": "tsx scripts/live-recurring.ts",
-    "test:live:delegation": "tsx scripts/live-delegation.ts",
-    "test:live:local": "tsx scripts/live-local.ts",
-    "test:live:branches": "tsx scripts/live-branches.ts",
-    "test:live:host": "tsx scripts/live-host-routing.ts",
-    "test:live:recovery": "tsx scripts/live-task-recovery.ts",
-    "test:live:workers": "tsx scripts/live-workers.ts"
+    "update:pi": "tsx scripts/update-pi.ts"
   },
   "dependencies": {
     "@earendil-works/pi-coding-agent": "1.6.1",

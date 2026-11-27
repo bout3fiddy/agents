@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { databaseImpact } from '../src/workflow.ts'
+import { databaseImpact } from '../src/job-checks.ts'
 
 test('DB checks follow persistence code, removed adapters and configured scopes', () => {
   const detect = (path: string, before: string, after: string, scopes: string[] = []) =>

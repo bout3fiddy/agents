@@ -16,8 +16,7 @@ import type { ConversationEntry } from './worker-live.ts'
 
 type Source = Pick<WorkersCatalog, 'list' | 'conversation' | 'send' | 'warnings'>
 const names: Record<string, string> = {
-  'task-coordinator': 'Coordinator',
-  'branch-orchestrator': 'Branch coordinator',
+  job: 'Job',
   'task-worker': 'Worker',
   implementer: 'Implementer',
   reviewer: 'Review',
@@ -34,7 +33,7 @@ function age(at: string): string {
 
 function status(row: WorkerRow): string {
   if (!row.active) {
-    return row.taskStatus && row.legacy ? row.taskStatus : row.state.status
+    return row.state.status
   }
 
   const stage = row.state.stage === 'model' ? 'Working' : row.state.stage
@@ -300,7 +299,7 @@ export class WorkersView implements Focusable {
         this.composing = true
         this.input.focused = this.hasFocus
       } else {
-        this.notice = 'Worker has stopped. Return to its coordinator for follow-up work.'
+        this.notice = 'Worker has stopped. Guide its job from the conversation instead.'
       }
     } else if (matchesKey(data, 'pageUp') || matchesKey(data, 'up')) {
       this.offset = Math.min(
@@ -405,11 +404,7 @@ export class WorkersView implements Focusable {
       const title = depth ? role : row.title || taskTitle(row.info.task) || role
       const marker = hasChildren ? (this.collapsed.has(row.id) ? '▸' : '▾') : depth ? '↳' : '·'
       const prefix = (row.id === this.selectedId ? '›' : ' ') + '  '.repeat(Math.min(depth, 5))
-      const coordinator = ['task-coordinator', 'branch-orchestrator'].includes(row.info.role)
-      const state =
-        (row.legacy || (coordinator && row.active)) && row.taskStatus
-          ? row.taskStatus
-          : row.state.status
+      const state = row.job && row.taskStatus ? row.taskStatus : row.state.status
       const activity =
         row.state.summary ||
         row.state.tool ||
@@ -457,8 +452,7 @@ export class WorkersView implements Focusable {
   }
 
   private renderChat(row: WorkerRow, width: number): string[] {
-    const model =
-      row.legacy && !row.info.actualModel ? 'Model unrecorded' : modelLabel(row.info.model)
+    const model = modelLabel(row.info.model)
     const effort = row.info.thinking ?? 'effort unrecorded'
     const heading = [names[row.info.role] ?? row.info.role, model, effort, status(row)].join(' · ')
     const attention = ['needs_attention', 'failed', 'blocked'].includes(
@@ -550,9 +544,7 @@ export class WorkersView implements Focusable {
     if (this.mode === 'details') {
       return [
         `Worker: ${row.info.id}`,
-        row.legacy && !row.info.actualModel
-          ? 'Worker model and effort unrecorded'
-          : `Model: ${row.info.model} · ${row.info.thinking ?? 'effort unrecorded'}`,
+        `Model: ${row.info.model} · ${row.info.thinking ?? 'effort unrecorded'}`,
         row.info.fallbackReason
           ? `Requested: ${row.info.requestedModel} · Fallback: ${row.info.fallbackReason}`
           : '',
@@ -570,11 +562,8 @@ export class WorkersView implements Focusable {
         `Prompt: press p to view the complete delegated prompt.`,
         `Trace: ${row.transcript ?? row.info.output}`,
         row.info.reviewOf ? `Reviewing the candidate after worker ${row.info.reviewOf}` : '',
-        row.inferredRelationship
-          ? 'Legacy relationship reconstructed from task, candidate and worker order.'
-          : '',
-        row.legacy
-          ? 'Legacy run: guidance goes to the task coordinator.'
+        row.job
+          ? 'No worker is running; guidance is held for the next round of this job.'
           : 'Guidance goes to this worker at a safe boundary; its write scope stays unchanged.',
       ]
         .filter(Boolean)

@@ -309,7 +309,7 @@ async function runClaudeProcess(
     await live.recordClaudeModel(actualModel)
     await progress.update({ actualModel, stage: 'complete', message: evidence.result.summary })
     await live.finish(
-      completedResult(evidence.result.verdict, request.role === 'progress-auditor')
+      completedResult(evidence.result.verdict, !request.checkpoint.writePaths.length)
         ? 'complete'
         : 'needs_attention',
       evidence.result.summary,
@@ -321,7 +321,7 @@ async function runClaudeProcess(
       ...(route.fallbackReason && { quotaFallbackFrom: route.requestedModel }),
       liveWorkerId: live.info.id,
       snapshot: snapshotHash(await inventory(request.workspace)),
-      result: validateResult(evidence.result, request.decideContinuation),
+      result: validateResult(evidence.result),
       commands: evidence.commands,
       turns: response.num_turns ?? 0,
       model: `claude-cli/${actualModel}`,

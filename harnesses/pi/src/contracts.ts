@@ -7,19 +7,13 @@ import type { ExecutionPolicy } from './worker-execution.ts'
 export const roleNames = [
   'orchestrator',
   'design-advisor',
-  'progress-auditor',
-  'task-coordinator',
-  'branch-orchestrator',
   'task-worker',
   'implementer',
   'performance',
 ] as const
 
 export type RoleName = (typeof roleNames)[number]
-export type WorkerRole = Exclude<
-  RoleName,
-  'orchestrator' | 'design-advisor' | 'task-coordinator' | 'branch-orchestrator'
->
+export type WorkerRole = Exclude<RoleName, 'orchestrator' | 'design-advisor'>
 
 export const thinkingSchema = Type.Union([
   Type.Literal('low'),
@@ -163,22 +157,8 @@ export const implementerResultSchema = Type.Object(
   { additionalProperties: false },
 )
 
-export const auditResultSchema = Type.Object(
-  {
-    ...resultSchema.properties,
-    continuation: Type.Object(
-      {
-        action: Type.Union([Type.Literal('continue'), Type.Literal('stop')]),
-        reason: Type.String({ minLength: 1, maxLength: 1000 }),
-      },
-      { additionalProperties: false },
-    ),
-  },
-  { additionalProperties: false },
-)
 export type WorkerResult = Static<typeof resultSchema> & {
   engineeringReview?: Static<typeof engineeringReviewSchema>
-  continuation?: Static<typeof auditResultSchema>['continuation']
 }
 export type Role = {
   name: RoleName
@@ -201,7 +181,7 @@ export type CommandResult = {
   truncated: boolean
   durationMs: number
 
-  /** How the process actually ran. Absent on results recorded before execution policy. */
+  /** How the process actually ran. */
   runner?: 'sandbox' | 'host'
 }
 
@@ -241,7 +221,6 @@ export type Receipt = {
 export type WorkerRequest = {
   checkout?: { pinnedBase: string; head: string; clean: boolean }
   implementerModel?: ImplementerModel
-  decideContinuation?: boolean
   thinking?: Role['thinking']
   role: WorkerRole
   task: string
@@ -276,7 +255,7 @@ export type WorkerEvidence = Partial<ModelRoute> & {
 
   /** The execution decision in force when the worker submitted. */
   execution?: ExecutionPolicy
-  role: WorkerRole | 'reviewer' | 'database-reviewer' // Historical receipts.
+  role: WorkerRole
   snapshot: string
   result: WorkerResult
   commands: CommandResult[]
@@ -299,10 +278,8 @@ export function completedResult(verdict: WorkerResult['verdict'], readOnlyReport
   return verdict === 'pass' || (readOnlyReport && verdict === 'changes')
 }
 
-export function validateResult(value: unknown, decideContinuation = false): WorkerResult {
-  const schema = decideContinuation ? auditResultSchema : resultSchema
-
-  if (!Check(schema, value) && (decideContinuation || !Check(engineeringResultSchema, value))) {
+export function validateResult(value: unknown): WorkerResult {
+  if (!Check(resultSchema, value) && !Check(engineeringResultSchema, value)) {
     throw new Error('Invalid worker result')
   }
 

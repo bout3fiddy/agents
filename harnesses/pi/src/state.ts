@@ -1,36 +1,9 @@
-import { mkdir, open, readFile, rename, rm } from 'node:fs/promises'
+import { mkdir, open, readFile, rename } from 'node:fs/promises'
 import { realpathSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { randomUUID } from 'node:crypto'
-import { digest, validateWriteScope } from './paths.ts'
-import { acquireLock, type ReleaseLock } from './lock.ts'
+import { digest } from './paths.ts'
 import { projectTraces } from './traces.ts'
-import {
-  validateDesign,
-  type Checkpoint,
-  type Design,
-  type Receipt,
-  type TaskIsolation,
-  type WorkerEvidence,
-  type WorkerResult,
-} from './contracts.ts'
-
-export type TaskState = {
-  id: string
-  designHash: string
-  designVersion?: number
-  status: 'running' | 'needs_attention' | 'verified' | 'applying' | 'complete' | 'interrupted'
-  phase: string
-  round: number
-  hostActions?: WorkerResult['hostActions']
-  reviewRound?: { snapshot: string; start: number; database: boolean }
-  candidate?: string
-  resumedFrom?: string
-  snapshot?: string
-  evidence: WorkerEvidence[]
-  receipts: Receipt[]
-  error?: string
-}
 
 export async function atomicJson(path: string, value: unknown): Promise<void> {
   await atomicText(path, JSON.stringify(value, null, 2) + '\n')
@@ -70,6 +43,7 @@ export async function readJson<T>(path: string): Promise<T | undefined> {
   }
 }
 
+/** Where a checkout keeps its private harness files: worker records, traces, consultations. */
 export class StateStore {
   readonly directory: string
 
@@ -85,85 +59,5 @@ export class StateStore {
           initializeTraces ? projectTraces(this.projectRoot) : join(this.projectRoot, '.pi/traces'),
           'harness',
         )
-  }
-
-  async draft(design: Design): Promise<string> {
-    validateDesign(design)
-    validateWriteScope(design.writePaths)
-    const hash = digest(JSON.stringify(design))
-    await atomicJson(join(this.directory, 'draft.json'), { design, hash })
-    return hash
-  }
-
-  async accept(expectedHash?: string): Promise<Checkpoint> {
-    const draft = await readJson<{ design: Design; hash: string }>(
-      join(this.directory, 'draft.json'),
-    )
-
-    if (!draft || (expectedHash && !draft.hash.startsWith(expectedHash))) {
-      throw new Error('No matching current draft; inspect the proposed design before accepting')
-    }
-
-    validateDesign(draft.design)
-    validateWriteScope(draft.design.writePaths)
-
-    if (digest(JSON.stringify(draft.design)) !== draft.hash) {
-      throw new Error('Draft integrity check failed')
-    }
-
-    const checkpoint = await this.pin(draft.design)
-    await rm(join(this.directory, 'draft.json'))
-    return checkpoint
-  }
-
-  /** Freeze worker scope without changing the host conversation. Caller owns the project lock.
-   * A scope pinned for isolated work stays isolated each time the recorded scope is resumed. */
-  async pin(design: Design, isolation?: TaskIsolation): Promise<Checkpoint> {
-    validateDesign(design)
-    validateWriteScope(design.writePaths)
-    const previous = await this.checkpoint()
-    const checkpoint: Checkpoint = {
-      ...design,
-      version: (previous?.version ?? 0) + 1,
-      hash: digest(JSON.stringify(design)),
-      acceptedAt: new Date().toISOString(),
-      ...(isolation && { isolation }),
-    }
-    await atomicJson(join(this.directory, 'designs', `${checkpoint.version}.json`), checkpoint)
-    await atomicJson(join(this.directory, 'accepted.json'), checkpoint)
-    return checkpoint
-  }
-
-  async checkpoint(): Promise<Checkpoint | undefined> {
-    return readJson<Checkpoint>(join(this.directory, 'accepted.json'))
-  }
-
-  async task(): Promise<TaskState | undefined> {
-    return readJson<TaskState>(join(this.directory, 'task.json'))
-  }
-
-  async saveTask(task: TaskState): Promise<void> {
-    await atomicJson(join(this.directory, 'tasks', `${task.id}.json`), task)
-    await atomicJson(join(this.directory, 'task.json'), task)
-  }
-
-  async lock(): Promise<ReleaseLock> {
-    await mkdir(this.directory, { recursive: true, mode: 0o700 })
-    const release = await acquireLock(join(this.directory, 'workflow.lock'))
-
-    try {
-      const task = await this.task()
-
-      if (task?.status === 'running' || task?.status === 'applying') {
-        task.status = 'interrupted'
-        task.error = 'Previous supervisor exited; completed evidence remains available'
-        await this.saveTask(task)
-      }
-    } catch (error) {
-      await release()
-      throw error
-    }
-
-    return release
   }
 }

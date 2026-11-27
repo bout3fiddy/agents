@@ -15,7 +15,7 @@ import {
   runWorkerCommand,
   type ExecutionPolicy,
 } from '../src/worker-execution.ts'
-import { fixture, hashes } from './support.ts'
+import { fixture, hashes, checkpoint } from './support.ts'
 
 const loader = join(harnessRoot, 'node_modules/tsx/dist/loader.mjs')
 const sandbox = pathToFileURL(join(harnessRoot, 'src/sandbox.ts')).href
@@ -171,7 +171,7 @@ test('the Claude bridge runs commands under the host decision and its revocation
     task: 'Bridge execution test',
     workspace: item.root,
     project,
-    checkpoint: await item.store.checkpoint(),
+    checkpoint: item.checkpoint,
     model: 'claude-fable-5-2',
     outputPath,
     baseline: {},
@@ -241,11 +241,11 @@ test('cancellation during dispatcher setup prevents model process launch', async
     task: 'Must never reach a model',
     workspace: root,
     project: { root, checks: [], databasePaths: [], instrumentationPaths: [] },
-    checkpoint: (await store.checkpoint())!,
+    checkpoint: checkpoint(),
     model: 'openai-codex/gpt-6.1-sol',
     baseline: await hashes(root),
   }
-  const running = dispatcher(store)(request, controller.signal)
+  const running = dispatcher(store.directory)(request, controller.signal)
   controller.abort(new Error('setup cancellation'))
   await assert.rejects(running, /setup cancellation/)
   const attempts = await readdir(join(store.directory, 'attempts'))

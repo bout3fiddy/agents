@@ -92,7 +92,7 @@ test('user input wins; mixed requests append once and recover a lost ACK', async
   assert.equal(board.calls.filter((c) => c.command === 'link').length, 2)
 })
 
-test('dropped draft retries without ACK; paused work stays quiet', async (t) => {
+test('a dropped draft is retried without an ACK', async (t) => {
   const { root, base } = await fixture()
   const board = new FixtureBoard()
   const clock = new ManualClock()
@@ -140,25 +140,12 @@ test('dropped draft retries without ACK; paused work stays quiet', async (t) => 
   await work
   assert.equal(dropped, 1)
   assert.equal(steps, 1)
-  const sessionId = session.sessionManager.getSessionId()
-  const hostWork = (state: string) =>
-    session.sessionManager.appendCustomEntry('pi-host-work', {
-      session: sessionId,
-      state,
-      detail: 'Explicit pause test',
-    })
-  hostWork('paused')
 
+  // The request the host never received is offered again once its backoff has passed.
   for (let i = 0; i < 4; i++) {
     await clock.tick()
   }
 
-  assert.equal(steps, 1)
-  assert.equal(
-    board.calls.some((c) => c.command === 'ack'),
-    false,
-  )
-  hostWork('done')
   await clock.tick()
   await session.waitForIdle()
   assert.equal(steps, 2)

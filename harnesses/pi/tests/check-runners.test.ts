@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import test, { type TestContext } from 'node:test'
 import type { Project, ProjectCheck } from '../src/contracts.ts'
 import { dependencyDrift, requireDependencies } from '../src/dependencies.ts'
-import { gitCommand } from '../src/git-branches.ts'
+import { gitCommand } from '../src/git-command.ts'
 import { createWorkspace, lintFindings, loadProject, verifyProject } from '../src/project.ts'
 import { sandboxProfile } from '../src/sandbox.ts'
 

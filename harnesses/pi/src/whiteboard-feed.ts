@@ -7,7 +7,6 @@ import type {
   SessionEntry,
 } from '@earendil-works/pi-coding-agent'
 import { invariant } from './invariant.ts'
-import { hostWorkPaused } from './host-work.ts'
 import {
   BoardUpgradeRequired,
   MissingBoardCLI,
@@ -217,7 +216,7 @@ export class BoardFeed {
 
     const candidates = this.events.filter((event) => !this.seen.has(event.id))
 
-    if (!candidates.length || hostWorkPaused(ctx)) {
+    if (!candidates.length) {
       return
     }
 

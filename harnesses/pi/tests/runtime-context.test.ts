@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { access, readFile, rm } from 'node:fs/promises'
+import { readFile, rm } from 'node:fs/promises'
 import { execFileSync } from 'node:child_process'
 import { basename, join } from 'node:path'
 import {
@@ -15,10 +15,10 @@ import { AssistantMessageEventStream } from '@earendil-works/pi-ai/utils/event-s
 import type { AssistantMessage } from '@earendil-works/pi-ai'
 import harness from '../src/extension.ts'
 import { StateStore } from '../src/state.ts'
-import { fixture, design } from './support.ts'
+import { fixture } from './support.ts'
 import { loadRole } from '../src/roles.ts'
 
-test('scope snapshots preserve Pi conversation lifecycle', async () => {
+test('the Pi conversation survives compaction, resume and branches', async () => {
   const item = await fixture()
   execFileSync('git', ['init', '--quiet', item.root])
   const store = new StateStore(item.root)
@@ -126,29 +126,12 @@ test('scope snapshots preserve Pi conversation lifecycle', async () => {
   }
 
   try {
-
-    // A pre-upgrade checkpoint must no longer hide earlier conversation on reload.
-    await store.draft({ ...design, design: 'FINAL_SCHEMA_MARKER' })
-    await store.accept()
     session = await create(manager)
     const sessionFile = manager.getSessionFile()!
-    assert.equal(session.extensionRunner.getCommand('accept-design'), undefined)
-    assert.ok(!session.getActiveToolNames().includes('propose_design'))
     await session.prompt('PENDING_CONSTRAINT_MARKER')
-    assert.match(payloads.at(-1)!, /FINAL_SCHEMA_MARKER/)
     assert.match(payloads.at(-1)!, /EARLY_USER_CONSTRAINT/)
-    assert.doesNotMatch(payloads.at(-1)!, /Repository project brief \(evidence\)/)
-    assert.ok(
-      !manager
-        .getEntries()
-        .some((e) => e.type === 'custom_message' && e.customType === 'pi-project-memory'),
-    )
-    await assert.rejects(access(join(item.root, '.pi/local-memory')), { code: 'ENOENT' })
-    await assert.rejects(access(join(item.root, '.pi/project-state.md')), { code: 'ENOENT' })
     const earlierBranch = session.sessionManager.getLeafId()!
-    await store.pin({ ...design, design: 'UPDATED_SCHEMA_MARKER' })
     await session.prompt('Continue our discussion after recording the implementation scope')
-    assert.match(payloads.at(-1)!, /UPDATED_SCHEMA_MARKER/)
     assert.match(payloads.at(-1)!, /EARLY_USER_CONSTRAINT/)
     assert.match(payloads.at(-1)!, /PENDING_CONSTRAINT_MARKER/)
     assert.equal(manager.getSessionFile(), sessionFile)
@@ -159,24 +142,17 @@ test('scope snapshots preserve Pi conversation lifecycle', async () => {
     assert.match(payloads.slice(beforeCompact).join('\n'), /EARLY_USER_CONSTRAINT/)
     assert.match(payloads.slice(beforeCompact).join('\n'), /PENDING_CONSTRAINT_MARKER/)
     await session.prompt('Continue after compaction')
-    assert.match(payloads.at(-1)!, /UPDATED_SCHEMA_MARKER/)
     const mirror = await readFile(
       join(item.root, '.pi/traces/sessions', basename(sessionFile)),
       'utf8',
     )
     assert.match(mirror, /PENDING_CONSTRAINT_MARKER/)
     session.dispose()
-    const legacy = SessionManager.open(sessionFile)
-    legacy.appendCustomMessageEntry('pi-project-memory', 'OBSOLETE_PRIORITY', false)
     session = await create(SessionManager.open(sessionFile))
     await session.prompt('Continue after resume')
-    assert.match(payloads.at(-1)!, /UPDATED_SCHEMA_MARKER/)
-    assert.doesNotMatch(payloads.at(-1)!, /OBSOLETE_PRIORITY/)
-    assert.match(await readFile(sessionFile, 'utf8'), /OBSOLETE_PRIORITY/)
     await session.navigateTree(earlierBranch, { summarize: true })
     await session.prompt('Continue after navigating the earlier branch')
     assert.match(payloads.at(-1)!, /EARLY_USER_CONSTRAINT/)
-    assert.match(payloads.at(-1)!, /UPDATED_SCHEMA_MARKER/)
     assert.deepEqual(
       session.getActiveToolNames().sort(),
       (await loadRole('orchestrator')).tools.sort(),

@@ -205,7 +205,7 @@ export class LiveWorker {
       projectRoot: rootPath,
       id,
       pid: process.pid,
-      taskId: input.output.match(/\/delegations\/([a-f0-9-]{36})\//)?.[1],
+      taskId: input.output.match(/\/jobs\/([a-f0-9-]{36})\//)?.[1],
       startedAt: new Date().toISOString(),
     })
     await mkdir(live.directory, { recursive: true, mode: 0o700 })

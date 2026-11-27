@@ -17,12 +17,7 @@ test('fresh installer and default Codex delegates select Astra medium', async (t
   const model = `${settings.defaultProvider}/${settings.defaultModel}`
   assert.deepEqual([model, settings.defaultThinkingLevel], ['openai-codex/gpt-6.2-astra', 'medium'])
 
-  for (const name of [
-    'task-coordinator',
-    'branch-orchestrator',
-    'task-worker',
-    'implementer',
-  ] as const) {
+  for (const name of ['task-worker', 'implementer'] as const) {
     const role = await loadRole(name)
     assert.deepEqual([role.model, role.thinking], [model, 'medium'])
   }

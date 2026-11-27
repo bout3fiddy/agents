@@ -1,15 +1,13 @@
-import { cleanup, cleanupSummary, retentionMs } from './cleanup.ts'
 import { access, realpath, mkdtemp, rm } from 'node:fs/promises'
 import { homedir, tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { ModelRuntime } from '@earendil-works/pi-coding-agent'
-import { WorkerRoots } from './worker-roots.ts'
+import { JobStore, jobView } from './job-store.ts'
 import { StateStore } from './state.ts'
 import { roleNames } from './contracts.ts'
 import { loadRole, rolePrompt } from './roles.ts'
 import { harnessRoot, loadProject } from './project.ts'
 import { runSandboxed } from './sandbox.ts'
-import { runWorkflow } from './workflow.ts'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import {
@@ -81,17 +79,6 @@ if (process.argv[1] && resolve(process.argv[1]) === new URL(import.meta.url).pat
   const store = new StateStore(await realpath(process.cwd()))
 
   switch (command) {
-    case 'register-worker-origin': {
-      const [taskId, session] = process.argv.slice(4)
-
-      if (!argument || !taskId || !session || process.argv.length !== 6) {
-        throw new Error('From origin project: register-worker-origin OWNER_ROOT TASK_UUID SESSION')
-      }
-
-      await new WorkerRoots(store).register({ root: argument, taskId, session })
-      console.log(`Registered Workers origin for ${taskId}`)
-      break
-    }
     case 'doctor':
       console.log(JSON.stringify(await doctor(argument), null, 2))
       break
@@ -102,44 +89,22 @@ if (process.argv[1] && resolve(process.argv[1]) === new URL(import.meta.url).pat
 
       console.log(JSON.stringify(await trust(store.projectRoot, argument), null, 2))
       break
-    case 'run': {
-      const controller = new AbortController()
-      process.once('SIGINT', () => controller.abort())
-      process.once('SIGTERM', () => controller.abort())
-      const task = await runWorkflow(
-        store,
-        argument ?? 'openai-codex/gpt-6.2-astra',
-        controller.signal,
-      )
-      console.log(JSON.stringify(task, null, 2))
-      process.exitCode = task.status === 'complete' ? 0 : 1
-      break
-    }
-    case 'status':
+    case 'status': {
+      const jobs = JobStore.open(store.projectRoot)
       console.log(
         JSON.stringify(
           {
-            design: await store.checkpoint(),
-            task: await store.task(),
+            jobs: jobs.list({ limit: 30 }).map(jobView),
             project: await loadProject(store.projectRoot),
-            state: store.directory,
+            state: jobs.directory,
           },
           null,
           2,
         ),
       )
       break
-    case 'gc': {
-      const dryRun = argument === '--dry-run'
-      const report = await cleanup(store, { retentionMs: retentionMs(), dryRun })
-      console.log(cleanupSummary(report, dryRun))
-      console.log(JSON.stringify(report, null, 2))
-      break
     }
     default:
-      throw new Error(
-        'Commands: doctor, gc [--dry-run], run [provider/model], status, ' +
-          'trust [trusted-local|required-isolation|unknown]',
-      )
+      throw new Error('Commands: doctor, status, trust [trusted-local|required-isolation|unknown]')
   }
 }

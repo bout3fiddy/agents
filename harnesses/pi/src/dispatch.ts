@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process'
 import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
-import { atomicJson, readJson, type StateStore } from './state.ts'
+import { atomicJson, readJson } from './state.ts'
 import { harnessRoot } from './project.ts'
 import { loadRole } from './roles.ts'
 import { ProviderQuotaError, type WorkerEvidence, type WorkerRequest } from './contracts.ts'
@@ -127,12 +127,13 @@ export async function runWorkerProcess(
   })
 }
 
-export function dispatcher(store: StateStore): Dispatcher {
+/** Workers of one job write their requests and results below that job's directory. */
+export function dispatcher(directory: string): Dispatcher {
   return async (request, signal, progress) => {
     signal?.throwIfAborted()
     const id = randomUUID()
-    const path = join(store.directory, 'attempts', `${id}.json`)
-    const outputPath = join(store.directory, 'attempts', `${id}.result.json`)
+    const path = join(directory, 'attempts', `${id}.json`)
+    const outputPath = join(directory, 'attempts', `${id}.result.json`)
     await atomicJson(path, { ...request, outputPath })
     await atomicJson(`${path}.status`, { status: 'dispatched', role: request.role })
     await loadRole(request.role, request.thinking, request.implementerModel)

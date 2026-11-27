@@ -8,7 +8,6 @@ import { tmpdir } from 'node:os'
 import { StateStore } from '../src/state.ts'
 import { projectTraces, shouldMirrorSession } from '../src/traces.ts'
 import { inventory, safePath, sensitive } from '../src/paths.ts'
-import { design } from './support.ts'
 
 test('project traces stay local, ignored and excluded from worker snapshots', async () => {
   const root = await mkdtemp(join(tmpdir(), 'pi-traces-'))
@@ -16,9 +15,6 @@ test('project traces stay local, ignored and excluded from worker snapshots', as
   try {
     const store = new StateStore(root)
     assert.equal(store.directory, join(store.projectRoot, '.pi/traces/harness'))
-    await store.draft(design)
-    await store.accept()
-    assert.match(await readFile(join(store.directory, 'accepted.json'), 'utf8'), /bounded/)
     const ignore = join(root, '.pi/.gitignore')
     assert.equal(await readFile(ignore, 'utf8'), '/traces/\n')
     projectTraces(root)

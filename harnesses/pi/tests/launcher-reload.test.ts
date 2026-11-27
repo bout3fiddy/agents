@@ -76,7 +76,7 @@ test('installed Pi reloads new tools under the active role policy', async (t) =>
   }
   const first = await load('startup')
   assert.deepEqual([`openai-codex/${first.model}`, first.thinking], [chosen, 'high'])
-  assert.ok(first.active.includes('recurring_task'))
+  assert.ok(first.active.includes('job_start'))
   assert.ok(!first.registered.includes('future_probe'))
 
   // Simulate a completed install pointing at another release. Extension reload cannot re-exec Pi.
@@ -93,7 +93,7 @@ test('installed Pi reloads new tools under the active role policy', async (t) =>
   const next = await load('reload')
   assert.deepEqual([next.model, next.thinking], [first.model, first.thinking])
   assert.ok(next.registered.includes('future_probe'))
-  assert.ok(next.active.includes('recurring_task'))
+  assert.ok(next.active.includes('job_start'))
   assert.ok(!next.active.includes('future_probe'))
   const [runtimeFile] = await readdir(join(root, '.pi/traces/harness/runtime'))
   const loads = (await readFile(join(root, '.pi/traces/harness/runtime', runtimeFile!), 'utf8'))

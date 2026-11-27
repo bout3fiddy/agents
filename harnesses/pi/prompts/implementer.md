@@ -9,8 +9,8 @@ hashes derived from its actual inputs. Update those when the design requires it 
 recorded approval state.
 
 Submit the implementation with the checks you ran and any remaining limitations. A passing result
-hands the candidate to the coordinator for verification. Report a blocker when a missing
-prerequisite prevents implementation or required evidence.
+hands the candidate to the host for verification. Report a blocker when a missing prerequisite
+prevents implementation or required evidence.
 
 Prefer project_edit for focused changes to existing files; match a unique current text block. Use
 project_write for new files or an intentional complete rewrite. Avoid regenerating unchanged large
