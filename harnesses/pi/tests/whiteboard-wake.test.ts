@@ -36,7 +36,7 @@ test('SDK delivers complete FIFO batches within both budgets across reload', asy
 
   for (let i = 0; i < 64; i++) {
     const text = i < 5 ? '🦦'.repeat(4000) : i % 2 ? note : undefined
-    board.add(String(i), i % 2 ? 'sketch_notify' : 'interpret_request', text)
+    board.add(String(i), text)
   }
 
   const expected = structuredClone(board.events)

@@ -37,15 +37,15 @@ when idle. The installer sets transcript thinking to collapsed. Use Pi’s think
 you want the full reasoning blocks; neither display mode changes the saved session.
 
 `/start_whiteboard` opens this conversation’s tldraw-sync board. Use the iPad URL or scan the QR on
-its Mac stage; keep the stage open for PNG snapshots. On iPad, optionally type a note, turn on
-Interpret for faithful cleanup, then tap **Notify agent**. Leave Interpret off to discuss the sketch
-without requesting cleanup. Only the owning host receives the request. It can inspect outstanding
-work with `whiteboard status` and publish to one Agent canvas. Only the human can replace Sketch.
-The listener resumes on reload; `/stop_whiteboard` detaches without stopping the shared daemon. Use
-matching protocol 2 versions of pih, the tldraw-sync CLI and daemon. Start explicitly in a new or
-forked session. Use a trusted LAN. Install `tldraw-sync` on PATH, set `PI_WHITEBOARD_BIN`, or
-install Bun with a sibling `tldraw-sync` checkout next to the project root. See the
-[whiteboard integration check](documentation/whiteboard.md) for the paired Mac/iPad journey.
+its Mac stage; keep the stage open for snapshots and previews. On iPad, optionally type a note
+saying what you want, then tap **Send**. Only the owning host receives the request. It answers in
+the conversation, or previews and publishes a freeform scene to the one Agent canvas. It can inspect
+outstanding work with `whiteboard status`. Only the human can replace Sketch. The listener resumes
+on reload; `/stop_whiteboard` detaches without stopping the shared daemon. pih, the tldraw-sync CLI
+and its daemon must all speak protocol 3; a mismatch names the version each one reports. Start
+explicitly in a new or forked session. Use a trusted LAN. Install `tldraw-sync` on PATH, set
+`PI_WHITEBOARD_BIN`, or install Bun with a sibling `tldraw-sync` checkout next to the project root.
+See the [whiteboard integration check](documentation/whiteboard.md) for the paired Mac/iPad journey.
 
 | Role                     | Model / default effort |
 | ------------------------ | ---------------------- |

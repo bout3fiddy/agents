@@ -5,6 +5,7 @@ import {
   canvasSnapshot,
   parseLink,
   parsePoll,
+  preview,
   publication,
 } from '../src/whiteboard-protocol.ts'
 
@@ -18,9 +19,9 @@ const request = {
   state: 'working',
   text: '  \tcredential: "🦦"\r\nCafe\u0301\n ',
 }
-const poll = { ...link, protocol: 2, sketch_hash: 'hash', agent_revision: 1, events: [request] }
+const poll = { ...link, protocol: 3, sketch_hash: 'hash', agent_revision: 1, events: [request] }
 
-test('v2 event projection preserves paired request bytes but not private or ACK fields', () => {
+test('event projection preserves paired request bytes but not private or ACK fields', () => {
   const row = { ...request, scoped_token: 'hidden', message: 'Working on it' }
   assert.deepEqual(parsePoll({ ...poll, events: [row] }, link).events, [request])
   const limit = '🦦'.repeat(4000)
@@ -36,7 +37,7 @@ test('v2 event projection preserves paired request bytes but not private or ACK 
   }
 })
 
-test('negotiate v2 and validate the whole journal before exposing any event', () => {
+test('negotiate protocol 3 and validate the whole journal before exposing any event', () => {
   const linked = {
     ...link,
     binding_file: '/private',
@@ -44,10 +45,17 @@ test('negotiate v2 and validate the whole journal before exposing any event', ()
     stage_url: 'http://fixture/stage',
   }
 
-  for (const protocol of [undefined, 1, '2']) {
-    assert.throws(() => parseLink({ ...linked, protocol }, 'host', '/private'), /upgrade/i)
-    assert.throws(() => parsePoll({ ...poll, protocol }, link), /upgrade/i)
+  for (const protocol of [undefined, 1, 2, '3']) {
+    assert.throws(
+      () => parseLink({ ...linked, protocol }, 'host', '/private'),
+      /protocol mismatch/i,
+    )
+    assert.throws(() => parsePoll({ ...poll, protocol }, link), /protocol mismatch/i)
   }
+
+  // A retired request kind is never handed to the host, whatever the board says.
+  const retired = { ...request, kind: 'interpret_request' }
+  assert.throws(() => parsePoll({ ...poll, events: [retired] }, link), /Invalid/)
 
   const rows = Array.from({ length: 64 }, (_, i) => ({
     ...request,
@@ -60,45 +68,71 @@ test('negotiate v2 and validate the whole journal before exposing any event', ()
   assert.throws(() => parsePoll({ ...poll, events: [request, { ...request, id: 'other' }] }, link))
 })
 
-test('canvas snapshot exposes unified artifacts and rejects an incomplete or foreign reply', () => {
+test('a snapshot exposes the sketch and scene artifacts and rejects a foreign reply', () => {
   const snapshot = {
     ...link,
-    path: '/png',
+    image_path: '/png',
     records_path: '/records',
     strokes_path: '/strokes',
-    diagram_path: '/diagram',
-    previous_diagram_path: null,
+    scene_path: '/scene',
     snapshot: 'hash',
     base_revision: 0,
-    prompt: 'Interpret current sketch',
-    publish_command: 'whiteboard-publish',
-    layer: 'canvas',
+
+    // The real prompt carries the scene format, so it is far longer than any path.
+    prompt: 'Read the sketch. '.repeat(1000),
   }
   assert.deepEqual(canvasSnapshot(snapshot, link), snapshot)
 
   for (const change of [
     { strokes_path: null },
+    { scene_path: undefined },
     { base_revision: -1 },
     { session: 'other' },
-    { layer: 'ideas' },
     { snapshot: {} },
-    { previous_diagram_path: 17 },
+    { prompt: '' },
   ]) {
     assert.throws(() => canvasSnapshot({ ...snapshot, ...change }, link))
   }
 })
 
-test('use one canvas revision; do not reinterpret a legacy layer write as a replacement', () => {
-  assert.deepEqual(boardArguments({ action: 'snapshot' }), ['--layer', 'canvas'])
-  assert.deepEqual(boardArguments({ action: 'publish', layer: 'canvas', file: 'p' }), [
-    '--layer',
-    'canvas',
-    '--file',
-    'p',
-  ])
+test('a preview and a publish name the same scene file and nothing else', () => {
+  assert.deepEqual(boardArguments({ action: 'snapshot' }), [])
+  assert.deepEqual(boardArguments({ action: 'preview', file: 'p' }), ['--file', 'p'])
+  assert.deepEqual(boardArguments({ action: 'publish', file: 'p' }), ['--file', 'p'])
 
-  for (const layer of ['ideas', 'interpretation'] as const) {
-    assert.throws(() => boardArguments({ action: 'publish', layer, file: 'p' }), /canvas/)
-    assert.throws(() => publication({ ...link, layer, revision: 1 }, link))
+  for (const file of [undefined, '', '-', '--binding', 'a\0b']) {
+    assert.throws(() => boardArguments({ action: 'preview', file }), /scene file/)
+    assert.throws(() => boardArguments({ action: 'publish', file }), /scene file/)
   }
+})
+
+test('a preview is accepted only when it says it published nothing', () => {
+  const drawn = {
+    ...link,
+    image_path: '/preview.png',
+    records_hash: 'abc',
+    shapes_count: 2,
+    published: false,
+  }
+  const { owner: _owner, ...shown } = drawn
+  assert.deepEqual(preview({ ...drawn, token: 'hidden' }, link), shown)
+
+  for (const change of [
+    { published: true },
+    { published: undefined },
+    { image_path: '' },
+    { records_hash: 7 },
+    { session: 'other' },
+  ]) {
+    assert.throws(() => preview({ ...drawn, ...change }, link))
+  }
+
+  const published = { ...link, revision: 3, records_hash: 'abc' }
+  assert.deepEqual(publication({ ...published, title_applied: true }, link), {
+    session: 'board',
+    revision: 3,
+    records_hash: 'abc',
+  })
+  assert.throws(() => publication({ ...published, revision: -1 }, link))
+  assert.throws(() => publication({ ...published, session: 'other' }, link))
 })

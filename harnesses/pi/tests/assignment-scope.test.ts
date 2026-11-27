@@ -87,14 +87,14 @@ test('pausing one assignment leaves the automatic wakes of the others running', 
     ['a2', 'paused'],
   ])
   assert.equal(hostWorkPaused(desk!.current!), false, 'a1 was not paused, so the host is not')
-  board.add('first', 'sketch_notify', 'A note for ALPHA.')
+  board.add('first', 'A note for ALPHA.')
   await polls(4)
   assert.equal(model.shown('Paired user requests', 'A note for ALPHA.'), 1, 'the wake arrived')
 
   // Retained: once the user has paused every open assignment, automatic wakes stay parked.
   await session.prompt('/assignments pause a1')
   assert.equal(hostWorkPaused(desk!.current!), true)
-  board.add('second', 'sketch_notify', 'A note while everything is paused.')
+  board.add('second', 'A note while everything is paused.')
   await polls(6)
   assert.equal(model.shown('A note while everything is paused.'), 0, 'nothing woke the host')
   assert.deepEqual(await states(), [

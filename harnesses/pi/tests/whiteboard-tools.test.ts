@@ -102,7 +102,7 @@ test('foreign and unversioned polls cannot wake or acknowledge a paired request'
     await rm(base, { recursive: true, force: true })
   })
   await session.prompt('/start_whiteboard')
-  board.add('notify', 'sketch_notify', 'Owning host only')
+  board.add('notify', 'Owning host only')
   await clock.tick()
   corrupt = { session: 'other-board' }
   await clock.tick()
@@ -168,7 +168,7 @@ test('fork cannot inherit a link or finish a link started by its parent', async 
   assert.equal(clock.delay, 2000)
 })
 
-test('SDK tool snapshots, publishes and acknowledges in the owning session', async (t) => {
+test('SDK tool snapshots, previews, publishes and acks in the owning session', async (t) => {
   const { root, base } = await fixture()
   const board = new FixtureBoard()
   const clock = new ManualClock()
@@ -176,11 +176,12 @@ test('SDK tool snapshots, publishes and acknowledges in the owning session', asy
     { action: 'status' },
     { action: 'ack', event: 'request', state: 'working' },
     { action: 'snapshot' },
-    { action: 'publish', layer: 'canvas', file: 'proposal.json' },
-    { action: 'ack', event: 'request', state: 'updated', message: 'Published interpretation' },
-    { action: 'publish', layer: 'ideas', file: 'legacy.json' },
+    { action: 'preview', file: 'scene.json' },
+    { action: 'publish', file: 'scene.json' },
+    { action: 'ack', event: 'request', state: 'updated', message: 'Published the scene' },
+    { action: 'preview' },
     { action: 'status' },
-    { action: 'snapshot', layer: 'canvas' },
+    { action: 'snapshot' },
     { action: 'publish', file: 'other.json' },
   ]
   let step = 0
@@ -209,7 +210,7 @@ test('SDK tool snapshots, publishes and acknowledges in the owning session', asy
   })
   await session.prompt('/start_whiteboard')
   const note = ' \nPlease preserve the 🦦\r\n '
-  board.add('request', 'interpret_request', note)
+  board.add('request', note)
   let snapshots = 0
   board.before = async (command) => {
     if (command === 'snapshot' && ++snapshots === 2) {
@@ -222,26 +223,38 @@ test('SDK tool snapshots, publishes and acknowledges in the owning session', asy
   assert.equal(results.length, actions.length)
   assert.deepEqual(
     results.map((m) => m.isError),
-    actions.map((_, i) => i === 5 || i === 7 || i === 8),
+    actions.map((_, i) => i === 6 || i === 8 || i === 9),
   )
   const status = results[0]?.content[0]
   assert.ok(status?.type === 'text')
   assert.equal(JSON.parse(status.text).events[0].text, note)
-  assert.match(JSON.stringify(results[0]?.content), /interpret_request/)
-  assert.match(JSON.stringify(results[2]?.content), /diagram_path/)
-  assert.match(JSON.stringify(results[5]?.content), /fresh canvas snapshot/)
-  assert.doesNotMatch(JSON.stringify(results[6]?.content), /interpret_request/)
-  assert.match(JSON.stringify(results[7]?.content), /stage closed/)
-  assert.match(JSON.stringify(results[8]?.content), /mismatched/)
+  assert.match(JSON.stringify(results[0]?.content), /sketch_notify/)
+  assert.match(JSON.stringify(results[2]?.content), /scene_path/)
+  const previewed = results[3]?.content[0]
+  assert.ok(previewed?.type === 'text')
+  assert.deepEqual(JSON.parse(previewed.text), {
+    session: 'board-1',
+    image_path: '/preview',
+    records_hash: 'records-1',
+    shapes_count: 1,
+    published: false,
+  })
+  assert.match(JSON.stringify(results[6]?.content), /require a scene file/)
+  assert.doesNotMatch(JSON.stringify(results[7]?.content), /sketch_notify/)
+  assert.match(JSON.stringify(results[8]?.content), /stage closed/)
+  assert.match(JSON.stringify(results[9]?.content), /mismatched/)
   assert.equal(board.calls.filter((c) => c.command === 'publish').length, 1)
+
+  // A preview reaches the board before the publish of the same file, and publishes nothing.
+  assert.deepEqual(
+    board.calls.filter((c) => ['preview', 'publish'].includes(c.command)),
+    [
+      { command: 'preview', args: ['--file', 'scene.json'] },
+      { command: 'publish', args: ['--file', 'scene.json'] },
+    ],
+  )
   assert.deepEqual(
     board.calls.filter((c) => c.command === 'ack').map((c) => c.args[3]),
     ['received', 'working', 'updated'],
   )
-  assert.deepEqual(board.calls.find((c) => c.command === 'publish')?.args, [
-    '--layer',
-    'canvas',
-    '--file',
-    'proposal.json',
-  ])
 })

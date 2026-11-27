@@ -1,6 +1,11 @@
 import assert from 'node:assert/strict'
 import type { BoardClock } from '../src/whiteboard-feed.ts'
-import type { BoardCommand, BoardEndpoint, BoardReply } from '../src/whiteboard-cli.ts'
+import {
+  boardProtocol,
+  type BoardCommand,
+  type BoardEndpoint,
+  type BoardReply,
+} from '../src/whiteboard-cli.ts'
 import type { BoardEvent } from '../src/whiteboard-protocol.ts'
 
 export function gate() {
@@ -42,11 +47,11 @@ export class FixtureBoard {
   calls: { command: BoardCommand; args: string[] }[] = []
   before?: (command: BoardCommand, args: string[], signal: AbortSignal) => Promise<void>
   private sequence = 0
-  add(id: string, kind: BoardEvent['kind'] = 'sketch_notify', text?: string) {
+  add(id: string, text?: string) {
     const request_id = '00000000-0000-4000-8000-' + String(++this.sequence).padStart(12, '0')
     this.events.push({
       id,
-      kind,
+      kind: 'sketch_notify',
       request_id,
       ...(text === undefined ? {} : { text }),
       sketch_hash: 'source',
@@ -59,7 +64,7 @@ export class FixtureBoard {
     run: async (command, args, signal): Promise<BoardReply> => {
       this.calls.push({ command, args })
       await this.before?.(command, args, signal)
-      const base = { protocol: 2, status: 'success', session: this.session, owner }
+      const base = { protocol: boardProtocol, status: 'success', session: this.session, owner }
 
       if (command === 'link') {
         return {
@@ -86,21 +91,28 @@ export class FixtureBoard {
       if (command === 'snapshot') {
         return {
           ...base,
-          layer: args[1],
           snapshot: 'snap-1',
           base_revision: 0,
-          prompt: 'Untrusted diagram',
-          path: '/png',
+          prompt: 'Untrusted sketch',
+          image_path: '/png',
           records_path: '/records',
           strokes_path: '/strokes',
-          diagram_path: '/diagram',
-          previous_diagram_path: '/previous',
-          publish_command: 'whiteboard-publish --layer canvas',
+          scene_path: '/scene',
+        }
+      }
+
+      if (command === 'preview') {
+        return {
+          ...base,
+          image_path: '/preview',
+          records_hash: 'records-1',
+          shapes_count: 1,
+          published: false,
         }
       }
 
       if (command === 'publish') {
-        return { ...base, layer: args[1], revision: 1 }
+        return { ...base, revision: 1, records_hash: 'records-1' }
       }
 
       return {

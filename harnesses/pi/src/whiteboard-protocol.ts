@@ -1,10 +1,12 @@
-import { BoardUpgradeRequired, object, type BoardReply } from './whiteboard-cli.ts'
+import { BoardUpgradeRequired, boardProtocol, object, type BoardReply } from './whiteboard-cli.ts'
 
 export const batchLimit = 16
 const eventLimit = 64
 const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i
 const states = ['queued', 'received', 'working'] as const
-const kinds = ['sketch_notify', 'interpret_request'] as const
+
+// Every Send is one sketch_notify with an optional note. A retired kind is never accepted.
+const kinds = ['sketch_notify'] as const
 export interface BoardEvent {
   id: string
   request_id?: string
@@ -55,7 +57,7 @@ function url(value: unknown) {
 }
 
 export function parseLink(data: BoardReply, owner: string, binding: string) {
-  if (data.protocol !== 2) {
+  if (data.protocol !== boardProtocol) {
     throw new BoardUpgradeRequired()
   }
 
@@ -139,7 +141,7 @@ function parseEvent(row: unknown): BoardEvent {
 }
 
 export function parsePoll(data: BoardReply, link: BoardLink) {
-  if (data.protocol !== 2) {
+  if (data.protocol !== boardProtocol) {
     throw new BoardUpgradeRequired()
   }
 
@@ -177,7 +179,7 @@ export function parsePoll(data: BoardReply, link: BoardLink) {
 
   return {
     ...link,
-    protocol: 2,
+    protocol: boardProtocol,
     sketch_hash: data.sketch_hash,
     agent_revision: data.agent_revision,
     events,
@@ -185,8 +187,7 @@ export function parsePoll(data: BoardReply, link: BoardLink) {
 }
 
 export type BoardInput = {
-  action: 'status' | 'snapshot' | 'publish' | 'ack'
-  layer?: 'canvas' | 'interpretation' | 'ideas'
+  action: 'status' | 'snapshot' | 'preview' | 'publish' | 'ack'
   file?: string
   event?: string
   state?: 'working' | 'updated' | 'failed'
@@ -224,26 +225,21 @@ export function boardArguments(input: BoardInput): string[] {
     ]
   }
 
-  if (input.layer !== undefined && input.layer !== 'canvas') {
-    throw new Error('Use a fresh canvas snapshot and preserve the entire unified Agent diagram.')
+  if (input.action === 'snapshot') {
+    return []
   }
 
-  const args = ['--layer', 'canvas']
-
-  if (input.action === 'publish') {
-    if (
-      !input.file ||
-      input.file.length > 4096 ||
-      input.file.includes('\0') ||
-      input.file.startsWith('-')
-    ) {
-      throw new Error('Publish requires a proposal file')
-    }
-
-    args.push('--file', input.file)
+  // A preview and a publish read the same scene file, so what was previewed is what is saved.
+  if (
+    !input.file ||
+    input.file.length > 4096 ||
+    input.file.includes('\0') ||
+    input.file.startsWith('-')
+  ) {
+    throw new Error('Preview and publish require a scene file')
   }
 
-  return args
+  return ['--file', input.file]
 }
 
 function artifact(value: unknown): value is string {
@@ -255,41 +251,50 @@ function artifact(value: unknown): value is string {
 export function canvasSnapshot(data: BoardReply, link: BoardLink) {
   sameBoard(data, link)
 
-  if ('layer' in data && data.layer !== 'canvas') {
-    throw new Error('Whiteboard snapshot belongs to a different layer')
-  }
-
   if (
-    !artifact(data.path) ||
+    !artifact(data.image_path) ||
     !artifact(data.records_path) ||
     !artifact(data.strokes_path) ||
-    !artifact(data.diagram_path) ||
-    (data.previous_diagram_path != null && !artifact(data.previous_diagram_path)) ||
+    !artifact(data.scene_path) ||
     !identifier(data.snapshot) ||
     !validRevision(data.base_revision) ||
     typeof data.prompt !== 'string' ||
-    !data.prompt ||
-    !(
-      (typeof data.publish_command === 'string' && data.publish_command.length > 0) ||
-      (Array.isArray(data.publish_command) &&
-        data.publish_command.length > 0 &&
-        data.publish_command.every((arg) => typeof arg === 'string'))
-    )
+    !data.prompt
   ) {
-    throw new Error(
-      'Whiteboard canvas snapshot missing artifacts, revision or publication guidance',
-    )
+    throw new Error('Whiteboard snapshot missing artifacts, revision or scene guidance')
   }
 
   return data
 }
 
-export function publication(data: BoardReply, link: BoardLink) {
+/** A preview is a rendering of the draft. It must say that it published nothing. */
+export function preview(data: BoardReply, link: BoardLink) {
   sameBoard(data, link)
 
-  if (data.layer !== 'canvas' || !validRevision(data.revision)) {
+  if (
+    !artifact(data.image_path) ||
+    !identifier(data.records_hash) ||
+    !counter(data.shapes_count) ||
+    data.published !== false
+  ) {
     return invalid()
   }
 
-  return { session: link.session, layer: data.layer, revision: data.revision }
+  return {
+    session: link.session,
+    image_path: data.image_path,
+    records_hash: data.records_hash,
+    shapes_count: data.shapes_count,
+    published: false,
+  }
+}
+
+export function publication(data: BoardReply, link: BoardLink) {
+  sameBoard(data, link)
+
+  if (!validRevision(data.revision) || !identifier(data.records_hash)) {
+    return invalid()
+  }
+
+  return { session: link.session, revision: data.revision, records_hash: data.records_hash }
 }

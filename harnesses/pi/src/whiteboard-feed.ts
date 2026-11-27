@@ -18,6 +18,7 @@ import {
   batchLimit,
   boardArguments,
   parsePoll,
+  preview,
   publication,
   canvasSnapshot,
   sameBoard,
@@ -395,6 +396,10 @@ export class BoardFeed {
 
       if (input.action === 'publish') {
         return publication(data, this.link)
+      }
+
+      if (input.action === 'preview') {
+        return preview(data, this.link)
       }
 
       return canvasSnapshot(data, this.link)
