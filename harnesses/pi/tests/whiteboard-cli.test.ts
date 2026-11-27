@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
 import { BoardUpgradeRequired, boardProtocol, openBoardEndpoint } from '../src/whiteboard-cli.ts'
-import { parseLink, parsePoll } from '../src/whiteboard-protocol.ts'
+import { boardArguments, parseLink, parsePoll } from '../src/whiteboard-protocol.ts'
 
 const cli = `#!/usr/bin/env node
 const fs = require('node:fs')
@@ -16,7 +16,7 @@ const reply = { status: 'success', session: 'board', owner: 'host' }
 // Like tldraw-sync: the CLI speaks one protocol, and the daemon may still be running another.
 const number = (name, otherwise) =>
   fs.existsSync(name) ? Number(fs.readFileSync(name, 'utf8')) : otherwise
-const supported = number('cli-protocol', 3)
+const supported = number('cli-protocol', 4)
 const daemon = number('daemon-protocol', supported)
 if (command === 'status') {
   if (fs.existsSync('status-broken')) process.exit(1)
@@ -84,7 +84,7 @@ test('CLI argv, binding privacy, flat envelopes and output cap', async (t) => {
   assert.equal(endpoint.binding, join(root, '.pi/traces/harness/whiteboards/host.json'))
   const silent = join(subdir, 'silent-cli')
   await writeFile(silent, '')
-  await assert.rejects(endpoint.run('link', [], signal), /protocol mismatch: pih requests 3/)
+  await assert.rejects(endpoint.run('link', [], signal), /protocol mismatch: pih requests 4/)
   await rm(silent)
   const linked = parseLink(await endpoint.run('link', [], signal), 'host', endpoint.binding)
   assert.equal(linked.draw, 'http://lan/draw')
@@ -102,11 +102,33 @@ test('CLI argv, binding privacy, flat envelopes and output cap', async (t) => {
     created_at_ms: 123,
     state: 'queued',
   }
+  const chat = {
+    ...event,
+    id: 'chat',
+    request_id: '00000000-0000-4000-8000-000000000002',
+    include_sketch: false,
+  }
   const eventsPath = join(subdir, 'events.json')
-  await writeFile(eventsPath, JSON.stringify([{ ...event, token: 'private-marker' }]))
+  await writeFile(eventsPath, JSON.stringify([{ ...event, token: 'private-marker' }, chat]))
   const polled = parsePoll(await endpoint.run('poll', [], signal), linked.link)
-  assert.deepEqual(polled.events, [event])
+  assert.deepEqual(polled.events, [{ ...event, include_sketch: true }, chat])
   await rm(eventsPath)
+
+  // The answer reaches the CLI process as one exact argv value.
+  const answer = ' I read it privately. 🦦\r\n\t"--binding" stays text; Café '
+  const ack = { action: 'ack', event: 'chat', state: 'updated', message: answer } as const
+  const answered = await endpoint.run('ack', boardArguments(ack), signal)
+  assert.deepEqual(answered.args, [
+    '--binding',
+    endpoint.binding,
+    '--event',
+    'chat',
+    '--state',
+    'updated',
+    '--message',
+    answer,
+    '--json',
+  ])
 
   for (const identity of [{ owner: 'other' }, { session: 'other' }]) {
     assert.throws(() => parsePoll({ ...status, ...identity }, linked.link), /mismatched/)
@@ -206,13 +228,13 @@ test('a protocol mismatch names the launcher, CLI and daemon versions', async (t
   )
 
   // The same board once the launcher is current: only the daemon is behind.
-  const stale = await mismatch(boardProtocol, 3, 2)
-  assert.deepEqual(stale.versions, { requested: 3, cli: 3, daemon: 2 })
-  assert.match(stale.message, /CLI supports 3, the daemon reports 2\. .*tldraw-sync stop/)
+  const stale = await mismatch(boardProtocol, 4, 3)
+  assert.deepEqual(stale.versions, { requested: 4, cli: 4, daemon: 3 })
+  assert.match(stale.message, /CLI supports 4, the daemon reports 3\. .*tldraw-sync stop/)
 
-  const old = await mismatch(boardProtocol, 2, 2)
-  assert.deepEqual(old.versions, { requested: 3, cli: 2, daemon: 2 })
-  assert.match(old.message, /CLI supports 2, the daemon reports 2\. Upgrade tldraw-sync/)
+  const old = await mismatch(boardProtocol, 3, 3)
+  assert.deepEqual(old.versions, { requested: 4, cli: 3, daemon: 3 })
+  assert.match(old.message, /CLI supports 3, the daemon reports 3\. Upgrade tldraw-sync/)
 
   const stopped = await mismatch(2, 3, 0)
   assert.deepEqual(stopped.versions, { requested: 2, cli: 3, daemon: 'stopped' })
@@ -225,8 +247,8 @@ test('a protocol mismatch names the launcher, CLI and daemon versions', async (t
   assert.match(unknown.message, /the daemon reports an unknown version/)
   await rm(join(root, 'status-broken'))
 
-  await set('cli-protocol', 3)
-  await set('daemon-protocol', 3)
+  await set('cli-protocol', 4)
+  await set('daemon-protocol', 4)
   const endpoint = await openBoardEndpoint(root, 'host')
-  assert.equal((await endpoint.run('link', [], signal)).protocol, 3)
+  assert.equal((await endpoint.run('link', [], signal)).protocol, 4)
 })

@@ -365,17 +365,23 @@ export class BoardFeed {
         return status
       }
 
+      // One answer per delivered request on this board: a finished, foreign or undelivered
+      // event never reaches the CLI.
       if (input.action === 'ack') {
         const event = status.events.find((e) => e.id === input.event)
 
-        if (event?.state === 'queued') {
-          if (
-            !(await this.flushed()) ||
-            receipts(this.ctx.sessionManager.getBranch(), this.link, [event]).missing.size
-          ) {
-            throw new Error('Whiteboard event has not been delivered in this conversation')
-          }
+        if (!event) {
+          throw new Error('Whiteboard event is not outstanding on this board: answered or unknown')
+        }
 
+        if (
+          !(await this.flushed()) ||
+          receipts(this.ctx.sessionManager.getBranch(), this.link, [event]).missing.size
+        ) {
+          throw new Error('Whiteboard event has not been delivered in this conversation')
+        }
+
+        if (event.state === 'queued') {
           await this.received(event)
         }
       }

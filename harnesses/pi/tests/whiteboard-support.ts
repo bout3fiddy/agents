@@ -40,20 +40,24 @@ export class ManualClock implements BoardClock {
   }
 }
 
+/** A journal row as the board stores it: include_sketch is absent on a legacy sketch request. */
+export type BoardRow = Omit<BoardEvent, 'include_sketch'> & { include_sketch?: boolean }
+
 export class FixtureBoard {
   binding = '/private/fixture.json'
   session = 'board-1'
-  events: BoardEvent[] = []
+  events: BoardRow[] = []
   calls: { command: BoardCommand; args: string[] }[] = []
   before?: (command: BoardCommand, args: string[], signal: AbortSignal) => Promise<void>
   private sequence = 0
-  add(id: string, text?: string) {
+  add(id: string, text?: string, include_sketch?: boolean) {
     const request_id = '00000000-0000-4000-8000-' + String(++this.sequence).padStart(12, '0')
     this.events.push({
       id,
       kind: 'sketch_notify',
       request_id,
       ...(text === undefined ? {} : { text }),
+      ...(include_sketch === undefined ? {} : { include_sketch }),
       sketch_hash: 'source',
       state: 'queued',
       created_at_ms: 100,

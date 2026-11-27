@@ -39,12 +39,6 @@ test(`whiteboard recovery schedule, seed ${seed}`, async (t) => {
           ? [entry.details as { ids: string[]; time: number }]
           : [],
       )
-  const pause = (paused: boolean) =>
-    session.sessionManager.appendCustomEntry('pi-host-work', {
-      session: session.sessionManager.getSessionId(),
-      state: paused ? 'paused' : 'done',
-      detail: 'Fixture',
-    })
   await session.prompt('/start_whiteboard')
   let failPoll = false
   let failReceipt = false
@@ -65,9 +59,9 @@ test(`whiteboard recovery schedule, seed ${seed}`, async (t) => {
     }
   }
 
+  // Escaped gap: this schedule also appended a retired host-work pause entry that nothing reads
+  // any more, and asserted it suppressed wakes. Only the default seed avoided that coincidence.
   for (let tick = 0; tick < 24; tick++) {
-    const paused = next() % 5 === 0
-    pause(paused)
     failPoll = next() % 6 === 0
     failReceipt = next() % 4 === 0
 
@@ -75,17 +69,21 @@ test(`whiteboard recovery schedule, seed ${seed}`, async (t) => {
       await session.reload()
     }
 
-    board.add(`event-${tick}`, next() % 2 === 0 ? 'A note' : undefined)
+    const shape = next() % 3
+    board.add(
+      `event-${tick}`,
+      shape === 2 ? undefined : shape ? 'A note' : 'A private question',
+      shape ? undefined : false,
+    )
     const count = batches().length
     await clock.tick()
     await session.waitForIdle()
 
-    if (paused || failPoll) {
+    if (failPoll) {
       assert.equal(batches().length, count)
     }
   }
 
-  pause(false)
   failPoll = false
   failReceipt = false
 

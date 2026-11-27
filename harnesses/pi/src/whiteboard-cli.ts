@@ -15,7 +15,7 @@ export class MissingBoardCLI extends Error {
 
 // The one protocol this launcher speaks. tldraw-sync names the same number in
 // src/shared/whiteboard.ts; the launcher, the CLI and the running daemon must all agree.
-export const boardProtocol = 3
+export const boardProtocol = 4
 
 /** Three parties hold a protocol number. A mismatch names each one, so the fix is not a guess. */
 export interface BoardVersions {

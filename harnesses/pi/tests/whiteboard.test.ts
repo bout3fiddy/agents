@@ -230,6 +230,63 @@ test('fresh session waits for its transcript file before first ACK', async (t) =
   assert.equal(board.events[0]?.state, 'received')
 })
 
+// Escaped gap: the receipt check guarded only queued events, so a sibling branch could finish a
+// request another branch had already received and was answering.
+test('a sibling branch cannot answer a request delivered on another branch', async (t) => {
+  const { root, base } = await fixture()
+  const board = new FixtureBoard()
+  const clock = new ManualClock()
+  const { session, runtime } = await captureSession(
+    root,
+    base,
+    [(pi) => registerWhiteboard(pi, board.open, clock)],
+    async (context) => {
+      const last = context.messages.at(-1)
+      const content = JSON.stringify(last?.content)
+      const ack = (state: string, message?: string) => [
+        {
+          type: 'toolCall' as const,
+          id: state,
+          name: 'whiteboard',
+          arguments: { action: 'ack', event: 'chat', state, ...(message && { message }) },
+        },
+      ]
+
+      if (last?.role === 'toolResult') {
+        return done
+      }
+
+      if (content.includes('Request data (JSON)')) {
+        return ack('working')
+      }
+
+      return content.includes('Answer from the sibling') ? ack('updated', 'Sibling reply') : done
+    },
+  )
+  t.after(async () => {
+    await session.dispose()
+    await runtime.settleCredentialWrites()
+    await rm(base, { recursive: true, force: true })
+  })
+  await session.prompt('Before linking')
+  await session.prompt('/start_whiteboard')
+  const linkedLeaf = session.sessionManager.getLeafId()!
+  board.add('chat', 'A private question', false)
+  await clock.tick()
+  await session.waitForIdle()
+  assert.equal(board.events[0]?.state, 'working')
+  await session.navigateTree(linkedLeaf, { summarize: false })
+  await session.prompt('Answer from the sibling')
+  const result = session.messages.findLast((m) => m.role === 'toolResult')
+  assert.equal(result?.isError, true)
+  assert.match(JSON.stringify(result?.content), /not been delivered in this conversation/)
+  assert.deepEqual(
+    board.calls.filter((c) => c.command === 'ack').map((c) => c.args[3]),
+    ['received', 'working'],
+  )
+  assert.equal(board.events[0]?.state, 'working')
+})
+
 test('tree change cancels in-flight polls without a stale wake or ACK', async (t) => {
   const { root, base } = await fixture()
   const board = new FixtureBoard()

@@ -34,12 +34,18 @@ test('SDK delivers complete FIFO batches within both budgets across reload', asy
   await session.prompt('/start_whiteboard')
   const note = ' \t{"authorization":"example"}\r\nCafe\u0301 🦦 \n '
 
+  // Private chats, explicit and legacy sketch requests share one FIFO journal.
   for (let i = 0; i < 64; i++) {
     const text = i < 5 ? '🦦'.repeat(4000) : i % 2 ? note : undefined
-    board.add(String(i), text)
+    const include_sketch = text === undefined ? undefined : i % 3 === 0 ? false : i % 3 === 1
+    board.add(String(i), text, include_sketch)
   }
 
-  const expected = structuredClone(board.events)
+  const expected = board.events.map((event) => ({
+    ...structuredClone(event),
+    include_sketch: event.include_sketch ?? true,
+  }))
+  assert.ok(expected.some((event) => !event.include_sketch))
   await clock.tick()
   await session.waitForIdle()
   await session.reload()
