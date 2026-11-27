@@ -17,17 +17,11 @@ test('groups adjacent operations, separates repositories, preserves interleaved 
   assert.notEqual(view.add('later', 'gh pr view 23 --repo team/two').group, other.group)
 })
 
-test('unknown commands only coalesce for exact retries or recorded host work', () => {
+test('unknown commands only coalesce for exact retries', () => {
   const view = new ShellActivity()
   const first = view.add('a', 'pwd')
   assert.equal(view.add('b', 'pwd').group, first.group)
   assert.notEqual(view.add('c', 'whoami').group, first.group)
-  view.hostWork({ state: 'active', detail: 'Validate the deployment' })
-  const host = view.add('d', './prepare')
-  assert.equal(view.add('e', './publish').group, host.group)
-  assert.equal(host.group.operation.title, 'Validate the deployment')
-  view.hostWork({ state: 'done', detail: 'Deployment verified' })
-  assert.notEqual(view.add('f', './publish').group, host.group)
 })
 
 function assistant(content: AssistantMessage['content']): AssistantMessage {

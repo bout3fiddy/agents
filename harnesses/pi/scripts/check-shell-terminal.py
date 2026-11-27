@@ -101,7 +101,7 @@ class Terminal:
 
 
 def compact(view):
-    hidden = ("host_work", "TRACK_OPERATION_", '"content":', RAW_FIRST, RAW_SECOND, RAW_OUTPUT)
+    hidden = ('"content":', RAW_FIRST, RAW_SECOND, RAW_OUTPUT)
     return (view.count("PR #61") == 1 and "project read · guide.md" in view and "Failed ·" in view
             and "2 calls" in view and "1 failed" in view and BLOCKER in view
             and "conflict" in view.lower() and all(marker not in view for marker in hidden))
@@ -123,8 +123,7 @@ def exercise(launcher, project, reports, resume):
                          "waiting for folded conversation")
         (reports / (name + "-folded.txt")).write_text(view)
         initial_render = (reports / (name + ".ansi")).read_text()
-        assert all(marker not in initial_render for marker in (RAW_FIRST, RAW_SECOND, RAW_OUTPUT,
-                                                             "TRACK_OPERATION_"))
+        assert all(marker not in initial_render for marker in (RAW_FIRST, RAW_SECOND, RAW_OUTPUT))
 
         if not resume:
             cli.click("project read · guide.md")
@@ -149,12 +148,11 @@ def exercise(launcher, project, reports, resume):
         cli.process.setwinsize(90, 80)
         cli.process.send("\x0f")
         view = cli.until(lambda text: all(marker in text for marker in
-                                         (RAW_FIRST, RAW_SECOND, RAW_OUTPUT, "TRACK_OPERATION_END",
+                                         (RAW_FIRST, RAW_SECOND, RAW_OUTPUT,
                                           "Merge conflict in guide.md")),
                          "expanding both shell commands")
         (reports / (name + "-expanded.txt")).write_text(view)
         assert RAW_OUTPUT in view and "Merge conflict in guide.md" in view, view
-        assert "TRACK_OPERATION_END" in view, view
         cli.process.send("\x0f")
         cli.until(compact, "collapsing raw commands")
     finally:

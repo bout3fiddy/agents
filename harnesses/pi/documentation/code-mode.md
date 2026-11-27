@@ -1,110 +1,79 @@
 # Pi code mode
 
-The orchestrator and Pi-backed coordinators, implementers and task workers can call `codemode`. Each
-script sees the permitted inspection tools registered for its own role. Independent reads can run
-together. A script can also search once and use the returned paths and line numbers for bounded
-follow-up reads in the same model step. Keep a single lookup direct when there is nothing to
-combine. Workers can save a large inspected value with `store(key, value)` and use `load(key)` in
-later scripts in the session. Return the needed excerpts. When the SDK truncates a result, workers
-can reread the relevant project range. The tool reports the count and first six nested failures even
-when a script catches an error or prints only part of a result.
+`codemode` runs one JavaScript script that calls tools, chains their results and returns only what
+the decision needs. A step that would take several model round trips takes one.
 
-In the host terminal, an inspection shows its status, inspected paths and any failed calls. Click
-the row or use Pi’s tool expansion key for individual calls and a short output preview. Click **Show
-raw script and output** in that view for the original script, call arguments and returned text.
+## What a script may call
 
-- `read`, `grep`, `find`, `ls`. Host SDK inspections. Native read returns its SDK shape. The three
-  listing/search tools return text.
+The orchestrator can call every tool of its role from a script except `bash`, `write` and `edit`.
+Those three stay direct calls so each use of the shell and each host file write is individually
+visible.
 
-- `project_search`, `project_read`. Host and Pi worker inspections. Literal search exposes hits with
-  path, line and text, and hasMore. Listings expose matches and an optional nextAfterPath. Reads
-  include content, folder rules, the full-file hash and any continuation coordinates. For literal
-  searches, use pathPrefix to restrict the files scanned. Return hits and hasMore when you need
-  locations. Each entry in matches repeats the same path, line and text. An explicitly excluded
-  prefix returns an error, or scopeNote when the same prefix matches visible sibling names. Report
-  the excluded contents as unknown. If they affect a decision, hand that check to the host.
+| Tools                                                      | Notes                              |
+| ---------------------------------------------------------- | ---------------------------------- |
+| `job_start`, `job_status`, `job_message`, `job_retry`,     | Results are objects. Give every    |
+| `job_close`                                                | scripted `job_start` a `key`       |
+| `read`, `grep`, `find`, `ls`, `project_read`,              | `project_search` returns hits with |
+| `project_search`                                           | path and line for follow-up reads  |
+| `inspect_pr`, `inspect_ci_run`, `watch_github_run`         | Batch PRs or runs in one script    |
+| `consult_design`, `design_consultation`, `document_check`, | Same authority as a direct call    |
+| `whiteboard`                                               |                                    |
 
-- `original_read`, `read_reference`. Worker inspections where the role supplies them. Original reads
-  use the same paging as project_read. For the exact JS/TS formatting rule, read_reference({name:
-  "readability-spacing"}) returns the same source used by project_format and harness lint.
+Pi workers script only their read-only inspections: `project_read`, `project_search`,
+`original_read` and `read_reference`. Claude workers have no code mode.
 
-- `task_status`, `harness_status`, `harness_capabilities`. Host inspections. Task status returns one
-  object for an ID or an array without an ID. Read status, hostActions and checks from the task.
-  Both task_status and review_receipts expose the same task lifecycle as status and state. Receipt
-  verdicts and individual check statuses apply to their recorded snapshots. Harness status includes
-  runtime, workflow and delegations.
+## Why a script cannot overreach
 
-- `inspect_ci_run`. Batch run IDs for the baseline and candidate. Compare wallMs, lastFinishingJob,
-  longestJobs and sameHeadRuns. Check jobsObserved against jobsTotal before generalizing.
+- Job creation is bounded in the store: four active jobs per repository, and one job per `key`.
+- There is no cancel or pause function. Stopping work is the user's `/jobs cancel`.
+- A nested call to a tool outside the allowed set is blocked at execution, whatever the script
+  names.
+- Host file writes are subject to the same routing hook inside a script as outside it.
 
-- `compare_candidates`. Inspect a local batch and its candidate evidence.
+## Patterns
 
-- `inspect_pr`, `review_receipts`. Host inspections. Read baseRefName, baseRefOid and headRefOid in
-  the same query as mergeability, reviews and checks. Read required findings and check snapshots
-  from receipts. Missing receipts are null. Final runner checks supersede provisional coordinator
-  checks for the same attempt. Required findings and non-passing check receipts survive a narrow
-  script projection.
+Fan out research and return immediately:
 
-- `host_work`. Direct host tool that records and updates the session's assignments.
-- `whiteboard`. Direct, session-bound host tool: read paired requests, snapshot, preview or publish
-  the Agent canvas and acknowledge events. Never expose the binding or this tool to workers.
-- `watch_github_run`. Direct host tool. Registers or cancels a local CI follow-up.
+```js
+const questions = ['How is auth wired?', 'Where are retries configured?']
+const started = await Promise.allSettled(
+  questions.map((task, index) =>
+    tools.job_start({ title: `Research ${index + 1}`, task, mode: 'research', key: `r${index}` }),
+  ),
+)
+text(started.map((item) => (item.status === 'fulfilled' ? item.value.id : String(item.reason))))
+```
 
-- `codemode`. Top-level script runner. Model helpers are disabled.
+Search, then read only the hits:
 
-- `bash`, `run_command`, `write`, `edit`, `project_write`, `project_edit`, `project_delete`,
-  `project_format`. Direct calls under the role's normal authority.
+```js
+const found = await tools.project_search({ query: 'retryPolicy', pathPrefix: 'src/' })
+const reads = await Promise.all(
+  found.hits.slice(0, 5).map((hit) => tools.project_read({ path: hit.path, startLine: hit.line })),
+)
+text(reads.map((file) => file.content.slice(0, 600)))
+```
 
-- `document_check`, `design_consultation`, `recurring_task`. Direct. These tools can also format,
-  consume/cancel consultation results or change schedules.
-
-- `delegate_local`, `integrate_candidate`. Direct local dispatch and integration.
-
-- `workflow`, `consult_design`, `delegate_task`, `delegate_branches`, `delegate_worker`. Direct.
-  These calls launch work.
-
-- `task_control`, `revise_tasks`, `resume_task`, `merge_branches`. Direct changes to running work or
-  Git.
-
-- `run_checks`, `verify_loop`, `submit_result`, `report_progress`, `report_milestone`. Direct
-  coordinator or worker actions that execute checks or record evidence.
-
-- `WebFetch`, `WebSearch`. Claude-native tools where enabled. Claude CLI roles use their existing
-  tools and can issue independent reads together.
-
-Implementers and performance workers call `verify_loop` directly for repeated commands. For example,
-mode `seeded`, argv `["node", "tests/recovery.js", "{seed}"]`, firstSeed 100 and count 40 run cases
-100–139 until the first failure. Use the returned replay arguments on the recorded snapshot.
-Differential mode compares matching text from original and candidate; benchmark mode pairs their
-samples in alternating order and reports medians in the supplied metric and unit. Benchmark commands
-must print a single finite number. Both sides use the candidate’s installed dependencies and their
-own source snapshots. Raw samples live in the private receipt alongside the worker result. Each
-sample runs in a fresh copy under the same execution decision as `run_command`. A call accepts up to
-128 cases and five minutes; continue a longer campaign in ranges. Project acceptance checks still
-run on the final snapshot.
-
-For one large read that only needs a count or a few matches, filter it in code mode. Use a direct
-call for one small read. Save expensive results before printing when a later slice is likely. Scope
-saved keys to the observed head or snapshot and refresh mutable status when acting on it.
-
-For PR triage, inspect each head once. Check runs expose detailsUrl and commit statuses expose
-targetUrl. Either may be null. Use the failing check's link and collect its log once for all needed
-filters.
+Triage PRs, inspecting each head once:
 
 ```js
 const reads = await Promise.allSettled(
   numbers.map((number) => tools.inspect_pr({ repository, number })),
 )
+
 for (const [index, read] of reads.entries()) {
   if (read.status === 'rejected') {
     text({ number: numbers[index], error: String(read.reason) })
     continue
   }
+
   const { number, headRefOid, mergeable, reviewDecision, statusCheckRollup } = read.value
   text({ number, headRefOid, mergeable, reviewDecision, checks: statusCheckRollup })
 }
 ```
 
-Measure uptake on turns with eligible reads. Use parent tool IDs to distinguish a batch from its
-nested calls. Compare similar requests' model steps and wall time. A higher call count by itself
-does not establish a speedup.
+Use `store(key, value)` and `load(key)` to keep a large result across scripts. Do not poll a job
+from a script: its outcome is delivered to the conversation.
+
+In the host terminal a script shows its status, inspected paths and failed calls. Click the row or
+use Pi's tool expansion key for the individual calls and the raw script.

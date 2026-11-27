@@ -112,14 +112,9 @@ export function compactTool(name: string, base?: ToolRenderers): ToolRenderers {
         )
       }
 
-      if (name === 'host_work' && !ctx.isError) {
-        return hidden
-      }
-
-      const target =
-        name === 'task_control'
-          ? [field(args, 'action'), field(args, 'id').slice(0, 8)].filter(Boolean).join(' · ')
-          : field(args, 'path') || field(args, 'title')
+      const target = name.startsWith('job_')
+        ? [field(args, 'id'), field(args, 'title')].filter(Boolean).join(' · ')
+        : field(args, 'path') || field(args, 'title')
       return row('▸ ' + title + (target ? ' · ' + target : ''), theme, ctx.isError)
     },
     renderResult(result, options, theme, ctx) {
@@ -146,17 +141,6 @@ export function compactTool(name: string, base?: ToolRenderers): ToolRenderers {
           theme,
           true,
         )
-      }
-
-      if (name === 'host_work' && !options.isPartial) {
-        const state = field(ctx.args, 'state')
-
-        if (
-          (state === 'paused' || state === 'waiting') &&
-          !(ctx.args && typeof ctx.args === 'object' && 'retry' in ctx.args)
-        ) {
-          return row(state + ' · ' + field(ctx.args, 'detail'), theme)
-        }
       }
 
       return hidden

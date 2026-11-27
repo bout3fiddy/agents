@@ -13,7 +13,7 @@ export const schemaVersion = 1
 export const jobLimits = {
 
   /** Jobs that may be queued or running in one repository. */
-  active: 6,
+  active: 4,
 
   /** Runner heartbeat period, and the silence after which a runner is taken for dead. */
   heartbeatMs: 2000,

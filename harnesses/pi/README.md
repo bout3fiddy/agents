@@ -10,9 +10,8 @@ Resolve conflicts, unsafe paths or filesystem errors before continuing. If an in
 `.pi-tiger-style.lock`, confirm no setup is active before removing the empty directory.
 
 Codex workshops designs with the user and parallel Fable advice. It has shell and file tools for
-investigation, setup and acceptance. Tracked workers make project changes while discussion
-continues. Implementation uses Astra workers on disposable candidates by default, executable checks
-and optional performance measurement.
+investigation, setup and acceptance. Every product change runs as a background job: one worker in an
+isolated copy, checks run by the host, then delivery. The conversation continues meanwhile.
 
 On Apple silicon Macs with Paper Desktop in `/Applications`, start Paper and use `pih` normally. Pi
 and Claude sessions discover Paper’s native tools without selecting a task. In Pi, `/mcp` shows
@@ -54,48 +53,74 @@ See the [whiteboard integration check](documentation/whiteboard.md) for the pair
 | Role                     | Model / default effort |
 | ------------------------ | ---------------------- |
 | Orchestrator             | Codex / medium         |
-| Task coordinator         | Codex / medium         |
-| Branch orchestrator      | Codex / medium         |
-| General task worker      | Codex / medium         |
-| Design advisor           | Fable 5.2 / medium     |
 | Implementer              | GPT 6.2 Astra / medium |
+| General task worker      | GPT 6.2 Astra / medium |
+| Design advisor           | Fable 5.2 / medium     |
 | Performance investigator | Fable 5.2 / medium     |
-
-Claude specialists prefer Fable 5.2. On a confirmed usage limit the harness selects Opus with the
-same role and effort. Reuse a confirmed limit only before reset and for less than 15 minutes;
-otherwise probe Fable again. Attribute results to the actual model and report quota fallback.
 
 Fresh installs default to `openai-codex/gpt-6.2-astra` at medium effort. Pi's current model and
 thinking selection take precedence for the orchestrator; the harness never silently changes them.
-Timing traces record the actual selection. Implementation defaults to `openai-codex/gpt-6.2-astra`
-with medium as its default. Change `roles/*.json` to select models, effort, tools, skills and write
-scopes. The orchestrator has normal host shell/file access; the worker boundaries apply to delegated
-execution, whose commands are sandboxed unless you enrolled the project as trusted-local. Use
-`/thinking medium` in a running Pi session for ordinary coordination. The current session selection
-is independent of worker effort.
+Change `roles/*.json` to select models, effort, tools and write scopes. Astra implements by default;
+when you ask for Opus or Fable the orchestrator sets `implementerModel` on that job. Claude roles
+prefer Fable 5.2 and fall back to Opus on a confirmed usage limit, reported with the result.
 
-Astra implements by default. When the user explicitly requests Opus or Fable to implement a design,
-set `implementerModel` to `opus` or `fable` on the workflow, delegated task or individual branch
-task. For explicit Claude comparisons use research with no writes. For document edits authorize only
-the necessary document paths. Route implementation and repair through its tracked implementer.
-Claude implementers use medium or high effort. When Fable reaches its usage limit, Opus continues
-the same task at the selected effort.
+## Jobs
 
-The orchestrator can select `thinking` for each background job. On `workflow` and implementation
-jobs it selects Astra's effort. The optional `specialistThinking` object selects each applicable
-workflow specialist by role (`performance`). On other `delegate_task` jobs and each
-`delegate_branches` task it selects the coordinator's effort. Each coordinator chooses its
-children's effort independently with `delegate_worker`. Use low for mechanical changes, medium for
-implementation from a settled design, and high for difficult concurrency problems, uncertain
-invariants or repairs that need diagnosis.
+A job is the only way product files change. The orchestrator starts one with `job_start`:
 
-Fable supports medium and high. `consult_design.thinking` selects the advisor's effort independently
-of answer length. The maximum for all workers is high. Worker receipts and the worker details view
-show the selected level.
+| Field        | Meaning                                                                       |
+| ------------ | ----------------------------------------------------------------------------- |
+| `mode`       | `implement` (code), `documents` (Markdown and text) or `research` (read-only) |
+| `writePaths` | Exact files, `directory/**` or `**`. The host checks them on the actual bytes |
+| `design`     | Optional settled design for an implement job                                  |
+| `deliver`    | `apply` writes into the working tree; `branch` commits on a local branch      |
+| `base`       | Commit to start from. Default: the working tree as it stands                  |
+| `isolation`  | `required` keeps the job sandboxed whatever the project trusts                |
+| `key`        | Idempotency key: the same key in one session returns the first job            |
 
-Recovery testing follows explicit impact, configured DB paths, SQL/schema files and persistence code
-or configuration changes. References in ordinary Markdown do not trigger a specialist. Vyper NatSpec
-annotations are excluded from SQL detection.
+What the host does for every job, in code and never by a model's decision:
+
+1. Record the starting point as a Git commit: the working tree exactly as it stands, uncommitted and
+   untracked files included, without touching your index, HEAD or stash.
+2. Give one worker a disposable copy and the assignment.
+3. Check on the actual bytes that every change is inside the write scope.
+4. Run the project's checks on the copy. A failure goes back to the same worker with the output. The
+   loop stops when the same failure repeats, or after six failed rounds.
+5. Deliver: apply to the checkout, or advance the branch. A path the checkout changed meanwhile is a
+   conflict; then nothing is written and the verified result stays available as a commit.
+
+Jobs do not reserve files. Up to four run at once; overlapping results collide at delivery.
+
+Outcomes reach the conversation on their own. At every turn boundary and idle tick the host reads
+which outcomes the session has not been shown and offers them; an outcome counts as delivered only
+once its message is in the session transcript. A wake that is lost is offered again. Each turn also
+starts with the recorded state of the session's open jobs.
+
+| You type           | Effect                                                     |
+| ------------------ | ---------------------------------------------------------- |
+| `/jobs`            | List recent jobs                                           |
+| `/jobs j12`        | Show one job in full                                       |
+| `/jobs cancel j12` | Stop it. Its work so far is kept as a commit               |
+| `/workers`         | Browse live workers and their conversations, send guidance |
+
+Only you can stop running work. The model has no cancel tool. It can guide a running job
+(`job_message`), retry a stopped one from the work it kept (`job_retry`) or close a stopped one with
+a reason (`job_close`), and you are shown every closure.
+
+A job that stops is `needs_attention` with the reason: a blocked worker and the host actions it
+asked for, failing checks, an edit outside scope, a delivery conflict, or a runner that died. A dead
+runner is detected from its heartbeat, and a retry continues from the last recorded commit.
+
+Pushing a branch, opening a PR and merging are host shell actions the orchestrator takes only on
+your request. A CI failure on a job's branch is repaired by another job on that branch.
+
+## Code mode
+
+`codemode` runs one JavaScript script that calls many tools, chains their results and returns only
+what matters. Every orchestrator tool is callable from a script except `bash`, `write` and `edit`,
+so a single step can start several jobs, read their status, search and read files and inspect PRs.
+Workers script their read-only inspections. See
+[documentation/code-mode.md](documentation/code-mode.md).
 
 ## Shell activity in the terminal
 
@@ -201,182 +226,16 @@ no model-turn or elapsed-session cap. Session shutdown, replacement, reload and 
 pending advice. Results and inputs live in the project's private harness state under
 `consultations/`. Resuming can inspect a saved result; an abandoned running job must be restarted.
 
-The orchestrator owns setup, Tiger Style customization, acceptance and authorized integration. In a
-fresh directory, it creates the starter README, ignore files and formatting manifest and runs the
-install and check itself; those files need no worker. In a product repository, changes to a README
-or package manifest go to a tracked worker.
+The orchestrator owns setup, Tiger Style customization and acceptance. In a fresh directory it
+creates the starter README, ignore files and formatting manifest and runs the install and check
+itself. Its file tools otherwise write only `design.md`, `design/design.md`, `.pi/harness.json` and
+private scratch under `.pi/traces/scratch/`; everything else is a job. The host shell is
+unrestricted and must not be used to bypass that. A Git commit requires your authorization.
 
-A small workshop decision can be saved to `design.md` or `design/design.md` without an
-implementation checkpoint. Use `.pi/traces/scratch/` for private probes. Send product documentation,
-code, tests and repairs through a tracked worker regardless of size. Return defects to the writer
-with the failing check. Host shell is unrestricted; never use it to bypass file routing. A Git
-commit requires user authorization.
-
-`harness_capabilities` reports the boundary. Host tools have ordinary filesystem, network and CLI
-access. Worker commands never retain shell writes or publish Git; workers edit through scoped file
-tools. By default those commands are sandboxed with no network or home access. In a project you
-enroll as trusted-local they run as normal local commands with your authority, which is a statement
-of trust and not containment. The host marks a task whose input is external or untrusted with
-`isolation: 'required'`, which keeps it sandboxed in every project. See
-[documentation/worker-execution.md](documentation/worker-execution.md). Perform authorized installs,
-lockfile generation, Git setup and publication on the host. `delegate_task.requires` names host
-capabilities and rejects incompatible assignments before launch. Workers return structured
-`hostActions` when a missing capability is encountered. The host inspects retained work and
-completes authorized missing steps instead of repeating the same blocked worker.
-
-Active workers persist phase/tool/child progress. At most once per minute, fresh progress is added
-privately to orchestrator context without a model turn or visible progress block. Workers use
-`report_progress` for meaningful findings, phase changes or concrete blockers. The orchestrator
-receives the latest routine update per task. A terminal result retires that task's earlier updates.
-The raw trace keeps every update. Milestones, attention notices and results stay in context.
-Ordinary activity is recorded automatically; workers need no periodic status calls or guidance
-questions. Three minutes without recorded activity produces one attention notice for that activity
-point; age alone never cancels work. A coordinator uses `report_milestone` when a verified result
-unblocks other work or materially changes the plan. The host summarizes related milestones together
-at a safe boundary. The latest summary per active task survives routine heartbeats and reload. A
-terminal result takes precedence over any pending milestone for that task. `task_status` exposes
-progress and activity age. Completion and real blockers wake the orchestrator for acknowledgement
-and authorized recovery. Worker `project_edit` replaces unique text blocks in one file. Pass
-subsequent replacements in `additionalEdits` to validate them all in order before writing once. Pi
-executes tool batches containing retained edits in order. Independent read calls can share one model
-response.
-
-Workers receive the paths changed since the original snapshot. Workers can inspect both versions
-directly. Small projects also include a filename index. For larger projects, list paths by prefix
-and follow `nextAfterPath` to continue. File reads report total lines and the next line and column
-for bounded excerpts. Reads include folder instructions by default. Set `reuseInstructions` when the
-preceding rules are still in context. Write receipts omit repeated identical instructions; changed
-rules return in full.
-
-The orchestrator keeps `bash`, `read`, `write`, `edit`, `grep`, `find` and `ls`. It applies
-repository lint and appropriate checks to its own changes. `document_check` checks or formats
-selected Markdown files with the pinned formatter and 100-column policy. Fenced code examples use
-the same Prettier settings as source files formatted by workers. Content correctness and links still
-need review. Root `.prettierignore` exclusions skip formatting checks and writes, including the
-document integration gate. Results list these paths in `formattingSkipped`; the independent
-100-column check still applies. Formatter configuration code is never loaded by this tool.
-
-During scoped verification, Pi records inherited line-width findings on unchanged Markdown listed in
-the original root `.prettierignore` outside the task's write scope. The receipt names each affected
-file. All project checks receive the complete candidate. Direct lint, document checks, new or edited
-text, in-scope files and code retain the full rules. On a branch, task-workers can edit .md, .txt
-and .rst documents. Implementers own scoped project manifests and JSON files.
-
-### Recurring background tasks
-
-Ask the orchestrator “Every hour, audit progress and flag blockers” or “Stop the progress audit.”
-The orchestrator uses `recurring_task` to list, set or remove named schedules. A definition has
-`everyMinutes`, an optional `until` timestamp with timezone, and `work`. The first run is due after
-one interval unless `startImmediately` is true. Setting an existing name replaces its definition for
-subsequent runs. Removing it cancels an outstanding job and preserves its receipts.
-
-For visible updates every interval, set `work.notifyEveryInterval` on an audit. The owning terminal
-shows completed summaries and idle ticks. Idle ticks use no model call. A new audit starts with
-recent discussion and current task states.
-
-Each dispatched audit receives the current Git head when available and the latest host summary from
-an audit wake that ran a successful shell command. These summaries alone do not trigger runs.
-
-For a Fable progress audit, ask “Audit progress hourly with Fable Medium, run a baseline now, write
-scorecards under `.pi/audits/progress/`, and stop when the release evidence is complete.” The host
-uses `work.kind = "audit"` with `model: "fable"` and `thinking: "medium"`. A single read-only Fable
-worker inspects the project snapshot and can verify public evidence with web tools. The default
-audit uses Codex. Both receive host summaries of completed background work, discussions, changed
-task checks, and the current Git commit when it changes. An immediate baseline also runs in a fresh
-session. Later idle intervals use no model calls.
-
-Set `reportDirectory` under `.pi/audit/` or `.pi/audits/` for dated Markdown scorecards. The default
-output is `.pi/audit/<job-id>.json`. With `stopWhen`, a completed audit supplies an explicit
-continue or stop decision with evidence. The host records the reason and disables the schedule on
-stop. A later set can reactivate it. Project findings and final decisions reach the orchestrator.
-Other recurring work takes the same scoped definition as `delegate_task`. Recurring implementation
-requires an explicit settled design.
-
-Schedules are private to the local Pi installation and keyed by the project’s canonical path. The
-creating session dispatches the work and receives its findings. Reload or reopen that session to
-resume. Setting the schedule from another session in the project transfers future runs to it. While
-Pi is closed, already dispatched workers can finish. Missed intervals coalesce at reopening. A busy
-queue defers dispatch; a failed run pauses the schedule for inspection. Use `/workers` for a running
-job and ask the orchestrator to list schedules for its last outcome and next run.
-
-The installed launcher takes its active tool list from the loaded role on each reload. Older
-launchers pinned a process-wide tool list. If `/harness-version` reports missing role tools, exit Pi
-once and run the warning’s exact session command from the project.
-
-### Background delegation
-
-`delegate_task` accepts a task, complete context, a kind and repository-relative write paths:
-`documents`, read-only `research`, bounded `maintenance`, or scoped `implementation`. It returns a
-task ID immediately. Continue the discussion while a separate Codex coordinator reads the project,
-delegates writable tasks and validates their results. Document workers can use low effort for
-mechanical edits. Implementation uses Astra medium by default. Routine documents need no review
-call. Maintenance uses executable checks by default. Database changes require recovery checks. A
-read-only research report can complete with required findings. A blocked research assignment still
-needs attention. Delegated implementation workers record their task ID so the worker picker and
-traces identify the owning task. Blocked implementation results include the worker’s structured
-requests for host actions. Once a coordinator verifies a passing task, the completion notice omits
-host actions from resolved child blockers. Their receipts remain available.
-
-Leaf acceptance covers its assigned work; the coordinator owns verification. When completion is
-blocked by an earlier child result, the error names the exact role and write scope that must pass.
-Verification-only follow-ups retain that scope. Checks apply to the verified candidate.
-
-`task_control` with `action: "evidence"` passes host observations to the active implementer on the
-specified task through its existing mailbox. The receipt identifies the worker and queued message.
-The accepted design keeps its original scope. Other actions send a scoped update, pause or
-cancellation. `task_status` inspects durable state and evidence. Completion reaches the originating
-session once at a safe model/tool boundary. While idle, it wakes the orchestrator for a brief
-acknowledgement; while busy, it joins the current discussion. Simultaneous completions are batched,
-queued user input takes priority, and reload does not repeat the notification. Routine progress does
-not start model calls. Recovery within the original authorization is permitted; unrelated work and
-publication need their own authorization.
-
-Two ordinary jobs may run concurrently on disjoint paths. Local implementation reserves writes
-exclusively through both `workflow` and `delegate_task` with kind `implementation`. Read-only
-research can continue alongside it. For direct local builds use `delegate_local` on the current
-commit. For independent published builds, use `delegate_branches` with a committed design and the
-required checks. Coordinators have no child-call or model-turn limit; their writable children run
-serially. Explicit file tools and Markdown formatting reject writes to active task paths. Shell
-ownership is a prompt rule; host integration also rejects a changed target file. Document tasks
-preserve unrelated foreground edits. Code maintenance and implementation require the complete
-project baseline to remain unchanged. New scope requires a new task. Acceptance/context reset waits
-for active tasks to finish or cancel.
-
-Jobs survive `/reload` and Pi exit; their process, controls, status and evidence live under
-`.pi/traces/harness/delegations/<id>/`. Stop a job through `task_control`; an ordinary conversation
-interrupt only stops the foreground turn. Cancelling a job that an [assignment](#assignments) waits
-on needs your confirmation line. Completion delivery is session/branch-specific, while `task_status`
-works from a new session. Failed or conflicted candidates remain available for inspection.
-`resume_task` restarts a paused or failed coordinator against its retained candidate. Use
-`revise_tasks` after stopping all affected workers to replace their prompts and repartition existing
-authorized scopes as one recoverable batch. Retained edits transfer to their new owner; conflicts
-and scope expansion are rejected, approvals are invalidated, and tasks remain paused until resumed.
-Paused files remain reserved. Explicitly cancelled work needs a new user request. Accepted
-implementation can resume its original assignment with `resume_task`. Preserve the candidate and use
-`workflow` with the revised design when that assignment changes and its reservation is released.
-Agents have no model-turn, child-call or total-task duration ceiling. Individual commands still have
-execution timeouts, and explicit cancellation propagates to worker processes.
-
-Older bulky file/search tool results and write/edit/shell arguments are excerpted after four newer
-model steps. Current-request reads remain intact until a successful write/edit supersedes them;
-current shell output also stays. User messages, assistant prose, advice and tool failures remain
-intact. Full raw payloads stay in the session trace; persisted context edits survive resume and
-compaction. Read current file sections when exact text is needed for editing.
-
-Fable can research current platform details and engineering practices during design advice and
-performance measurements and progress audits. Its shared `prompts/web-research.md` prefers primary
-sources, requires source links and version/context qualifications, and keeps private data out of
-search queries. Web calls and their results are recorded in the Claude JSONL trace. Research
-supplements project tests.
-
-Run `npm run test:live:delegation -- --automatic` to exercise document routing from an ordinary
-request, concurrent discussion, completion acknowledgement and reload receipts.
-
-## Code mode
-
-Pi batches independent inspections during ordinary project work. See the
-[tool inventory and examples](documentation/code-mode.md) for host and worker result shapes, role
-boundaries and usage measurement.
+By default worker commands are sandboxed with no network or home access. In a project you enroll as
+trusted-local they run as normal local commands with your authority, which is a statement of trust
+and not containment. See [documentation/worker-execution.md](documentation/worker-execution.md).
+Workers return structured `hostActions` when they need a capability only the host has.
 
 ## Automatic harness updates
 
@@ -392,136 +251,25 @@ a process restart, even if the extension hash is identical. The host shows a res
 than claiming to have switched releases. A process predating launcher detection needs one normal
 exit and restart through the installed wrapper. Detached workers keep their build.
 
-## Browse subagents
-
-`/workers` opens a tree table with task, status, latest activity and update age. It has Active and
-Past tabs. Coordinators group their children; reviews sit beneath the worker whose candidate they
-inspect. A completed worker remains visible as context while its review runs. Separate coordinators
-retain separate groups. Opening or closing the picker keeps the existing host and worker sessions
-running.
-
-| Key                 | Action                                                                    |
-| ------------------- | ------------------------------------------------------------------------- |
-| Left/Right          | Collapse or expand a branch, or move to its parent or first child         |
-| Tab                 | Switch Active/Past                                                        |
-| Up/Down, Enter      | Select and open a conversation                                            |
-| g                   | Compose guidance; Enter sends, Escape cancels input                       |
-| d                   | Toggle model, delegator, repository, worktree/candidate, branch and scope |
-| p                   | Toggle the complete delegated task prompt                                 |
-| PgUp/PgDn, Home/End | Scroll history or return to latest activity                               |
-| r                   | Toggle the raw transcript                                                 |
-| l                   | Load older conversation history                                           |
-| Escape              | Return to the picker, then to the orchestrator                            |
-| Ctrl+O              | Return directly to the orchestrator                                       |
-
-The conversation header shows the worker model and thinking level. The conversation renders prose as
-Markdown and shows tool activity alongside its outcome. Use the wheel in fullscreen Pi, or the arrow
-and page keys, to read earlier turns. Press **End** to follow new activity. Press **r** to inspect a
-tool’s original input and output.
-
-`/workers panel` toggles a compact, noncapturing panel at the upper right. It lists active subagents
-with the same hierarchy and leaves keyboard focus in the host input. Pi's extension API supplies an
-overlay, so it can cover text beneath it; it does not reserve a permanent sidebar column. The panel
-hides below 120 terminal columns and shows an overflow count when more workers exist than fit.
-
-Guidance goes directly to the selected existing worker. Pi workers consume it through SDK steering;
-Claude workers receive it at their next scoped tool boundary. A tool already running continues.
-Queued and delivered states are distinct; delivery means the worker received the message, without
-claiming the requested change is finished. Final submission cannot pass with accepted, undelivered
-guidance. A stopped worker retains undelivered messages visibly. The parent task coordinator
-receives child guidance too, and the host retains it privately for the next discussion turn.
-Guidance keeps the original file and tool authority; scope changes still use the task revision
-workflow.
-
-Workers started before this feature expose their saved coordinator conversation and task controls;
-the picker labels guidance as routed to that coordinator. Direct child channels are available for
-workers started with this version. Design consultations remain available through
-`design_consultation`; the picker covers execution workers, performance specialists and their
-coordinators.
-
-An older coordinator can also start newer children after an installation update. The picker keeps
-that coordinator visible, reconstructs missing parent links from the durable task ID and routes
-child guidance back to it. For old records, review placement uses the preceding completed author in
-the same task and candidate; Details labels this reconstruction. Original metadata stays intact.
-
 ## Verify the loaded runtime
 
 Run `/harness-version` to inspect the currently loaded version, Git revision, source digest, load
 ID, load time, startup/reload reason and actual tool inventory. `piHost` records the observed CLI
 entry and its package version, if identifiable, separately from the loaded harness source and the
 install receipt’s `expectedPi`. A missing host version is unknown, not the extension SDK version.
-The footer shows the harness version and short digest; `harness_status` returns the same receipt.
-Each session records these receipts in `.pi/traces/harness/runtime/<session-id>.jsonl` and its raw
-trace. Request timing references the load ID. Compare the source digest with
-`~/.pi/agent/harness-install.json` after an installation.
+The footer shows the harness version and short digest; Each session records these receipts in
+`.pi/traces/harness/runtime/<session-id>.jsonl` and its raw trace. Request timing references the
+load ID. Compare the source digest with `~/.pi/agent/harness-install.json` after an installation.
 
 Code identity and orchestrator prompt/tool policy are captured for the loaded generation. Editing
 files on disk cannot relabel the running process. `/reload` activates the new generation and records
-a fresh load ID with reason `reload`; it preserves conversation and background tasks.
-
-## Substantial implementation
-
-For independent work from a settled design document, ask for parallel branch execution. The
-orchestrator uses `delegate_branches` to launch up to four autonomous orchestrators with disjoint
-scopes, each in a Git worktree on its own branch. They implement through Astra, fix test failures,
-push branches and open GitHub PRs. Publication is the default. Only an explicit user request
-authorizes merging, either through `mergeToMain: true` at dispatch or a later `merge_branches` call.
-Published tasks resume in their existing worktrees. Large designs stay in the pinned worktree. The
-coordinator reads their full text in pages from the original snapshot.
-
-For an authorized merge, the host detects external review agents such as Codex or Claude, waits for
-feedback, and sends findings to the branch orchestrator for triage and verified fixes. Each fix is
-pushed for another review. After at most five external review rounds, the host proceeds with serial
-merging and passing required checks; it skips that loop when no review agents are triggered.
-Required checks are refreshed against current remote `main` before each integration.
-
-Branch orchestrators have no child-call, turn or total-duration ceiling. Routine approvals are
-unnecessary; the pinned design supplies their decisions. Cancellation, scope enforcement and
-individual-operation timeouts remain. GitHub CI failures return to the orchestrator for repair.
-Missing design decisions, credentials or repository-policy blockers retain the branch with a clear
-`needs_attention` result. The user's original checkout stays unchanged as remote main advances.
-
-See [independent branch orchestration](documentation/branches.md) for preparation, traces, GitHub
-requirements and recovery. For a single local implementation:
-
-1. Ask for implementation once the scope is settled. Codex calls `workflow` with the design,
-   invariants, acceptance criteria, permitted paths and DB/performance flags.
-2. The runtime records a versioned worker scope and returns a background task ID. No acceptance
-   command, session switch or conversation pruning is required. Discussion continues immediately.
-3. Run executable tests and lint. Database changes require recovery checks. Performance scope runs
-   benchmarks. Set `performanceReview` only for a user-requested performance specialist.
-4. A verified candidate is applied and checked again. Concurrent project edits block integration.
-   Avoid editing the candidate's files from the orchestrator while this workflow runs.
-
-An interrupted workflow retains its candidate. Call `workflow` without a design to resume its
-recorded scope: the original project baseline must still match. An unchanged candidate goes through
-fresh checks and routes any outstanding findings to the writer. Supplying a new design starts a new
-version from the current project baseline. Active or paused conflicting work prevents replacing its
-scope.
-
-Workers receive the recorded design, changed files, original file snapshots and command receipts.
-They start with fresh context. The performance investigator can measure, instrument and report;
-optimization belongs to the implementer. There is no automatic commit, push, publication or
-deployment.
-
-Use `harness_status` in Pi to inspect progress. For explicit headless control:
-
-```sh
-node --import /absolute/agents/harnesses/pi/node_modules/tsx/dist/loader.mjs \
-  /absolute/agents/harnesses/pi/src/cli.ts status
-```
-
-The same CLI supports `run openai-codex/gpt-6.1-sol` to resume the recorded scope. Start new work
-through Pi's `workflow` tool. Run CLI commands from the target project's root.
-
-In Git worktrees, worker file tools reject untracked paths excluded by Git ignore rules. Tracked
-source remains available when a later ignore rule matches it.
+a fresh load ID with reason `reload`; it preserves conversation and background jobs.
 
 ## Project checks
 
-Pi reads the project's committed check configuration before branch dispatch. An explicit
-`.pi/harness.json` takes precedence. Without it, each row below uses the first executable npm script
-present in the listed order. Receipts still require the command to run and pass.
+Pi reads the project's check configuration when a job starts. An explicit `.pi/harness.json` takes
+precedence. Without it, each row below uses the first executable npm script present in the listed
+order. Receipts still require the command to run and pass.
 
 | Check kind   | npm scripts                          |
 | ------------ | ------------------------------------ |
@@ -531,8 +279,8 @@ present in the listed order. Receipts still require the command to run and pass.
 | Benchmark    | `benchmark`, `test:performance`      |
 
 A generic `check` script can combine arbitrary steps and does not establish test coverage by itself.
-Database and performance assignments require their respective check kinds. Use an adapter for other
-command names or custom timeouts. Example:
+Designs that declare database or performance work require their respective check kinds. Use an
+adapter for other command names or custom timeouts. Example:
 
 ```json
 {
@@ -575,163 +323,30 @@ the host; only trusted-local enrollment does. Harness lint compares its findings
 commit's findings by file, message and line text. Existing findings are listed in
 `inheritedLintPaths` and never block; only findings the task adds do.
 
-Local tasks verify against the check policy committed at the checkout's current HEAD, including
-tasks pinned to unmerged commits, so a policy fix reaches retained and resumed tasks instead of
-leaving them to fail on the policy they were dispatched with. Branch tasks already revalidate
-against current `main`.
+Starting an implement job fails when host `node_modules` does not match the direct dependencies
+pinned by `package-lock.json`. Run `npm ci` on the host and start it again.
 
-Dispatch of implementation, maintenance, local and branch work fails when host `node_modules` does
-not match the direct dependencies pinned by the task's `package-lock.json`. Run `npm ci` on the host
-and dispatch again.
+Worker changes to `.pi/` are forbidden. New paths ignored by the project's Git policy are rejected
+before delivery. Required checks with truncated output fail; use concise summaries when a suite is
+verbose.
 
-Write scopes support exact paths, `directory/**`, and `**`. Pi rejects a new filename wildcard such
-as `tests/unit_*.ts` before dispatch. A prompt-only `revise_tasks` call can omit `writePaths` to
-preserve the registered scope. Performance writes must match both the accepted scope and its role
-scope or the adapter's explicit instrumentation paths. Worker changes to `.pi/` are forbidden. Root
-and nearest folder `AGENTS.md` instructions are supplied when reading files and assignments.
+## State
 
-`project_write` and `project_delete` share the same assignment and role scope. Deletion is limited
-to individual files. Private paths are checked using Unicode folding and actual filesystem spelling.
-New paths ignored by the project's Git policy are rejected before integration; update that policy
-before starting an implementation that requires such files. Required checks with truncated output
-fail; use concise machine-readable summaries when a test suite is verbose.
+Everything is project-local under `.pi/traces/`, ignored through `.pi/.gitignore`.
 
-## Cleanup
+| Path                           | Content                                                 |
+| ------------------------------ | ------------------------------------------------------- |
+| `harness/jobs.db`              | Jobs, undelivered outcomes and held guidance (SQLite)   |
+| `harness/jobs/<id>/`           | Worker requests and results, check receipts, runner log |
+| `harness/workers/<id>/`        | One worker's metadata, state and conversation           |
+| `harness/consultations/`       | Design advice inputs and results                        |
+| `sessions/`                    | Pi conversations                                        |
+| Git refs `refs/pi/jobs/<id>/*` | Each job's base, latest work and result commits         |
 
-Pi removes what no live or resumable task needs. One minute after a session starts and hourly while
-it is idle, it removes:
-
-- worktrees, baselines and temporary copies of complete, cancelled or failed tasks;
-- the same for `needs_attention`, paused or stopped tasks idle for 48 hours. Uncommitted changes are
-  saved to the task's `expired.patch`, `expired.json` records the expiry and a resume reports it
-  instead of starting over;
-- baseline worktrees older than six hours whose task is not running, and clean host worktrees under
-  `.pi/traces/harness/host-worktrees/` older than the retention period;
-- local `pi/*` branches already merged into `main`;
-- `$TMPDIR/pi-<pid><kind>-*` directories whose creating process exited, `$TMPDIR/pi-task-*` copies
-  of tasks that no longer need them, and legacy `$TMPDIR/pi-workspace-*` copies older than the
-  retention period that no retained task references. Names stay short because macOS limits Unix
-  socket paths, which test suites bind below `TMPDIR`, to 104 bytes.
-
-Set `PI_HARNESS_RETENTION_HOURS` to change the 48-hour retention. `/harness-cleanup` runs the pass
-immediately; `/harness-cleanup --dry-run` reports without removing. From a project root,
-`node --import <harness>/node_modules/tsx/dist/loader.mjs <harness>/src/cli.ts gc [--dry-run]` does
-the same. The last report is in `.pi/traces/harness/cleanup.json`.
-
-## Where the rules live
-
-- `prompts/shared.md`: TigerStyle, all ten NASA rules, language adaptations and the escaped-bug
-  regression policy.
-- `prompts/{orchestrator,design-advisor,implementer,performance}.md`: each role's task and evidence
-  requirements.
-- `roles/*.json`: executable role configuration, including backend and model.
-- `scripts/linting/`: actual JS/TS AST and Python token/AST readability checks, JSON validity,
-  Unicode-aware 100-column checks and exclusions.
-- `.oxlintrc.json`: strict semantic checks for this runtime; `tsconfig.json`: strict TypeScript
-  checks. Project-specific semantic lint stays in the project's check adapter.
-- `../../skills/`: canonical skills. Role prompts selectively include housekeeping or performance
-  engineering. `read_reference` exposes selected benchmark, allocation and compiler references
-  without global skill loading.
-
-`project_format` applies the same executable formatting and logical-spacing rules within a worker's
-scope. All project checks run again under host control. This does not claim to mechanically prove
-TigerStyle, security or test quality; those remain explicit review responsibilities.
-
-Implementer assessments can record TigerStyle evidence and score the changed behavior's testing
-harness. `review_receipts` shows the snapshot, the worker’s evidence for each dimension and the
-computed percentage. The target is 80/100. Production code, invariants and exploration always count.
-Recovery, replay and Playwright browser journeys count where relevant. Each applicable dimension
-earns 0–2 points. Pi rounds earned points divided by possible points to a percentage. An explained
-exemption adds no points. An unscored review has no percentage. Required findings and executable
-checks still govern acceptance. Earlier receipts retain their original evidence.
-
-When the host starts retrying an operational prerequisite, `host_work.retry` shows the assignment,
-its blocker and the observation that permits progress. Repeated reports of the same condition stay
-quiet.
-
-An idle Pi host refreshes `origin/main` in the background at most every ten minutes across
-worktrees. A completed Pi merge or an observed `gh pr merge` requests an earlier refresh. Git
-fast-forwards local `main` in its worktree, preserving unrelated unstaged edits. Feature branches
-stay on their current commit. Divergence, staged changes, overlapping edits, checkout filters or a
-Git operation in progress defer the update. The status line shows a problem; routine checks use no
-model turns. Set `git config pi.syncMain false` in a repository to disable it.
-
-## Verification and recovery
-
-```sh
-npm run verify
-npm run test:live
-npm run test:live:basic
-npm run test:live:workshop
-npm run test:live:web
-npm run test:live:workers
-```
-
-Every confirmed bug is an escaped test or verification gap. The repair records its root cause, the
-missing invariant and a regression that fails before the fix in the existing result or handoff
-evidence, or cites adequate existing coverage. Infrastructure failures and correct validation
-rejections are classified separately. `tests/regression-policy.test.ts` checks that every rendered
-role prompt carries the policy and that repair-owning roles apply it. Seeded simulations share
-`tests/simulation.ts`; replay one seed with `PI_SIMULATION_SEED=<n>` and widen a run with
-`PI_SIMULATION_SEEDS=<count>`. `npm test` keeps bounded deterministic defaults without sleeps or
-network; live and browser campaigns run where the escaped path needs them.
-
-The live test uses real model calls and a disposable SQLite ledger. It exercises seeded
-replay/conflict properties, invalid inputs, SIGKILL recovery, file-backed benchmarks and the
-implementation and specialist roles. Reports are written to ignored `reports/`. Set
-`PI_HARNESS_LIVE_MODEL` to choose another Codex model for a live run.
-
-The workshop live case uses real Codex and Fable calls to check parallel guidance, automatic reply
-delivery, shell access and direct document updates despite unresolved workshop questions. It spawns
-no implementation workers.
-
-The web live case verifies successful WebSearch and WebFetch calls in both the design advisor and a
-progress auditor, including source citations and the scoped MCP result handoff.
-
-The basic live case exercises a seeded parser contract and confirms that implementation completes
-without a specialist.
-
-The workers live case sends guidance to a real Codex worker while the host continues a separate
-discussion. It checks delivery, final integration and the Past view. The deterministic terminal
-fixture exercises the installed CLI, keyboard focus, hierarchy, guidance, metadata, panel and
-resizing without model requests:
-
-```sh
-uv run --with pexpect --with pyte --with pillow python scripts/check-workers-terminal.py
-```
-
-Its synthetic workers and PTY live in a disposable project; screen captures and raw terminal output
-remain under `reports/terminal-*/`. It never opens or changes the user's existing terminal sessions.
-
-Project-local traces live in `.pi/traces/` under the directory where Pi starts:
-
-- `sessions/`: orchestrator JSONL sessions, readable with Pi or a text editor. The `pih` launcher
-  stores sessions here directly. Ordinary `pi` sessions are mirrored here at lifecycle boundaries.
-- `harness/consultations/`: Fable workshop inputs, status and advice.
-- `harness/timing/`: request/model selection, model-step start/end, first visible text, tool
-  duration and settled events. These contain timing/usage metadata, without prompt or tool-argument
-  bodies. Model intervals include client/provider overhead; they do not isolate server queueing or
-  compute.
-- `harness/delegations/`: task requests, controls, status, child receipts and coordinator sessions.
-- `harness/runtime/`: loaded-version receipts, reload reasons and active/registered tools.
-- `harness/attempts/`: worker assignments, Codex session JSONL directories, Claude event JSONL,
-  scoped tool evidence and results.
-- `harness/`: implementation checkpoints, receipts, task state, snapshots and integration journal.
-
-The harness adds `/traces/` to `.pi/.gitignore`, preserving existing entries. This also works for a
-project folder before Git initialization. Traces are excluded from worker file tools and snapshots.
-Start Pi from the project root to keep its traces together. Older sessions and state under `~/.pi/`
-remain historical files; new runs use local state and do not automatically import old checkpoints.
-`pih --continue` resumes the most recent local session.
-
-Failed candidates remain at the path recorded in task state. A cancelled or crashed worker cannot
-report success. A subsequent run recovers a pending integration only if every file still matches its
-recorded before or after value. Unexpected user edits stop recovery.
-
-Implementation scope snapshots preserve discussion history, normal compaction and tree navigation.
-Full raw traces remain available. See [architecture](documentation/architecture.md),
-[sources](documentation/sources.md) and [validation](documentation/validation.md) for details and
-limitations.
+All checkouts of one repository share the primary checkout's store, so a job started for another
+worktree is visible from any session of that repository. A directory without Git keeps its commits
+in `harness/shadow.git`. State written by another schema version is set aside as `jobs.db.vN` and
+never migrated. Temporary copies belong to the process that made them and are swept once it exits.
 
 ## Separation from other harnesses
 
@@ -740,13 +355,6 @@ installation. Claude global cleanup is a separate, explicit operation under `../
 supplies its Claude workers' prompts at launch. Pi installation never rewrites canonical `SKILL.md`
 content or `instructions/global.md`. Repository-wide lint also covers the executable skill scripts;
 formatting changes to those scripts preserve their behavior.
-
-Local implementation hands unchanged, out-of-scope harness lint failures to the host when all
-diagnostics can be attributed. The gate stays failed and the candidate remains available.
-
-One-time commands and approvals stay with their task. Required audit findings reach the host with
-their report path. An empty first response to an actionable audit gets one follow-up opportunity at
-idle, subject to queued user input.
 
 ### GitHub Actions follow-up
 
@@ -764,36 +372,3 @@ with `includeQueue: true` to distinguish verified GitHub queue membership from a
 Ordinary inspections keep their single GitHub query. If a run stops gating your task, the host can
 call `watch_github_run` with `action: "cancel"`, repository and run ID. Cancellation survives reload
 and leaves the remote workflow running. An optional PR pin limits cancellation to that candidate.
-
-### Assignments
-
-Each outcome you authorize is recorded as an assignment: the outcome, the target it must reach, who
-advances it next, its attempts and its evidence. You ask for the work as before; the orchestrator
-records it with `host_work` and chooses the worker, coordinator or branch orchestrator. Several
-assignments run side by side. A new request, a side question, an interrupt or moving around the
-conversation tree never pauses or cancels one. An interrupt stops the current turn only.
-`/assignments` shows the records with their IDs.
-
-To stop one assignment, name it. Run `/assignments pause a2` or `/assignments cancel a2`, which acts
-at once on that record, or put the line `pause a2` or `cancel a2` in a message so the orchestrator
-may do it. Pi accepts only that exact line from your latest message: the orchestrator cannot pause
-or cancel an assignment on its own reading of a request, and when you ask in other words it asks you
-for the line. Pausing holds the orchestrator's next step while running workers finish their attempt.
-Cancelling also stops that assignment's running workers and watches. `cancel` followed by the first
-eight characters of a task ID stops that one worker and keeps its assignment open. A worker that
-another session's assignment waits on is paused or cancelled from this session only on that task
-line, `pause 1a2b3c4d` or `cancel 1a2b3c4d`. Pausing one assignment leaves the others, and requests
-arriving for them, moving.
-
-An assignment waits only on something Pi can observe: a tracked task, in this checkout or another,
-or a run registered with `watch_github_run`. When that source finishes, Pi hands the assignment back
-to the orchestrator without a prompt from you, also when the notification itself was lost. A
-dependency Pi cannot observe is shown as a blocker with its owner and resume condition. A finished
-worker, candidate or preview does not close an assignment: closing needs evidence for the authorized
-target and its revision, and the orchestrator keeps acceptance. A continuation that only restates a
-plan surfaces a stalled notice for the assignments it named and no others. Records are kept per
-session and reconcile while Pi is running; a closed session catches up when it is reopened.
-[Architecture](documentation/architecture.md#assignments) has the bounds and delivery rules.
-
-Local fan-out, competing candidates and evidence-based integration are described in
-[Independent branch orchestration](documentation/branches.md#local-candidates).

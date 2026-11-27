@@ -55,27 +55,16 @@ Any one of these is enough, and none can be overridden from below:
 - **Project:** `cli trust required-isolation` in that project.
 - **Host process:** start the host with `PI_HARNESS_ISOLATION=required`. Every project it dispatches
   is isolated, enrolled or not. Any other non-empty value is rejected rather than interpreted.
-- **Host task:** `isolation: 'required'` on the tool call that starts the work.
+- **Job:** `isolation: 'required'` on the `job_start` call.
 
-### Per-task isolation
+### Per-job isolation
 
 The host sets `isolation: 'required'` when a design, its inputs or the material a task reads are
 external or untrusted. The field exists only on host tools and accepts only that value; an omitted
 field adds nothing and no value lifts isolation the project or host process demands.
 
-- `workflow`, field `isolation`: the pinned scope, with its implementer, checks and benchmarks.
-- `delegate_task`, field `isolation`: the coordinator, its children and its checks.
-- `delegate_local`, field `isolation` for the whole batch: every candidate, its acceptance and the
-  checks run again at integration.
-- `delegate_branches`, field `isolation` for the whole batch: every branch task, its children,
-  checks and merge-time refresh.
-- `recurring_task`, field `definition.work.isolation`: every occurrence, audits included.
-
-The requirement is stored in the task's `request.json` and read by every runner, so it survives
-reload, `resume_task`, `revise_tasks` and `merge_branches`. `workflow` also records it on the pinned
-scope: calling `workflow` without a design resumes that scope with the same isolation, and the CLI
-`run` command honors it. A coordinator hands its children the narrowed decision, research swarm
-members included. `task_status` shows `isolation` on each task that carries it.
+`job_start` carries the field. It covers the job's worker, every check and benchmark, and each
+retry, because it is stored in the job's spec and read by the runner. `/jobs jN` shows it.
 
 A stored value other than `required` stops the task with an error. It is never read as "not
 isolated".
@@ -128,15 +117,11 @@ The restore step attributes every change outside the assignment that happens dur
 that command, and never touches an assigned path. It cannot undo a legitimate edit, because
 legitimate edits only land on the assigned paths of the one worker that may write a candidate:
 
-- A writer holds its candidate alone. The coordinator serializes its children and its own tools, and
-  each local or branch candidate has its own worktree.
-- The only workers that share a candidate are research swarm siblings. They are dispatched with an
-  empty write scope, so their file tools retain nothing, and a swarm never overlaps a writer.
-- Siblings can undo each other's stray command writes in either order. The coordinator compares the
-  candidate before and after a swarm and rejects one that left it changed.
+- A writer holds its copy alone. Each job has its own copy and runs one worker at a time; the
+  performance specialist, when requested, runs after the implementer has returned.
 
-Dispatching a writer beside another worker on one candidate would break this and needs a different
-safeguard first. `tests/execution-dispatch.test.ts` holds the invariant.
+Dispatching a second worker onto a copy while another is writing would break this and needs a
+different safeguard first.
 
 Harness lint always runs in the sandbox. Benchmark checks follow the same decision as other checks:
 a trusted-local project measures as a local command, every other project measures in the sandbox,
@@ -153,8 +138,7 @@ writes to the candidate; it does not observe paths excluded from snapshots (depe
 writes, the disposable candidate, check receipts, host publication and independent acceptance are
 unchanged, but under `trusted-local` they guard against mistakes, not against hostile code.
 
-For work you do not trust, use isolation. The sandbox limits are described in
-[architecture.md](architecture.md).
+For work you do not trust, use isolation. See [architecture.md](architecture.md) for how a job runs.
 
 ## Nested dependencies
 
@@ -189,9 +173,8 @@ isolated candidate copy without installed dependencies:
 node --experimental-strip-types --test harnesses/pi/tests/worker-execution.test.ts
 ```
 
-`tests/execution-dispatch.test.ts` drives the host tools through a real Pi session and each stored
-task through its runner: per-task isolation on every route, resume and revision, scheduled work,
-coordinator children, the restore invariant and the benchmark route.
+`tests/job-runner.test.ts` runs jobs through the real runner and asserts that required isolation
+reaches the worker and its checks whatever the project trusts.
 
 `tests/verification-loop.test.ts` and `tests/worker-lifecycle.test.ts` drive the real worker tools,
 the host check route and the Claude MCP bridge. Their loopback, host-runner refusal, cancellation

@@ -283,7 +283,7 @@ test('a user cancellation stops the worker and keeps the job cancelled', async (
   assert.equal(await runJob(store, job.id), undefined, 'a cancelled job is not claimed again')
 })
 
-test('required isolation reaches the worker and its checks whatever the project trusts', async (t) => {
+test('required isolation reaches the worker whatever the project trusts', async (t) => {
   const { root, store } = await project(t)
   const modes: (string | undefined)[] = []
   const observe =
