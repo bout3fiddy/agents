@@ -1,3 +1,4 @@
+import { paperServers, type PaperServers } from './paper-mcp.ts'
 import { execFile } from 'node:child_process'
 import { appendFileSync } from 'node:fs'
 import { promisify } from 'node:util'
@@ -64,6 +65,7 @@ export type AdviceRunner = (
   tracePath?: string,
   thinking?: ConsultationInput['thinking'],
   routed?: (route: ModelRoute) => Promise<void>,
+  projectRoot?: string,
 ) => Promise<Advice>
 
 export async function consultationInput(
@@ -131,6 +133,7 @@ export async function runDesignAdvice(
   tracePath?: string,
   thinking?: ConsultationInput['thinking'],
   routed?: (route: ModelRoute) => Promise<void>,
+  projectRoot = process.cwd(),
 ): Promise<Advice> {
   signal.throwIfAborted()
   const role = await loadRole('design-advisor', thinking)
@@ -140,6 +143,7 @@ export async function runDesignAdvice(
       input,
       signal,
       selected,
+      await paperServers({ root: projectRoot }),
       tracePath && retry ? tracePath + '.opus.jsonl' : tracePath,
     )
     return { ...advice, ...route, actualModel: advice.model.replace(/^claude-cli\//, '') }
@@ -150,6 +154,7 @@ async function runAdviceAttempt(
   input: string,
   signal: AbortSignal,
   role: Role,
+  servers: PaperServers,
   tracePath?: string,
 ): Promise<Advice> {
   signal.throwIfAborted()
@@ -158,7 +163,7 @@ async function runAdviceAttempt(
   try {
     const config = join(scratch, 'mcp.json')
     const prompt = join(scratch, 'system.txt')
-    await atomicJson(config, { mcpServers: {} })
+    await atomicJson(config, { mcpServers: servers })
     await writeFile(prompt, await rolePrompt('design-advisor'), { mode: 0o600 })
 
     if (tracePath) {
@@ -317,6 +322,7 @@ export class DesignConsultations {
               fallback?.(route)
             }
           },
+          store.projectRoot,
         )
 
         if (job.advice.actualModel) {

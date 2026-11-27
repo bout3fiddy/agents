@@ -47,6 +47,7 @@ import { checkModelOutcome, checkWorkerThinking, explicitResources } from './wor
 import { createWorkerTools } from './worker-tools.ts'
 import { progressReporter, type TaskProgress } from './progress.ts'
 import { workerCapabilities } from './capabilities.ts'
+import { paperServers } from './paper-mcp.ts'
 import { storedExecution } from './worker-execution.ts'
 import { invariant } from './invariant.ts'
 import {
@@ -1185,15 +1186,16 @@ export async function runTaskCoordinator(
       return evidence
     },
   )
+  const servers = await paperServers(request.project)
   const { session } = await createAgentSession({
     cwd: request.workspace,
     agentDir,
     modelRuntime,
     model,
     thinkingLevel: role.thinking,
-    tools: role.tools,
+    tools: servers.paper ? [...role.tools, 'mcp__paper__*'] : role.tools,
     customTools: worker.tools,
-    resourceLoader: await explicitResources(await rolePrompt(coordinatorRole(request))),
+    resourceLoader: await explicitResources(await rolePrompt(coordinatorRole(request)), servers),
     settingsManager: SettingsManager.inMemory({
       compaction: { enabled: true },
       retry: { enabled: true, maxRetries: 2 },
@@ -1312,6 +1314,7 @@ export async function runTaskCoordinator(
 
   try {
     checkWorkerThinking(session, role.thinking)
+    await session.bindExtensions({})
     await refreshControls()
     combined.throwIfAborted()
     await session.prompt(
@@ -1398,6 +1401,7 @@ export async function runTaskCoordinator(
     await poll
     await session.abort()
     await worker.settle()
+    await session.extensionRunner.emit({ type: 'session_shutdown', reason: 'quit' })
     session.dispose()
     await liveSession.dispose()
     await worker.progress.settle()

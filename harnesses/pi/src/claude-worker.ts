@@ -1,3 +1,4 @@
+import { paperServers } from './paper-mcp.ts'
 import { invariant } from './invariant.ts'
 import { spawn } from 'node:child_process'
 import { appendFileSync } from 'node:fs'
@@ -177,6 +178,7 @@ async function runClaudeProcess(
   await atomicJson(requestPath, { ...request, liveWorkerId: live.info.id })
   await atomicJson(configPath, {
     mcpServers: {
+      ...(await paperServers(request.project)),
       piworker: {
         command: process.execPath,
         args: [
