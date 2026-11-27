@@ -1,6 +1,6 @@
-import { needsRestart, restartCommand, type PiInstall } from './pi-host.ts'
+import { needsRestart, type PiInstall } from './pi-host.ts'
 import type { ExtensionAPI, ExtensionContext } from '@earendil-works/pi-coding-agent'
-import { captureBuild, readInstall, type LoadedRuntime } from './runtime-version.ts'
+import { captureBuild, readInstall, recoveryStatus, type LoadedRuntime } from './runtime-version.ts'
 
 const command = 'harness-apply-install'
 type ReloadTarget = Pick<PiInstall, 'sourceHash' | 'installedAt'> & { pid: number }
@@ -84,14 +84,7 @@ export function registerAutoReload(
       if (needsRestart(loaded.source, loaded.piHost, install)) {
         attempted = install.installedAt
 
-        if (!loaded.launcherWarning || loaded.install?.installedAt !== install.installedAt) {
-          const restart = restartCommand(install.wrapper, ctx.sessionManager)
-          ctx.ui.notify(
-            `Reload cannot replace this host. Local install: ${install.source} ` +
-              `(Pi ${install.pi?.version ?? 'unknown'}). Exit and run: ${restart}`,
-            'warning',
-          )
-        }
+        ctx.ui.setStatus('pi-harness', recoveryStatus(ctx, Boolean(loaded.piHost.wrapper)))
 
         return
       }

@@ -1,7 +1,7 @@
 import type { ExtensionAPI } from '@earendil-works/pi-coding-agent'
 import { InterruptInput } from './interrupt-input.ts'
 
-export default function registerSteering(pi: ExtensionAPI): void {
+export default function registerSteering(pi: ExtensionAPI): () => boolean {
   let interrupt: InterruptInput | undefined
   pi.on('session_start', (_event, ctx) => {
     if (ctx.mode === 'tui') {
@@ -30,4 +30,5 @@ export default function registerSteering(pi: ExtensionAPI): void {
       }
     },
   })
+  return () => interrupt?.canLeaveSession() === true
 }

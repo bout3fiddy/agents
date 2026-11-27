@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { spawn, spawnSync } from 'node:child_process'
 import { once } from 'node:events'
+import { renameSync } from 'node:fs'
 import {
   cp,
   mkdir,
@@ -19,6 +20,15 @@ import { setTimeout as delay } from 'node:timers/promises'
 import { stripVTControlCharacters } from 'node:util'
 import { install } from '../scripts/install.ts'
 import { harnessRoot } from '../src/project.ts'
+
+// Real interactive startup and shutdown over pipes with a private terminal and network fixture.
+const terminal =
+  'process.stdin.isTTY=true;process.stdout.isTTY=true;' +
+  'process.stdout.columns=240;process.stdout.rows=30;' +
+  'const fetch=async url=>String(url).endsWith("/api/latest-version")?' +
+  'Response.json({version:"999.0.0"}):new Response(null,{status:404});' +
+  'Object.defineProperty(globalThis,"fetch",{get:()=>fetch,set:()=>{}});'
+const terminalOptions = `--import=data:text/javascript,${encodeURIComponent(terminal)}`
 
 test('installed Pi reloads new tools under the active role policy', async (t) => {
   const base = await mkdtemp(join(tmpdir(), 'pi-launcher-reload-'))
@@ -124,20 +134,27 @@ test('interactive exit and legacy resume identify the CLI and preserve the sessi
   const file = join(sessions, `saved_${id}.jsonl`)
   const timestamp = new Date().toISOString()
   const header = { type: 'session', version: 3, id, cwd: root, timestamp }
-  await writeFile(file, JSON.stringify(header) + '\n')
+  const message = {
+    type: 'message',
+    id: '12345678',
+    parentId: null,
+    timestamp,
+    message: { role: 'user', content: 'Keep this exact conversation.', timestamp: Date.now() },
+  }
+  await writeFile(file, [header, message].map((row) => JSON.stringify(row)).join('\n') + '\n')
   const pkg = '@earendil-works/pi-coding-agent'
   const global = join(base, 'global')
   await cp(join(harnessRoot, 'node_modules', pkg), global, { recursive: true })
   const manifest = JSON.parse(await readFile(join(global, 'package.json'), 'utf8'))
   const expectedVersion = manifest.version
   await symlink(join(harnessRoot, 'node_modules'), join(base, 'node_modules'))
-  const globalEntry = join(global, manifest.bin.pi)
+
+  // The default gate is hermetic. The same journey can target the real global 1.6.1 binary.
+  const globalEntry = process.env.PI_TEST_GLOBAL_PI
+    ? await realpath(process.env.PI_TEST_GLOBAL_PI)
+    : join(global, manifest.bin.pi)
   await symlink(globalEntry, join(base, 'pi'))
 
-  // Use the real interactive shutdown over pipes, with only terminal capabilities simulated.
-  const terminal =
-    'process.stdin.isTTY=true;process.stdout.isTTY=true;' +
-    'process.stdout.columns=240;process.stdout.rows=30;'
   const quit = join(base, 'quit.ts')
   await writeFile(quit, "export default pi => pi.on('session_start', (_e,ctx) => ctx.shutdown())")
   const options = {
@@ -149,7 +166,9 @@ test('interactive exit and legacy resume identify the CLI and preserve the sessi
       PATH: `${base}:${process.env.PATH}`,
       PI_CODING_AGENT_DIR: destination,
       PI_HARNESS_AGENT_DIR: destination,
-      NODE_OPTIONS: `--import=data:text/javascript,${encodeURIComponent(terminal)}`,
+      PI_OFFLINE: '',
+      PI_SKIP_VERSION_CHECK: '',
+      NODE_OPTIONS: terminalOptions,
     },
   }
   const run = (command: string, args: string[], env: NodeJS.ProcessEnv = {}) => {
@@ -187,28 +206,80 @@ test('interactive exit and legacy resume identify the CLI and preserve the sessi
   assert.equal(operands[0], wrapper)
   assert.equal(operands[operands.indexOf('--session') + 1], file)
 
-  manifest.version = '0.0.7'
+  // Only the fixture's manifest changes. An explicitly supplied global CLI is always read-only.
+  manifest.version = '1.6.1'
   await writeFile(join(global, 'package.json'), JSON.stringify(manifest))
-  const legacy = spawn('pi', ['--session-dir', sessions, '--session', id, '--offline'], options)
+  const globalArgs = ['--session-dir', sessions, '--session', id]
+  const manual = run('pi', [...globalArgs, '--extension', quit])
+  const correction = manual.split('For this harness chat, use this instead:\n')[1]?.trim()
+  assert.ok(correction, manual.slice(-2000))
+  assert.match(manual, /To resume this session:[^\n]*\npi /)
+  assert.doesNotMatch(manual, /999\.0\.0|Exit and run from this project/)
+  assert.ok(
+    run('/bin/sh', ['-c', `cd .. && ${correction} "$@"`, 'resume', ...flags]).includes(command),
+  )
+  assert.equal(spawnSync('mkfifo', [join(root, 'gate')]).status, 0)
+  const legacy = spawn('pi', globalArgs, options)
   let screen = ''
-  let warned = false
+  let stage = 0
+  const timeout = setTimeout(() => legacy.stdin.end('/quit\r'), 15_000)
   legacy.stdout.on('data', (chunk: Buffer) => {
-    screen = (screen + chunk).slice(-32_768)
+    screen = (screen + stripVTControlCharacters(chunk.toString())).slice(-65_536)
 
-    if (!warned && screen.includes('Not running the installed harness launcher')) {
-      warned = true
+    if (screen.includes('Not running the installed harness launcher/release')) {
+      legacy.stdin.end('/quit\r')
+    } else if (stage === 0 && screen.includes('Global Pi · /pih')) {
+      stage++
+      legacy.stdin.write('/reload\r')
+    } else if (stage === 1 && screen.includes('Reloaded keybindings')) {
+      stage++
+      renameSync(file, file + '.held')
+      legacy.stdin.write('/pih\r')
+    } else if (stage === 2 && screen.includes('Cannot verify the saved chat')) {
+      stage++
+      renameSync(file + '.held', file)
+      legacy.stdin.write('!echo holding; cat gate; exit 7\r')
+    } else if (stage === 3 && screen.includes('holding') && screen.includes('cat gate')) {
+      stage++
+      legacy.stdin.write('/pih\r')
+    } else if (stage === 4 && screen.includes('Finish the current work')) {
+      stage++
+      void writeFile(join(root, 'gate'), 'shell finished\n')
+    } else if (stage === 5 && screen.includes('shell finished') && screen.includes('(exit 7)')) {
+      stage++
+      legacy.stdin.write('/pih\r')
+    } else if (
+      stage === 6 &&
+      screen.includes('Reopening this chat') &&
+      screen.slice(screen.lastIndexOf('Reopening this chat')).includes('999.0.0')
+    ) {
+      stage++
       legacy.stdin.end('/quit\r')
     }
   })
   const [status] = await once(legacy, 'close')
-  assert.equal(status, 0, screen.slice(-1000))
-  assert.ok(warned, screen.slice(-1000))
+  clearTimeout(timeout)
+  assert.equal(status, 0, `stage ${stage}: ${screen.slice(-3000)}`)
+  assert.equal(stage, 7, screen.slice(-3000))
+  assert.ok(screen.includes(command))
+  const [beforeRecovery, afterRecovery] = screen.split('Reopening this chat')
+  assert.doesNotMatch(beforeRecovery!, /999\.0\.0|Run pi update|Exit and run from this project/)
+  assert.match(afterRecovery!, /999\.0\.0/)
   const records = (await readFile(join(root, '.pi/traces/harness/runtime', `${id}.jsonl`), 'utf8'))
     .trim()
     .split('\n')
     .map((line) => JSON.parse(line))
-  assert.equal(records.length, 3)
-  const [first, resumed, wrong] = records
+  assert.equal(records.length, 7)
+  const [first, resumed, , corrected, wrong, reloaded, recovered] = records
+  assert.deepEqual(corrected.piHost, first.piHost)
+  const persisted = await readFile(file, 'utf8')
+  assert.ok(persisted.includes(recovered.loadId))
+  assert.ok(persisted.includes('Keep this exact conversation.'))
+  assert.ok(persisted.includes('shell finished'))
+  assert.deepEqual(wrong.piHost, reloaded.piHost)
+  assert.deepEqual(first.piHost, recovered.piHost)
+  assert.equal(reloaded.pid, recovered.pid)
+  assert.equal(recovered.launcherWarning, undefined)
   assert.notEqual(first.pid, resumed.pid)
   assert.deepEqual(first.piHost, resumed.piHost)
   assert.equal(first.piHost.version, expectedVersion)
@@ -216,7 +287,87 @@ test('interactive exit and legacy resume identify the CLI and preserve the sessi
   assert.equal(wrong.piHost.entry, globalEntry)
   assert.equal(wrong.piHost.version, manifest.version)
   assert.equal(wrong.expectedPi.version, expectedVersion)
-  const restart = wrong.launcherWarning.split('Exit and run from this project: ')[1]
-  assert.ok(restart?.includes('pi-harness'))
-  assert.ok(run('/bin/sh', ['-c', `${restart} "$@"`, 'resume', ...flags]).includes(command))
+  assert.ok(wrong.launcherWarning)
+})
+
+test('an older wrapper reopens the original chat in the newly installed release', async (t) => {
+  const base = await realpath(await mkdtemp(join(tmpdir(), 'pi-old-wrapper-')))
+  t.after(() => rm(base, { recursive: true, force: true }))
+  const project = join(base, 'original project')
+  await mkdir(project)
+  const id = 'b2967ad2-cdc3-4248-b4c9-19825ea5ecb9'
+  const timestamp = new Date().toISOString()
+  const file = join(base, 'original.jsonl')
+  await writeFile(
+    file,
+    JSON.stringify({ type: 'session', version: 3, id, cwd: project, timestamp }) + '\n',
+  )
+  const { destination, wrapper } = await install(join(base, 'agent'))
+  const release = join(base, 'new release')
+  await mkdir(release)
+
+  for (const part of [
+    'src',
+    'scripts',
+    'roles',
+    'prompts',
+    'guidelines',
+    'package.json',
+    'package-lock.json',
+  ]) {
+    await cp(join(harnessRoot, part), join(release, part), { recursive: true })
+  }
+
+  await symlink(join(harnessRoot, 'node_modules'), join(release, 'node_modules'))
+  const old = spawn(wrapper, ['--session', file, '--offline'], {
+    cwd: base,
+    env: { ...process.env, HOME: base, NODE_OPTIONS: terminalOptions },
+    timeout: 25_000,
+  })
+  const closed = once(old, 'close')
+  const timeout = setTimeout(() => old.stdin.end('/quit\r'), 18_000)
+  let screen = ''
+  let stage = 0
+
+  for await (const chunk of old.stdout) {
+    screen = (screen + stripVTControlCharacters(chunk.toString())).slice(-32_768)
+
+    if (stage === 0 && screen.includes('orchestrator')) {
+      stage++
+      const result = spawnSync(
+        process.execPath,
+        ['--import', 'tsx', 'scripts/install.ts', destination],
+        {
+          cwd: release,
+          encoding: 'utf8',
+          timeout: 10_000,
+        },
+      )
+      assert.equal(result.status, 0, result.stderr)
+    } else if (stage === 1 && screen.includes('Older harness host · /pih')) {
+      stage++
+      old.stdin.write('/pih\r')
+    } else if (stage === 2 && screen.split('Reopening this chat')[1]?.includes('orchestrator')) {
+      stage++
+      old.stdin.end('/quit\r')
+    }
+  }
+
+  clearTimeout(timeout)
+  assert.equal((await closed)[0], 0, screen.slice(-2000))
+  assert.equal(stage, 3)
+  const receipts = (
+    await readFile(join(project, '.pi/traces/harness/runtime', `${id}.jsonl`), 'utf8')
+  )
+    .trim()
+    .split('\n')
+    .map((line) => JSON.parse(line))
+  assert.equal(receipts.length, 2)
+  const [first, recovered] = receipts
+  assert.equal(first.piHost.wrapper, wrapper)
+  assert.equal(first.source, harnessRoot)
+  assert.equal(recovered.piHost.launcherSource, release + '/')
+  assert.equal(recovered.pid, first.pid)
+  assert.equal(recovered.launcherWarning, undefined)
+  assert.ok((await readFile(file, 'utf8')).includes(recovered.loadId))
 })

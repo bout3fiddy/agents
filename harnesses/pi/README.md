@@ -170,10 +170,22 @@ The launcher uses the harness's own Pi dependency and disables ambient extension
 templates, context discovery and MCP. Ordinary `pi` also loads the installed role extension; the
 dedicated launcher supplies the full isolation flags even if other global Pi packages are installed
 later. When quitting the launcher, use the printed command from the same project: it quotes the
-installed wrapper and selects the exact saved session, without looking up `pi` on `PATH`. If you
-follow an older `pi --session ...` hint, the installed extension warns when the CLI is not the
-expected launcher or release. Exit normally and use the warning’s command. Nothing is upgraded or
-restarted automatically. A global Pi without the harness is unchanged.
+installed wrapper and selects the exact saved session, without looking up `pi` on `PATH`.
+
+**If the footer says `Global Pi` or `Older harness host`, enter `/pih` in that chat.** It quits
+normally and reopens the saved conversation in its original project using the installed wrapper. It
+does not pick the most recent chat, open a trace copy, start a second writer or update Pi. An
+unsaved chat or unfinished foreground work is not restarted. Detached harness jobs remain detached.
+The new host runs the installed harness profile, not a replay of the global Pi command line.
+
+A global bundle starts before it loads extensions. Its `/reload` confirmation is about extensions,
+not the launcher; the footer still identifies the host. The harness skips the upstream startup
+version check on a detected mismatch, but cannot retract a banner already shown or rewrite a global
+bundle’s install-change warnings, terminal-restore command (where supported) or built-in exit line.
+On ordinary quit, use **the final harness command**, not the global Pi hint above it. It names the
+original project, wrapper and session file explicitly. `/pih` uses POSIX process replacement after
+successful quit; on hosts without it, use the final command. Recovery requires a saved file and the
+installed extension. Global Pi without the extension is unchanged.
 
 ### Update Pi
 
@@ -259,9 +271,9 @@ An interactive host checks the completed local receipt every three seconds. For 
 the same source directory with the same Pi host, it reloads the extension at the next idle point. An
 unsent draft, queued work, open worker picker or pending design consultation defers reload. Reload
 does not replace the running CLI or its launcher code. A different release directory or Pi pin needs
-a process restart, even if the extension hash is identical. The host shows a restart command rather
-than claiming to have switched releases. A process predating launcher detection needs one normal
-exit and restart through the installed wrapper. Detached workers keep their build.
+a process restart, even if the extension hash is identical. The footer offers `/pih` rather than
+claiming to have switched releases. Processes without this recovery extension need a normal exit and
+restart through the installed wrapper. Detached workers keep their build.
 
 ## Verify the loaded runtime
 

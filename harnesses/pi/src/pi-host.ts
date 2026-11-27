@@ -97,19 +97,3 @@ export function needsRestart(source: string, host: Host, install: PiInstall): bo
     Boolean(install.pi && (host.entry !== install.pi.entry || host.version !== install.pi.version))
   )
 }
-
-export function restartCommand(
-  wrapper: string,
-  session: {
-    getSessionFile(): string | undefined
-    getSessionDir(): string
-  },
-): string {
-  const file = session.getSessionFile()
-
-  // A fresh persistent session has a file name before Pi first flushes it to disk.
-  return file
-    ? `${shellQuote(wrapper)} --session-dir ${shellQuote(session.getSessionDir())} ` +
-        `--session ${shellQuote(file)}`
-    : shellQuote(wrapper)
-}

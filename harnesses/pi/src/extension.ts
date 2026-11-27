@@ -7,6 +7,7 @@ import { registerGitHubRunWatch } from './github-run-watch.ts'
 import { directOnly, registerInspectionMode } from './inspection-mode.ts'
 import { inspectionTools } from './inspection.ts'
 import { registerJobs, type JobOptions } from './job-tools.ts'
+import { registerLauncherRecovery } from './launcher-recovery.ts'
 import { instructions } from './project.ts'
 import { loadRole, rolePrompt } from './roles.ts'
 import { runtimeVersion } from './runtime-version.ts'
@@ -56,7 +57,7 @@ function register(pi: ExtensionAPI, options: { jobs?: JobOptions }): void {
   registerJobs(pi, options.jobs)
   registerShellActivity(pi)
   registerActivityCaption(pi)
-  registerSteering(pi)
+  const canLeaveSession = registerSteering(pi)
 
   pi.on('session_start', async (event, ctx) => {
     await furnishTigerStyle(ctx.cwd)
@@ -66,7 +67,9 @@ function register(pi: ExtensionAPI, options: { jobs?: JobOptions }): void {
   })
 
   // The trace mirror runs after the load receipt above has been appended to the session.
-  registerAutoReload(pi, runtime.current, () => workerWindow.open || consultations.busy)
+  const busy = () => workerWindow.open || consultations.busy
+  registerLauncherRecovery(pi, runtime.current, () => busy() || !canLeaveSession())
+  registerAutoReload(pi, runtime.current, busy)
   registerTraces(pi)
 
   pi.registerCommand('harness-version', {

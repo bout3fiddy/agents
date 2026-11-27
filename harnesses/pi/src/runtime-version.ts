@@ -6,14 +6,7 @@ import { execFileSync } from 'node:child_process'
 import type { ExtensionAPI, ExtensionContext } from '@earendil-works/pi-coding-agent'
 import { harnessRoot } from './project.ts'
 import { readJson, StateStore } from './state.ts'
-import {
-  capturePiHost,
-  installPath,
-  needsRestart,
-  piPackage,
-  restartCommand,
-  type PiInstall,
-} from './pi-host.ts'
+import { capturePiHost, installPath, needsRestart, piPackage, type PiInstall } from './pi-host.ts'
 
 export function captureBuild(root: string) {
   const files = ['package.json', 'package-lock.json']
@@ -95,7 +88,7 @@ export async function readInstall() {
   return install
 }
 
-async function launcherReceipt(ctx: ExtensionContext, reason: string) {
+async function launcherReceipt(reason: string) {
   const piHost = capturePiHost(undefined, reason !== 'reload')
   let install: PiInstall | undefined
   let launcherWarning: string | undefined
@@ -115,15 +108,12 @@ async function launcherReceipt(ctx: ExtensionContext, reason: string) {
   }
 
   const expectedPi = install?.pi
-  const restart = install && restartCommand(install.wrapper, ctx.sessionManager)
 
   if (install && needsRestart(build.source, piHost, install)) {
     launcherWarning =
       `Not running the installed harness launcher/release. ` +
       `Pi ${piHost.version ?? 'unknown'} at ${piHost.entry}; ` +
-      `expected Pi ${expectedPi?.version ?? 'unrecorded'} from ${install.source}. ` +
-      'If the pin changed, sync the intended checkout first. Exit and run from this project: ' +
-      restart
+      `expected Pi ${expectedPi?.version ?? 'unrecorded'} from ${install.source}.`
   }
 
   const target = install && {
@@ -131,7 +121,14 @@ async function launcherReceipt(ctx: ExtensionContext, reason: string) {
     wrapper: install.wrapper,
     installedAt: install.installedAt,
   }
-  return { restart, receipt: { piHost, expectedPi, install: target, launcherWarning } }
+  return { piHost, expectedPi, install: target, launcherWarning }
+}
+
+export function recoveryStatus(ctx: ExtensionContext, wrapped: boolean): string {
+  const host = wrapped ? 'Older harness host' : 'Global Pi'
+  return ctx.sessionManager.getSessionFile()
+    ? `${host} · /pih to reopen this chat in the installed harness`
+    : `${host} · no saved chat to reopen`
 }
 
 export function runtimeVersion(pi: ExtensionAPI) {
@@ -141,14 +138,8 @@ export function runtimeVersion(pi: ExtensionAPI) {
     async record(ctx: ExtensionContext, reason: string, expected: string[]) {
       const activeTools = pi.getActiveTools().sort()
       const missing = expected.filter((name) => !activeTools.includes(name))
-      const { restart, receipt } = await launcherReceipt(ctx, reason)
-      const toolWarning = missing.length
-        ? 'Missing role tools: ' +
-          missing.join(', ') +
-          (restart
-            ? `. Exit and run: ${restart}`
-            : '. Restart with the installed harness launcher.')
-        : undefined
+      const receipt = await launcherReceipt(reason)
+      const toolWarning = missing.length ? 'Missing role tools: ' + missing.join(', ') : undefined
       loaded = {
         ...build,
         ...receipt,
@@ -171,18 +162,19 @@ export function runtimeVersion(pi: ExtensionAPI) {
       })
       pi.appendEntry('pi-harness-load', loaded)
 
-      if (loaded.launcherWarning) {
+      if (loaded.launcherWarning && !loaded.install) {
         ctx.ui.notify(loaded.launcherWarning, 'warning')
       }
 
-      if (toolWarning) {
+      if (toolWarning && !loaded.launcherWarning) {
         ctx.ui.notify(toolWarning, 'warning')
       }
 
       ctx.ui.setStatus(
         'pi-harness',
-        `Pi harness ${loaded.version} · ${loaded.sourceHash.slice(0, 10)} · orchestrator` +
-          (loaded.launcherWarning ? ' · check launcher' : ''),
+        ctx.mode === 'tui' && loaded.launcherWarning && loaded.install
+          ? recoveryStatus(ctx, Boolean(loaded.piHost.wrapper))
+          : `Pi harness ${loaded.version} · ${loaded.sourceHash.slice(0, 10)} · orchestrator`,
       )
       return loaded
     },

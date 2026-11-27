@@ -200,6 +200,18 @@ export class InterruptInput {
     this.installSession()
   }
 
+  // The public ExtensionContext does not count interactive ! commands or the editor's
+  // compaction queue. Ask the owning session; never infer settlement from transcript entries.
+  canLeaveSession(): boolean {
+    return Boolean(
+      this.session &&
+      !this.session.isBashRunning &&
+      !this.session.hasPendingBashMessages &&
+      !this.handoff &&
+      !this.tui?.compactionQueuedMessages.length,
+    )
+  }
+
   /** Submit a /steer command's message as human input. */
   steer(send: () => void): void {
     this.origin.runCommand(send)

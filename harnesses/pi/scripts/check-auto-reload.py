@@ -87,7 +87,7 @@ def main():
             release = base / "next release"
             shutil.copytree(harness, release, symlinks=True)
             assert install(release) == next_target
-            cli.expect("Reload cannot replace this host")
+            cli.expect("Older harness host · no saved chat to reopen")
             assert len(loads()) == 3 and Path(loads()[-1]["source"]) == harness
             fresh = pexpect.spawn(
                 str(agent / "bin/pi-harness"), ["--no-session", "--offline"], cwd=str(project),
