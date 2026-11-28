@@ -4,6 +4,7 @@ import { registerAutoReload } from './auto-reload.ts'
 import { registerDocumentTools } from './document-tools.ts'
 import { fileTools } from './file-tools.ts'
 import { registerGitHubRunWatch } from './github-run-watch.ts'
+import { registerHandoffs, type HandoffOptions } from './handoff-tools.ts'
 import { directOnly, registerInspectionMode } from './inspection-mode.ts'
 import { inspectionTools } from './inspection.ts'
 import { registerJobs, type JobOptions } from './job-tools.ts'
@@ -25,13 +26,15 @@ import { registerWorkshop } from './workshop.ts'
 const orchestratorPolicy = Promise.all([loadRole('orchestrator'), rolePrompt('orchestrator')])
 
 /** The harness extension. Tests supply their own job launcher; the installed one runs for real. */
-export function createHarness(options: { jobs?: JobOptions } = {}) {
+type HarnessOptions = { jobs?: JobOptions; handoffs?: HandoffOptions }
+
+export function createHarness(options: HarnessOptions = {}) {
   return (pi: ExtensionAPI) => register(pi, options)
 }
 
 export default createHarness()
 
-function register(pi: ExtensionAPI, options: { jobs?: JobOptions }): void {
+function register(pi: ExtensionAPI, options: HarnessOptions): void {
   const activePaperTools = () =>
     pi.getActiveTools().filter((name) => name.startsWith('mcp__paper__'))
 
@@ -49,6 +52,7 @@ function register(pi: ExtensionAPI, options: { jobs?: JobOptions }): void {
   registerWorkers(pi, workerWindow)
   registerGitHubRunWatch(pi)
   registerWhiteboard(pi)
+  registerHandoffs(pi, options.handoffs)
   const { consultations } = registerWorkshop(pi)
   registerWorkshopContext(pi)
   registerDocumentTools(pi)

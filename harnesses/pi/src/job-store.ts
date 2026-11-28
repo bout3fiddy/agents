@@ -250,7 +250,10 @@ export class JobStore {
    * Record a job. A key makes creation idempotent within its session: a script that runs twice,
    * or loops, gets the job it already started instead of a second one.
    */
-  createOnce(input: { root: string; session: string; spec: JobSpec; key?: string }): {
+  createOnce(
+    input: { root: string; session: string; spec: JobSpec; key?: string },
+    link?: (job: Job) => void,
+  ): {
     job: Job
     created: boolean
   } {
@@ -285,7 +288,12 @@ export class JobStore {
           now,
           now,
         )
-      return { job: this.get(id), created: true }
+      const job = this.get(id)
+
+      // Link a handoff before commit. A rejected link rolls back; a crash can leave an
+      // undelivered link, never a launched job whose source cannot identify it.
+      link?.(job)
+      return { job, created: true }
     })
   }
 
@@ -355,6 +363,16 @@ export class JobStore {
 
     this.db.prepare(`UPDATE jobs SET ${sets.join(', ')} WHERE id = ?`).run(...values, id)
     return this.get(id)
+  }
+
+  /** Fence a lost launch: a late runner can no longer claim it. A running job is untouched. */
+  failUnclaimed(id: string) {
+    return this.transaction(() => {
+      const job = this.get(id)
+      return job.status === 'queued'
+        ? this.finish(id, 'needs_attention', { error: 'Job launch did not complete.' })
+        : job
+    })
   }
 
   /** A runner takes a queued job. False when another runner, or a cancellation, got there first. */

@@ -72,6 +72,28 @@ test('a runner that died leaves its job for the host with an event', async (t) =
   assert.equal(jobs.pendingEvents('s1').length, 1)
 })
 
+test('an interrupted launch is fenced unless a runner has already claimed it', async (t) => {
+  const { base, jobs } = await store(t)
+  assert.throws(
+    () =>
+      jobs.createOnce({ root: base, session: 's1', spec }, () => {
+        throw new Error('receiver was replaced')
+      }),
+    /receiver was replaced/,
+  )
+  assert.deepEqual(jobs.list(), [], 'an interrupted link cannot leave an orphan job')
+  const first = jobs.create({ root: base, session: 's1', spec })
+  assert.equal(jobs.failUnclaimed(first.id).status, 'needs_attention')
+  assert.equal(jobs.claim(first.id, process.pid), false)
+  const second = jobs.create({ root: base, session: 's1', spec })
+  assert.ok(jobs.claim(second.id, process.pid))
+  assert.equal(jobs.failUnclaimed(second.id).status, 'running')
+  assert.deepEqual(
+    jobs.pendingEvents('s1').map((e) => e.job),
+    [first.id],
+  )
+})
+
 test('the user cancels; a queued job ends at once and a running one is signalled', async (t) => {
   const { base, jobs } = await store(t)
   const queued = jobs.create({ root: base, session: 's1', spec })

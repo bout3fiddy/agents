@@ -82,6 +82,15 @@ seconds of silence becomes `needs_attention`, found by any session's next read o
   whether an authorized step is still undone. It is asked again only after more work. This is the
   whole defence against a host that stalls: there is no record of host work, timer or audit.
 
+## Cross-project handoffs
+
+[Project handoffs](project-handoffs.md) route between explicitly enrolled roots; they do not merge
+job databases. The installation-private SQLite mailbox holds aliases, fenced receiver leases,
+idempotency keys and bounded briefs and replies. A receiver handles one brief in a fresh Pi
+orchestrator context. A build links the request to an ordinary destination job before its launch;
+the job store remains authoritative for checks and delivery. A replacement receiver collects a
+linked outcome without running the request again. Neither discovery nor status launches a process.
+
 ## Authority
 
 - **Job control is session-owned.** The host can guide, cancel, retry or close its own jobs, never

@@ -168,7 +168,7 @@ function specFor(input: StartInput, model: string): JobSpec {
   }
 }
 
-async function checkoutRoot(ctx: ExtensionContext, store: JobStore, checkout?: string) {
+async function checkoutRoot(ctx: ExtensionContext, checkout?: string) {
   if (checkout === undefined) {
     return realpath(ctx.cwd)
   }
@@ -177,7 +177,7 @@ async function checkoutRoot(ctx: ExtensionContext, store: JobStore, checkout?: s
     throw new Error(`No checkout at ${checkout}`)
   })
 
-  if (primaryRoot(root) !== store.root) {
+  if (primaryRoot(root) !== primaryRoot(ctx.cwd)) {
     throw new Error(`${root} belongs to another repository; start its jobs from a session there`)
   }
 
@@ -543,6 +543,43 @@ function afterCancel(job: Job): string {
     : 'Stopped. Use job_retry with guidance if this assignment should continue.'
 }
 
+export async function startScopedJob(
+  input: StartInput,
+  root: string,
+  session: string,
+  model: string,
+  launch: Launcher = launchJob,
+  link?: (job: Job) => void,
+) {
+
+  // Workers cannot install: stale dependencies would fail every check that imports them.
+  if (input.mode === 'implement') {
+    await requireDependencies(root)
+  }
+
+  const store = jobStore(root)
+  const { job, created } = store.createOnce(
+    {
+      root,
+      session,
+      spec: specFor(input, model),
+      key: input.key,
+    },
+    link,
+  )
+
+  if (created) {
+    try {
+      await launch(store, job.id)
+    } catch (error) {
+      store.failUnclaimed(job.id)
+      throw error
+    }
+  }
+
+  return job
+}
+
 function registerTools(pi: ExtensionAPI, launch: Launcher) {
   pi.registerTool({
     name: 'job_start',
@@ -564,24 +601,15 @@ function registerTools(pi: ExtensionAPI, launch: Launcher) {
         throw new Error('Select a model first')
       }
 
-      const store = jobStore(ctx.cwd)
-      const root = await checkoutRoot(ctx, store, input.checkout)
+      const root = await checkoutRoot(ctx, input.checkout)
 
-      // Workers cannot install: a stale node_modules would fail every check that imports it.
-      if (input.mode === 'implement') {
-        await requireDependencies(root)
-      }
-
-      const { job, created } = store.createOnce({
+      const job = await startScopedJob(
+        input,
         root,
-        session: ctx.sessionManager.getSessionId(),
-        spec: specFor(input, `${ctx.model.provider}/${ctx.model.id}`),
-        key: input.key,
-      })
-
-      if (created) {
-        await launch(store, job.id)
-      }
+        ctx.sessionManager.getSessionId(),
+        `${ctx.model.provider}/${ctx.model.id}`,
+        launch,
+      )
 
       return structuredResult({
         ...jobView(job),

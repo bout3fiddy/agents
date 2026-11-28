@@ -113,10 +113,20 @@ export async function install(agentDir = join(homedir(), '.pi', 'agent'), binDir
     shellQuote(join(harnessRoot, 'scripts', 'update-pi.ts')),
     '"$@"',
   ].join(' ')
+  const handoff = [
+    shellQuote(process.execPath),
+    '--import',
+    shellQuote(join(harnessRoot, 'node_modules/tsx/dist/loader.mjs')),
+    shellQuote(join(harnessRoot, 'src/handoff-cli.ts')),
+    '"$@"',
+  ].join(' ')
   await writeFile(
     wrapper,
     `#!/bin/sh\nexport PI_CODING_AGENT_DIR=${shellQuote(destination)}\n` +
       `export PI_HARNESS_AGENT_DIR=${shellQuote(destination)}\n` +
+      'case "$1" in project-enroll|project-leave|project-receive|project-forget)\n' +
+      `  export TSX_TSCONFIG_PATH=${shellQuote(join(harnessRoot, 'tsconfig.json'))}\n` +
+      `  exec ${handoff} ;; esac\n` +
       `if [ "$1" = update ]; then\n  shift\n  exec ${update}\nfi\n` +
       `export PI_HARNESS_LAUNCH_WRAPPER=${shellQuote(wrapper)}\n` +
       `exec ${command}\n`,

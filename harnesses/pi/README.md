@@ -13,6 +13,9 @@ Codex workshops designs with the user and parallel Fable advice. It has shell an
 investigation, setup and acceptance. Every product change runs as a background job: one worker in an
 isolated copy, checks run by the host, then delivery. The conversation continues meanwhile.
 
+To ask another local project's orchestrator for advice or a scoped build, see
+[project handoffs](documentation/project-handoffs.md) for enrollment, discovery and durable replies.
+
 On Apple silicon Macs with Paper Desktop in `/Applications`, start Paper and use `pih` normally. Pi
 and Claude sessions discover Paper’s native tools without selecting a task. In Pi, `/mcp` shows
 Paper’s connection and tool count. If Paper is absent or isolation is required, it is not added.
