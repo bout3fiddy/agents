@@ -24,9 +24,15 @@ export interface BoardEvent {
   created_at_ms: number
   state: (typeof states)[number]
 }
+
+// A board's mode is fixed when it is first linked. A native board takes atomic edits of its
+// shared records; a legacy board takes whole agent print scenes. pih never converts one.
+export const boardModes = ['native', 'legacy'] as const
+export type BoardMode = (typeof boardModes)[number]
 export interface BoardLink {
   session: string
   owner: string
+  mode: BoardMode
 }
 
 function invalid(): never {
@@ -64,7 +70,11 @@ function url(value: unknown) {
   return value
 }
 
-export function parseLink(data: BoardReply, owner: string, binding: string) {
+/**
+ * `native` echoes the request. A native link must echo true: a CLI that omits it cannot confirm
+ * the board is native. A legacy link accepts false or, from an older CLI, no field.
+ */
+export function parseLink(data: BoardReply, owner: string, binding: string, mode: BoardMode) {
   if (data.protocol !== boardProtocol) {
     throw new BoardUpgradeRequired()
   }
@@ -73,8 +83,18 @@ export function parseLink(data: BoardReply, owner: string, binding: string) {
     return invalid()
   }
 
+  if (
+    mode === 'native' ? data.native !== true : data.native !== undefined && data.native !== false
+  ) {
+    throw new Error(
+      mode === 'native'
+        ? 'The tldraw-sync CLI did not confirm a native board. Upgrade tldraw-sync.'
+        : 'The tldraw-sync CLI linked a native board where a legacy board was requested.',
+    )
+  }
+
   return {
-    link: { owner, session: data.session },
+    link: { owner, session: data.session, mode },
     draw: url(data.draw_url),
     stage: url(data.stage_url),
   }
@@ -205,7 +225,7 @@ export function parsePoll(data: BoardReply, link: BoardLink) {
 }
 
 export type BoardInput = {
-  action: 'status' | 'snapshot' | 'preview' | 'publish' | 'ack'
+  action: 'status' | 'snapshot' | 'preview' | 'publish' | 'scene' | 'edit' | 'ack'
   file?: string
   event?: string
   state?: 'working' | 'updated' | 'failed'
@@ -299,12 +319,16 @@ export function boardArguments(input: BoardInput): string[] {
     return [...event, '--message', answer(input.message)]
   }
 
-  if (input.action === 'snapshot') {
-    return []
+  if (input.event !== undefined || input.state !== undefined || input.message !== undefined) {
+    throw new Error('event, state and message belong to an ACK')
   }
 
-  if (input.event !== undefined || input.state !== undefined || input.message !== undefined) {
-    throw new Error('event, state and message belong to an ACK, not a preview or publish')
+  if (input.action === 'snapshot' || input.action === 'scene') {
+    if (input.file !== undefined) {
+      throw new Error(`A ${input.action} takes no file`)
+    }
+
+    return []
   }
 
   // A preview and a publish read the same scene file, so what was previewed is what is saved.
@@ -314,7 +338,11 @@ export function boardArguments(input: BoardInput): string[] {
     input.file.includes('\0') ||
     input.file.startsWith('-')
   ) {
-    throw new Error('Preview and publish require a scene file')
+    throw new Error(
+      input.action === 'edit'
+        ? 'An edit requires an edit file'
+        : 'Preview and publish require a scene file',
+    )
   }
 
   const file = ['--file', input.file]

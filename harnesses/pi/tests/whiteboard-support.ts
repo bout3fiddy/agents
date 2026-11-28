@@ -50,6 +50,9 @@ export class FixtureBoard {
   resting: Record<string, string> = { layout: 'grid' }
   calls: { command: BoardCommand; args: string[] }[] = []
   before?: (command: BoardCommand, args: string[], signal: AbortSignal) => Promise<void>
+
+  // The request ID the scripted edit reply names; a test sets it from the edit file it wrote.
+  requestId = 'file-0000000000'
   private sequence = 0
   add(id: string, text?: string, include_sketch?: boolean) {
     const request_id = '00000000-0000-4000-8000-' + String(++this.sequence).padStart(12, '0')
@@ -71,12 +74,37 @@ export class FixtureBoard {
       await this.before?.(command, args, signal)
       const base = { protocol: boardProtocol, status: 'success', session: this.session, owner }
 
+      // Like the released CLI, `native` echoes the request rather than discovering the board.
       if (command === 'link') {
         return {
           ...base,
           draw_url: 'http://fixture/draw',
           stage_url: 'http://fixture/stage',
           binding_file: this.binding,
+          native: args.includes('--native'),
+        }
+      }
+
+      if (command === 'scene') {
+        return {
+          ...base,
+          code: 'scene_read',
+          base_sequence: this.sequence + 1,
+          records_count: 2,
+          scene_path: '/private/scene.json',
+        }
+      }
+
+      if (command === 'edit') {
+        assert.deepEqual(args.slice(0, 1), ['--file'])
+        this.sequence++
+        return {
+          ...base,
+          code: 'edit_written',
+          result: 'written',
+          sequence: this.sequence,
+          minted: [{ placeholder: 'shape:new-first', id: 'shape:minted' + this.sequence }],
+          request_id: this.requestId,
         }
       }
 

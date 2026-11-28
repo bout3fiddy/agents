@@ -11,7 +11,7 @@ import {
   selectedState,
 } from '../src/whiteboard-protocol.ts'
 
-const link = { session: 'board', owner: 'host' }
+const link = { session: 'board', owner: 'host', mode: 'legacy' as const }
 const request = {
   id: 'event',
   request_id: '8ebf7683-c4ba-40b9-aae4-7fbdfbdd4803',
@@ -52,7 +52,7 @@ test('negotiate protocol 4 and validate the whole journal before exposing any ev
 
   for (const protocol of [undefined, 1, 2, 3, '4']) {
     assert.throws(
-      () => parseLink({ ...linked, protocol }, 'host', '/private'),
+      () => parseLink({ ...linked, protocol }, 'host', '/private', 'legacy'),
       /protocol mismatch/i,
     )
     assert.throws(() => parsePoll({ ...poll, protocol }, link), /protocol mismatch/i)
@@ -342,7 +342,7 @@ test('a preview is accepted only when it says it published nothing', () => {
     shapes_count: 2,
     published: false,
   }
-  const { owner: _owner, ...shown } = drawn
+  const { owner: _owner, mode: _mode, ...shown } = drawn
   assert.deepEqual(preview({ ...drawn, token: 'hidden' }, link), shown)
 
   for (const change of [

@@ -48,7 +48,7 @@ test('the host knows one surface, who owns each layer and how provenance is read
   const prompt = await hostPrompt()
 
   for (const required of [
-    'The board is one dotted surface: Sketch and the agent print share one camera',
+    'The legacy board is one dotted surface: Sketch and the agent print share one camera',
     'The human editor owns Sketch; publish owns the agent print',
     'The snapshot image is a composite of both, so never infer human ink from its pixels',
     'Check the saved original agent records for provenance and completeness',
@@ -112,7 +112,7 @@ test('the host answers a private chat once, on the board, without the sketch', a
   for (const required of [
     'Acknowledge a delivered whiteboard request as working; that ACK is not the answer',
     'When `include_sketch` is false the person is chatting with you privately in text',
-    'do not snapshot, preview or publish for it',
+    'do not read the scene, edit, snapshot, preview or publish for it',
     'a concise, natural first-person answer to that request',
     'never copy the terminal conversation, tool or CLI output, other requests or plans',
   ]) {
@@ -122,6 +122,31 @@ test('the host answers a private chat once, on the board, without the sketch', a
   const tool = (await text('src', 'whiteboard.ts')).replace(/'\s*\+\s*'/g, '')
   assert.ok(tool.includes('A working ACK is not an answer'))
   assert.ok(tool.includes('1 to 4000 Unicode code points, sent exactly'))
+})
+
+// Native boards take atomic edits of shared shapes; legacy boards keep the stage journey. The
+// host must follow the linked mode and never offer one mode's features on the other.
+test('the host edits a native board atomically and keeps a legacy board legacy', async () => {
+  const prompt = await hostPrompt()
+
+  for (const required of [
+    'A board keeps the mode it was linked with; the wake and `whiteboard status` name it',
+    "Use only that mode's actions and never describe one mode's features as the other's",
+    'On a native board, otherwise read the scene and decide what was asked',
+    'write one edit file against the scene you read, always with all three arrays',
+    'an empty array for any you do not use',
+    'updates as full records with their original ids and base hashes',
+    'Change shared shapes in place rather than redrawing them',
+    'Each edit is one ordinary step the person can undo on the iPad',
+    'there is no host revert, preview or publish',
+    'On a conflict, read the scene again and write a new edit',
+    'resend the identical file only when the outcome is unknown',
+    'On a legacy board, otherwise take a fresh snapshot',
+  ]) {
+    assert.ok(prompt.includes(required), `Host prompt is missing: ${required}`)
+  }
+
+  assert.doesNotMatch(prompt, /\bTake\b|revert the edit|migrat/)
 })
 
 test('the host keeps snapshot, revision and ownership safeguards', async () => {

@@ -90,7 +90,12 @@ test('CLI argv, binding privacy, flat envelopes and output cap', async (t) => {
   await writeFile(silent, '')
   await assert.rejects(endpoint.run('link', [], signal), /protocol mismatch: pih requests 4/)
   await rm(silent)
-  const linked = parseLink(await endpoint.run('link', [], signal), 'host', endpoint.binding)
+  const linked = parseLink(
+    await endpoint.run('link', [], signal),
+    'host',
+    endpoint.binding,
+    'legacy',
+  )
   assert.equal(linked.draw, 'http://lan/draw')
   execFileSync('git', ['check-ignore', '--', endpoint.binding], { cwd: root })
   const status = await endpoint.run('poll', [], signal)

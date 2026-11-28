@@ -63,16 +63,22 @@ function register(pi: ExtensionAPI, options: HarnessOptions): void {
   registerActivityCaption(pi)
   const canLeaveSession = registerSteering(pi)
 
-  pi.on('session_start', async (event, ctx) => {
-    await furnishTigerStyle(ctx.cwd)
-    const [role] = await orchestratorPolicy
-    pi.setActiveTools([...role.tools, ...activePaperTools()])
-    await runtime.record(ctx, event.reason, role.tools)
+  // Another extension may quit during session_start, before this receipt is recorded.
+  let loading: Promise<void> = Promise.resolve()
+  pi.on('session_start', (event, ctx) => {
+    loading = (async () => {
+      await furnishTigerStyle(ctx.cwd)
+      const [role] = await orchestratorPolicy
+      pi.setActiveTools([...role.tools, ...activePaperTools()])
+      await runtime.record(ctx, event.reason, role.tools)
+    })()
+    return loading
   })
+  const settled = () => loading.then(runtime.current, runtime.current)
 
   // The trace mirror runs after the load receipt above has been appended to the session.
   const busy = () => workerWindow.open || consultations.busy
-  registerLauncherRecovery(pi, runtime.current, () => busy() || !canLeaveSession())
+  registerLauncherRecovery(pi, settled, () => busy() || !canLeaveSession())
   registerAutoReload(pi, runtime.current, busy)
   registerTraces(pi)
 

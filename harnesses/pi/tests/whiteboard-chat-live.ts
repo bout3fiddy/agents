@@ -1,6 +1,7 @@
 // Opt-in only. A real Pi session with a scripted host answers one private chat on a new,
-// temporary board served by the real tldraw-sync CLI. The host never snapshots, previews or
-// publishes. The temporary project and its board are left for inspection.
+// temporary native board served by the real tldraw-sync CLI. The host never reads the scene,
+// edits, snapshots, previews or publishes. The temporary project and its board are left for
+// inspection.
 import assert from 'node:assert/strict'
 import { mkdir, mkdtemp } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -138,9 +139,9 @@ assert.match(answers[2]!.text, /not outstanding on this board/)
 const status = results.find((r) => r.action.action === 'status')
 assert.ok(status && !status.isError && !status.text.includes(JSON.stringify(chatId)))
 assert.deepEqual(
-  commands.filter((c) => ['snapshot', 'preview', 'publish'].includes(c)),
+  commands.filter((c) => ['snapshot', 'preview', 'publish', 'scene', 'edit'].includes(c)),
   [],
-  'A private chat never reaches the sketch or the canvas',
+  'A private chat never reads the scene or the sketch, and writes nothing',
 )
 await session.dispose()
 await runtime.settleCredentialWrites()

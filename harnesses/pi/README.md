@@ -42,21 +42,24 @@ The editor’s working indicator shows the latest streamed reasoning caption on 
 when idle. The installer sets transcript thinking to collapsed. Use Pi’s thinking display toggle if
 you want the full reasoning blocks; neither display mode changes the saved session.
 
-`/start_whiteboard` opens this conversation’s tldraw-sync board: one dotted surface where your
-Sketch and the agent print share one camera. Use the iPad URL or scan the QR on its Mac stage; keep
-the stage open for snapshots and previews. On iPad, optionally type a note saying what you want,
-then tap **Send**; turn off sharing the sketch to chat privately in text. Only the owning host
-receives the request. It answers each request once on the board, and for a sketch request may also
-preview and publish a freeform scene as the whole agent print. A preview can show selected control
-options the snapshot describes; a publish saves the canonical scene. Your editor owns Sketch and the
-agent never writes it; to keep a printed shape, inspect it and take it into Sketch, which one undo
-reverses. The host reads the saved original agent records, not the composite image, to tell its
-print from your ink. It can inspect outstanding work with `whiteboard status`. The listener resumes
-on reload; `/stop_whiteboard` detaches without stopping the shared daemon. pih, the tldraw-sync CLI
-and its daemon must all speak protocol 4; a mismatch names the version each one reports. Start
-explicitly in a new or forked session. Use a trusted LAN. Install `tldraw-sync` on PATH, set
-`PI_WHITEBOARD_BIN`, or install Bun with a sibling `tldraw-sync` checkout next to the project root.
-See the [whiteboard integration check](documentation/whiteboard.md) for the paired Mac/iPad journey.
+`/start_whiteboard` opens this conversation’s tldraw-sync board. A new board is native: the host
+reads its scene and edits the shared shapes in place, each edit one step you can undo on the iPad.
+`/start_whiteboard legacy` opens a legacy board instead, and a board always keeps its mode. On a
+legacy board your Sketch and the agent print share one dotted surface and camera. Use the iPad URL
+or scan the QR on its Mac stage; keep the stage open for snapshots and previews. On iPad, optionally
+type a note saying what you want, then tap **Send**; turn off sharing the sketch to chat privately
+in text. Only the owning host receives the request. It answers each request once on the board, and
+for a legacy sketch request may also preview and publish a freeform scene as the whole agent print.
+A preview can show selected control options the snapshot describes; a publish saves the canonical
+scene. Your editor owns Sketch and the agent never writes it; to keep a printed shape, inspect it
+and take it into Sketch, which one undo reverses. The host reads the saved original agent records,
+not the composite image, to tell its print from your ink. It can inspect outstanding work with
+`whiteboard status`. The listener resumes on reload; `/stop_whiteboard` detaches without stopping
+the shared daemon. pih, the tldraw-sync CLI and its daemon must all speak protocol 4; a mismatch
+names the version each one reports. Start explicitly in a new or forked session. Use a trusted LAN.
+Install `tldraw-sync` on PATH, set `PI_WHITEBOARD_BIN`, or install Bun with a sibling `tldraw-sync`
+checkout next to the project root. See the
+[whiteboard integration check](documentation/whiteboard.md) for the paired Mac/iPad journey.
 
 | Role                     | Model / default effort |
 | ------------------------ | ---------------------- |

@@ -9,15 +9,53 @@ board before stopping; the next `/start_whiteboard` starts the current daemon an
 binding. Do not stop a daemon another session is using without telling its owner. Keep binding files
 private; never inspect or paste their contents.
 
+## Native and legacy boards
+
+`/start_whiteboard` links a new board as native (`whiteboard-link --native`);
+`/start_whiteboard legacy` links a new legacy board. pih records the mode with the link in the
+session. An existing board keeps its mode: a link recorded before native boards existed is legacy,
+reload reattaches without relinking, and a start naming the other mode is refused before the CLI
+runs. A native link must echo `native: true`; a CLI that omits it cannot confirm the board and is
+rejected. A legacy link of a binding with no recorded mode is refused, because a link without
+`--native` keeps whatever the binding is. The CLI itself refuses `--native` on a legacy binding;
+nothing is migrated.
+
+A native board has two tool actions besides `status` and `ack`:
+
+- `scene` runs `whiteboard-scene` and returns `session`, `base_sequence`, `records_count` and the
+  absolute private `scene_path` artifact (`{session, base_sequence, records, hashes}`).
+- `edit` runs `whiteboard-edit --file` with one edit file:
+  `{base_sequence, adds, updates, deletes, request_id?}`. All three arrays are required; unused ones
+  are empty. Adds are full records with placeholder ids (`shape:new-…` or `binding:new-…`); updates
+  are `{record, base_hash}` with the original id; deletes are `{id, base_hash}`. Every operation
+  names a distinct record. pih checks the released bounds first (at most 1 MiB + 4 KiB, 1 to 800
+  operations, 64 lowercase hex `base_hash`, `request_id` matching `^[A-Za-z0-9_-]{8,64}$`) and
+  leaves deeper record checks to the CLI. The reply must name `edit_written`, `edit_replayed` or
+  `edit_unchanged`, its matching `result`, the request ID (by default `file-` and the first 40 hex
+  characters of the file's SHA-256), a sequence (null when unchanged) and the minted ids.
+
+Each edit is one atomic change and one ordinary iPad undo step; pih has no revert. A conflict
+(exit 5) or a named rejection (exit 1) settles the edit: read the scene again and write a new one.
+Any other failure leaves the outcome unknown, and pih then accepts only the identical file until a
+fresh scene read. pih never rebases or retries an edit itself. Snapshot, preview, controls and
+publish belong to legacy boards; scene and edit are refused on them, and the reverse.
+
+The host-run check `native-board-disposable-cli` runs `tests/whiteboard-native-live.ts` against an
+expendable copy of the released CLI with a private HOME, TMPDIR, BOARD_DATA_DIR and daemon on
+port 0. It links, reads, writes, replays, edits in place and conflicts on a native board; links a
+legacy board, checks its binding is unchanged and that native link, scene and edit are refused; then
+runs both modes through a Pi session. It stops only its own daemon.
+
 ## One canvas
 
-Sketch and the agent print are layers of one dotted surface that share one camera; there is no other
-view to switch to. The human editor owns Sketch: pih has no action that writes it. `publish` owns
-the agent print and replaces it whole with the previewed scene file, guarded by the agent print
-revision and the sketch hash. The snapshot image is a composite of both layers, so it never shows
-which pixels are human ink; the host checks the snapshot's saved original agent records for
-provenance and completeness. Only the human can inspect a printed shape and take it into Sketch, as
-one edit that one undo reverses. This changes no tool action and no protocol 4 field.
+On a legacy board, Sketch and the agent print are layers of one dotted surface that share one
+camera; there is no other view to switch to. The human editor owns Sketch: pih has no action that
+writes it. `publish` owns the agent print and replaces it whole with the previewed scene file,
+guarded by the agent print revision and the sketch hash. The snapshot image is a composite of both
+layers, so it never shows which pixels are human ink; the host checks the snapshot's saved original
+agent records for provenance and completeness. Only the human can inspect a printed shape and take
+it into Sketch, as one edit that one undo reverses. This changes no tool action and no protocol 4
+field.
 
 ## Authoring capabilities and selected state
 

@@ -3,6 +3,7 @@ import { constants } from 'node:fs'
 import { access, lstat, mkdir, realpath, stat } from 'node:fs/promises'
 import { delimiter, dirname, isAbsolute, join, resolve } from 'node:path'
 import { promisify } from 'node:util'
+import { invariant } from './invariant.ts'
 import { projectRoot } from './tiger-style.ts'
 import { projectTraces } from './traces.ts'
 
@@ -55,7 +56,8 @@ export class BoardUpgradeRequired extends Error {
     this.versions = versions
   }
 }
-export type BoardCommand = 'link' | 'poll' | 'ack' | 'snapshot' | 'preview' | 'publish'
+export type BoardCommand =
+  'link' | 'poll' | 'ack' | 'snapshot' | 'preview' | 'publish' | 'scene' | 'edit'
 export type BoardReply = Record<string, unknown>
 export interface BoardEndpoint {
   binding: string
@@ -161,9 +163,30 @@ function requiredByCLI(failure: unknown) {
   return match ? protocolNumber(Number(match[1])) : undefined
 }
 
+/**
+ * A CLI failure with a fixed hint. `settled` says the board certainly did not apply a native
+ * edit: a conflict (exit 5) or a named rejection (exit 1). Any other edit failure may have
+ * committed, so only the identical file may be sent again.
+ */
+export class BoardCommandFailed extends Error {
+  constructor(
+    message: string,
+    readonly settled: boolean,
+  ) {
+    super(message)
+  }
+}
+
+// Native edit rejections the CLI reports with exit 1 before anything is written.
+const editRejections = ['request_id_reused', 'invalid_records', 'invalid_request', 'not_native']
+
 // Scene codes a model can act on. The CLI's own message may quote drawn content, so only the
 // code chooses the hint.
 const hints: Record<string, string> = {
+  not_native: 'This board is not native.',
+  request_id_reused: 'That request_id named a different edit. Omit it or use a new one.',
+  invalid_records: 'The edit records do not match the scene. Fix the file against the scene.',
+  invalid_request: 'The edit file does not match the native edit schema.',
   stage_closed: 'Reopen the Mac stage with /start_whiteboard.',
   revision_conflict: 'The agent print changed. Take a fresh snapshot.',
   sketch_changed: 'The sketch changed. Take a fresh snapshot.',
@@ -176,15 +199,47 @@ const hints: Record<string, string> = {
   sketch_busy: 'The sketch kept changing. Try again.',
 }
 
-function commandFailure(command: BoardCommand, failure: unknown) {
-  const code = object(failure) && failure.status === 'failure' ? failure.code : undefined
-  const hint =
-    (typeof code === 'string' && Object.hasOwn(hints, code) && hints[code]) ||
-    (command === 'link' || command === 'poll'
-      ? 'Check the daemon with `tldraw-sync status`.'
-      : 'Check the daemon, open Mac stage and current revision.')
-  return new Error(`Whiteboard ${command} failed. ${hint}`)
+function genericHint(command: BoardCommand) {
+  if (command === 'link' || command === 'poll' || command === 'scene') {
+    return 'Check the daemon with `tldraw-sync status`.'
+  }
+
+  return 'Check the daemon, open Mac stage and current revision.'
 }
+
+function commandFailure(command: BoardCommand, failure: unknown, exit?: unknown) {
+  const code = object(failure) && failure.status === 'failure' ? failure.code : undefined
+  const named = typeof code === 'string' && Object.hasOwn(hints, code) ? hints[code] : undefined
+
+  if (command !== 'edit') {
+    return new BoardCommandFailed(
+      `Whiteboard ${command} failed. ${named || genericHint(command)}`,
+      true,
+    )
+  }
+
+  if (code !== undefined && exit === 5) {
+    return new BoardCommandFailed(
+      'Whiteboard edit conflicts with the board. Read the scene again and write a new edit ' +
+        'on it; never resend this one.',
+      true,
+    )
+  }
+
+  if (exit === 1 && typeof code === 'string' && editRejections.includes(code)) {
+    invariant(named !== undefined, 'Every edit rejection has a fixed hint')
+    return new BoardCommandFailed(`Whiteboard edit rejected. ${named}`, true)
+  }
+
+  return new BoardCommandFailed(
+    'Whiteboard edit outcome is unknown. Resend the identical file unchanged, or read the ' +
+      'scene before writing another edit.',
+    false,
+  )
+}
+
+// Replies that name artifacts must never carry binding credentials.
+const guardedReplies: BoardCommand[] = ['snapshot', 'scene', 'edit']
 
 // Never attach stdout, stderr, argv or the underlying execFile error to a model-visible error.
 export async function openBoardEndpoint(
@@ -252,7 +307,7 @@ export async function openBoardEndpoint(
           [...prefix, 'whiteboard-' + command, ...argv, ...args, '--json'],
           options,
         )
-        response = JSON.parse(stdout, command === 'snapshot' ? publicField : undefined)
+        response = JSON.parse(stdout, guardedReplies.includes(command) ? publicField : undefined)
       } catch (error) {
         signal.throwIfAborted()
 
@@ -272,7 +327,7 @@ export async function openBoardEndpoint(
           throw await mismatch(requiredByCLI(response), signal)
         }
 
-        throw commandFailure(command, response)
+        throw commandFailure(command, response, object(error) ? error.code : undefined)
       }
 
       if (!object(response) || response.status !== 'success') {

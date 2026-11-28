@@ -118,20 +118,45 @@ async function targetFor(ctx: ExtensionContext, loaded: LoadedRuntime | undefine
   }
 }
 
+// A wrong launcher suppresses Pi's update notice, which would name the wrong update command.
+// The saved setting lives in the process, since /reload re-registers this extension.
+const versionCheckSuppression = ((globalThis as Record<symbol, unknown>)[
+  Symbol.for('pi-harness.version-check-suppression')
+] ??= { saved: undefined }) as { saved: { value: string | undefined } | undefined }
+
+function restoreVersionCheck(): void {
+  const saved = versionCheckSuppression.saved
+
+  if (!saved) {
+    return
+  }
+
+  if (saved.value === undefined) {
+    delete process.env.PI_SKIP_VERSION_CHECK
+  } else {
+    process.env.PI_SKIP_VERSION_CHECK = saved.value
+  }
+
+  versionCheckSuppression.saved = undefined
+}
+
+// `settled` resolves after the session's load receipt is recorded. An extension may quit during
+// session_start, so shutdown must not read a receipt that is still being written.
 export function registerLauncherRecovery(
   pi: ExtensionAPI,
-  current: () => LoadedRuntime | undefined,
+  settled: () => Promise<LoadedRuntime | undefined>,
   busy: () => boolean,
 ): void {
   let requested: Target | undefined
-  const versionCheck = process.env.PI_SKIP_VERSION_CHECK
-  let suppressed = false
-  pi.on('session_start', (_event, ctx) => {
-    const loaded = current()
+  pi.on('session_start', async (_event, ctx) => {
+    const loaded = await settled()
+    const warn = ctx.mode === 'tui' && Boolean(loaded?.install && loaded.launcherWarning)
 
-    if (ctx.mode === 'tui' && loaded?.install && loaded.launcherWarning && !versionCheck) {
+    if (!warn) {
+      restoreVersionCheck()
+    } else if (!versionCheckSuppression.saved && !process.env.PI_SKIP_VERSION_CHECK) {
+      versionCheckSuppression.saved = { value: process.env.PI_SKIP_VERSION_CHECK }
       process.env.PI_SKIP_VERSION_CHECK = '1'
-      suppressed = true
     }
   })
   pi.registerCommand('pih', {
@@ -142,7 +167,7 @@ export function registerLauncherRecovery(
         return
       }
 
-      const target = await targetFor(ctx, current())
+      const target = await targetFor(ctx, await settled())
 
       if (!target) {
         ctx.ui.notify('No saved chat needs a launcher change.', 'info')
@@ -180,18 +205,15 @@ export function registerLauncherRecovery(
     },
   })
   pi.on('session_shutdown', async (event, ctx) => {
-    if (suppressed) {
-      if (versionCheck === undefined) {
-        delete process.env.PI_SKIP_VERSION_CHECK
-      } else {
-        process.env.PI_SKIP_VERSION_CHECK = versionCheck
-      }
 
-      suppressed = false
+    // Pi's startup version check may still be pending during an early /reload. The reloaded
+    // session decides again; every other shutdown restores the user's setting.
+    if (event.reason !== 'reload') {
+      restoreVersionCheck()
     }
 
     if (event.reason === 'quit' && ctx.mode === 'tui') {
-      const target = requested ?? (await targetFor(ctx, current()))
+      const target = requested ?? (await targetFor(ctx, await settled()))
 
       if (target) {
         finishQuit(target, Boolean(requested))

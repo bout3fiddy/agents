@@ -30,7 +30,10 @@ if (
 
 const endpoint = await openBoardEndpoint(resolve(project), owner)
 const signal = AbortSignal.timeout(120000)
-const link = async () => parseLink(await endpoint.run('link', [], signal), owner, endpoint.binding)
+
+// The interactive stage journey runs on a legacy board, linked without --native.
+const link = async () =>
+  parseLink(await endpoint.run('link', [], signal), owner, endpoint.binding, 'legacy')
 const first = await link()
 const reopened = await link()
 assert.deepEqual(first.link, reopened.link)
